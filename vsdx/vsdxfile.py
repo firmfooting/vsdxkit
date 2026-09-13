@@ -1263,6 +1263,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         allocation walk that stopped short, and gave every child a second ID it
         then threw away. ``increment_shape_ids`` now reaches the whole subtree.
         """
+        page.vis._require_open("VisioFile.increment_sub_shape_ids()")
         return self.renumber_shape_ids(shape.xml, page, id_map)
 
     def copy_shape(self, shape: Element, page: Page) -> Element:
@@ -1325,6 +1326,10 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             together share one map; a new one is started when omitted
         :return: the ID map, old ID -> new ID
         """
+        # its own, rather than the one it inherits from increment_shape_ids:
+        # this is the documented primitive and could not name itself in its own
+        # error (issue #329)
+        page.vis._require_open("VisioFile.renumber_shape_ids()")
         before = page._shape_ids()
         id_map = self.increment_shape_ids(shape, page, id_map)
         self.update_ids(shape, id_map)
