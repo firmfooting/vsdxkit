@@ -8,8 +8,8 @@ sys.path.insert(0, os.path.abspath(".."))
 import vsdx
 
 project = "vsdxkit"
-copyright = "2021–2026, Dave Howard and Shaun Eccles"  # noqa: RUF001  # update when preparing each release
-author = "Dave Howard and Shaun Eccles"
+copyright = "2020–2026, Dave Howard and Firm Footing"  # noqa: RUF001  # holders as in LICENSE
+author = "Dave Howard and Firm Footing"
 release = vsdx.__version__
 version = vsdx.__version__
 
@@ -26,3 +26,7 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "maintainers"]
 
 html_theme = "sphinx_rtd_theme"
 html_title = f"vsdxkit {release}"
+
+# Canonical URL, so search engines credit the published site rather than a
+# mirror or a local build.
+html_baseurl = "https://firmfooting.github.io/vsdxkit/"

@@ -36,7 +36,7 @@ classifiers = [
 
 [project.urls]
 Homepage = "https://github.com/firmfooting/vsdxkit"
-Documentation = "https://github.com/firmfooting/vsdxkit/tree/main/docs"
+Documentation = "https://firmfooting.github.io/vsdxkit/"
 Issues = "https://github.com/firmfooting/vsdxkit/issues"
 "Original project" = "https://github.com/dave-howard/vsdx"
 
@@ -73,7 +73,7 @@ dev = [
 # floor keeps the universal resolution satisfiable across the whole
 # requires-python range, instead of dragging the library up to the
 # documentation toolchain's floor. Raise this together with the Python version
-# used by the CI docs build and by .readthedocs.yaml.
+# used by the CI docs build and by the Docs workflow that publishes to Pages.
 docs = { requires-python = ">=3.12" }
 
 [tool.setuptools]
