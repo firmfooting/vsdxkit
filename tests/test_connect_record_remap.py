@@ -1,13 +1,15 @@
-"""Renumbering a shape must take its Connect records with it.
+"""Renumbering a shape must take everything that names it with it.
 
-`Page.remap_connect_records` is the code under test and carries the reasoning;
+`VisioFile.renumber_shape_ids` is the code under test and carries the reasoning;
 these pin it from the outside: a record naming the renumbered shape at either
-end, a shape nested inside a renumbered group, and the case where the records
-must stay put because the id they name is still in use. Issue #278.
+end, a shape nested inside a renumbered group, the formulas elsewhere on the
+page that address it, and the case where all of it must stay put because the id
+is still in use. Issues #278 and #328.
 
 Each test saves as well as asserting, so the package validator gets a look at
 the result. A record naming a shape that is not there is its `dangling-glue`
-defect, which is what this produced before the fix.
+defect and a formula naming one is `stale-sheet-reference`; renumbering produced
+the first before #278 and the second before #328.
 """
 
 import xml.etree.ElementTree as ET
@@ -66,6 +68,31 @@ def test_renumbering_a_group_moves_records_naming_a_shape_inside_it(vsdx_copy, t
         vis.save_vsdx(str(tmp_path / "renumbered_group.vsdx"))
 
 
+POINT_GLUE_FIXTURE = "fixtures/com_reference/s07_point_glue_masters.vsdx"
+
+
+def test_renumbering_a_shape_moves_the_formulas_elsewhere_that_name_it(vsdx_copy, tmp_path):
+    """A connector's endpoint formulas follow the shape they name, not just its record.
+
+    Shape 3 is a connector glued to shape 2: its record names shape 2 and so do
+    the formulas that place its end. Renumbering shape 2 rewrote the record,
+    because that sweep covers the page, and left the formulas, because that one
+    covered only the subtree being renumbered (#328).
+    """
+    with VisioFile(vsdx_copy(POINT_GLUE_FIXTURE)) as vis:
+        page = vis.pages[0]
+        connector = page.find_shape_by_id("3")
+        assert "Sheet.2!" in connector.cell_formula("EndX")
+
+        new_id = str(vis.increment_sub_shape_ids(page.find_shape_by_id("2"), page)["2"])
+
+        connector = page.find_shape_by_id("3")
+        for cell in ("EndX", "EndY", "EndTrigger"):
+            assert f"Sheet.{new_id}!" in connector.cell_formula(cell)
+            assert "Sheet.2!" not in connector.cell_formula(cell)
+        vis.save_vsdx(str(tmp_path / "renumbered_glued_shape.vsdx"))
+
+
 def test_copying_a_shape_leaves_the_records_of_the_original_alone(vsdx_copy, tmp_path):
     """The copy is numbered afresh; the shape it was copied from is not moving."""
     with VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
@@ -76,6 +103,22 @@ def test_copying_a_shape_leaves_the_records_of_the_original_alone(vsdx_copy, tmp
 
         assert _records(page) == before
         vis.save_vsdx(str(tmp_path / "copied_shape.vsdx"))
+
+
+def test_copying_a_shape_leaves_the_formulas_naming_the_original_alone(vsdx_copy, tmp_path):
+    """Nothing was vacated, so the page-wide sweep has nothing to rewrite.
+
+    The copy takes new ids while the shape it came from keeps its own, and a
+    formula elsewhere on the page still means the shape it always named.
+    """
+    with VisioFile(vsdx_copy(POINT_GLUE_FIXTURE)) as vis:
+        page = vis.pages[0]
+        before = page.find_shape_by_id("3").cell_formula("EndX")
+
+        page.find_shape_by_id("2").copy()
+
+        assert page.find_shape_by_id("3").cell_formula("EndX") == before
+        vis.save_vsdx(str(tmp_path / "copied_glued_shape.vsdx"))
 
 
 def _drop_shape(page, shape_id: str) -> None:

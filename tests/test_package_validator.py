@@ -93,14 +93,15 @@ def test_every_fixture_carries_only_the_defects_on_record(basedir):
 @pytest.mark.allow_invalid_package
 class TestShapeIdentity:
     def test_a_page_using_one_id_twice_is_a_defect(self, broken):
-        """And the glue that pointed at the overwritten shape now dangles.
+        """And the glue that pointed at the overwritten shape now dangles, both ways.
 
-        Both are reported, because they are two different things to fix: one
-        page has lost a shape, and one connector has lost its endpoint.
+        Three findings, because they are three things to fix: one page has lost
+        a shape, one connector's record has lost its endpoint, and the formula
+        that placed that endpoint names the id nothing carries any more.
         """
         path = broken("test4_connectors.vsdx", {PAGE1: ("<Shape ID='5'", "<Shape ID='2'")})
 
-        assert sorted(set(_kinds(path))) == ["dangling-glue", "duplicate-shape-id"]
+        assert sorted(set(_kinds(path))) == ["dangling-glue", "duplicate-shape-id", "stale-sheet-reference"]
 
     def test_a_group_member_colliding_with_a_top_level_shape_is_a_defect(self, broken):
         """Uniqueness is per page, not per level: ids are page-scoped."""
@@ -127,6 +128,43 @@ class TestGlue:
 
         assert _kinds(path) == ["dangling-glue"]
         assert "999" in describe_defects(validate_package(path))
+
+
+@pytest.mark.allow_invalid_package
+class TestSheetReferences:
+    """The other half of a shape's glue: the `Sheet.N!` references in its formulas."""
+
+    def test_a_formula_naming_a_sheet_that_is_not_on_the_page_is_a_defect(self, broken):
+        path = broken("test4_connectors.vsdx", {PAGE1: ("Sheet.2!EventXFMod", "Sheet.999!EventXFMod")})
+
+        assert _kinds(path) == ["stale-sheet-reference"]
+        assert [d.where for d in validate_package(path)] == [PAGE1]
+        assert "999" in describe_defects(validate_package(path))
+
+    def test_a_master_formula_naming_a_sheet_that_is_not_in_it_is_a_defect(self, broken):
+        """A master's contents part is a page's, so its formulas resolve the same way."""
+        path = broken("test4_connectors.vsdx", {MASTER2: ("Sheet.6!FillForegnd", "Sheet.996!FillForegnd")})
+
+        offenders = [d for d in validate_package(path) if d.kind == "stale-sheet-reference"]
+        assert [d.where for d in offenders] == [MASTER2], describe_defects(validate_package(path))
+
+    def test_a_reference_to_a_sheet_on_another_page_is_left_alone(self, broken):
+        """`Pages[Page-2]!Sheet.996!` names a sheet on that page, not on this one."""
+        path = broken(
+            "test4_connectors.vsdx",
+            {PAGE1: ("_XFTRIGGER(Sheet.2!EventXFMod)", "_XFTRIGGER(Pages[Page-2]!Sheet.996!EventXFMod)")},
+        )
+
+        assert _kinds(path) == []
+
+    def test_one_cell_naming_a_missing_sheet_twice_is_reported_once(self, broken):
+        """Visio writes both coordinates of a glue point into a single formula."""
+        path = broken(
+            "test4_connectors.vsdx",
+            {PAGE1: ("_XFTRIGGER(Sheet.2!EventXFMod)", "PAR(PNT(Sheet.996!Connections.X1,Sheet.996!Connections.Y1))")},
+        )
+
+        assert _kinds(path) == ["stale-sheet-reference"]
 
 
 @pytest.mark.allow_invalid_package

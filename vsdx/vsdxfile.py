@@ -80,7 +80,14 @@ _SUFFIX_BY_CONTENT_TYPE = {MACRO_ENABLED_CONTENT_TYPE: ".vsdm", DRAWING_CONTENT_
 # formulas it generates for connector glue -- `_XFTRIGGER(Sheet5!EventXFMod)`,
 # `PAR(PNT(Sheet5!Connections.X1,...))` -- where the reference is also nested
 # inside a function call rather than at the start of the formula.
-_SHEET_REFERENCE_RE = re.compile(r"\bSheet(\.?)(\d+)!")
+#
+# The lookbehind excludes the sheet of a cross-page reference: the `Sheet.5!` in
+# `Pages[Page-2]!Sheet.5!Width` is an id on the page named in front of it, and
+# ids are page-scoped, so remapping it through this page's map would repoint the
+# reference at an unrelated shape. `tests/helpers/package_validator.py` draws
+# the same line, and the two have to agree or one of them is wrong about which
+# references a page owns.
+_SHEET_REFERENCE_RE = re.compile(r"(?<!!)\bSheet(\.?)(\d+)!")
 
 
 def _remap_sheet_references(formula: str, id_map: dict[str, int]) -> str:
@@ -1311,14 +1318,29 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         then sweeping only the formulas is what left a renumbered shape's glue
         naming an ID that was no longer on the page.
 
-        A record follows only the IDs this call vacated: on the page before,
-        gone after. Renumbering does not always retire an ID - ``copy_shape``
-        leaves the original where it was, and the Jinja loop renumbers the
-        duplicates while the shape they were copied from keeps its ID. Nor is
-        every ID in the map one this page ever had: a subtree arriving from
-        elsewhere brings its own, and a stale record that happens to name one
-        of those numbers belongs to whatever wrote the file, not to the shape
-        now carrying it.
+        Both stores are swept over the same ground: the whole page. Sweeping the
+        records page-wide and the formulas only inside the renumbered subtree
+        left behind every *other* shape that named the vacated ID in a cell
+        formula, so a connector's record moved on while the formula placing its
+        endpoint still addressed a sheet that had gone (#328).
+
+        A vacated ID is one that was on the page before and is gone after.
+        Renumbering does not always retire an ID - ``copy_shape`` leaves the
+        original where it was, and the Jinja loop renumbers the duplicates while
+        the shape they were copied from keeps its ID. Nor is every ID in the map
+        one this page ever had: a subtree arriving from elsewhere brings its own,
+        and a stale record that happens to name one of those numbers belongs to
+        whatever wrote the file, not to the shape now carrying it. When nothing
+        was vacated neither sweep runs, and nothing on the page is rewritten.
+
+        The subtree is swept twice when it is already on the page, and the second
+        sweep cannot chain onto what the first wrote. A subtree on the page has
+        every allocated ID stamped onto one of its shapes, so every allocated ID
+        is in ``after`` and none of them can be a vacated ID; a subtree that is
+        not on the page leaves ``before`` and ``after`` equal and vacates
+        nothing. The one way past that is a caller seeding ``id_map`` with a
+        mapping onto an ID the page is still using, which is not what the
+        parameter is for.
 
         :param shape: root of the subtree to renumber, normally a ``Shape`` element
         :param page: page that owns the ID high-water mark and the records
@@ -1334,7 +1356,10 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         id_map = self.increment_shape_ids(shape, page, id_map)
         self.update_ids(shape, id_map)
         after = page._shape_ids()
-        page._remap_connect_records({old: new for old, new in id_map.items() if old in before and old not in after})
+        vacated = {old: new for old, new in id_map.items() if old in before and old not in after}
+        if vacated:
+            self.update_ids(require_element(page.xml.getroot(), "page root"), vacated)
+            page._remap_connect_records(vacated)
         return id_map
 
     def increment_shape_ids(self, shape: Element, page: Page, id_map: dict[str, int] | None = None) -> dict[str, int]:

@@ -83,6 +83,26 @@ def test_update_ids_matches_whole_ids_only(vsdx_copy):
     assert cell.attrib["F"] == "Sheet.1!Width+Sheet.700!Width"
 
 
+def test_update_ids_leaves_a_reference_to_another_pages_sheet_alone():
+    """`Pages[Page-2]!Sheet.1!` names a sheet on that page, which this map is not about.
+
+    Ids are page-scoped, so the number after a `Pages[...]!` prefix belongs to
+    the page named in front of it, and rewriting it repoints the reference at a
+    shape on a page this call never looked at. Only reachable since #328 made
+    the sweep cover the whole page: a cross-page reference is written by some
+    shape other than the one being renumbered.
+    """
+    shapes = ET.fromstring(
+        f'<Shapes xmlns="{namespace[1:-1]}">'
+        f'<Shape ID="9"><Cell N="Width" F="Pages[Page-2]!Sheet.1!Width+Sheet.1!Height"/></Shape>'
+        f"</Shapes>"
+    )
+    with VisioFile(os.path.join(basedir, "test1.vsdx")) as vis:
+        vis.update_ids(shapes, {"1": 700})
+    cell = shapes.find(f"{namespace}Shape/{namespace}Cell")
+    assert cell.attrib["F"] == "Pages[Page-2]!Sheet.1!Width+Sheet.700!Height"
+
+
 def test_update_ids_remaps_the_copied_shapes_own_cells(vsdx_copy):
     """A group's own formulas are part of the copy, not only its children's."""
     shapes = ET.fromstring(

@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import os
 import posixpath
+import re
 import urllib.parse
 import xml.etree.ElementTree as ET
 import zipfile
@@ -291,6 +292,11 @@ def _contents_defects(contents: ET.Element, part: str) -> list[Defect]:
 
     `MasterContents` and `PageContents` are the same type, carrying the same
     `Shapes` and `Connects`, so a master goes wrong here the ways a page does.
+
+    Glue is checked from both ends. A `Connect` record and the `Sheet.N!`
+    references in the connector's endpoint formulas name the same shape, and a
+    writer that maintains one and not the other leaves the other pointing at a
+    shape that has moved. Watching the record alone is how #328 went undetected.
     """
     shapes = _shape_ids(contents.find(f"{_MAIN_NS}Shapes"))
     defects: list[Defect] = []
@@ -316,6 +322,19 @@ def _contents_defects(contents: ET.Element, part: str) -> list[Defect]:
                     part,
                     f"a Connect record names shape {shape_id} as its {role}, "
                     "but no such shape is in this part. Visio rebinds glue like this silently.",
+                )
+            )
+
+    for owner, cell, named in _sheet_references(contents.find(f"{_MAIN_NS}Shapes")):
+        if named not in seen:
+            defects.append(
+                Defect(
+                    "stale-sheet-reference",
+                    part,
+                    f"shape {owner} names Sheet.{named}! in its {cell} formula, but no such shape is "
+                    "in this part. A formula is the other place a shape id is written: a connector's "
+                    "endpoint and a container's membership are both held this way, so what the "
+                    "records say and what the sheet does can come apart.",
                 )
             )
     return defects
@@ -490,6 +509,56 @@ def _glue_endpoints(contents: ET.Element) -> list[tuple[str, int]]:
             if endpoint is not None:
                 endpoints.append((role, endpoint))
     return endpoints
+
+
+# A ShapeSheet formula addresses another shape on the same page as `Sheet.5!Cell`
+# or `Sheet5!Cell`, at the start of the formula or nested inside a function call.
+# The lookbehind drops the sheet of a cross-page reference - the `Sheet.5!` in
+# `Pages[Page-2]!Sheet.5!Width` belongs to the page named in front of it and
+# cannot be resolved against this one.
+_SHEET_REFERENCE = re.compile(r"(?<!!)\bSheet\.?(\d+)!")
+
+
+def _own_cells(shape: ET.Element) -> list[ET.Element]:
+    """The cells this shape declares, not the ones its sub-shapes declare.
+
+    Cells sit at several depths - directly under the shape, and inside the rows
+    of a `Section` - so this descends, stopping at the `Shapes` container that
+    holds the shape's children. A sub-shape's cells are found when the walk
+    reaches that shape, and are reported under its id.
+    """
+    found: list[ET.Element] = []
+    for child in shape:
+        if child.tag == f"{_MAIN_NS}Shapes":
+            continue
+        if child.tag == f"{_MAIN_NS}Cell":
+            found.append(child)
+        else:
+            found.extend(_own_cells(child))
+    return found
+
+
+def _sheet_references(container: ET.Element | None) -> list[tuple[str, str, int]]:
+    """Every sheet a formula names, as (the shape holding it, the cell, the id).
+
+    A formula naming one sheet twice - which is how Visio writes a glue point,
+    `PAR(PNT(Sheet.2!Connections.X1,Sheet.2!Connections.Y1))` - yields it once.
+    That is one thing to fix, and reporting it per occurrence would report the
+    one fix twice.
+    """
+    if container is None:
+        return []
+    found: list[tuple[str, str, int]] = []
+    for shape in container.findall(f"{_MAIN_NS}Shape"):
+        owner = shape.attrib.get("ID", "?")
+        for cell in _own_cells(shape):
+            formula = cell.attrib.get("F")
+            if not formula or "Sheet" not in formula:
+                continue
+            for named in dict.fromkeys(_SHEET_REFERENCE.findall(formula)):
+                found.append((owner, cell.attrib.get("N", "?"), int(named)))
+        found.extend(_sheet_references(shape.find(f"{_MAIN_NS}Shapes")))
+    return found
 
 
 # --- package ----------------------------------------------------------------
