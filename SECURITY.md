@@ -12,7 +12,7 @@ Only the latest release of `vsdxkit` receives security fixes.
 ## Reporting a vulnerability
 
 This repository has GitHub
-[private vulnerability reporting](https://github.com/shauneccles/vsdx/security/advisories/new)
+[private vulnerability reporting](https://github.com/firmfooting/vsdxkit/security/advisories/new)
 enabled — please use it. Reports stay private while they are assessed, and you
 will be credited if you wish.
 
@@ -22,6 +22,8 @@ When reporting, please include:
 - a minimal reproduction (a `.vsdx` file or code snippet),
 - your assessment of the impact.
 
-If the vulnerable code originates upstream
-([dave-howard/vsdx](https://github.com/dave-howard/vsdx)), report here first —
-this repository will coordinate disclosure with upstream where relevant.
+vsdxkit shares its early history with
+[dave-howard/vsdx](https://github.com/dave-howard/vsdx). If the vulnerable code
+predates the split and so affects that project too, report it here first — we
+will coordinate disclosure with its maintainer rather than leave those users
+exposed.

@@ -1,7 +1,7 @@
 """vsdxkit - create, edit and analyse Microsoft Visio .vsdx files.
 
-The import namespace remains ``vsdx`` for continuity with the upstream
-library; the distribution installs as ``vsdxkit``.
+The distribution installs as ``vsdxkit``; the import namespace stays ``vsdx``
+so code written against the library this one descends from keeps working.
 """
 
 import xml.dom.minidom as minidom  # minidom used for prettyprint

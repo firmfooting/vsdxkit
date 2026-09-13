@@ -1,7 +1,8 @@
 # Changelog
 
-This changelog covers the `vsdxkit` fork. The upstream project history remains
-available at <https://github.com/dave-howard/vsdx>.
+This changelog covers `vsdxkit`. The project it descends from, and whose
+history precedes 0.6.3 here, remains available at
+<https://github.com/dave-howard/vsdx>.
 
 ## Unreleased
 
