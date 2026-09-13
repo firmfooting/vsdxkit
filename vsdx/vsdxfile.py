@@ -281,6 +281,18 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
     ) -> None:
         self.close_vsdx()
 
+    @override
+    def _require_open(self, operation: str) -> None:
+        """Refuse a mutation on a closed document, whose result no save can reach.
+
+        Ask this of the document the operation would change, which is not
+        always the receiver: a cross-document copy runs `copy_shape` on the
+        source but edits the destination page, so those methods ask `page.vis`
+        (issue #242).
+        """
+        if not self.file_open:
+            raise VisioFileNotOpen(f"{operation} is not available once the document is closed")
+
     @staticmethod
     def _part_tree(tree: ET.ElementTree[ET.Element] | None, description: str) -> ET.ElementTree[ET.Element]:
         """A required document part (pages.xml, app.xml, ...).
@@ -640,6 +652,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
 
         :return: None
         """
+        self._require_open("VisioFile.remove_page_by_index()")
 
         # remove Page element from pages.xml file - zero based index
         if isinstance(index, int):
@@ -682,6 +695,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
 
         :return: None
         """
+        self._require_open("VisioFile.remove_page_by_name()")
 
         # get index and then pass to remove_page_by_index() to perform deletion
         for p in self.pages:
@@ -1005,6 +1019,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
 
         :return: :class:`Page` object representing the new page
         """
+        self._require_open("VisioFile.add_page_at()")
 
         # Determine the new page's name
         new_page_name = self._get_new_page_name(name or f"Page-{len(self.pages) + 1}")
@@ -1088,6 +1103,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
 
         :return: the newly created page
         """
+        self._require_open("VisioFile.copy_page()")
         # Determine the new page's name
         new_page_name = self._get_new_page_name(name or page.name)
 
@@ -1198,8 +1214,10 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         Created on first use and reused for every subsequent create/connect
         call, so a loop of N shapes parses the donor packages once rather than
         N times. Ownership stays here: `close_vsdx` closes and drops it, and a
-        later call builds a fresh one rather than handing back a closed object.
+        closed document is refused rather than handed a replacement, so the
+        only pair that ever exists is one this document will close (issue #242).
         """
+        self._require_open("building a shape or connector")
         if self._media is None:
             self._media = vsdx.Media()
         return self._media
@@ -1229,7 +1247,10 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         :param text: label text; the palette sentinel name is cleared when None
         :return: the new Shape
         """
-        media = self._shared_media()
+        page.vis._require_open("VisioFile.create_shape()")
+        # the donor belongs to the document being changed, which is also the
+        # one that will close it
+        media = page.vis._shared_media()
         source = media.palette.pages[0].find_shape_by_text(palette_name)
         if source is None:
             raise ValueError(f"palette has no shape named {palette_name}")
@@ -1277,6 +1298,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             ElementTree: The new shape ElementTree
 
         """
+        page.vis._require_open("VisioFile.copy_shape()")
 
         new_shape = ET.fromstring(ET.tostring(shape))
 
@@ -1289,6 +1311,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         return new_shape
 
     def insert_shape(self, shape: Element, shapes: Element, page: Page, page_path: str) -> Element:
+        page.vis._require_open("VisioFile.insert_shape()")
         # Keep page_path for the current API, but never let it select a different
         # page from the typed Page argument that owns ID allocation.
         if _normalise_page_path(page.filename) != _normalise_page_path(page_path):
@@ -1330,6 +1353,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             share one map; a new one is started when omitted
         :return: the ID map, old ID -> new ID, for ``update_ids`` to apply
         """
+        page.vis._require_open("VisioFile.increment_shape_ids()")
         page._set_max_ids()
         if id_map is None:
             id_map = {}
@@ -1450,8 +1474,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         :raises ValueError: if the extension contradicts the package kind
 
         """
-        if not self.file_open:
-            raise VisioFileNotOpen("Unable to save a file after being closed or outside of 'with' block.")
+        self._require_open("VisioFile.save_vsdx()")
         if not self.zip_file_contents:
             raise ValueError("cannot save an empty package")
 

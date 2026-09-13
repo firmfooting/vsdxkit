@@ -42,6 +42,7 @@ class JinjaTemplatingMixin:
 
     def increment_sub_shape_ids(self, shape: Shape, page: Page, id_map: dict[str, int] | None = None) -> dict[str, int]: ...
     def remove_page_by_index(self, index: int) -> None: ...
+    def _require_open(self, operation: str) -> None: ...
 
     def jinja_render_vsdx(self, context: dict[str, object]) -> None:
         """Transform a template VisioFile object using the Jinja language
@@ -53,6 +54,10 @@ class JinjaTemplatingMixin:
 
         :return: None
         """
+        # up front, not at the page.xml assignment below: shape text is
+        # rewritten in place before that line, so a late refusal would leave
+        # earlier pages rendered and later ones untouched
+        self._require_open("VisioFile.jinja_render_vsdx()")
         # parse each shape in each page as Jinja2 template with context
         pages_to_remove: list[Page] = []
         for page in self.pages:  # type: Page
