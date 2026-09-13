@@ -8,6 +8,17 @@ history precedes 0.6.3 here, remains available at
 
 ### Added
 
+- A 0.x API notice at the top of the README and the documentation landing page:
+  0.7 is the last release of the inherited API, and 1.0 renames `VisioFile` and
+  `Container`, splits `Connect`, and removes the context manager.
+- `tests/fixtures/com_reference/README.md` documents the COM reference corpus:
+  what each scenario captured from Visio 16.0 and why, including the two
+  scenarios whose COM calls failed, the `manifest.json` schema, and how to
+  regenerate with `tools/com_reference.ps1`. CONTRIBUTING gains a "When a change
+  needs Visio" section covering the `needs-visio` label and
+  `tools/visio_check.ps1`.
+- `docs/maintainers/upstream-sync.md` records how and when to check
+  `dave-howard/vsdx` for fixes worth adopting, and the sync point last checked.
 - CI runs the test suite on macOS as well as Linux and Windows, on the oldest
   and newest supported interpreters, which catches path-separator and
   case-sensitivity regressions before a release does.

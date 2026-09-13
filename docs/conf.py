@@ -18,7 +18,11 @@ extensions = [
 ]
 
 templates_path = ["_templates"]
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+# docs/maintainers/ holds Markdown notes for this project's maintainers. They
+# live here to sit beside the docs they concern, not to be published: there is
+# no Markdown parser configured, and they are not in any toctree. Excluding
+# them says so, rather than relying on Sphinx ignoring an unreadable suffix.
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "maintainers"]
 
 html_theme = "sphinx_rtd_theme"
 html_title = f"vsdxkit {release}"
