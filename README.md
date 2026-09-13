@@ -215,3 +215,5 @@ interpreter.
 vsdxkit descends from [`dave-howard/vsdx`](https://github.com/dave-howard/vsdx), originally written by Dave Howard and released under the BSD 3-Clause licence. That work is the foundation this library is built on, and its copyright notice is retained in [`LICENSE`](LICENSE) alongside our own.
 
 vsdxkit is now developed independently: it is not a downstream of that project and does not track it. The `vsdx` import namespace is kept so existing code continues to work, and the licence remains BSD 3-Clause.
+
+<!-- Verified automated workflow test -->
