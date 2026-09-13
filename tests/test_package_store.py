@@ -300,11 +300,21 @@ def test_open_enforces_the_member_count_limit():
 
 
 @pytest.mark.allow_invalid_package
-@pytest.mark.parametrize("member", ["/abs/evil.bin", "visio\\document.xml"])
-def test_open_refuses_a_member_name_that_escapes_or_collides(tmp_path, member: str):
+def test_open_refuses_a_member_name_that_escapes_the_archive(tmp_path):
+    """The pre-flight name check runs, and `open` does not swallow it.
+
+    A member name carrying a backslash is deliberately not tested here.
+    `zipfile` folds `os.sep` to `/` in `ZipInfo.__init__`, on the way in *and*
+    on the way back out, so on Windows such a member cannot be written, read,
+    or therefore reached -- and a version of this test parametrised over one
+    failed on all five Windows runners, reporting `duplicate_member` because
+    the name had already become `visio/document.xml`. The backslash rule is
+    covered where it is reachable on every platform: over a part name, in
+    `test_a_name_that_is_not_an_opc_part_name_is_refused`.
+    """
     path = os.path.join(str(tmp_path), FIXTURE)
     shutil.copy(fixture_path(), path)
-    append_member(path, member, b"evil")
+    append_member(path, "/abs/evil.bin", b"evil")
     with pytest.raises(PackageLimitError) as excinfo:
         PackageStore.open(path)
     assert excinfo.value.reason == "member_name"
