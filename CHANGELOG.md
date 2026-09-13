@@ -8,6 +8,18 @@ From 0.7.1 onward this file is maintained by release-please, which writes a
 section per release from the conventional-commit subjects on `main`. Edit the
 release pull request rather than this file directly.
 
+## [0.7.1](https://github.com/firmfooting/vsdxkit/compare/v0.7.0...v0.7.1) (2026-09-13)
+
+
+### Bug Fixes
+
+* render Jinja templates in a sandboxed environment ([#259](https://github.com/firmfooting/vsdxkit/issues/259)) ([d5b735c](https://github.com/firmfooting/vsdxkit/commit/d5b735c95385032f72129e057a34484dab321d71))
+
+
+### Documentation
+
+* correct attribution and release-day drift ([#265](https://github.com/firmfooting/vsdxkit/issues/265)) ([659b47b](https://github.com/firmfooting/vsdxkit/commit/659b47b5059cc186674c2d244e4e7e75f5b46035))
+
 ## 0.7.0 - 2026-09-13
 
 ### Added
