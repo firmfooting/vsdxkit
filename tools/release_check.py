@@ -55,7 +55,6 @@ def section_for(version: str, changelog: Path | None = None) -> str | None:
     return "\n".join(lines[start:]).strip("\n")
 
 
-
 def _conventional_subjects(since_tag: str) -> list[str] | None:
     """Subjects of every commit since `since_tag` that should reach the changelog.
 
@@ -129,10 +128,7 @@ def main(argv: list[str]) -> int:
     if args.since:
         missing = missing_from_changelog(body, args.since)
         if missing:
-            print(
-                f"FAIL: the CHANGELOG.md section for {args.version} is missing "
-                f"{len(missing)} commit(s) since {args.since}:"
-            )
+            print(f"FAIL: the CHANGELOG.md section for {args.version} is missing {len(missing)} commit(s) since {args.since}:")
             for subject in missing:
                 print(f"  {subject}")
             print(
