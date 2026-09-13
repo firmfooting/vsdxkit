@@ -333,6 +333,10 @@ def test_a_shape_id_that_is_not_a_number_is_described_rather_than_raised_on(tmp_
     assert observation.pages[0].shapes, "the rest of the page should still be read"
 
 
+# The group's id is deliberately unreadable, so every `Sheet.N!` reference to it
+# resolves to nothing. That is the rule added with #328 doing its job on a
+# package built to be wrong, not a finding.
+@pytest.mark.allow_invalid_package("stale-sheet-reference")
 def test_a_group_with_an_unreadable_id_still_reports_its_members(tmp_path, basedir):
     """Dropping the members with the group would report three shapes missing.
 

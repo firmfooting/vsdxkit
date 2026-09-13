@@ -331,7 +331,7 @@ def _contents_defects(contents: ET.Element, part: str) -> list[Defect]:
                 )
             )
 
-    for owner, cell, named in _sheet_references(contents.find(f"{_MAIN_NS}Shapes")):
+    for owner, cell, named in _sheet_references(contents.find(f"{MAIN_NS}Shapes")):
         if named not in seen:
             defects.append(
                 Defect(
@@ -535,9 +535,9 @@ def _own_cells(shape: ET.Element) -> list[ET.Element]:
     """
     found: list[ET.Element] = []
     for child in shape:
-        if child.tag == f"{_MAIN_NS}Shapes":
+        if child.tag == f"{MAIN_NS}Shapes":
             continue
-        if child.tag == f"{_MAIN_NS}Cell":
+        if child.tag == f"{MAIN_NS}Cell":
             found.append(child)
         else:
             found.extend(_own_cells(child))
@@ -555,7 +555,7 @@ def _sheet_references(container: ET.Element | None) -> list[tuple[str, str, int]
     if container is None:
         return []
     found: list[tuple[str, str, int]] = []
-    for shape in container.findall(f"{_MAIN_NS}Shape"):
+    for shape in container.findall(f"{MAIN_NS}Shape"):
         owner = shape.attrib.get("ID", "?")
         for cell in _own_cells(shape):
             formula = cell.attrib.get("F")
@@ -563,7 +563,7 @@ def _sheet_references(container: ET.Element | None) -> list[tuple[str, str, int]
                 continue
             for named in dict.fromkeys(_SHEET_REFERENCE.findall(formula)):
                 found.append((owner, cell.attrib.get("N", "?"), int(named)))
-        found.extend(_sheet_references(shape.find(f"{_MAIN_NS}Shapes")))
+        found.extend(_sheet_references(shape.find(f"{MAIN_NS}Shapes")))
     return found
 
 
