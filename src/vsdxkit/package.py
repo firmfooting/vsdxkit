@@ -265,13 +265,18 @@ def read_archive_members(path: str | os.PathLike[str], limits: PackageLimits) ->
     """Every file member of a zip archive, in archive order, within `limits`.
 
     The end-of-central-directory entry count is checked before ``ZipFile``
-    parses the central directory, ZipInfo metadata is checked against
-    ``limits`` before any member body is read, and reads stream through a byte
-    counter so the *per-member* cap holds even if the archive's metadata
-    disagrees with its contents. ``max_total_uncompressed`` is not defended
-    that way: it is applied to the sizes the central directory declares, so an
-    archive that under-declares every member can still deliver
-    ``max_members * max_member_size`` bytes.
+    parses the central directory, and ZipInfo metadata is checked against
+    ``limits`` before any member body is read.
+
+    ``max_total_uncompressed`` is applied to the sizes the central directory
+    declares, which the archive chooses. That bounds what is materialised only
+    because ``ZipFile`` will not hand back more of a member than the member
+    claims to hold: it truncates the output at ``file_size`` and fails the CRC,
+    so a declaration that lies can only make the loader read *less*. That is a
+    dependency on CPython rather than on anything here, and
+    ``test_a_member_cannot_deliver_more_bytes_than_it_declares`` is what holds
+    it. ``_read_bounded`` is the second line, for a reader that is not
+    ``ZipFile``.
 
     Directory entries are not parts and are dropped, but they are counted
     against ``max_members`` first: an archive can be padded with them just as

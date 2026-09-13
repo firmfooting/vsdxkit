@@ -7,10 +7,10 @@ import warnings
 import zipfile
 
 import pytest
-from helpers.broken_package import append_member
+from helpers.broken_package import append_member, understated
 
 import vsdxkit
-from vsdxkit.package import PackageLimits, _read_bounded
+from vsdxkit.package import PackageLimits, _read_bounded, read_archive_members
 
 # Every test here builds a package designed to be wrong - padding members to
 # trip a count cap, names that escape the archive, payloads that expand out of
@@ -199,3 +199,36 @@ def test_error_message_names_the_limit_and_values(tmp_path):
     with pytest.raises(vsdxkit.PackageLimitError) as excinfo:
         vsdxkit.VisioFile(path, limits_path=limits_path)
     assert "60000" in str(excinfo.value)
+
+
+# The uncompressed-size cap is applied to `info.file_size`, which the archive
+# declares and an attacker therefore chooses. The two tests below are why that
+# is sound rather than a hole: `ZipFile` refuses to hand back more of a member
+# than the member claims to hold, so a lie can only ever make the loader
+# materialise *less*. `_read_bounded` is the second line, for a reader that is
+# not `ZipFile` at all (`test_streaming_counter_rejects_over_delivery`).
+#
+# This is a dependency on CPython's behaviour, not on ours, which is exactly
+# why it is pinned here: if a future release started honouring the compressed
+# stream over the declared size, the total cap would quietly stop bounding
+# anything and nothing else in this suite would notice.
+UNDERSTATED_PAYLOAD = bytes(range(256)) * 64
+
+
+def test_a_member_that_understates_its_size_is_refused(tmp_path):
+    path = understated(os.path.join(str(tmp_path), "understated.vsdx"), "visio/pages/pad.bin", UNDERSTATED_PAYLOAD, 1)
+    with pytest.raises(zipfile.BadZipFile):
+        read_archive_members(path, PackageLimits())
+
+
+def test_a_member_cannot_deliver_more_bytes_than_it_declares(tmp_path):
+    """The stronger case: the CRC agrees with the lie, so nothing raises."""
+    path = understated(
+        os.path.join(str(tmp_path), "understated.vsdx"),
+        "visio/pages/pad.bin",
+        UNDERSTATED_PAYLOAD,
+        1,
+        consistent_crc=True,
+    )
+    ((_, delivered),) = read_archive_members(path, PackageLimits())
+    assert len(delivered) == 1
