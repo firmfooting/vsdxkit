@@ -276,7 +276,11 @@ def _verdict(record: dict, package: Observation, visio: Observation) -> tuple[bo
     if differences:
         return False, f"DIFFER {name}: {len(differences)} difference(s)\n" + _indent(format_differences(differences))
     shapes = sum(len(page.shapes) for page in package.pages)
-    return True, f"AGREE  {name}: {len(package.pages)} page(s), {shapes} shape(s) - Visio sees the same document"
+    cells = sum(len(shape.cells) for page in package.pages for shape in page.shapes)
+    return True, (
+        f"AGREE  {name}: {len(package.pages)} page(s), {shapes} shape(s), {cells} placement cell(s) "
+        "- Visio sees the same document"
+    )
 
 
 def _indent(text: str) -> str:
@@ -375,13 +379,26 @@ def command_replay(recordings: list[str], *, corpus: str) -> int:
             )
             failures += 1
             continue
+        try:
+            visio = observation_from_com_json(record)
+        except ValueError as error:
+            # The recording and this code no longer agree on what is in a
+            # recording. Guessing at the difference is how a harness starts
+            # reporting agreement on a comparison it did not make, so it is
+            # refused here and named as the operator's next action.
+            print(
+                f"SCHEMA {name}: {error}\n"
+                f"    Re-record on a Windows machine: python tools/visio_verify.py record {package_path}"
+            )
+            failures += 1
+            continue
         transform = record["source"].get("transform", "none")
         with tempfile.TemporaryDirectory(prefix="vsdxkit-replay-") as workspace:
             # Re-run the writer *now*. This is what makes replay a gate on the
             # library rather than on its own reader: the bytes being described
             # were produced by today's code, not read back out of git.
             subject = _apply_transform(transform, package_path, os.path.join(workspace, name))
-            agreed, text = _verdict(record, observation_from_package(subject), observation_from_com_json(record))
+            agreed, text = _verdict(record, observation_from_package(subject), visio)
         print(text)
         failures += 0 if agreed else 1
     return 1 if failures else 0

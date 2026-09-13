@@ -2,9 +2,10 @@
 
 One JSON file per fixture, recording what a real Microsoft Visio 16.0 reported
 when it opened **the file vsdxkit wrote from that fixture**: every page, every
-shape id including group members, every glue record. They are the far half of a
-differential oracle — the near half is `tests/helpers/visio_observation.py`,
-which derives the same account from a package's own XML.
+shape id including group members, the cells that place each shape, and every glue
+record. They are the far half of a differential oracle — the near half is
+`tests/helpers/visio_observation.py`, which derives the same account from a
+package's own XML.
 
 The distinction matters more than it looks. A recording of a fixture *as it sits
 in git* would be worthless as a regression gate: the bytes are frozen, so the
@@ -71,16 +72,57 @@ had done is not evidence of anything.
 ## What is compared, and what is not
 
 Compared: page count and order, page names, shape ids per page, each shape's
-enclosing group, and every glue record.
+enclosing group, every glue record, and the **placement cells** — `PinX`,
+`PinY`, `Width`, `Height`, `Angle`, `LocPinX`, `LocPinY`, `FlipX`, `FlipY`, and
+on a 1-D shape `BeginX`, `BeginY`, `EndX`, `EndY`.
 
 Not compared:
 
 - **Shape names.** Visio synthesises `Sheet.5` for a shape the package never
   named, so comparing names would report a difference on nearly every shape and
   bury the real ones. Names are recorded for the failure message only.
-- **Geometry, text, cell values and formatting.** Not yet extracted. Whether a
-  shape is where it should be, and says what it should say, is still checked by
-  eye. See the open issues on extending the observation.
+- **Visio's `ResultIU`.** Recorded, printed in failure messages, and left
+  uncompared — see below.
+- **Where a glued connector actually sits.** Every placement cell on a dynamic
+  connector is a formula — `_WALKGLUE(...)`, `GUARD((BeginX+EndX)/2)` — inherited
+  from the same master on both sides, so all thirteen are compared as text and
+  none as a number. Move such a connector and this comparison does not notice.
+  Its endpoints are still covered by the glue records, which is a weaker claim
+  than the one made for every other shape.
+- **Text, colour and everything else in the ShapeSheet.** Not yet extracted.
+  Whether a shape *says* what it should say is still checked by eye. See the
+  open issues on extending the observation.
 
 The narrower claim is the honest one: these recordings say Visio agrees about
-the *structure* of these documents, not that it renders them correctly.
+the structure of these documents and about where their shapes sit, not that it
+renders them correctly.
+
+## Formula and result
+
+Each recorded cell carries two numbers, because a cell is two facts.
+`Cell.FormulaU` is what the cell says; `Cell.ResultIU` is what that evaluates to,
+in internal units. A package that writes a correct-looking formula in the wrong
+unit differs only in the result; a package whose formula we rewrote but which
+still evaluates the same differs only in the formula. Recording one of the two
+would hide half the bugs.
+
+Only the formula is compared. The package side has no evaluator: the `V`
+attribute next to a formula in the XML is a cache written by whoever last opened
+the file, and vsdxkit never recomputes it, so comparing it against what Visio
+evaluated would turn someone else's stale cache into a failure of ours. The
+result is recorded for the failure message — a message that says `PinX` changed
+and cannot say where the shape ended up is half a message — and for a future
+comparison of one Visio version against another, where both sides really do
+evaluate.
+
+The one place the result is used as evidence is a formula that is nothing but a
+literal. There the two sides spell the same fact differently — the package
+writes `1.332677148526936` in internal units and Visio renders the same cell as
+`33.849999572584 mm` — and a literal formula evaluates to itself, so its result
+*is* that constant in internal units. No unit parser is needed, and none exists.
+
+Constants are compared to a tolerance of 1e-9, relative or absolute, defined
+once as `PLACEMENT_TOLERANCE` in `tests/helpers/visio_observation.py`. An exact
+comparison on a double that has been through inches to millimetres and back
+fails on arithmetic that is correct, and a check that cries wolf gets switched
+off.
