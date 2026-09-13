@@ -5,7 +5,8 @@
 .DESCRIPTION
     This is one half of a differential oracle. It opens each document in an
     invisible Visio instance, enumerates every page, every shape (descending
-    into groups) and every glue record, and writes the result to stdout as JSON.
+    into groups) with the cells that place it, and every glue record, and writes
+    the result to stdout as JSON.
     tests/helpers/visio_observation.py reads that JSON, derives the same account
     from the package's own XML, and compares the two.
 
@@ -44,7 +45,25 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$SchemaVersion = 1
+$SchemaVersion = 2
+
+# The cells that decide where a shape is, how big it is and which way round it
+# faces. Kept in step with PLACEMENT_CELLS in tests/helpers/visio_observation.py
+# by test_the_two_sides_ask_for_the_same_placement_cells - a name added on one
+# side and not the other is a cell nobody compares.
+#
+# The last four exist only on a 1-D shape, so every name is asked for with
+# CellExistsU and a shape reports the ones it has. That keeps the record
+# symmetric with the package side, which can only speak where its XML does.
+$PlacementCells = @(
+    'PinX', 'PinY', 'Width', 'Height', 'Angle', 'LocPinX', 'LocPinY', 'FlipX', 'FlipY',
+    'BeginX', 'BeginY', 'EndX', 'EndY'
+)
+
+# CellExistsU's second argument: 0 asks "does this shape have this cell at all",
+# counting one inherited from a master. 1 would ask only about cells stated
+# locally, and a stencil instance states almost none of them.
+$visExistsAnywhere = 0
 
 # Documents.OpenEx flags. Read-only because a write lock is what strands a file
 # when this crashes; macros disabled because opening a document must never run
@@ -112,6 +131,60 @@ function Get-LeakedProcessIds {
     )
 }
 
+function Get-CellRecords {
+    <#
+      Both halves of every placement cell: the formula and the evaluated result.
+      They are different facts, both are recorded, and Python decides what to do
+      with them.
+
+      FormulaU and CellsU rather than Formula and Cells: the universal forms do
+      not change with the machine's language, and a recording made on a German
+      Windows has to replay on an English one.
+
+      ResultIU is in internal units - inches, and radians for angles - which is
+      the unit the package's own `V` attribute uses. FormulaU is rendered in the
+      document's units instead, so the same cell reads `33.849999572584 mm`
+      there and `1.33267714852694` here. Reporting both is what lets the Python
+      side compare a constant without parsing units.
+    #>
+    param($Shape)
+
+    $records = @()
+    foreach ($name in $PlacementCells) {
+        # A cell Visio has but will not read out is a finding, and it has to
+        # arrive as a record rather than as a gap. A gap reads as "this shape
+        # does not have this cell", which is a different fact, and one the
+        # package side says too - legitimately, for the four endpoint cells on
+        # every 2-D shape. Both sides would then be silent and nothing would
+        # fire. That is why a failure to ask is reported the same way as a
+        # failure to read: CellExistsU answers false for a cell the shape has
+        # not got, so it throwing means something else went wrong.
+        $unreadable = $null
+        $exists = $false
+        try { $exists = [bool]$Shape.CellExistsU($name, $visExistsAnywhere) }
+        catch { $unreadable = "CellExistsU: $($_.Exception.Message)" }
+        if ($null -eq $unreadable) {
+            if (-not $exists) { continue }
+            try {
+                $cell = $Shape.CellsU($name)
+                $records += @{
+                    name    = $name
+                    formula = [string]$cell.FormulaU
+                    result  = [double]$cell.ResultIU
+                }
+                continue
+            }
+            catch { $unreadable = $_.Exception.Message }
+        }
+        $records += @{
+            name    = $name
+            formula = "<unreadable: $unreadable>"
+            result  = $null
+        }
+    }
+    return $records
+}
+
 function Get-ShapeRecords {
     <#
       Walk a Shapes collection, descending into groups.
@@ -130,6 +203,10 @@ function Get-ShapeRecords {
             id        = [int]$shape.ID
             parent_id = $ParentId
             name      = [string]$shape.NameID
+            # @() because PowerShell unrolls an array on `return`: a shape with
+            # one readable cell would otherwise arrive as a bare hashtable and be
+            # serialised as a JSON object where every other shape has a list.
+            cells     = @(Get-CellRecords -Shape $shape)
         }
         $records += $record
         $childCount = 0
@@ -290,7 +367,7 @@ finally {
     schema    = $SchemaVersion
     viewer    = $viewer
     documents = @($documents)
-} | ConvertTo-Json -Depth 8 -Compress
+} | ConvertTo-Json -Depth 10 -Compress
 
 # Explicit, so that $LASTEXITCODE is always set for the caller to read: pwsh -Command
 # reports only whether the pipeline succeeded, and a script that falls off its end

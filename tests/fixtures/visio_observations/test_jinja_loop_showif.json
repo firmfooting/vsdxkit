@@ -8,16 +8,157 @@
       "name": "Page-1",
       "shapes": [
         {
+          "cells": [
+            {
+              "formula": "41.849998867042 mm",
+              "name": "PinX",
+              "result": 1.647637750670963
+            },
+            {
+              "formula": "276.57499581125 mm",
+              "name": "PinY",
+              "result": 10.88877936264758
+            },
+            {
+              "formula": "70.999997734085 mm",
+              "name": "Width",
+              "result": 2.795275501341926
+            },
+            {
+              "formula": "28.150008377503 mm",
+              "name": "Height",
+              "result": 1.108268046358385
+            },
+            {
+              "formula": "0 deg",
+              "name": "Angle",
+              "result": 0.0
+            },
+            {
+              "formula": "Width*0.5",
+              "name": "LocPinX",
+              "result": 1.397637750670963
+            },
+            {
+              "formula": "Height*0.5",
+              "name": "LocPinY",
+              "result": 0.5541340231791927
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipX",
+              "result": 0.0
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipY",
+              "result": 0.0
+            }
+          ],
           "id": 9,
           "name": "Sheet.9",
           "parent_id": null
         },
         {
+          "cells": [
+            {
+              "formula": "Sheet.9!Width*0.5",
+              "name": "PinX",
+              "result": 1.397637750670963
+            },
+            {
+              "formula": "Sheet.9!Height*0.81083471107393",
+              "name": "PinY",
+              "result": 0.8986222011614691
+            },
+            {
+              "formula": "Sheet.9!Width*1",
+              "name": "Width",
+              "result": 2.795275501341926
+            },
+            {
+              "formula": "Sheet.9!Height*0.37833057785213",
+              "name": "Height",
+              "result": 0.4192916903938215
+            },
+            {
+              "formula": "0 deg",
+              "name": "Angle",
+              "result": 0.0
+            },
+            {
+              "formula": "Width*0.5",
+              "name": "LocPinX",
+              "result": 1.397637750670963
+            },
+            {
+              "formula": "Height*0.5",
+              "name": "LocPinY",
+              "result": 0.2096458451969107
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipX",
+              "result": 0.0
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipY",
+              "result": 0.0
+            }
+          ],
           "id": 7,
           "name": "Sheet.7",
           "parent_id": 9
         },
         {
+          "cells": [
+            {
+              "formula": "Sheet.9!Width*0.4950021884055",
+              "name": "PinX",
+              "result": 1.38366749036054
+            },
+            {
+              "formula": "Sheet.9!Height*0.18650082664436",
+              "name": "PinY",
+              "result": 0.2066929067893684
+            },
+            {
+              "formula": "Sheet.9!Width*0.94661517492049",
+              "name": "Width",
+              "result": 2.646050207653747
+            },
+            {
+              "formula": "Sheet.9!Height*0.37300165328872",
+              "name": "Height",
+              "result": 0.4133858135787367
+            },
+            {
+              "formula": "0 deg",
+              "name": "Angle",
+              "result": 0.0
+            },
+            {
+              "formula": "Width*0.5",
+              "name": "LocPinX",
+              "result": 1.323025103826873
+            },
+            {
+              "formula": "Height*0.5",
+              "name": "LocPinY",
+              "result": 0.2066929067893684
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipX",
+              "result": 0.0
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipY",
+              "result": 0.0
+            }
+          ],
           "id": 8,
           "name": "Sheet.8",
           "parent_id": 9
@@ -25,7 +166,7 @@
       ]
     }
   ],
-  "schema": 1,
+  "schema": 2,
   "source": {
     "name": "test_jinja_loop_showif.vsdx",
     "sha256": "52b5c0dd86330d04fcdbb1f02c24978117ab566e15c05e3bcde1541e2ab88810",

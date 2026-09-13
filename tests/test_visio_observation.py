@@ -8,11 +8,15 @@ import json
 
 import pytest
 from helpers.visio_observation import (
+    PLACEMENT_CELLS,
     SCHEMA_VERSION,
+    CellObservation,
     ConnectObservation,
     Observation,
     PageObservation,
     ShapeObservation,
+    _com_cells,
+    _package_cell,
     compare,
     observation_from_com_json,
     observation_from_package,
@@ -23,8 +27,27 @@ def _page(index=1, name="Page-1", shapes=(), connects=()):
     return PageObservation(index=index, name=name, shapes=tuple(shapes), connects=tuple(connects))
 
 
-def _shape(shape_id, parent_id=None, name=""):
-    return ShapeObservation(id=shape_id, parent_id=parent_id, name=name)
+def _shape(shape_id, parent_id=None, name="", cells=()):
+    return ShapeObservation(id=shape_id, parent_id=parent_id, name=name, cells=tuple(cells))
+
+
+def _cell(name, constant, result=None):
+    """A cell whose formula is the constant itself, as either side would state it."""
+    return CellObservation(name=name, formula=repr(constant), constant=constant, result=result)
+
+
+def _cell_formula(name, formula, result=None):
+    return CellObservation(name=name, formula=formula, constant=None, result=result)
+
+
+def _com(formula, result):
+    """One cell as the COM reader builds it, bypassing the JSON envelope."""
+    return _com_cells([{"name": "PinX", "formula": formula, "result": result}])[0]
+
+
+def _package(formula, value):
+    """One cell as the package reader builds it, from a formula and its cached `V`."""
+    return _package_cell("PinX", formula, value)
 
 
 def test_identical_observations_have_no_differences():
@@ -235,3 +258,261 @@ def test_a_page_whose_relationship_does_not_resolve_keeps_its_position(tmp_path,
     assert [page.index for page in observation.pages] == [1, 2, 3], "page numbering shifted"
     assert observation.pages[0].unresolved
     assert not observation.pages[1].unresolved
+
+
+class TestPlacementCells:
+    """The cells that decide where a shape is and how big it is.
+
+    Structure alone cannot see a shape that moved: the ids, the grouping and the
+    glue are all unchanged when a rectangle slides a millimetre to the left. The
+    cells below are what makes that visible.
+    """
+
+    def test_a_cell_only_one_side_reports_is_a_difference(self):
+        package = Observation(label="package", pages=(_page(shapes=(_shape(1, cells=(_cell("PinX", 1.0),)),)),))
+        visio = Observation(label="visio", pages=(_page(shapes=(_shape(1),)),))
+
+        differences = compare(package, visio)
+
+        assert [d.kind for d in differences] == ["cell-missing"]
+        assert differences[0].locus == "page 1 shape 1 cell PinX"
+
+    def test_a_constant_that_moved_further_than_the_tolerance_is_a_difference(self):
+        """A millimetre is 0.0394 internal units: far outside any float noise."""
+        package = Observation(label="package", pages=(_page(shapes=(_shape(1, cells=(_cell("PinX", 1.0),)),)),))
+        visio = Observation(
+            label="visio", pages=(_page(shapes=(_shape(1, cells=(_cell("PinX", 1.0 + 0.03937, result=1.03937),)),)),)
+        )
+
+        differences = compare(package, visio)
+
+        assert [d.kind for d in differences] == ["cell-value"]
+        assert "PinX" in differences[0].locus
+        assert "1.0" in differences[0].detail and "1.03937" in differences[0].detail
+
+    def test_a_constant_that_differs_only_by_float_noise_is_not_a_difference(self):
+        """Inches to millimetres and back does not return the same double.
+
+        An exact comparison here fails on arithmetic that is correct. See
+        PLACEMENT_TOLERANCE for the measured case and the margin.
+        """
+        package = Observation(label="package", pages=(_page(shapes=(_shape(1, cells=(_cell("PinX", 1.332677148526936),)),)),))
+        visio = Observation(label="visio", pages=(_page(shapes=(_shape(1, cells=(_cell("PinX", 1.33267714852694),)),)),))
+
+        assert compare(package, visio) == ()
+
+    # Every pair below is one Visio 16.0 produced, against the formula the
+    # package stores for the same cell, on the fixture named. Nothing is invented.
+    @pytest.mark.parametrize(
+        ("stored", "rendered", "fixture"),
+        [
+            ("GUARD(0DA)", "GUARD(0 deg)", "test4_connectors"),
+            ("GUARD(0.19685039370079DL)", "GUARD(5.0000000000001 mm)", "test4_connectors"),
+            ("Width*0.499973064698594", "Width*0.49997306469859", "test5_master"),
+            ("Height*0.0", "Height*0", "test5_master"),
+            ("Sheet.5!Width*0.5", "Sheet.7!Width*0.5", "test3_house"),
+            ("GUARD(Sheet.5!Width)", "GUARD(Sheet.1!Width)", "test_master_multiple_child_shapes"),
+        ],
+    )
+    def test_visios_rendering_of_a_stored_formula_is_not_a_difference(self, stored, rendered, fixture):
+        """`FormulaU` is Visio's rendering of a formula, not the text the file holds.
+
+        Measured against Visio 16.0: the same formula comes back with its units
+        respelled, its literals reprinted to fourteen digits, `0.0` as `0`, and -
+        the one that settles it - cross-sheet references rebound from the ids
+        inside the master to the ids of the instance on the page. `Sheet.5!Width`
+        and `Sheet.7!Width` are two different sentences that mean the same thing.
+
+        Matching that text would mean reimplementing Visio's formula printer from
+        examples: unbounded, and every rule guessed at is somewhere a real
+        difference can hide.
+        """
+        package = Observation(label="package", pages=(_page(shapes=(_shape(1, cells=(_cell_formula("PinX", stored),)),)),))
+        visio = Observation(
+            label="visio", pages=(_page(shapes=(_shape(1, cells=(_cell_formula("PinX", rendered, result=1.0),)),)),)
+        )
+
+        assert compare(package, visio) == (), fixture
+
+    def test_an_expression_that_genuinely_changed_is_not_reported_either(self):
+        """The cost of the test above, stated rather than buried.
+
+        Nothing distinguishes this pair from those without knowing what Visio's
+        printer does, so a writer that rewrote an expression is not caught here.
+        The cell is still checked for presence and for still being an expression,
+        and both formulas are recorded and printed; what is gone is any claim
+        that the text agreed.
+        """
+        package = Observation(
+            label="package", pages=(_page(shapes=(_shape(1, cells=(_cell_formula("LocPinX", "Width*0.5"),)),)),)
+        )
+        visio = Observation(
+            label="visio",
+            pages=(_page(shapes=(_shape(1, cells=(_cell_formula("LocPinX", "Width*0.25", result=0.25),)),)),),
+        )
+
+        assert compare(package, visio) == ()
+
+    def test_a_literal_against_an_expression_is_a_difference(self):
+        """The two are different facts about the cell, whatever they evaluate to.
+
+        A package whose formula we replaced with the constant it happened to
+        evaluate to at write time has lost the link that kept the shape in place,
+        and the next change to Width moves it, even though the two agree
+        numerically today.
+        """
+        package = Observation(label="package", pages=(_page(shapes=(_shape(1, cells=(_cell("LocPinX", 0.5),)),)),))
+        visio = Observation(
+            label="visio",
+            pages=(_page(shapes=(_shape(1, cells=(_cell_formula("LocPinX", "Width*0.5", result=0.5),)),)),),
+        )
+
+        differences = compare(package, visio)
+
+        assert [d.kind for d in differences] == ["cell-formula"]
+        assert "Width*0.5" in differences[0].detail
+
+    def test_results_are_not_compared_because_only_one_side_can_have_them(self):
+        """Visio evaluates; the package's `V` is a cache nothing here recomputes."""
+        package = Observation(label="package", pages=(_page(shapes=(_shape(1, cells=(_cell("PinX", 1.0, result=99.0),)),)),))
+        visio = Observation(label="visio", pages=(_page(shapes=(_shape(1, cells=(_cell("PinX", 1.0, result=1.0),)),)),))
+
+        assert compare(package, visio) == ()
+
+
+class TestReadingPlacementCellsFromAPackage:
+    def test_it_reads_the_cells_a_shape_states_itself(self, basedir):
+        observation = observation_from_package(f"{basedir}/test4_connectors.vsdx")
+
+        shape = observation.pages[0].shapes_by_id[1]
+        cells = shape.cells_by_name
+        assert set(PLACEMENT_CELLS) >= set(cells)
+        assert cells["PinX"].constant == pytest.approx(1.332677148526936)
+        # LocPinX carries a formula, so it is compared as text and has no constant
+        assert cells["LocPinX"].formula == "Width*0.5"
+        assert cells["LocPinX"].constant is None
+
+    def test_a_two_dimensional_shape_states_no_endpoints(self, basedir):
+        observation = observation_from_package(f"{basedir}/test4_connectors.vsdx")
+
+        shape = observation.pages[0].shapes_by_id[1]
+        assert "BeginX" not in shape.cells_by_name
+
+    def test_a_one_dimensional_shape_states_its_endpoints(self, basedir):
+        observation = observation_from_package(f"{basedir}/test4_connectors.vsdx")
+
+        connectors = [shape for page in observation.pages for shape in page.shapes if "BeginX" in shape.cells_by_name]
+        assert connectors, "no 1-D shape found in a connector fixture"
+        assert {"BeginX", "BeginY", "EndX", "EndY"} <= set(connectors[0].cells_by_name)
+
+    def test_it_takes_cells_the_shape_inherits_from_its_master(self, basedir):
+        """A shape that states only `PinX` is still somewhere and still a size.
+
+        The rest of its placement comes from the master, and a comparison that
+        could not see it would report a difference against Visio on every
+        instance of every stencil shape.
+        """
+        observation = observation_from_package(f"{basedir}/test5_master.vsdx")
+
+        shape = observation.pages[0].shapes_by_id[1]
+        assert "Width" in shape.cells_by_name, "master-inherited cells were not resolved"
+        assert shape.cells_by_name["Width"].constant == pytest.approx(1.0)
+
+    def test_a_cell_whose_formula_says_inherit_resolves_to_the_master_formula(self, basedir):
+        """`F='Inh'` points at the master's formula; the `V` beside it is that formula, evaluated.
+
+        Reading that number as the cell's own formula would turn every connector
+        in the corpus from something tracking its endpoints into a constant that
+        happens to sit where the connector was, and the comparison would then
+        agree with Visio about a file that had lost its glue.
+        """
+        observation = observation_from_package(f"{basedir}/test4_connectors.vsdx")
+
+        # shape 6 is a connector: PinX is `<Cell N='PinX' V='2.733...' F='Inh'/>`
+        connector = observation.pages[0].shapes_by_id[6]
+        pin_x = connector.cells_by_name["PinX"]
+        assert pin_x.formula == "GUARD((BeginX+EndX)/2)"
+        assert pin_x.constant is None
+
+    def test_every_shape_in_every_fixture_states_a_full_placement(self, basedir):
+        """The comparison is symmetric on presence, which is only honest if this holds.
+
+        Visio always has these cells; the package has them only where its XML or
+        a master says so. If some shape legitimately said nothing, `cell-missing`
+        would fire on a correct file and the check would have to be loosened into
+        one that could no longer see a dropped cell.
+        """
+        import glob
+
+        two_dimensional = set(PLACEMENT_CELLS) - {"BeginX", "BeginY", "EndX", "EndY"}
+        for path in sorted(glob.glob(f"{basedir}/*.vsdx")):
+            observation = observation_from_package(path)
+            for page in observation.pages:
+                for shape in page.shapes:
+                    missing = two_dimensional - set(shape.cells_by_name)
+                    assert not missing, f"{path} shape {shape.id} states nothing about {sorted(missing)}"
+
+
+@pytest.mark.parametrize(
+    "formula",
+    ["0", "1.25", ".5", "-3e-2", "33.849999572584 mm", "0.19685039370079DL", "0 deg", "TRUE", "FALSE", "1.5 in."],
+)
+def test_both_sides_agree_that_a_literal_is_a_literal(formula):
+    """The two readers share one classifier, and this is what that buys.
+
+    If the COM side called `FALSE` an expression where the package side called
+    `0` a constant, every shape in every file would report a kind mismatch. The
+    classifier is the only thing standing between the two spellings.
+    """
+    package = _com(formula, 0.0).constant
+    visio = _package(formula, "0").constant
+
+    assert package is not None and visio is not None
+
+
+@pytest.mark.parametrize("formula", ["Width*0.5", "GUARD((BeginX+EndX)/2)", "_WALKGLUE(a,b,c)", "Sheet.7!Width*1", ""])
+def test_both_sides_agree_that_an_expression_is_an_expression(formula):
+    assert _com(formula, 0.0).constant is None
+    assert _package(formula, "0").constant is None
+
+
+class TestReadingPlacementCellsFromCom:
+    def _payload(self, cells):
+        return {
+            "schema": SCHEMA_VERSION,
+            "pages": [{"index": 1, "name": "Page-1", "shapes": [{"id": 1, "parent_id": None, "cells": cells}]}],
+        }
+
+    def test_a_literal_formula_takes_its_number_from_the_result(self):
+        """Visio spells the constant in the document's units; the result is in ours.
+
+        `33.849999572584 mm` and `1.33267714852694` are the same fact. Only the
+        second is in internal units, which is the unit the package writes, so it
+        is the one the comparison can use - and taking it from the result costs
+        no unit parser, because a literal formula evaluates to itself.
+        """
+        observation = observation_from_com_json(
+            self._payload([{"name": "PinX", "formula": "33.849999572584 mm", "result": 1.33267714852694}])
+        )
+
+        cell = observation.pages[0].shapes_by_id[1].cells_by_name["PinX"]
+        assert cell.constant == pytest.approx(1.33267714852694)
+        assert cell.result == pytest.approx(1.33267714852694)
+
+    def test_an_expression_has_no_constant(self):
+        observation = observation_from_com_json(self._payload([{"name": "LocPinX", "formula": "Width*0.5", "result": 0.5}]))
+
+        cell = observation.pages[0].shapes_by_id[1].cells_by_name["LocPinX"]
+        assert cell.constant is None
+        assert cell.result == pytest.approx(0.5)
+
+    def test_a_boolean_formula_is_a_literal(self):
+        """Visio renders FlipX as `FALSE` where the package writes `0`.
+
+        Reading that as an expression would report a difference on every shape in
+        every file.
+        """
+        observation = observation_from_com_json(self._payload([{"name": "FlipX", "formula": "FALSE", "result": 0.0}]))
+
+        cell = observation.pages[0].shapes_by_id[1].cells_by_name["FlipX"]
+        assert cell.constant == pytest.approx(0.0)

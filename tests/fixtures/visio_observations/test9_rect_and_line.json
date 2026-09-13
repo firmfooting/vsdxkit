@@ -8,16 +8,197 @@
       "name": "Page-1",
       "shapes": [
         {
+          "cells": [
+            {
+              "formula": "54.999999672811 mm",
+              "name": "PinX",
+              "result": 2.16535431782722
+            },
+            {
+              "formula": "278.50000588564 mm",
+              "name": "PinY",
+              "result": 10.96456716085199
+            },
+            {
+              "formula": "89.999998294328 mm",
+              "name": "Width",
+              "result": 3.543307019461746
+            },
+            {
+              "formula": "13.000018190614 mm",
+              "name": "Height",
+              "result": 0.5118117397879589
+            },
+            {
+              "formula": "0 deg",
+              "name": "Angle",
+              "result": 0.0
+            },
+            {
+              "formula": "Width*0.5",
+              "name": "LocPinX",
+              "result": 1.771653509730873
+            },
+            {
+              "formula": "Height*0.5",
+              "name": "LocPinY",
+              "result": 0.2559058698939795
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipX",
+              "result": 0.0
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipY",
+              "result": 0.0
+            }
+          ],
           "id": 1,
           "name": "Sheet.1",
           "parent_id": null
         },
         {
+          "cells": [
+            {
+              "formula": "(BeginX+EndX)/2",
+              "name": "PinX",
+              "result": 2.165354305156951
+            },
+            {
+              "formula": "(BeginY+EndY)/2",
+              "name": "PinY",
+              "result": 9.842519568895232
+            },
+            {
+              "formula": "SQRT((EndX-BeginX)^2+(EndY-BeginY)^2)",
+              "name": "Width",
+              "result": 3.629741869488192
+            },
+            {
+              "formula": "0 mm",
+              "name": "Height",
+              "result": 0.0
+            },
+            {
+              "formula": "ATAN2(EndY-BeginY,EndX-BeginX)",
+              "name": "Angle",
+              "result": 0.2186689458739421
+            },
+            {
+              "formula": "Width*0.5",
+              "name": "LocPinX",
+              "result": 1.814870934744096
+            },
+            {
+              "formula": "Height*0.5",
+              "name": "LocPinY",
+              "result": 0.0
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipX",
+              "result": 0.0
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipY",
+              "result": 0.0
+            },
+            {
+              "formula": "9.9999998819976 mm",
+              "name": "BeginX",
+              "result": 0.3937007827558093
+            },
+            {
+              "formula": "239.99999716794 mm",
+              "name": "BeginY",
+              "result": 9.448818786139423
+            },
+            {
+              "formula": "99.999998819976 mm",
+              "name": "EndX",
+              "result": 3.937007827558093
+            },
+            {
+              "formula": "259.99999693194 mm",
+              "name": "EndY",
+              "result": 10.23622035165104
+            }
+          ],
           "id": 2,
           "name": "Sheet.2",
           "parent_id": null
         },
         {
+          "cells": [
+            {
+              "formula": "GUARD((BeginX+EndX)/2)",
+              "name": "PinX",
+              "result": 2.165354305156951
+            },
+            {
+              "formula": "GUARD((BeginY+EndY)/2)",
+              "name": "PinY",
+              "result": 9.055118003383614
+            },
+            {
+              "formula": "GUARD(EndX-BeginX)",
+              "name": "Width",
+              "result": 3.543307044802283
+            },
+            {
+              "formula": "GUARD(EndY-BeginY)",
+              "name": "Height",
+              "result": 0.7874015655116189
+            },
+            {
+              "formula": "GUARD(0 deg)",
+              "name": "Angle",
+              "result": 0.0
+            },
+            {
+              "formula": "GUARD(Width*0.5)",
+              "name": "LocPinX",
+              "result": 1.771653522401142
+            },
+            {
+              "formula": "GUARD(Height*0.5)",
+              "name": "LocPinY",
+              "result": 0.3937007827558094
+            },
+            {
+              "formula": "GUARD(FALSE)",
+              "name": "FlipX",
+              "result": 0.0
+            },
+            {
+              "formula": "GUARD(FALSE)",
+              "name": "FlipY",
+              "result": 0.0
+            },
+            {
+              "formula": "9.9999998819976 mm",
+              "name": "BeginX",
+              "result": 0.3937007827558093
+            },
+            {
+              "formula": "219.99999740395 mm",
+              "name": "BeginY",
+              "result": 8.661417220627804
+            },
+            {
+              "formula": "99.999998819976 mm",
+              "name": "EndX",
+              "result": 3.937007827558093
+            },
+            {
+              "formula": "239.99999716794 mm",
+              "name": "EndY",
+              "result": 9.448818786139423
+            }
+          ],
           "id": 3,
           "name": "Sheet.3",
           "parent_id": null
@@ -25,7 +206,7 @@
       ]
     }
   ],
-  "schema": 1,
+  "schema": 2,
   "source": {
     "name": "test9_rect_and_line.vsdx",
     "sha256": "0b5a8b9732cc5d15b04d727c02684490196a995c99f1035033e3458fb7acdb3f",
