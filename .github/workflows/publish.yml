@@ -165,6 +165,12 @@ jobs:
           # run from outside the checkout so the source tree cannot shadow the wheel
           cd "$RUNNER_TEMP"
           "$GITHUB_WORKSPACE/dist-check/bin/python" "$GITHUB_WORKSPACE/tools/smoke_wheel.py" "$GITHUB_WORKSPACE"/dist/*.whl
+      # The sdist goes to PyPI beside the wheel and is what a downstream
+      # packager builds from. This checks it carries every tracked test file
+      # and that the suite passes from the unpacked archive, so a release
+      # cannot ship a tests/ directory that nobody downstream can run.
+      - name: Smoke test the sdist
+        run: uv run --no-sync python tools/smoke_sdist.py dist/*.tar.gz
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: dist

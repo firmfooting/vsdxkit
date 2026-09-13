@@ -1,0 +1,19 @@
+# The sdist ships the test suite and it has to be runnable from the unpacked
+# archive. distutils' default file list would sweep in tests/test*.py and stop
+# there -- no conftest.py, no .vsdx fixtures, no tools/ -- which hands a
+# downstream packager a suite that errors on every test that opens a document.
+# grafts, not include patterns, so a new fixture extension needs no edit here.
+graft tests
+graft tools
+
+# CONTRIBUTING carries the commands for running that suite; CHANGELOG is what a
+# packager reads to decide whether to take the version. The other two are the
+# policy files a redistributor is expected to pass on with the source.
+include CHANGELOG.md
+include CONTRIBUTING.md
+include SECURITY.md
+include CODE_OF_CONDUCT.md
+
+# The grafts take what is on disk, not what git tracks, so a local build would
+# otherwise pick up bytecode sitting next to the sources.
+global-exclude *.py[cod]

@@ -3,7 +3,6 @@
 /.pytest_cache/
 /.venv/
 /venv*/
-/vsdx.egg-info/
 /vsdxkit.egg-info/
 /docs/_build/
 __pycache__/

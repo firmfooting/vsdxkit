@@ -3,7 +3,6 @@ name: CI
 on:
   push:
     branches: [main]
-    tags: ['v*']
   pull_request:
 
 permissions: {}
@@ -188,9 +187,11 @@ jobs:
           version: "0.12.7"
       - name: Build
         run: |
-          uv sync --locked --no-default-groups --group build
+          # the test group is here for the sdist smoke test, which runs the
+          # packaged suite out of the unpacked archive
+          uv sync --locked --no-default-groups --group build --group test
           uv run --no-sync python -m build
-      - name: Smoke test distribution
+      - name: Smoke test the wheel
         run: |
           uv venv dist-check
           uv pip install --python dist-check/bin/python dist/*.whl
@@ -198,6 +199,8 @@ jobs:
           # run from outside the checkout so the source tree cannot shadow the wheel
           cd "$RUNNER_TEMP"
           "$GITHUB_WORKSPACE/dist-check/bin/python" "$GITHUB_WORKSPACE/tools/smoke_wheel.py" "$GITHUB_WORKSPACE"/dist/*.whl
+      - name: Smoke test the sdist
+        run: uv run --no-sync python tools/smoke_sdist.py dist/*.tar.gz
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: dist
