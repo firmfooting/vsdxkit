@@ -171,23 +171,27 @@ class Container(DocumentPart):
         if not lanes:
             raise ValueError("page has no Swimlane lanes; not a CFF diagram")
         top_lane = lanes[0]
-        if label and get_user_row(top_lane, ROW_HEADING_TEXT) is None:
-            # checked before the clone: set_lane_label raises on a lane it
-            # cannot label, and it runs last, so leaving the check to it would
-            # abandon a new lane on the page with the list and container
-            # already grown around it
-            raise ValueError(f"lane {top_lane.ID} has no {ROW_HEADING_TEXT} row to copy; cannot label a clone of it")
-
-        new_xml = vsdx.ET.fromstring(vsdx.ET.tostring(top_lane.xml))
         shapes_tag = self.page.xml.find(f"{vsdx.namespace}Shapes")
         if shapes_tag is None:
+            # not reachable: a page with no Shapes tag has no lanes either, so
+            # the check above fires first. Kept to narrow the type for append()
             raise ValueError("page has no Shapes tag")
+
+        # The lane is built and labelled while still detached, because labelling
+        # is the step that can fail. It used to run after the clone was appended
+        # and the list and container grown, so a caller that caught the
+        # ValueError and saved wrote a diagram with an extra unlabelled lane,
+        # which the structural validator cannot see (#330). A failed call still
+        # burns the ids the clone was allocated; the page's id mark only rises,
+        # so the next shape gets a higher number and nothing else changes.
+        new_xml = vsdx.ET.fromstring(vsdx.ET.tostring(top_lane.xml))
         self.page.vis.renumber_shape_ids(new_xml, self.page)
-        shapes_tag.append(new_xml)
         new_lane = Shape(xml=new_xml, parent=self.page, page=self.page)
-
         new_lane.get_or_create_cell("PinY", v=str((top_lane.y or 0.0) + LANE_PITCH_INCHES))
+        if label:
+            self._write_lane_label(new_lane, label, subject=f"shape {top_lane.ID} (cloned to make the new lane)")
 
+        shapes_tag.append(new_xml)
         # grow the list and container so the new lane sits inside them
         pitch = LANE_PITCH_INCHES
         lane_list = self.swimlane_list
@@ -199,30 +203,49 @@ class Container(DocumentPart):
             container.get_or_create_cell("PinY", v=str((container.y or 0.0) + pitch / 2))
             container.get_or_create_cell("Height", v=str((container.height or 0) + pitch))
 
-        if label:
-            self.set_lane_label(new_lane, label)
         return new_lane
 
     def set_lane_label(self, lane: Shape, label: str) -> None:
         """Set a lane's heading label (visHeadingText row + heading text).
 
-        Raises if the shape carries no ``visHeadingText`` row, rather than
-        writing the visible half of the label and dropping the other. The row
-        is not created here: it is one of several rows Visio's cross-functional
-        flowchart machinery writes together with the Swimlane List that owns
-        the lane, and a shape that has none of them is not a lane, so inventing
-        one would produce a heading the CFF engine does not know about.
+        Raises rather than writing one half of the label. The ``visHeadingText``
+        row is not created here: it is one of several rows Visio's
+        cross-functional flowchart machinery writes together with the Swimlane
+        List that owns the lane, and inventing one would produce a heading the
+        CFF engine does not know about.
 
-        :raises ValueError: if ``lane`` has no ``visHeadingText`` row.
+        :raises ValueError: if ``lane`` has no heading sub-shape, or no writable
+            ``visHeadingText`` row.
         """
         self._require_open("Container.set_lane_label()")
-        if not set_user_row_value(lane, ROW_HEADING_TEXT, label):
-            raise ValueError(f"shape {lane.ID} has no writable {ROW_HEADING_TEXT} row, so it is not a swimlane lane")
+        self._write_lane_label(lane, label, subject=f"shape {lane.ID}")
+
+    def _write_lane_label(self, lane: Shape, label: str, *, subject: str) -> None:
+        """Write both halves of a lane label, or neither.
+
+        Every refusal is established before the first write, so a refusal
+        leaves the lane as it was. ``subject`` names the shape the caller can
+        act on, which for a clone is the lane it was copied from.
+
+        The lane body used to take the label when the lane had no heading
+        sub-shape, which was the one branch of #307 with no test. Which
+        sub-shape is the heading is a separate question, and a wrong one:
+        :meth:`lane_heading` takes the first child carrying a ``MasterShape``,
+        and in the reference capture that is the lane band rather than the
+        shape showing the text. Tracked by #337.
+        """
+        if not isinstance(label, str):
+            # the second write is Shape.text, which rejects a non-str only once
+            # it is already writing. The User row would be left holding a value
+            # the document cannot serialise, so the file could not be saved at
+            # all -- the same shape of defect as the abandoned lane above.
+            raise TypeError(f"lane label must be a str, not {type(label).__name__}")
         heading = self.lane_heading(lane)
-        if heading is not None:
-            heading.text = label
-        else:
-            lane.text = label
+        if heading is None:
+            raise ValueError(f"{subject} has no heading sub-shape, so it is not a swimlane lane")
+        if not set_user_row_value(lane, ROW_HEADING_TEXT, label):
+            raise ValueError(f"{subject} has no {ROW_HEADING_TEXT} row with a Value cell to write the label into")
+        heading.text = label
 
     @staticmethod
     def lane_heading(lane: Shape) -> Shape | None:
