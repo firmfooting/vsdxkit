@@ -210,6 +210,41 @@ def test_the_parse_error_is_kept_as_the_cause(broken_document_package):
     assert isinstance(caught.value.__cause__, ET.ParseError)
 
 
+@pytest.mark.allow_invalid_package("unresolved-page")
+@pytest.mark.parametrize(
+    ("member", "old", "expected"),
+    [
+        ("visio/pages/_rels/pages.xml.rels", b'Id="rId1"', "Id"),
+        ("visio/pages/_rels/pages.xml.rels", b'Target="page1.xml"', "Target"),
+    ],
+    ids=["relationship-without-Id", "relationship-without-Target"],
+)
+def test_a_required_attribute_missing_on_open_raises_malformed_package_error(vsdx_copy, tmp_path, member, old, expected):
+    """Well-formed XML that breaks the schema used to surface as a bare `KeyError`.
+
+    `load_pages` indexed `rel.attrib` directly, so a package a caller could not
+    have validated first reported a malformed relationship as `KeyError: 'Id'`
+    and `except VsdxError` missed it (#365 review).
+    """
+    source = vsdx_copy("test1.vsdx")
+    destination = str(tmp_path / "no-attribute.vsdx")
+    with zipfile.ZipFile(source) as original, zipfile.ZipFile(destination, "w") as rewritten:
+        for entry in original.infolist():
+            data = original.read(entry.filename)
+            if entry.filename == member:
+                assert old in data, f"the fixture has changed: {old!r} is not in {member}"
+                data = data.replace(old, b"", 1)
+            rewritten.writestr(entry, data)
+
+    with pytest.raises(MalformedPackageError, match=expected):
+        vsdxkit.VisioFile(destination)
+
+
+def test_require_attribute_returns_the_value_when_it_is_there():
+    element = ET.fromstring('<Relationship Id="rId1"/>')
+    assert vsdxkit.xmlio.require_attribute(element, "Id", "Relationship") == "rId1"
+
+
 def test_a_part_declaring_an_unknown_encoding_raises_malformed_package_error(bad_encoding_package):
     """`ET.iterparse` reports an unusable encoding as `LookupError`, not `ParseError`.
 

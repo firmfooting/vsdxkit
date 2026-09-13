@@ -346,3 +346,17 @@ def require_element(element: ET.Element | None, description: str) -> ET.Element:
     if element is None:
         raise MissingPartError(f"expected XML element not found: {description}")
     return element
+
+
+def require_attribute(element: ET.Element, name: str, description: str) -> str:
+    """Return an attribute the schema requires, or say which element is missing it.
+
+    `MalformedPackageError` rather than `MissingPartError`: the element is
+    there, and what is wrong is that it does not carry what the format says it
+    must. Indexing `element.attrib` directly reports the same fault as
+    `KeyError: 'Id'`, which names neither the part nor the element.
+    """
+    value = element.attrib.get(name)
+    if value is None:
+        raise MalformedPackageError(f"{description} has no {name} attribute")
+    return value

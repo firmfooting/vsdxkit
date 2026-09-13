@@ -79,7 +79,10 @@ Errors
 
 Every error the library raises about a package, a document or an operation on
 one derives from ``VsdxError``, so one ``except`` clause covers the library and
-nothing else.
+nothing else. The guarantee covers what the library checks: opening a document
+validates the parts and attributes it reads on the way in, but a package that
+is well-formed and breaks the schema somewhere the library only reaches later
+can still surface a plain ``KeyError`` or ``AttributeError``.
 Errors reporting a mistake in the arguments a caller passed stay plain
 builtins: a ``TypeError`` for a ``None`` where a number belongs, or a
 ``ValueError`` for a page dimension that is not positive, says nothing about

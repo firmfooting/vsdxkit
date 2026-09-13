@@ -45,6 +45,7 @@ from .xmlio import (  # noqa: E402
     adopt_prefixes,
     file_to_xml,
     register_namespaces,
+    require_attribute,
     require_element,
     require_root,
     require_tree,
@@ -273,8 +274,8 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         relid_page_dict = {}
 
         for rel in rels:
-            rel_id = rel.attrib["Id"]
-            page_file = rel.attrib["Target"]
+            rel_id = require_attribute(rel, "Id", "pages.xml.rels Relationship")
+            page_file = require_attribute(rel, "Target", f"pages.xml.rels Relationship {rel.attrib.get('Id', '')!r}")
             relid_page_dict[rel_id] = page_file
 
         pages_filename = self._pages_filename()  # pages contains Page name, width, height, mapped to Id
@@ -284,8 +285,10 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             logger.debug("Pages(%s)\n%s", pages_filename, VisioFile.pretty_print_element(pages))
 
         for page in pages:  # type: Element
-            rel_id = require_element(page.find(f"{namespace}Rel"), "Page/Rel").attrib[f"{r_namespace}id"]
-            page_name = page.attrib["Name"]
+            rel_id = require_attribute(
+                require_element(page.find(f"{namespace}Rel"), "Page/Rel"), f"{r_namespace}id", "pages.xml Page/Rel"
+            )
+            page_name = require_attribute(page, "Name", "pages.xml Page")
 
             page_file = relid_page_dict.get(rel_id)
             if page_file is None:
@@ -346,8 +349,10 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         # for each master page, create the Page object
         for master in self.masters_xml if self.masters_xml is not None else []:
             master_name = master.attrib.get("NameU") or master.attrib.get("Name") or "Unknown"
-            rel_id = require_element(master.find(f"{namespace}Rel"), "Master/Rel").attrib[f"{r_namespace}id"]
-            master_id = master.attrib["ID"]
+            rel_id = require_attribute(
+                require_element(master.find(f"{namespace}Rel"), "Master/Rel"), f"{r_namespace}id", "masters.xml Master/Rel"
+            )
+            master_id = require_attribute(master, "ID", "masters.xml Master")
             master_unique_id = master.attrib.get("UniqueID")
             master_base_id = master.attrib.get("BaseID")
 

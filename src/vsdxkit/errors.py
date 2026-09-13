@@ -12,6 +12,14 @@ raised the builtin before this module existed, and code catching it is entitled
 to go on working; the second base is what keeps that true. The exception is
 :class:`PackageError`, whose sites raised ``OSError`` (``PackageLimitError``)
 or nothing at all.
+
+The guarantee covers what the library checks, which is not the whole Visio
+schema. Opening a document validates the parts and attributes it reads on the
+way in, so a package that is truncated, unparsable or missing what those reads
+need is reported here; a package that is well-formed but breaks the schema
+somewhere the library only reaches later can still surface a plain ``KeyError``
+or ``AttributeError`` from the element it reads. Validating the schema up front
+is separate work.
 """
 
 from __future__ import annotations
