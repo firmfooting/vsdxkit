@@ -9,13 +9,30 @@ from __future__ import annotations
 import re
 import xml.etree.ElementTree as ET
 
-from jinja2 import Template
+from jinja2.sandbox import SandboxedEnvironment
 
 from .logging_support import get_logger
 from .pages import Page
 from .shapes import Shape
 
 logger = get_logger(__name__)
+
+# Every template rendered here comes out of the .vsdx being processed: shape
+# text, shape names, cell formulas. On Jinja's default environment that text is
+# executable -- `{{ cycler.__init__.__globals__.os.popen(...) }}` reaches the os
+# module and runs shell commands. Rendering a document you did not write would
+# mean handing it a shell. The sandbox refuses the attribute access such a
+# payload needs while leaving ordinary loops, conditionals and arithmetic alone.
+#
+# One environment, built once: templates are compiled per shape and per page, so
+# a fresh Environment on each call would recompile the filter and test registry
+# every time for no benefit.
+_ENVIRONMENT = SandboxedEnvironment()
+
+
+def _template(source: str):
+    """Compile document-supplied text in the sandbox. Never use jinja2.Template here."""
+    return _ENVIRONMENT.from_string(source)
 
 
 class JinjaTemplatingMixin:
@@ -49,7 +66,7 @@ class JinjaTemplatingMixin:
                     continue
                 source = ET.tostring(page_root, encoding="unicode")
                 source = JinjaTemplatingMixin.unescape_jinja_statements(source)  # unescape chars like < and > inside {%...%}
-                template = Template(source)
+                template = _template(source)
                 output = template.render(context)
                 page.xml = ET.ElementTree(ET.fromstring(output))  # create ElementTree from Element created from output
 
@@ -100,7 +117,7 @@ class JinjaTemplatingMixin:
                 ref_val = str(shape.__getattribute__(self_ref[0]))
                 value = value.replace("self." + self_ref[0], ref_val)
             # use Jinja template to calculate any self refs found
-            template = Template(value)  # value might be '{{ 1.0+2.4*3 }}'
+            template = _template(value)  # value might be '{{ 1.0+2.4*3 }}'
             value = template.render(context)
             if property_name in ["x", "y"]:
                 shape.__setattr__(property_name, value)
@@ -191,7 +208,7 @@ class JinjaTemplatingMixin:
         if len(jinja_source):
             # process last matching value
             template_source = "{{ " + jinja_source[-1] + " }}"
-            template = Template(template_source)  # value might be '{{ 1.0+2.4*3 }}'
+            template = _template(template_source)  # value might be '{{ 1.0+2.4*3 }}'
             value = template.render(context)
             # is the value truthy - i.e. not 0, False, or empty string, tuple, list or dict
             logger.debug(
