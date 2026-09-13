@@ -43,7 +43,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from .errors import MissingPartError, PackageLimitError
+from .errors import MalformedPackageError, MissingPartError, PackageLimitError
 from .xmlio import parse_part, serialise_part
 
 __all__ = [
@@ -272,6 +272,17 @@ def read_archive_members(path: str | os.PathLike[str], limits: PackageLimits) ->
     """
     source = os.fspath(path)
     _preflight_eocd(source, limits)
+    try:
+        return _members_within(source, limits)
+    except zipfile.BadZipFile as error:
+        # A file that is not an archive, or one whose members do not read back
+        # as they were declared, is a malformed package rather than a zipfile
+        # problem the caller of this library asked for.
+        raise MalformedPackageError(f"{source} is not a readable package: {error}") from error
+
+
+def _members_within(source: str, limits: PackageLimits) -> list[tuple[str, bytes]]:
+    """`read_archive_members` without the archive-level error translation."""
     with zipfile.ZipFile(source, "r") as archive:
         infos = archive.infolist()
         if len(infos) > limits.max_members:

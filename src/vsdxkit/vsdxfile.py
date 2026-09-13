@@ -334,10 +334,13 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         # populate relid to master path
         relid_to_path: dict[str, str] = {}
         for rel in master_rels:
-            master_id = rel.attrib.get("Id")
-            if master_id is None:
-                continue
-            relid_to_path[master_id] = f"{self.directory}/visio/masters/{rel.attrib.get('Target')}"
+            # Skipping a relationship with no Id used to leave the master that
+            # names it with no path, and the lookup below reported that as
+            # `KeyError: 'rId1'`; the Target went in unchecked and spelled a
+            # part called "None".
+            subject = "masters.xml.rels Relationship"
+            target = require_attribute(rel, "Target", subject)
+            relid_to_path[require_attribute(rel, "Id", subject)] = f"{self.directory}/visio/masters/{target}"
 
         # load masters.xml file
         masters_path = f"{self.directory}/visio/masters/masters.xml"
@@ -356,7 +359,9 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             master_unique_id = master.attrib.get("UniqueID")
             master_base_id = master.attrib.get("BaseID")
 
-            master_path = relid_to_path[rel_id]
+            master_path = relid_to_path.get(rel_id)
+            if master_path is None:
+                raise MissingPartError(f"no master part found for relationship {rel_id}")
 
             master_page = Page(
                 require_xml_tree(master_path, self.zip_file_contents, "master part"),

@@ -7,6 +7,7 @@ and the one that matters more, is that the library actually raises these types.
 A hierarchy nobody raises documents a contract the code does not keep.
 """
 
+import pathlib
 import xml.etree.ElementTree as ET
 import zipfile
 
@@ -238,6 +239,44 @@ def test_a_required_attribute_missing_on_open_raises_malformed_package_error(vsd
 
     with pytest.raises(MalformedPackageError, match=expected):
         vsdxkit.VisioFile(destination)
+
+
+@pytest.mark.allow_invalid_package
+def test_a_master_relationship_without_an_id_raises_malformed_package_error(vsdx_copy, tmp_path):
+    """The masters loop skipped such a relationship and `KeyError`d on the lookup after it."""
+    source = vsdx_copy("test5_master.vsdx")
+    destination = str(tmp_path / "no-master-rel-id.vsdx")
+    member = "visio/masters/_rels/masters.xml.rels"
+    with zipfile.ZipFile(source) as original, zipfile.ZipFile(destination, "w") as rewritten:
+        for entry in original.infolist():
+            data = original.read(entry.filename)
+            if entry.filename == member:
+                assert b'Id="rId1"' in data, f'the fixture has changed: no Id="rId1" in {member}'
+                data = data.replace(b'Id="rId1"', b"", 1)
+            rewritten.writestr(entry, data)
+
+    with pytest.raises(MalformedPackageError, match="Id"):
+        vsdxkit.VisioFile(destination)
+
+
+@pytest.mark.allow_invalid_package
+@pytest.mark.parametrize(
+    ("label", "payload"),
+    [("not-a-zip", b"this is not a zip file"), ("truncated", None)],
+)
+def test_a_file_that_is_not_a_readable_archive_raises_malformed_package_error(vsdx_copy, tmp_path, label, payload):
+    """`zipfile.BadZipFile` is the most basic malformed package there is.
+
+    It escaped the hierarchy entirely, so `except VsdxError` around an open did
+    not cover a file that is not a package at all (#365 review).
+    """
+    if payload is None:
+        payload = pathlib.Path(vsdx_copy("test1.vsdx")).read_bytes()[:2048]
+    destination = tmp_path / f"{label}.vsdx"
+    destination.write_bytes(payload)
+
+    with pytest.raises(MalformedPackageError, match="not a readable package"):
+        vsdxkit.VisioFile(str(destination))
 
 
 def test_require_attribute_returns_the_value_when_it_is_there():
