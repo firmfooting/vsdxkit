@@ -5,6 +5,7 @@ Python where it can be tested; this file is what makes that claim true.
 """
 
 import json
+import zipfile
 
 import pytest
 from helpers.visio_observation import (
@@ -198,8 +199,6 @@ def test_a_page_declaring_one_id_twice_is_reported_even_when_the_sides_agree():
 @pytest.mark.allow_invalid_package  # the package is broken on purpose
 def test_reading_a_package_whose_group_member_collides_with_a_top_level_id(tmp_path, basedir):
     """The same collision, through the reader that has to sort real shapes."""
-    import zipfile
-
     source = f"{basedir}/test10_nested_shapes.vsdx"
     broken = str(tmp_path / "collide.vsdx")
     with zipfile.ZipFile(source) as original, zipfile.ZipFile(broken, "w") as rewritten:
@@ -241,8 +240,6 @@ def test_a_page_whose_relationship_does_not_resolve_keeps_its_position(tmp_path,
     compared against page 2 and the result is a pile of shape differences
     pointing at the wrong page. The unreadable page is reported as itself.
     """
-    import zipfile
-
     source = f"{basedir}/test4_connectors.vsdx"
     broken = str(tmp_path / "badrel.vsdx")
     with zipfile.ZipFile(source) as original, zipfile.ZipFile(broken, "w") as rewritten:
@@ -258,6 +255,109 @@ def test_a_page_whose_relationship_does_not_resolve_keeps_its_position(tmp_path,
     assert [page.index for page in observation.pages] == [1, 2, 3], "page numbering shifted"
     assert observation.pages[0].unresolved
     assert not observation.pages[1].unresolved
+
+
+class TestResolvingARelationshipTarget:
+    """Both packages below are valid, and `validate_package` reports nothing on
+    either, so a reader that cannot resolve them makes the harness call a good
+    file broken - a failure whoever wrote the package cannot act on.
+
+    See `_resolve` in the helper for what the rule is and where it comes from.
+    """
+
+    def test_a_percent_encoded_target_resolves(self, tmp_path, basedir):
+        encoded = str(tmp_path / "encoded.vsdx")
+        with zipfile.ZipFile(f"{basedir}/test1.vsdx") as original, zipfile.ZipFile(encoded, "w") as rewritten:
+            for entry in original.infolist():
+                data = original.read(entry.filename)
+                name = entry.filename
+                if name == "visio/pages/_rels/pages.xml.rels":
+                    old, new = b'Target="page1.xml"', b'Target="page%201.xml"'
+                    assert old in data, "the relationship target is spelled differently now"
+                    data = data.replace(old, new, 1)
+                elif name == "[Content_Types].xml":
+                    # the member is renamed below, so its override has to follow
+                    old, new = b"/visio/pages/page1.xml", b"/visio/pages/page 1.xml"
+                    assert old in data, "the content type override is spelled differently now"
+                    data = data.replace(old, new, 1)
+                elif name == "visio/pages/page1.xml":
+                    name = "visio/pages/page 1.xml"
+                rewritten.writestr(name, data)
+
+        observation = observation_from_package(encoded)
+
+        assert not observation.pages[0].unresolved
+        assert observation.pages[0].shapes, "the page resolved but was read as empty"
+
+    def test_a_target_that_walks_upwards_resolves(self, tmp_path, basedir):
+        """Joined on verbatim, `../pages/page1.xml` yields
+        `visio/pages/../pages/page1.xml`, which no archive has a member called.
+        """
+        walked = str(tmp_path / "walked.vsdx")
+        with zipfile.ZipFile(f"{basedir}/test1.vsdx") as original, zipfile.ZipFile(walked, "w") as rewritten:
+            for entry in original.infolist():
+                data = original.read(entry.filename)
+                if entry.filename == "visio/pages/_rels/pages.xml.rels":
+                    old, new = b'Target="page1.xml"', b'Target="../pages/page1.xml"'
+                    assert old in data, "the relationship target is spelled differently now"
+                    data = data.replace(old, new, 1)
+                rewritten.writestr(entry, data)
+
+        observation = observation_from_package(walked)
+
+        assert not observation.pages[0].unresolved
+        assert observation.pages[0].shapes, "the page resolved but was read as empty"
+
+
+def test_a_shape_id_that_is_not_a_number_is_described_rather_than_raised_on(tmp_path, basedir):
+    """A bare `int()` on the id raised out of `observation_from_package`.
+
+    The validator treats a non-numeric id as reachable and has its own test for
+    it, so the corpus already considers this a file that turns up. The package
+    built here is otherwise sound, and `validate_package` reports nothing on it.
+    """
+    odd = str(tmp_path / "oddid.vsdx")
+    with zipfile.ZipFile(f"{basedir}/test1.vsdx") as original, zipfile.ZipFile(odd, "w") as rewritten:
+        for entry in original.infolist():
+            data = original.read(entry.filename)
+            if entry.filename == "visio/pages/page1.xml":
+                old, new = "<Shape ID='1'", "<Shape ID='²'"
+                text = data.decode("utf-8")
+                assert old in text, "the fixture spells its shapes differently now"
+                data = text.replace(old, new, 1).encode("utf-8")
+            rewritten.writestr(entry, data)
+
+    observation = observation_from_package(odd)
+
+    assert 1 not in observation.pages[0].shapes_by_id
+    assert observation.pages[0].shapes, "the rest of the page should still be read"
+
+
+def test_a_group_with_an_unreadable_id_still_reports_its_members(tmp_path, basedir):
+    """Dropping the members with the group would report three shapes missing.
+
+    The group cannot be named as a parent, because naming it needs the id it has
+    not got. Its members are real shapes all the same, and on a package both
+    oracles otherwise call sound their absence would be three findings for one
+    fault. They are reported against the nearest ancestor that does have an id,
+    which leaves one `shape-parent` difference pointing at the group.
+    """
+    # in this fixture shape 3 is a group inside group 7, holding shapes 1 and 2
+    odd = str(tmp_path / "oddgroup.vsdx")
+    with zipfile.ZipFile(f"{basedir}/test10_nested_shapes.vsdx") as original, zipfile.ZipFile(odd, "w") as rewritten:
+        for entry in original.infolist():
+            data = original.read(entry.filename)
+            if entry.filename == "visio/pages/page1.xml":
+                old, new = "<Shape ID='3'", "<Shape ID='\u00b2'"
+                text = data.decode("utf-8")
+                assert old in text, "the fixture spells its shapes differently now"
+                data = text.replace(old, new, 1).encode("utf-8")
+            rewritten.writestr(entry, data)
+
+    shapes = observation_from_package(odd).pages[0].shapes_by_id
+
+    assert set(shapes) == {1, 2, 4, 5, 6, 7, 8}
+    assert (shapes[1].parent_id, shapes[2].parent_id) == (7, 7)
 
 
 class TestPlacementCells:

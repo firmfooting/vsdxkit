@@ -198,8 +198,14 @@ class TestPackageStructure:
         assert "unresolved-page" in _kinds(path)
 
 
-def test_a_report_names_the_part_each_defect_is_in():
-    """A defect nobody can locate is barely a defect."""
+def test_a_report_names_the_kind_and_the_part_of_each_defect():
+    """A defect nobody can locate is barely a defect, and one nobody can name is
+    one nobody can look up.
+
+    The report's main consumer is the failure message the autouse fixture in
+    `conftest.py` raises, and `kind` is the token that leads a reader from that
+    message to the rule that produced it.
+    """
     defects = (
         Defect(kind="duplicate-shape-id", where="visio/pages/page1.xml", detail="shape 2 appears twice"),
         Defect(kind="dangling-glue", where="visio/pages/page2.xml", detail="shape 999 is not here"),
@@ -208,7 +214,10 @@ def test_a_report_names_the_part_each_defect_is_in():
     report = describe_defects(defects).splitlines()
 
     assert len(report) == 2
-    assert all(defect.where in line and defect.detail in line for defect, line in zip(defects, report, strict=True))
+    assert all(
+        defect.kind in line and defect.where in line and defect.detail in line
+        for defect, line in zip(defects, report, strict=True)
+    )
 
 
 def test_the_opc_extension_of_a_dotfile_part_is_read_from_its_final_period():

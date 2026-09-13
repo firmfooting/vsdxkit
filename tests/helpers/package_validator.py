@@ -35,11 +35,17 @@ import xml.etree.ElementTree as ET
 import zipfile
 from dataclasses import dataclass
 
-__all__ = ["Defect", "describe_defects", "validate_package"]
+from helpers.opc import (
+    CONTENT_TYPES_PART,
+    DOC_REL_NS,
+    MAIN_NS,
+    MASTERS_PART,
+    MASTERS_RELS_PART,
+    PAGES_PART,
+    PAGES_RELS_PART,
+)
 
-_MAIN_NS = "{http://schemas.microsoft.com/office/visio/2012/main}"
-_DOC_REL_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
-_CONTENT_TYPES = "[Content_Types].xml"
+__all__ = ["Defect", "describe_defects", "validate_package"]
 
 
 @dataclass(frozen=True)
@@ -144,16 +150,16 @@ class _ListingSpec:
 
 
 _PAGES = _ListingSpec(
-    listing="visio/pages/pages.xml",
-    relationships="visio/pages/_rels/pages.xml.rels",
+    listing=PAGES_PART,
+    relationships=PAGES_RELS_PART,
     tag="Page",
     noun="page",
     # a package with no pages is not a drawing; one with no masters is ordinary
     required=True,
 )
 _MASTERS = _ListingSpec(
-    listing="visio/masters/masters.xml",
-    relationships="visio/masters/_rels/masters.xml.rels",
+    listing=MASTERS_PART,
+    relationships=MASTERS_RELS_PART,
     tag="Master",
     noun="master",
     required=False,
@@ -254,14 +260,14 @@ def _listing_defects(archive: zipfile.ZipFile, members: set[str], spec: _Listing
                     )
                 )
             declared_ids.add(key)
-        if element.tag != f"{_MAIN_NS}{spec.tag}":
+        if element.tag != f"{MAIN_NS}{spec.tag}":
             # `masters.xml` also carries `<MasterShortcut>`, which stands for a
             # master held in another document: it takes an id in this package
             # but has no part in it, so the rules about parts do not apply.
             continue
         label = element.attrib.get("Name") or element.attrib.get("NameU") or identifier or "?"
-        rel = element.find(f"{_MAIN_NS}Rel")
-        target = None if rel is None else relationships.get(rel.attrib.get(f"{_DOC_REL_NS}id", ""))
+        rel = element.find(f"{MAIN_NS}Rel")
+        target = None if rel is None else relationships.get(rel.attrib.get(f"{DOC_REL_NS}id", ""))
         if target is None or target not in members:
             defects.append(
                 Defect(
@@ -298,7 +304,7 @@ def _contents_defects(contents: ET.Element, part: str) -> list[Defect]:
     writer that maintains one and not the other leaves the other pointing at a
     shape that has moved. Watching the record alone is how #328 went undetected.
     """
-    shapes = _shape_ids(contents.find(f"{_MAIN_NS}Shapes"))
+    shapes = _shape_ids(contents.find(f"{MAIN_NS}Shapes"))
     defects: list[Defect] = []
 
     seen: set[int] = set()
@@ -347,7 +353,7 @@ def _max_id_defects(contents: ET.Element, entry: _Entry) -> list[Defect]:
     the cell is.
     """
     declared = _declared_max_id(entry.element)
-    shapes = _shape_ids(contents.find(f"{_MAIN_NS}Shapes"))
+    shapes = _shape_ids(contents.find(f"{MAIN_NS}Shapes"))
     if declared is None or not shapes or declared >= max(shapes):
         return []
     return [
@@ -370,14 +376,14 @@ def _master_reference_defects(contents: dict[str, ET.Element], masters: _Listing
     if not masters.read:
         return []
     shapes_by_master = {
-        _id_key(entry.identifier): frozenset(_shape_ids(contents[entry.part].find(f"{_MAIN_NS}Shapes")))
+        _id_key(entry.identifier): frozenset(_shape_ids(contents[entry.part].find(f"{MAIN_NS}Shapes")))
         for entry in masters.entries
         if entry.identifier is not None and entry.part in contents
     }
     defects: list[Defect] = []
     for part, root in contents.items():
         defects.extend(
-            _shape_reference_defects(root.find(f"{_MAIN_NS}Shapes"), None, part, masters.declared_ids, shapes_by_master)
+            _shape_reference_defects(root.find(f"{MAIN_NS}Shapes"), None, part, masters.declared_ids, shapes_by_master)
         )
     return defects
 
@@ -398,7 +404,7 @@ def _shape_reference_defects(
     if container is None:
         return []
     defects: list[Defect] = []
-    for shape in container.findall(f"{_MAIN_NS}Shape"):
+    for shape in container.findall(f"{MAIN_NS}Shape"):
         named = shape.attrib.get("Master")
         master = _id_key(named) if named is not None else inherited
         if named is not None and master not in declared:
@@ -428,7 +434,7 @@ def _shape_reference_defects(
                     f"{master}, which has no shape with that id.",
                 )
             )
-        defects.extend(_shape_reference_defects(shape.find(f"{_MAIN_NS}Shapes"), master, part, declared, shapes_by_master))
+        defects.extend(_shape_reference_defects(shape.find(f"{MAIN_NS}Shapes"), master, part, declared, shapes_by_master))
     return defects
 
 
@@ -441,10 +447,10 @@ def _declared_max_id(sheet_holder: ET.Element) -> int | None:
     package that states the number wrongly is worse than one that stays quiet:
     the wrong number is the one an allocator would trust.
     """
-    sheet = sheet_holder.find(f"{_MAIN_NS}PageSheet")
+    sheet = sheet_holder.find(f"{MAIN_NS}PageSheet")
     if sheet is None:
         return None
-    for cell in sheet.findall(f"{_MAIN_NS}Cell"):
+    for cell in sheet.findall(f"{MAIN_NS}Cell"):
         if cell.attrib.get("N") == "MaxID":
             try:
                 return int(float(cell.attrib.get("V", "")))
@@ -489,21 +495,21 @@ def _shape_ids(container: ET.Element | None) -> list[int]:
     if container is None:
         return []
     found: list[int] = []
-    for shape in container.findall(f"{_MAIN_NS}Shape"):
+    for shape in container.findall(f"{MAIN_NS}Shape"):
         shape_id = _as_int(shape.attrib.get("ID"))
         if shape_id is not None:
             found.append(shape_id)
-        found.extend(_shape_ids(shape.find(f"{_MAIN_NS}Shapes")))
+        found.extend(_shape_ids(shape.find(f"{MAIN_NS}Shapes")))
     return found
 
 
 def _glue_endpoints(contents: ET.Element) -> list[tuple[str, int]]:
     """Every shape a Connect record names, with the end it names it as."""
-    container = contents.find(f"{_MAIN_NS}Connects")
+    container = contents.find(f"{MAIN_NS}Connects")
     if container is None:
         return []
     endpoints = []
-    for connect in container.findall(f"{_MAIN_NS}Connect"):
+    for connect in container.findall(f"{MAIN_NS}Connect"):
         for attribute, role in (("FromSheet", "source"), ("ToSheet", "target")):
             endpoint = _as_int(connect.attrib.get(attribute))
             if endpoint is not None:
@@ -643,10 +649,10 @@ def _extension(member: str) -> str:
 
 
 def _content_type_defects(archive: zipfile.ZipFile, members: set[str]) -> list[Defect]:
-    if _CONTENT_TYPES not in members:
-        return [Defect("missing-part", _CONTENT_TYPES, "the package has no content types part")]
+    if CONTENT_TYPES_PART not in members:
+        return [Defect("missing-part", CONTENT_TYPES_PART, "the package has no content types part")]
 
-    parsed = _parse(archive, _CONTENT_TYPES)
+    parsed = _parse(archive, CONTENT_TYPES_PART)
     if isinstance(parsed, Defect):
         return [parsed]
     defaults: set[str] = set()
@@ -662,7 +668,7 @@ def _content_type_defects(archive: zipfile.ZipFile, members: set[str]) -> list[D
 
     defects: list[Defect] = []
     for member in sorted(members):
-        if member == _CONTENT_TYPES or member.endswith("/"):
+        if member == CONTENT_TYPES_PART or member.endswith("/"):
             continue
         extension = _extension(member)
         if _normalise_part(member) in overrides or extension in defaults:
@@ -670,7 +676,7 @@ def _content_type_defects(archive: zipfile.ZipFile, members: set[str]) -> list[D
         defects.append(
             Defect(
                 "undeclared-content-type",
-                _CONTENT_TYPES,
+                CONTENT_TYPES_PART,
                 f"{member} has no content type: no Override names it and no Default covers "
                 f"{'.' + extension if extension else 'a part with no extension'}",
             )
@@ -679,6 +685,6 @@ def _content_type_defects(archive: zipfile.ZipFile, members: set[str]) -> list[D
     for normalised, declared in sorted(overrides.items()):
         if normalised not in normalised_members:
             defects.append(
-                Defect("missing-part", _CONTENT_TYPES, f"an Override declares {declared}, which is not in the package")
+                Defect("missing-part", CONTENT_TYPES_PART, f"an Override declares {declared}, which is not in the package")
             )
     return defects

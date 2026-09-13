@@ -43,6 +43,8 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
 
+from helpers.opc import CONTENT_TYPES_PART
+
 __all__ = [
     "CANONICALIZE_OPTIONS",
     "CHANGE_KINDS",
@@ -83,7 +85,6 @@ CANONICALIZE_OPTIONS: Mapping[str, bool] = MappingProxyType(
 XML_SUFFIXES = (".xml", ".rels")
 
 MAIN_DOCUMENT_PART = "/visio/document.xml"
-CONTENT_TYPES_PART = "[Content_Types].xml"
 CONTENT_TYPES_NAMESPACE = "http://schemas.openxmlformats.org/package/2006/content-types"
 MACRO_ENABLED_CONTENT_TYPE = "application/vnd.ms-visio.drawing.macroEnabled.main+xml"
 DRAWING_CONTENT_TYPE = "application/vnd.ms-visio.drawing.main+xml"
@@ -184,7 +185,6 @@ class PartManifest:
     byte_sha256: str
     declaration: XmlDeclaration | None = None
     namespaces: tuple[tuple[str, str], ...] = ()
-    root_tag: str | None = None
     canonical_sha256: str | None = None
     canonical_text: str | None = field(default=None, compare=False, repr=False)
 
@@ -246,7 +246,7 @@ def _part_manifest(name: str, data: bytes) -> PartManifest:
         return PartManifest(name=name, kind="binary", byte_sha256=byte_sha256)
     try:
         canonical = ET.canonicalize(xml_data=data, **CANONICALIZE_OPTIONS)
-        root_tag, namespaces = _structure(data)
+        namespaces = _prefixes(data)
     except ET.ParseError as error:
         raise ValueError(f"package member {name!r} is not well-formed XML: {error}") from error
     return PartManifest(
@@ -255,32 +255,27 @@ def _part_manifest(name: str, data: bytes) -> PartManifest:
         byte_sha256=byte_sha256,
         declaration=XmlDeclaration.read(data),
         namespaces=namespaces,
-        root_tag=root_tag,
         canonical_sha256=_sha256(canonical.encode("utf-8")),
         canonical_text=canonical,
     )
 
 
-def _structure(data: bytes) -> tuple[str | None, tuple[tuple[str, str], ...]]:
-    """The root tag, and every (prefix, uri) the part binds, in document order.
+def _prefixes(data: bytes) -> tuple[tuple[str, str], ...]:
+    """Every (prefix, uri) the part binds, in document order.
 
     Prefixes are collected from the whole part rather than from the root
     element. A Visio drawing can carry a third-party vocabulary on a descendant
     -- Lucidchart's `lc:Property` is in the test corpus -- and that prefix is as
     much part of the file's spelling as the root's own.
     """
-    root_tag: str | None = None
     namespaces: list[tuple[str, str]] = []
     seen: set[tuple[str, str]] = set()
-    for event, payload in ET.iterparse(io.BytesIO(data), events=("start-ns", "start")):
-        if event == "start-ns":
-            binding = (payload[0], payload[1])
-            if binding not in seen:
-                seen.add(binding)
-                namespaces.append(binding)
-        elif root_tag is None:
-            root_tag = payload.tag
-    return root_tag, tuple(namespaces)
+    for _, payload in ET.iterparse(io.BytesIO(data), events=("start-ns",)):
+        binding = (payload[0], payload[1])
+        if binding not in seen:
+            seen.add(binding)
+            namespaces.append(binding)
+    return tuple(namespaces)
 
 
 def _main_part_content_type(content_types: bytes) -> str:
