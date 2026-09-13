@@ -14,7 +14,7 @@ import vsdx
 
 from .inheritance import InheritedRow
 from .logging_support import get_logger
-from .xmlio import xml_value
+from .xmlio import make_cell_element, xml_value
 
 logger = get_logger(__name__)
 
@@ -339,7 +339,7 @@ class GeometryCell:
             self.value = value
 
     def create_cell_xml(self, name: str) -> Element:
-        cell = ET.fromstring(f'<Cell xmlns="{namespace[1:-1]}"  />')
+        cell = make_cell_element(name)
         self.parent_xml.append(cell)
         if isinstance(self.parent, GeometryRow):
             self.parent.cells[name] = self

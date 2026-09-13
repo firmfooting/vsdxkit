@@ -21,7 +21,7 @@ from vsdx import namespace
 
 from .inheritance import InheritedRow
 from .logging_support import get_logger
-from .xmlio import xml_value
+from .xmlio import make_cell_element, xml_value
 
 if TYPE_CHECKING:
     from vsdx.connectors import Connect
@@ -41,7 +41,7 @@ def __getattr__(name: str):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-def _parent_of(root: Element, element: Element) -> Element | None:
+def parent_of(root: Element, element: Element) -> Element | None:
     """The element that holds `element`, or None if it is not in this tree."""
     for candidate in root.iter():
         if element in list(candidate):
@@ -626,51 +626,54 @@ class Shape:
                 return master.cell_formula(name)
         return None
 
-    def set_cell_value(self, name: str, value: float | str) -> None:
+    def _write_cell(self, name: str, *, v: str | None = None, f: str | None = None) -> None:
+        """Set a named cell's value or formula, creating the cell if absent.
+
+        The single primitive behind :meth:`set_cell_value` and
+        :meth:`set_cell_formula`. Those were copies of each other differing on
+        five lines, and one of those lines built the new element with
+        ``xmlns:ns0=`` instead of ``xmlns=`` -- declaring a prefix the element
+        did not use, so the cell landed outside the Visio namespace and the
+        shape could not find it again. Two implementations, one of them wrong,
+        is the thing this exists to prevent.
+
+        A cell the master defines is copied down first, so the attribute that
+        is not being set keeps what it inherits.
+        """
         cell = self.cells.get(name)
-        if cell:  # only set value of existing item
-            cell.value = value
+        if cell is not None:  # update in place
+            if f is not None:
+                cell.formula = f
+            if v is not None:
+                cell.value = v
             return
+
         cell_xml = None
-        if self.master_page_ID is not None and self.master_shape:
-            # copy master if master has this Cell (this will default same formula)
-            master_cell_xml = self.master_shape.xml.find(f'{namespace}Cell[@N="{name}"]')
-            if master_cell_xml is not None:  # use master Cell if found
+        master = self.master_shape
+        if master is not None:
+            master_cell_xml = master.xml.find(f'{namespace}Cell[@N="{name}"]')
+            if master_cell_xml is not None:
                 logger.debug("creating cell from: %s", ET.tostring(master_cell_xml))
                 cell_xml = ET.fromstring(ET.tostring(master_cell_xml))
-        if cell_xml is None:  # create a new Cell
-            cell_xml = ET.fromstring(f'<Cell xmlns="{namespace[1:-1]}" N="{name}" />')
-        # create new Cell from xml
+        if cell_xml is None:
+            cell_xml = make_cell_element(name)
+
         self.cells[name] = Cell(xml=cell_xml, shape=self)
-        self.cells[name].value = value
+        if f is not None:
+            self.cells[name].formula = f
+        if v is not None:
+            self.cells[name].value = v
+        # schema order: a shape's cells come before its Text and Sections
         cells = self.xml.findall(f"{namespace}Cell")
-        if len(cells):
-            self.xml.insert(list(self.xml).index(cells[-1]) + 1, cell_xml)  # insert after last Cell
-        else:
-            self.xml.insert(0, cell_xml)
+        self.xml.insert(list(self.xml).index(cells[-1]) + 1 if cells else 0, cell_xml)
+
+    def set_cell_value(self, name: str, value: float | str) -> None:
+        """Set a named cell's value, creating the cell if absent."""
+        self._write_cell(name, v=xml_value(value))
 
     def set_cell_formula(self, name: str, value: str) -> None:
-        cell = self.cells.get(name)
-        if cell:  # only set value of existing item
-            cell.formula = value
-            return
-        cell_xml = None
-        if self.master_page_ID is not None and self.master_shape:
-            # copy master if master has this Cell (this will default same value)
-            master_cell_xml = self.master_shape.xml.find(f'{namespace}Cell[@N="{name}"]')
-            if master_cell_xml is not None:  # use master Cell if found
-                logger.debug("creating cell from: %s", ET.tostring(master_cell_xml))
-                cell_xml = ET.fromstring(ET.tostring(master_cell_xml))
-        if cell_xml is None:  # create a new Cell
-            cell_xml = ET.fromstring(f'<Cell xmlns:ns0="{namespace[1:-1]}" N="{name}" />')
-        # create new Cell from xml
-        self.cells[name] = Cell(xml=cell_xml, shape=self)
-        self.cells[name].formula = value
-        cells = self.xml.findall(f"{namespace}Cell")
-        if len(cells):
-            self.xml.insert(list(self.xml).index(cells[-1]) + 1, cell_xml)  # insert after last Cell
-        else:
-            self.xml.insert(0, cell_xml)
+        """Set a named cell's formula, creating the cell if absent."""
+        self._write_cell(name, f=value)
 
     @property
     def line_style_id(self) -> str | None:
@@ -866,12 +869,10 @@ class Shape:
             if v is not None:
                 cell.value = v
             return cell
-        attribs = f'N="{name}"'
-        if v is not None:
-            attribs += f' V="{v}"'
-        if f is not None:
-            attribs += f' F="{f}"'
-        cell_el = ET.fromstring(f'<Cell xmlns="{vsdx.namespace[1:-1]}" {attribs}/>')
+        # built as an element, not formatted as a string: a value carrying a
+        # quote, an ampersand or an angle bracket is data, and string
+        # formatting turned it into a ParseError
+        cell_el = make_cell_element(name, v=v, f=f)
         insert_at = 0
         for i, child in enumerate(list(self.xml)):
             if child.tag == f"{vsdx.namespace}Cell":
@@ -1299,7 +1300,7 @@ class Shape:
         # call, and the one the old error message recommended -- would raise.
         # Detaching first is also what stops the element gaining a second
         # parent, which is the problem the rejection existed to prevent.
-        current_parent = _parent_of(self.page.xml.getroot(), append_shape.xml)
+        current_parent = parent_of(self.page.xml.getroot(), append_shape.xml)
         if current_parent is not None:
             current_parent.remove(append_shape.xml)
         container = self.xml if wraps_shapes_tag else find_or_create_shapes_tag(self.xml)

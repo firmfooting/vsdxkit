@@ -147,6 +147,34 @@ def _serialising(root: ET.Element) -> Generator[None, None, None]:
             table.update(saved)
 
 
+# The Visio main namespace in ElementTree's `{uri}tag` form, for building
+# elements rather than formatting them as strings.
+_VISIO_TAG_PREFIX = "{http://schemas.microsoft.com/office/visio/2012/main}"
+
+
+def make_cell_element(name: str, v: object | None = None, f: object | None = None) -> ET.Element:
+    """Build a ``<Cell>`` in the Visio namespace.
+
+    Four places formatted this XML by hand. One of them declared the namespace
+    as a prefix the element did not use, so the cell it built sat outside the
+    namespace and the shape could not find it again. The rest interpolated
+    values straight into the markup, so a value carrying a quote, an ampersand
+    or an angle bracket raised ParseError -- and Shape Data and shape text
+    routinely carry all three. Setting attributes on an element escapes them on
+    serialisation; building a string does not.
+    """
+    cell = ET.Element(f"{_VISIO_TAG_PREFIX}Cell")
+    cell.attrib["N"] = name
+    # coerced here, not by the caller: the callers used to interpolate into an
+    # f-string, which stringified a number for free. Storing the raw object
+    # instead fails much later, at save, with "cannot serialize 5 (type int)".
+    if v is not None:
+        cell.attrib["V"] = xml_value(v)
+    if f is not None:
+        cell.attrib["F"] = xml_value(f)
+    return cell
+
+
 def file_to_xml(filename: str, zip_file_contents: dict[str, io.BytesIO]) -> ET.ElementTree[ET.Element] | None:
     """Import a file as an ElementTree."""
     if filename in zip_file_contents:

@@ -154,14 +154,6 @@ class Connect:
         raise ValueError("Connect.create() requires both from_shape and to_shape")
 
     @staticmethod
-    def _get_or_create_cell(shape: Shape, name: str, v: str | None = None, f: str | None = None):
-        """Set or create a cell on a shape, preserving schema cell ordering.
-
-        Delegates to the single cell-write primitive on Shape.
-        """
-        return shape.get_or_create_cell(name, v=v, f=f)
-
-    @staticmethod
     def _connection_point_count(shape: Shape) -> int:
         sections = shape.xml.findall(f"{vsdx.namespace}Section")
         for section in sections:
@@ -216,10 +208,10 @@ class Connect:
                         f"Shape ID {shape.ID} has {cp_count} connection point(s); cannot glue to connection point index {cp}"
                     )
                 k = cp + 1
-                Connect._get_or_create_cell(connector_shape, f"{prefix}Trigger", f=f"_XFTRIGGER(Sheet{shape.ID}!EventXFMod)")
+                connector_shape.get_or_create_cell(f"{prefix}Trigger", f=f"_XFTRIGGER(Sheet{shape.ID}!EventXFMod)")
                 pnt = f"PAR(PNT(Sheet{shape.ID}!Connections.X{k},Sheet{shape.ID}!Connections.Y{k}))"
-                Connect._get_or_create_cell(connector_shape, f"{prefix}X", f=pnt)
-                Connect._get_or_create_cell(connector_shape, f"{prefix}Y", f=pnt)
+                connector_shape.get_or_create_cell(f"{prefix}X", f=pnt)
+                connector_shape.get_or_create_cell(f"{prefix}Y", f=pnt)
             beg_connect = (
                 f'<Connect xmlns="http://schemas.microsoft.com/office/visio/2012/main" '
                 f'FromSheet="{conn_id}" FromCell="BeginX" FromPart="9" '
@@ -234,21 +226,21 @@ class Connect:
             )
         else:
             # shape glue - dynamic connector behaviour, formulas as written by Visio 16
-            Connect._get_or_create_cell(connector_shape, "BegTrigger", f=f"_XFTRIGGER(Sheet{from_shape.ID}!EventXFMod)")
-            Connect._get_or_create_cell(connector_shape, "EndTrigger", f=f"_XFTRIGGER(Sheet{to_shape.ID}!EventXFMod)")
+            connector_shape.get_or_create_cell("BegTrigger", f=f"_XFTRIGGER(Sheet{from_shape.ID}!EventXFMod)")
+            connector_shape.get_or_create_cell("EndTrigger", f=f"_XFTRIGGER(Sheet{to_shape.ID}!EventXFMod)")
             walkglue_begin = "_WALKGLUE(BegTrigger,EndTrigger,WalkPreference)"
             walkglue_end = "_WALKGLUE(EndTrigger,BegTrigger,WalkPreference)"
-            Connect._get_or_create_cell(connector_shape, "BeginX", f=walkglue_begin)
-            Connect._get_or_create_cell(connector_shape, "BeginY", f=walkglue_begin)
-            Connect._get_or_create_cell(connector_shape, "EndX", f=walkglue_end)
-            Connect._get_or_create_cell(connector_shape, "EndY", f=walkglue_end)
-            Connect._get_or_create_cell(connector_shape, "GlueType", v="2")
-            Connect._get_or_create_cell(connector_shape, "ObjType", v="2")
+            connector_shape.get_or_create_cell("BeginX", f=walkglue_begin)
+            connector_shape.get_or_create_cell("BeginY", f=walkglue_begin)
+            connector_shape.get_or_create_cell("EndX", f=walkglue_end)
+            connector_shape.get_or_create_cell("EndY", f=walkglue_end)
+            connector_shape.get_or_create_cell("GlueType", v="2")
+            connector_shape.get_or_create_cell("ObjType", v="2")
             # explicit dynamic routing, as written by Visio 16; overrides the
             # template connector's inherited ShapeRouteStyle=16 (straight)
-            Connect._get_or_create_cell(connector_shape, "ShapeRouteStyle", v="0")
-            Connect._get_or_create_cell(connector_shape, "ConLineRouteExt", v="0")
-            Connect._get_or_create_cell(connector_shape, "ConFixedCode", v="6")
+            connector_shape.get_or_create_cell("ShapeRouteStyle", v="0")
+            connector_shape.get_or_create_cell("ConLineRouteExt", v="0")
+            connector_shape.get_or_create_cell("ConFixedCode", v="6")
             beg_connect = (
                 f'<Connect xmlns="http://schemas.microsoft.com/office/visio/2012/main" '
                 f'FromSheet="{conn_id}" FromCell="BeginX" FromPart="9" '
@@ -261,12 +253,12 @@ class Connect:
             )
 
         if routing == "straight":
-            Connect._get_or_create_cell(connector_shape, "ShapeRouteStyle", v="16")
+            connector_shape.get_or_create_cell("ShapeRouteStyle", v="16")
         elif routing == "rightangle":
-            Connect._get_or_create_cell(connector_shape, "ShapeRouteStyle", v="1")
+            connector_shape.get_or_create_cell("ShapeRouteStyle", v="1")
         elif routing == "curved":
-            Connect._get_or_create_cell(connector_shape, "ShapeRouteStyle", v="17")
-            Connect._get_or_create_cell(connector_shape, "ConLineRouteExt", v="2")
+            connector_shape.get_or_create_cell("ShapeRouteStyle", v="17")
+            connector_shape.get_or_create_cell("ConLineRouteExt", v="2")
 
         # Add these new connection relationships to the page
         page = connector_shape.page

@@ -18,7 +18,7 @@ import vsdx
 from vsdx import namespace
 
 from .connectors import Connect
-from .shapes import Shape
+from .shapes import Shape, parent_of
 from .xmlio import require_element, xml_value
 
 
@@ -226,7 +226,7 @@ class Page:
         Note: typically returns one :class:`Shape` object which itself contains :class:`Shape` objects
 
         """
-        return [Shape(xml=shapes, parent=self, page=self) for shapes in self.xml.findall(f"{namespace}Shapes")] or []
+        return [Shape(xml=shapes, parent=self, page=self) for shapes in self.xml.findall(f"{namespace}Shapes")]
 
     @property
     @deprecation.deprecated(
@@ -241,7 +241,7 @@ class Page:
         Note: typically returns one :class:`Shape` object which itself contains :class:`Shape` objects
 
         """
-        return [Shape(xml=shapes, parent=self, page=self) for shapes in self.xml.findall(f"{namespace}Shapes")]
+        return self._shapes
 
     @deprecation.deprecated(
         deprecated_in="0.5.0",
@@ -569,10 +569,9 @@ class Page:
         their own right by :meth:`delete_shape`.
         """
         self.remove_connect_records({str(shape.ID)}, match="either")
-        for shapes_el in self.xml.iter(f"{namespace}Shapes"):
-            if shape.xml in list(shapes_el):
-                shapes_el.remove(shape.xml)
-                break
+        container = parent_of(self.xml.getroot(), shape.xml)
+        if container is not None:
+            container.remove(shape.xml)
 
     def remove_connect_records(self, connector_ids: Iterable[str | int], *, match: str = "from") -> None:
         """Remove Connect records naming any of these shapes.
