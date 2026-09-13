@@ -264,3 +264,37 @@ class TestRemovingAPageThroughTheHelpers:
 
         defects = validate_package(out)
         assert not defects, describe_defects(defects)
+
+
+class TestTargetModeOnReuse:
+    """A relationship's mode is part of what identifies it, not decoration.
+
+    Raised by Codex review on #344, and by the human review before it. An
+    internal and an external relationship to the same string are relationships
+    to different things - one names a part in the package, the other a URI.
+    """
+
+    def test_an_internal_request_does_not_reuse_an_external_relationship(self):
+        rels = _rels()
+        append_if_absent(rels, rel_type=PAGE_TYPE, target="page1.xml", mode="External")
+
+        internal = append_if_absent(rels, rel_type=PAGE_TYPE, target="page1.xml")
+
+        assert "TargetMode" not in internal.attrib
+        assert _ids(rels) == ["rId1", "rId2"]
+
+    def test_an_external_request_does_not_reuse_an_internal_relationship(self):
+        rels = _rels()
+        append_if_absent(rels, rel_type=PAGE_TYPE, target="page1.xml")
+
+        external = append_if_absent(rels, rel_type=PAGE_TYPE, target="page1.xml", mode="External")
+
+        assert external.attrib["TargetMode"] == "External"
+        assert _ids(rels) == ["rId1", "rId2"]
+
+    def test_an_omitted_mode_matches_one_written_as_internal(self):
+        """`Internal` is the default, so the two spellings mean the same thing."""
+        rels = _rels(f'<Relationship Id="rId1" Type="{PAGE_TYPE}" Target="page1.xml" TargetMode="Internal"/>')
+
+        assert append_if_absent(rels, rel_type=PAGE_TYPE, target="page1.xml").attrib["Id"] == "rId1"
+        assert _ids(rels) == ["rId1"]

@@ -39,12 +39,24 @@ def all_of(rels: Element) -> list[Element]:
     return rels.findall(f"{RELATIONSHIPS_NS}Relationship")
 
 
-def find(rels: Element, *, rel_type: str | None = None, target: str | None = None) -> Element | None:
+def _effective_mode(relationship: Element) -> str:
+    """A relationship's target mode, with the default made explicit.
+
+    `TargetMode` is omitted for an internal target rather than written out, so
+    an absent attribute and `"Internal"` mean the same thing and have to compare
+    equal.
+    """
+    return relationship.attrib.get("TargetMode") or "Internal"
+
+
+def find(rels: Element, *, rel_type: str | None = None, target: str | None = None, mode: str | None = None) -> Element | None:
     """The first relationship matching every criterion given, or None."""
     for relationship in all_of(rels):
         if rel_type is not None and relationship.attrib.get("Type") != rel_type:
             continue
         if target is not None and relationship.attrib.get("Target") != target:
+            continue
+        if mode is not None and _effective_mode(relationship) != mode:
             continue
         return relationship
     return None
@@ -68,8 +80,13 @@ def append_if_absent(rels: Element, *, rel_type: str, target: str, mode: str | N
     """Return the relationship for this type and target, adding one if needed.
 
     Idempotent: the callers only ever want one relationship per target.
+
+    The mode is part of what is matched. An internal and an external
+    relationship to the same string point at different things - one names a part
+    in the package, the other a URI - so reusing one for the other would hand
+    back a relationship that does not resolve to what the caller asked for.
     """
-    existing = find(rels, rel_type=rel_type, target=target)
+    existing = find(rels, rel_type=rel_type, target=target, mode=mode or "Internal")
     if existing is not None:
         return existing
 
