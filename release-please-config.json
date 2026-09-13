@@ -7,7 +7,7 @@
       "extra-files": [
         {
           "type": "generic",
-          "path": "vsdx/__init__.py"
+          "path": "src/vsdxkit/__init__.py"
         }
       ],
       "bump-minor-pre-major": true,

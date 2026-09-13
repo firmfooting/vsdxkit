@@ -1,6 +1,6 @@
 """The release workflow's pre-publish checks.
 
-A tag that does not match `vsdx.__version__` would publish a distribution whose
+A tag that does not match `vsdxkit.__version__` would publish a distribution whose
 version is not the one being tagged, and PyPI accepts each version exactly once,
 so the mistake is not correctable after the fact.
 """
@@ -10,7 +10,7 @@ import os
 
 import pytest
 
-import vsdx
+import vsdxkit
 
 TOOLS = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "tools")
 
@@ -47,7 +47,7 @@ def test_release_and_prerelease_spellings_are_accepted(version):
 
 def test_the_packaged_version_is_read_from_the_module():
     """The check must read the real module, not a copy of the number."""
-    assert check_version_tag.packaged_version() == vsdx.__version__
+    assert check_version_tag.packaged_version() == vsdxkit.__version__
 
 
 def test_main_exits_non_zero_on_mismatch(capsys, monkeypatch):
@@ -66,7 +66,7 @@ def test_main_exits_zero_on_match(monkeypatch):
 def test_main_prints_the_packaged_version_on_request(capsys):
     """The release workflow reads the version from here rather than re-parsing it."""
     assert check_version_tag.main(["--print-version"]) == 0
-    assert capsys.readouterr().out.strip() == vsdx.__version__
+    assert capsys.readouterr().out.strip() == vsdxkit.__version__
 
 
 def test_main_requires_a_tag_argument():

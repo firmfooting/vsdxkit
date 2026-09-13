@@ -4,7 +4,7 @@ import copy
 import xml.etree.ElementTree as ET
 from xml.etree.ElementTree import Element
 
-import vsdx
+import vsdxkit
 
 from .shapes import Shape
 
@@ -27,7 +27,7 @@ class Connect:
             raise ValueError("connector route may specify only one routing behaviour")
         return "point" in route_parts, routing_parts[0] if routing_parts else None
 
-    def __init__(self, xml: Element | None = None, page: vsdx.Page | None = None):
+    def __init__(self, xml: Element | None = None, page: vsdxkit.Page | None = None):
         if page is None:
             raise ValueError("Connect requires the page containing the connection")
         if xml is None:
@@ -67,7 +67,7 @@ class Connect:
 
     @staticmethod
     def create(
-        page: vsdx.Page | None = None,
+        page: vsdxkit.Page | None = None,
         from_shape: Shape | None = None,
         to_shape: Shape | None = None,
         route: str = "dynamic",
@@ -176,10 +176,10 @@ class Connect:
 
     @staticmethod
     def _connection_point_count(shape: Shape) -> int:
-        sections = shape.xml.findall(f"{vsdx.namespace}Section")
+        sections = shape.xml.findall(f"{vsdxkit.namespace}Section")
         for section in sections:
             if section.attrib.get("N") == "Connection":
-                return len(section.findall(f"{vsdx.namespace}Row"))
+                return len(section.findall(f"{vsdxkit.namespace}Row"))
         return 0
 
     @staticmethod
@@ -288,7 +288,7 @@ class Connect:
 
     @staticmethod
     def retarget(
-        page: vsdx.Page,
+        page: vsdxkit.Page,
         connector_shape: Shape,
         from_shape: Shape | None = None,
         to_shape: Shape | None = None,

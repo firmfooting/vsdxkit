@@ -74,14 +74,20 @@ dev = [
 docs = { requires-python = ">=3.12" }
 
 [tool.setuptools]
-packages = ["vsdx"]
+# src layout: the package is found under src/, never from the working
+# directory. A flat layout puts the repository root on sys.path, so `import
+# vsdxkit` from here would get the working tree rather than the installed
+# wheel - which is how an upstream-vulnerability probe once reported our own
+# version as the upstream one.
+package-dir = { "" = "src" }
+packages = ["vsdxkit"]
 include-package-data = false
 
 [tool.setuptools.package-data]
-vsdx = ["media/*.vsdx", "py.typed"]
+vsdxkit = ["media/*.vsdx", "py.typed"]
 
 [tool.setuptools.dynamic]
-version = { attr = "vsdx.__version__" }
+version = { attr = "vsdxkit.__version__" }
 
 [tool.ruff]
 line-length = 127
@@ -106,7 +112,7 @@ ignore = ["E501"]
 "tests/*" = ["SIM117"]
 
 [tool.pyrefly]
-project-includes = ["vsdx"]
+project-includes = ["src/vsdxkit"]
 # strict preset: the package type-checks clean at this level, so keep it there
 preset = "strict"
 

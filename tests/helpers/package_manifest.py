@@ -23,7 +23,7 @@ the two happened:
 differs, says which of those records moved and prints a unified diff of the
 canonical XML.
 
-Nothing here imports `vsdx`. An oracle that shared the library's parser would
+Nothing here imports `vsdxkit`. An oracle that shared the library's parser would
 share its blind spots, so archives are opened with `zipfile` and parts with
 `xml.etree.ElementTree` directly. That also keeps the manifest usable on a
 package this library did not write.

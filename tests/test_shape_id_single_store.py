@@ -11,7 +11,7 @@ record naming a shape that is not there is its `dangling-glue` defect.
 
 import pytest
 
-from vsdx import VisioFile
+from vsdxkit import VisioFile
 
 
 def _records(page) -> list[tuple[str | None, str | None]]:

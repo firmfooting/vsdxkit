@@ -24,7 +24,7 @@ if sys.version_info >= (3, 12):
 else:
     from typing_extensions import override
 
-import vsdx
+import vsdxkit
 
 from . import relationships
 from .logging_support import attach_debug_stream_handler, get_logger
@@ -275,7 +275,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         self.zip_file_contents: dict[str, io.BytesIO] = {}  # file contents by file_path
         # the bundled donor packages are expensive to parse, so one Media is
         # shared by every create/connect call on this document (issue #65)
-        self._media: vsdx.Media | None = None
+        self._media: vsdxkit.Media | None = None
         self.open_vsdx_file()
 
     def __enter__(self) -> VisioFile:
@@ -1126,18 +1126,18 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         `Page.apply_text_context` is the route that resolves it.
         """
         for shape in shapes.iter(f"{namespace}Shape"):
-            prefix, text, suffix, trailing = vsdx.shapes._text_runs_of(shape.find(f"{namespace}Text"))
-            substituted = vsdx.shapes.substitute(text, context)
+            prefix, text, suffix, trailing = vsdxkit.shapes._text_runs_of(shape.find(f"{namespace}Text"))
+            substituted = vsdxkit.shapes.substitute(text, context)
             # see Shape.apply_text_filter: visiting a shape that needs no
             # substitution is not free, so do not write one back unchanged
             if substituted != text:
-                vsdx.shapes._write_text(shape, substituted, prefix=prefix, suffix=suffix, trailing=trailing)
+                vsdxkit.shapes._write_text(shape, substituted, prefix=prefix, suffix=suffix, trailing=trailing)
 
     @staticmethod
     def get_shape_id(shape: Element) -> str:
         return shape.attrib["ID"]
 
-    def _shared_media(self) -> vsdx.Media:
+    def _shared_media(self) -> vsdxkit.Media:
         """The bundled media/palette documents for this VisioFile.
 
         Created on first use and reused for every subsequent create/connect
@@ -1148,7 +1148,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         """
         self._require_open("building a shape or connector")
         if self._media is None:
-            self._media = vsdx.Media()
+            self._media = vsdxkit.Media()
         return self._media
 
     def create_shape(

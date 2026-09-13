@@ -12,10 +12,10 @@ import xml.etree.ElementTree as ET
 
 import deprecation
 
-import vsdx
+import vsdxkit
 
 # from .vsdxfile import file_to_xml  # todo: refactor this away - defined in set_name() to break circular imports
-from vsdx import namespace
+from vsdxkit import namespace
 
 from .connectors import Connect
 from .shapes import Shape, parent_of
@@ -98,7 +98,10 @@ class Page:
         return self.get_connects()
 
     @deprecation.deprecated(
-        deprecated_in="v0.5.0", removed_in="1.0.0", current_version=vsdx.__version__, details="Use Page.name property instead"
+        deprecated_in="v0.5.0",
+        removed_in="1.0.0",
+        current_version=vsdxkit.__version__,
+        details="Use Page.name property instead",
     )
     def set_name(self, value: str) -> None:
         self.vis._require_open("Page.set_name()")
@@ -171,10 +174,10 @@ class Page:
     # cannot be composed with @property/@x.setter (type checkers lose the setter)
     page_name = property(
         deprecation.deprecated(
-            deprecated_in="v0.5.0", removed_in="1.0.0", current_version=vsdx.__version__, details="Use Page.name instead"
+            deprecated_in="v0.5.0", removed_in="1.0.0", current_version=vsdxkit.__version__, details="Use Page.name instead"
         )(_get_page_name),
         deprecation.deprecated(
-            deprecated_in="v0.5.0", removed_in="1.0.0", current_version=vsdx.__version__, details="Use Page.name instead"
+            deprecated_in="v0.5.0", removed_in="1.0.0", current_version=vsdxkit.__version__, details="Use Page.name instead"
         )(_set_page_name),
         doc="Deprecated alias for :attr:`Page.name`.",
     )
@@ -242,7 +245,7 @@ class Page:
     @deprecation.deprecated(
         deprecated_in="0.5.0",
         removed_in="1.0.0",
-        current_version=vsdx.__version__,
+        current_version=vsdxkit.__version__,
         details="Use Page.child_shapes property to access top level shapes of a Page",
     )
     def shapes(self) -> list[Shape]:
@@ -256,7 +259,7 @@ class Page:
     @deprecation.deprecated(
         deprecated_in="0.5.0",
         removed_in="1.0.0",
-        current_version=vsdx.__version__,
+        current_version=vsdxkit.__version__,
         details="Use Page.child_shapes property to access top level shapes of a Page",
     )
     def sub_shapes(self) -> list[Shape]:
@@ -473,13 +476,13 @@ class Page:
         :rtype: Shape
         """
         self.vis._require_open("Page.connect_shapes()")
-        return vsdx.Connect.create(
+        return vsdxkit.Connect.create(
             page=self, from_shape=from_shape, to_shape=to_shape, route=route, from_cp=from_cp, to_cp=to_cp
         )
 
-    def get_container(self) -> vsdx.Container | None:
+    def get_container(self) -> vsdxkit.Container | None:
         """Return the page's CFF Container (swimlane diagram root), or None."""
-        return vsdx.Container.find(self)
+        return vsdxkit.Container.find(self)
 
     def add_swimlane(self, label: str | None = None) -> Shape:
         """Add a swimlane to this page's CFF Container by cloning its top lane.
@@ -515,7 +518,7 @@ class Page:
         :returns: the connector Shape
         """
         self.vis._require_open("Page.reanchor_connector()")
-        return vsdx.Connect.retarget(
+        return vsdxkit.Connect.retarget(
             page=self,
             connector_shape=connector_shape,
             from_shape=from_shape,

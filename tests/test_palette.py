@@ -1,7 +1,7 @@
 import os
 import shutil
 
-from vsdx import VisioFile
+from vsdxkit import VisioFile
 
 SENTINELS = ["PALETTE_PROCESS", "PALETTE_DECISION", "PALETTE_START_END", "PALETTE_PARALLELOGRAM", "PALETTE_DATABASE"]
 

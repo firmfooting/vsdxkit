@@ -15,7 +15,7 @@ the first before #278 and the second before #328.
 import os
 import xml.etree.ElementTree as ET
 
-from vsdx import Shape, VisioFile, namespace
+from vsdxkit import Shape, VisioFile, namespace
 
 
 def _records(page) -> list[tuple[str | None, str | None]]:

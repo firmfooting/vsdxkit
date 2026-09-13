@@ -6,7 +6,7 @@ virtual environment, so every assertion lands on the installed distribution:
     python /path/to/smoke_wheel.py /path/to/dist/*.whl
 
 Raises on any of:
-- vsdx not importable, or importable only via the checkout (source shadowing)
+- vsdxkit not importable, or importable only via the checkout (source shadowing)
 - py.typed or the bundled media .vsdx files missing from the installation
 - Media(), create_shape(), connector creation, save or reopen failing
 """
@@ -40,26 +40,26 @@ def main() -> int:
     # 1. wheel contents include package data: inspected from the archive itself
     with zipfile.ZipFile(wheel_path) as wheel:
         names = wheel.namelist()
-    media_members = sorted(name for name in names if name.startswith("vsdx/media/") and name.endswith(".vsdx"))
+    media_members = sorted(name for name in names if name.startswith("vsdxkit/media/") and name.endswith(".vsdx"))
     if len(media_members) < 2:
         fail(f"wheel carries {len(media_members)} media .vsdx members, expected at least 2: {media_members}")
     else:
         ok(f"wheel media members: {', '.join(media_members)}")
-    if "vsdx/py.typed" not in names:
+    if "vsdxkit/py.typed" not in names:
         fail("py.typed missing from wheel")
     else:
         ok("py.typed present in wheel")
 
     # 2. the import must resolve inside site-packages, not a source checkout
-    spec = importlib.util.find_spec("vsdx")
+    spec = importlib.util.find_spec("vsdxkit")
     if spec is None or spec.origin is None:
-        fail("vsdx is not importable")
+        fail("vsdxkit is not importable")
         return 1
     package_dir = os.path.dirname(os.path.abspath(spec.origin))
     if "site-packages" not in package_dir:
-        fail(f"vsdx resolves to {package_dir}, which is not an installed location; source tree is shadowing the wheel")
+        fail(f"vsdxkit resolves to {package_dir}, which is not an installed location; source tree is shadowing the wheel")
         return 1
-    ok(f"vsdx installed at {package_dir}")
+    ok(f"vsdxkit installed at {package_dir}")
 
     # 3. both bundled media files exist in the installed distribution
     for member_name in ("media.vsdx", "palette_extended.vsdx"):
@@ -69,13 +69,13 @@ def main() -> int:
         else:
             ok(f"installed media/{member_name} present")
 
-    import vsdx
+    import vsdxkit
 
-    ok(f"vsdxkit {vsdx.__version__} imports cleanly")
+    ok(f"vsdxkit {vsdxkit.__version__} imports cleanly")
 
     # 4. exercise Media() and the creation APIs against a sample document
     try:
-        vsdx.Media()
+        vsdxkit.Media()
     except Exception as error:  # smoke harness reports every failure mode
         fail(f"Media() failed from the installed wheel: {error}")
         return 1
@@ -90,7 +90,7 @@ def main() -> int:
             handle.write(payload)
 
         try:
-            with vsdx.VisioFile(document) as vis:
+            with vsdxkit.VisioFile(document) as vis:
                 page = vis.pages[0]
                 shape = vis.create_shape(page, "PALETTE_DECISION", 4.0, 6.0, w=1.5, h=1.0, text="smoke")
                 if shape is None:
@@ -105,7 +105,7 @@ def main() -> int:
                     ok("create_connect between created shapes")
                 vis.save_vsdx(document)
 
-            with vsdx.VisioFile(document) as reloaded:
+            with vsdxkit.VisioFile(document) as reloaded:
                 found = reloaded.pages[0].find_shape_by_text("smoke")
                 if found is None:
                     fail("saved document lost the created shape")

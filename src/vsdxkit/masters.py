@@ -12,7 +12,7 @@ import io
 import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING, cast
 
-from vsdx import namespace, r_namespace
+from vsdxkit import namespace, r_namespace
 
 from . import relationships
 from .logging_support import get_logger

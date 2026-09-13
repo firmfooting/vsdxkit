@@ -27,7 +27,7 @@ if sys.version_info >= (3, 12):
 else:
     from typing_extensions import override
 
-import vsdx
+import vsdxkit
 
 from .document_part import DocumentPart
 from .shapes import Shape
@@ -45,9 +45,9 @@ _CFF_MACHINERY = ("CFF Container", "Swimlane List", "Phase List", "Separator")
 
 def get_user_row(shape: Shape, name: str) -> ET.Element | None:
     """Return the ``<Row N=name>`` element of the shape's User section, or None."""
-    for section in shape.xml.findall(f"{vsdx.namespace}Section"):
+    for section in shape.xml.findall(f"{vsdxkit.namespace}Section"):
         if section.attrib.get("N") == "User":
-            for row in section.findall(f"{vsdx.namespace}Row"):
+            for row in section.findall(f"{vsdxkit.namespace}Row"):
                 if row.attrib.get("N") == name:
                     return row
     return None
@@ -59,7 +59,7 @@ def set_user_row_value(shape: Shape, name: str, value: str) -> bool:
     row = get_user_row(shape, name)
     if row is None:
         return False
-    for cell in row.findall(f"{vsdx.namespace}Cell"):
+    for cell in row.findall(f"{vsdxkit.namespace}Cell"):
         if cell.attrib.get("N") == "Value":
             cell.attrib["V"] = value
             return True
@@ -74,18 +74,18 @@ class Container(DocumentPart):
     behaviour. There are no membership cells to write.
     """
 
-    def __init__(self, page: vsdx.Page):
+    def __init__(self, page: vsdxkit.Page):
         self.page = page
 
     @property
     @override
-    def _document(self) -> vsdx.VisioFile:
+    def _document(self) -> vsdxkit.VisioFile:
         return self.page.vis
 
     # ---- discovery -------------------------------------------------------
 
     @staticmethod
-    def find(page: vsdx.Page) -> Container | None:
+    def find(page: vsdxkit.Page) -> Container | None:
         """Return a Container for the page, or None if this is not a CFF page."""
         for shape in page.all_shapes:
             if shape.shape_name == "CFF Container":
@@ -93,11 +93,11 @@ class Container(DocumentPart):
         return None
 
     def _top_level_named(self, name_prefix: str) -> list[Shape]:
-        shapes_tag = self.page.xml.find(f"{vsdx.namespace}Shapes")
+        shapes_tag = self.page.xml.find(f"{vsdxkit.namespace}Shapes")
         if shapes_tag is None:
             return []
         result = []
-        for el in shapes_tag.findall(f"{vsdx.namespace}Shape"):
+        for el in shapes_tag.findall(f"{vsdxkit.namespace}Shape"):
             name = el.attrib.get("NameU") or el.attrib.get("Name") or ""
             if name.startswith(name_prefix):
                 result.append(Shape(xml=el, parent=self.page, page=self.page))
@@ -171,7 +171,7 @@ class Container(DocumentPart):
         if not lanes:
             raise ValueError("page has no Swimlane lanes; not a CFF diagram")
         top_lane = lanes[0]
-        shapes_tag = self.page.xml.find(f"{vsdx.namespace}Shapes")
+        shapes_tag = self.page.xml.find(f"{vsdxkit.namespace}Shapes")
         if shapes_tag is None:
             # not reachable: a page with no Shapes tag has no lanes either, so
             # the check above fires first. Kept to narrow the type for append()
@@ -184,7 +184,7 @@ class Container(DocumentPart):
         # which the structural validator cannot see (#330). A failed call still
         # burns the ids the clone was allocated; the page's id mark only rises,
         # so the next shape gets a higher number and nothing else changes.
-        new_xml = vsdx.ET.fromstring(vsdx.ET.tostring(top_lane.xml))
+        new_xml = vsdxkit.ET.fromstring(vsdxkit.ET.tostring(top_lane.xml))
         self.page.vis.renumber_shape_ids(new_xml, self.page)
         new_lane = Shape(xml=new_xml, parent=self.page, page=self.page)
         new_lane.get_or_create_cell("PinY", v=str((top_lane.y or 0.0) + LANE_PITCH_INCHES))

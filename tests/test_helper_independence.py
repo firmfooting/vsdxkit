@@ -1,11 +1,11 @@
-"""The oracles in `tests/helpers/` must not import `vsdx`.
+"""The oracles in `tests/helpers/` must not import `vsdxkit`.
 
 `tests/helpers/__init__.py` states the rule and every module in there repeats
 it. This is what enforces it.
 
-The check is transitive by construction: the finder below refuses `vsdx` for the
+The check is transitive by construction: the finder below refuses `vsdxkit` for the
 whole duration of the import, so a helper reaching it through a third module is
-refused just the same. It is an import-time check, so a `vsdx` import inside a
+refused just the same. It is an import-time check, so a `vsdxkit` import inside a
 function would still get through - but nothing in these modules imports that
 way, and a helper that started to would be reaching for the library at the point
 where it matters most.
@@ -29,21 +29,21 @@ def _helper_modules() -> list[str]:
     """Every module and subpackage under `tests/helpers/`, found rather than listed.
 
     A hand-written list is a list someone forgets to add to, and the module
-    nobody added is the one that gets to import `vsdx`. `pkgutil` finds
+    nobody added is the one that gets to import `vsdxkit`. `pkgutil` finds
     subpackages too, which a scan for `*.py` would walk past.
     """
     return sorted(f"helpers.{found.name}" for found in pkgutil.iter_modules([HELPERS]))
 
 
 class _RefuseVsdx:
-    """Refuses `vsdx`, and defers on every other name.
+    """Refuses `vsdxkit`, and defers on every other name.
 
     Returning None from `find_spec` hands the request on to the finders after
     it, which is every normal one, so this intervenes for the one name only.
     """
 
     def find_spec(self, fullname, path=None, target=None):
-        if fullname == "vsdx" or fullname.startswith("vsdx."):
+        if fullname == "vsdxkit" or fullname.startswith("vsdxkit."):
             raise AssertionError(
                 f"{fullname!r} was imported. Modules under tests/helpers/ are the oracle the library "
                 "is measured against; one that shares the library's parser shares its blind spots "
@@ -54,16 +54,16 @@ class _RefuseVsdx:
 
 @contextlib.contextmanager
 def _refusing_vsdx(module: str):
-    """Import `module` from scratch, with `vsdx` unavailable.
+    """Import `module` from scratch, with `vsdxkit` unavailable.
 
     The module has to leave `sys.modules` first: an import of a name already
     there returns it without consulting a finder at all, so the check would pass
     on every helper the suite has already loaded - which is all of them.
-    `vsdx` goes too, or the same shortcut answers the import this is watching for.
+    `vsdxkit` goes too, or the same shortcut answers the import this is watching for.
     """
     saved = dict(sys.modules)
     for name in list(sys.modules):
-        if name == module or name.startswith(("helpers.", "vsdx.")) or name in ("helpers", "vsdx"):
+        if name == module or name.startswith(("helpers.", "vsdxkit.")) or name in ("helpers", "vsdxkit"):
             del sys.modules[name]
     finder = _RefuseVsdx()
     sys.meta_path.insert(0, finder)
@@ -88,8 +88,8 @@ def test_a_helper_imports_without_vsdx(module):
 
 def test_the_refusal_is_reachable():
     """Without this, a finder that never fired would make every case above vacuous."""
-    with _refusing_vsdx("vsdx"), pytest.raises(AssertionError, match="oracle"):
-        importlib.import_module("vsdx")
+    with _refusing_vsdx("vsdxkit"), pytest.raises(AssertionError, match="oracle"):
+        importlib.import_module("vsdxkit")
 
 
 def test_no_test_module_shadows_a_conftest_fixture():

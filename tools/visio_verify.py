@@ -158,9 +158,9 @@ def _apply_transform(transform: str, source: str, destination: str) -> str:
         raise VisioUnavailable(f"unknown transform {transform!r}; expected one of {', '.join(TRANSFORMS)}")
     # imported here, not at module scope: `replay` is the only caller that runs
     # in CI, and it should fail on a broken library rather than on an import.
-    import vsdx
+    import vsdxkit
 
-    with vsdx.VisioFile(source) as document:
+    with vsdxkit.VisioFile(source) as document:
         document.save_vsdx(destination)
     return destination
 

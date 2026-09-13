@@ -34,7 +34,7 @@ Both sides produce the same type. A comparison whose two halves have different
 shapes grows special cases until it only reports what its author already
 suspected.
 
-Nothing here imports `vsdx`; see the package docstring.
+Nothing here imports `vsdxkit`; see the package docstring.
 """
 
 from __future__ import annotations

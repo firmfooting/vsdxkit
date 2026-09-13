@@ -7,7 +7,7 @@ import zipfile
 
 import pytest
 
-from vsdx import VisioFile
+from vsdxkit import VisioFile
 
 
 def get_copy(basedir: str, filename: str, target_dir: str) -> str:

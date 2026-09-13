@@ -6,7 +6,7 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
-from vsdx import PagePosition, VisioFile
+from vsdxkit import PagePosition, VisioFile
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 

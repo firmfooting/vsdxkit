@@ -2,8 +2,8 @@
 
 import os
 
-from vsdx import Connect, VisioFile
-from vsdx.vsdxdiff import VisioFileDiff
+from vsdxkit import Connect, VisioFile
+from vsdxkit.vsdxdiff import VisioFileDiff
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 

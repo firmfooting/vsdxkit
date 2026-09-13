@@ -1,4 +1,4 @@
-"""Characterisation tests for `vsdx.geometry`.
+"""Characterisation tests for `vsdxkit.geometry`.
 
 Nothing in the suite exercised `Geometry`, `GeometryRow` or `GeometryCell`
 directly, so this module pins down what they do today, several faults
@@ -12,8 +12,8 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
-import vsdx
-from vsdx import Geometry, GeometryCell, GeometryRow, Shape, VisioFile, namespace
+import vsdxkit
+from vsdxkit import Geometry, GeometryCell, GeometryRow, Shape, VisioFile, namespace
 
 # Named for what it holds, not `basedir`: conftest.py has a session fixture of
 # that name, and a module global shadows it for every test in the file.
@@ -595,14 +595,14 @@ def test_reprs_identify_the_element_they_describe():
 def test_geometry_is_exported_from_the_package_root():
     """The three names are public API: exported, and from the module that defines them.
 
-    Looked up as strings, because `from vsdx import Geometry` at the top of this
-    file binds the same object `vsdx.Geometry` resolves to. Comparing the two
+    Looked up as strings, because `from vsdxkit import Geometry` at the top of this
+    file binds the same object `vsdxkit.Geometry` resolves to. Comparing the two
     compares a thing with itself.
     """
     for name in ("Geometry", "GeometryRow", "GeometryCell"):
-        assert name in vsdx.__all__, f"{name} is missing from vsdx.__all__"
-        assert getattr(vsdx, name, None) is not None, f"vsdx.{name} does not resolve"
-        assert getattr(vsdx, name).__module__ == "vsdx.geometry"
+        assert name in vsdxkit.__all__, f"{name} is missing from vsdxkit.__all__"
+        assert getattr(vsdxkit, name, None) is not None, f"vsdxkit.{name} does not resolve"
+        assert getattr(vsdxkit, name).__module__ == "vsdxkit.geometry"
 
 
 # --- when the Geometry is built ---------------------------------------------
@@ -622,7 +622,7 @@ def test_geometry_is_built_on_first_read_not_when_the_shape_is_built(monkeypatch
             built.append(shape)
             super().__init__(xml=xml, shape=shape)
 
-    monkeypatch.setattr(vsdx, "Geometry", CountedGeometry)
+    monkeypatch.setattr(vsdxkit, "Geometry", CountedGeometry)
 
     with VisioFile(TEST9) as vis:
         shapes = vis.pages[0].all_shapes

@@ -5,8 +5,8 @@ import io
 import logging
 import pathlib
 
-import vsdx
-from vsdx import VisioFile
+import vsdxkit
+from vsdxkit import VisioFile
 
 BASE = "test8_simple_connector.vsdx"
 
@@ -68,14 +68,14 @@ def test_debug_true_bridges_to_logging(vsdx_copy, capsys):
     # handler writes to stderr; capsys captures it even though it is
     # bypassing print (StreamHandler holds the stream by default capture)
     err = capsys.readouterr().err
-    assert "vsdx.vsdxfile" in err
+    assert "vsdxkit.vsdxfile" in err
 
 
 def test_host_application_can_capture_module_logs(vsdx_copy):
     """A host app configures the 'vsdx' logger and receives module records."""
     stream = io.StringIO()
     handler = logging.StreamHandler(stream)
-    root = logging.getLogger("vsdx")
+    root = logging.getLogger("vsdxkit")
     root.addHandler(handler)
     root.setLevel(logging.DEBUG)
     try:
@@ -107,7 +107,7 @@ def test_no_log_call_in_the_package_formats_its_own_message():
     """
     offenders = []
     inspected = 0
-    for path in sorted(pathlib.Path(vsdx.__file__).parent.rglob("*.py")):
+    for path in sorted(pathlib.Path(vsdxkit.__file__).parent.rglob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
@@ -135,7 +135,7 @@ def test_no_log_call_in_the_package_formats_its_own_message():
 def test_package_root_has_null_handler_only():
     """Library contract: the 'vsdx' logger carries a NullHandler and no
     propagation-escaping handlers of other kinds by default."""
-    root = logging.getLogger("vsdx")
+    root = logging.getLogger("vsdxkit")
     vsdx_handlers = [h for h in root.handlers if not getattr(h, "_vsdx_debug_handler", False)]
     assert len(vsdx_handlers) == 1
     assert isinstance(vsdx_handlers[0], logging.NullHandler)

@@ -12,8 +12,8 @@ import zipfile
 import pytest
 from helpers.package_validator import describe_defects, validate_package
 
-import vsdx
-from vsdx.relationships import (
+import vsdxkit
+from vsdxkit.relationships import (
     allocate_id,
     append_if_absent,
     ensure_override,
@@ -258,7 +258,7 @@ class TestRemovingAPageThroughTheHelpers:
                 rewritten.writestr(entry, data)
 
         out = str(tmp_path / "removed.vsdx")
-        with vsdx.VisioFile(respelled) as document:
+        with vsdxkit.VisioFile(respelled) as document:
             document.remove_page_by_index(0)
             document.save_vsdx(out)
 

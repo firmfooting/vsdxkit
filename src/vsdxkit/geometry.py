@@ -10,7 +10,7 @@ if sys.version_info >= (3, 12):
 else:
     from typing_extensions import override
 
-import vsdx
+import vsdxkit
 
 from .document_part import DocumentPart
 from .inheritance import InheritedRow
@@ -38,7 +38,7 @@ class Geometry(DocumentPart):
     of the same name rather than replacing it.
 
     An inherited row reads the master's cells but is marked
-    :attr:`~vsdx.inheritance.InheritedRow.inherited`. The first write to it,
+    :attr:`~vsdxkit.inheritance.InheritedRow.inherited`. The first write to it,
     through :attr:`GeometryRow.x`, :meth:`move`, :meth:`set_move_to` or
     :meth:`set_line_to`, materialises an override row on this shape and leaves
     the master alone.
@@ -52,7 +52,7 @@ class Geometry(DocumentPart):
     going through the row still edits the master.
     """
 
-    def __init__(self, xml: Element, shape: vsdx.Shape):
+    def __init__(self, xml: Element, shape: vsdxkit.Shape):
         # get shape master geometry, and append/overwrite with actual shape instance data
 
         self.xml = xml  # expect an Element of Section with attr N='Geometry'
@@ -87,7 +87,7 @@ class Geometry(DocumentPart):
 
     @property
     @override
-    def _document(self) -> vsdx.VisioFile:
+    def _document(self) -> vsdxkit.VisioFile:
         return self.shape._document
 
     def start_pos(self) -> tuple[float | None, float | None] | None:
@@ -163,7 +163,7 @@ class Geometry(DocumentPart):
 
     def __repr__(self):
         s = f"Geometry: {self.cells} {[(r.row_type, r.index, r.x, r.y) for r in self.rows.values()]}"
-        s += f"\nGeometry: {vsdx.pretty_print_element(self.xml)}"
+        s += f"\nGeometry: {vsdxkit.pretty_print_element(self.xml)}"
         return s
 
 
@@ -193,7 +193,7 @@ class GeometryRow(InheritedRow, DocumentPart):
 
     @property
     @override
-    def _document(self) -> vsdx.VisioFile:
+    def _document(self) -> vsdxkit.VisioFile:
         return self.geometry._document
 
     def inherited_by(self, geometry: Geometry) -> GeometryRow:
@@ -367,7 +367,7 @@ class GeometryCell(DocumentPart):
 
     @property
     @override
-    def _document(self) -> vsdx.VisioFile:
+    def _document(self) -> vsdxkit.VisioFile:
         return self.parent._document
 
     def create_cell_xml(self, name: str) -> Element:

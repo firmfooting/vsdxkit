@@ -3,8 +3,8 @@ import pprint
 
 import pytest
 
-from vsdx import Connect, VisioFile
-from vsdx.vsdxdiff import VisioFileDiff
+from vsdxkit import Connect, VisioFile
+from vsdxkit.vsdxdiff import VisioFileDiff
 
 
 @pytest.mark.parametrize(("filename_a", "filename_b"), [("test1.vsdx", "test2.vsdx"), ("test1.vsdx", "test4_connectors.vsdx")])

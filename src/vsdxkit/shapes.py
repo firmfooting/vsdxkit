@@ -16,8 +16,8 @@ else:
 
 import deprecation
 
-import vsdx
-from vsdx import namespace
+import vsdxkit
+from vsdxkit import namespace
 
 from .document_part import DocumentPart
 from .inheritance import InheritedRow
@@ -25,7 +25,7 @@ from .logging_support import get_logger
 from .xmlio import make_cell_element, xml_value
 
 if TYPE_CHECKING:
-    from vsdx.connectors import Connect
+    from vsdxkit.connectors import Connect
 
 logger = get_logger(__name__)
 
@@ -33,10 +33,10 @@ logger = get_logger(__name__)
 def __getattr__(name: str):
     # Module-level lazy attribute (PEP 562): typing.get_type_hints on the
     # quoted 'Connect' annotation resolves through module globals, and
-    # vsdx.connectors imports this module, so the reference is provided on
+    # vsdxkit.connectors imports this module, so the reference is provided on
     # demand instead of at import time (which would be a cycle).
     if name == "Connect":
-        from vsdx.connectors import Connect
+        from vsdxkit.connectors import Connect
 
         return Connect
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
@@ -208,7 +208,7 @@ class Cell(DocumentPart):
 
     @property
     @override
-    def _document(self) -> vsdx.VisioFile:
+    def _document(self) -> vsdxkit.VisioFile:
         return self.shape._document
 
     @property
@@ -245,7 +245,7 @@ class DataProperty(InheritedRow, DocumentPart):
     """Represents a single Data Property item associated with a Shape object
 
     A property a shape inherits from its master is handed out marked
-    :attr:`~vsdx.inheritance.InheritedRow.inherited`. Setting :attr:`value` on
+    :attr:`~vsdxkit.inheritance.InheritedRow.inherited`. Setting :attr:`value` on
     one materialises an override row on the instance rather than writing to the
     master page's XML.
     """
@@ -302,7 +302,7 @@ class DataProperty(InheritedRow, DocumentPart):
 
     @property
     @override
-    def _document(self) -> vsdx.VisioFile:
+    def _document(self) -> vsdxkit.VisioFile:
         return self.shape._document
 
     def inherited_by(self, shape: Shape) -> DataProperty:
@@ -430,10 +430,10 @@ class Shape(DocumentPart):
     """Represents a single shape, or a group shape containing other shapes"""
 
     xml: Element
-    parent: vsdx.Page | Shape
-    page: vsdx.Page
+    parent: vsdxkit.Page | Shape
+    page: vsdxkit.Page
     cells: dict[str, Cell]
-    _geometry: vsdx.Geometry | None
+    _geometry: vsdxkit.Geometry | None
     _geometry_xml: Element | None
     _master_shape: Shape | None
     _master_shape_resolved: bool
@@ -441,7 +441,7 @@ class Shape(DocumentPart):
     _data_properties: dict[str, DataProperty] | None
     _data_properties_key: tuple[Element, ...] | None
 
-    def __init__(self, xml: Element, parent: vsdx.Page | Shape, page: vsdx.Page):
+    def __init__(self, xml: Element, parent: vsdxkit.Page | Shape, page: vsdxkit.Page):
         self.xml = xml
         self.parent = parent
         self.page = page
@@ -469,7 +469,7 @@ class Shape(DocumentPart):
                 row_type = r.attrib["T"]
                 if row_type:
                     for e in r.findall(f"{namespace}Cell"):
-                        cell = vsdx.Cell(xml=e, shape=self)
+                        cell = vsdxkit.Cell(xml=e, shape=self)
                         if cell.name is not None:
                             self.cells[f"Geometry/{row_type}/{cell.name}"] = cell
 
@@ -479,7 +479,7 @@ class Shape(DocumentPart):
                 row_type = r.attrib["N"]
                 if row_type:
                     for e in r.findall(f"{namespace}Cell"):
-                        cell = vsdx.Cell(xml=e, shape=self)
+                        cell = vsdxkit.Cell(xml=e, shape=self)
                         if cell.name is not None:
                             self.cells[f"Control/{row_type}/{cell.name}"] = cell
 
@@ -490,7 +490,7 @@ class Shape(DocumentPart):
         return f"<Shape tag={self.tag} ID={self.ID} is_master=({self.is_master_shape}) type={self.shape_type} text='{self.text}' >"
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, vsdx.Shape):
+        if not isinstance(other, vsdxkit.Shape):
             return False
 
         return hash(self) == hash(other)
@@ -570,11 +570,11 @@ class Shape(DocumentPart):
 
     @property
     @override
-    def _document(self) -> vsdx.VisioFile:
+    def _document(self) -> vsdxkit.VisioFile:
         return self.page.vis
 
     @property
-    def geometry(self) -> vsdx.Geometry | None:
+    def geometry(self) -> vsdxkit.Geometry | None:
         """This shape's Geometry section, merged with the master's, or ``None``.
 
         Built on first read and then held for as long as this Shape object
@@ -594,11 +594,11 @@ class Shape(DocumentPart):
         if self._geometry_xml is None:
             return None
         if self._geometry is None:
-            self._geometry = vsdx.Geometry(xml=self._geometry_xml, shape=self)
+            self._geometry = vsdxkit.Geometry(xml=self._geometry_xml, shape=self)
         return self._geometry
 
     @geometry.setter
-    def geometry(self, value: vsdx.Geometry | None) -> None:
+    def geometry(self, value: vsdxkit.Geometry | None) -> None:
         """Give the shape a Geometry, or ``None`` to report none at all.
 
         Here because this was a plain attribute before it was built on demand,
@@ -627,7 +627,7 @@ class Shape(DocumentPart):
                 name_univ = name_univ_cell.attrib.get("V") or name_univ
         return name_univ
 
-    def copy(self, page: vsdx.Page | None = None) -> Shape:
+    def copy(self, page: vsdxkit.Page | None = None) -> Shape:
         """Copy this Shape to the specified destination Page, and return the copy.
 
         If the destination page is not specified, the Shape is copied to its containing Page.
@@ -643,7 +643,7 @@ class Shape(DocumentPart):
 
         # parent decides where the new shape tag lands: the destination
         # page's Shapes tag, or the source shape's own parent
-        parent: vsdx.Page | Shape
+        parent: vsdxkit.Page | Shape
         if page is not None:
             # copy_shape() above guarantees a Shapes tag exists on the page
             page_shapes = page._shapes
@@ -668,7 +668,7 @@ class Shape(DocumentPart):
         master element's children, by identity, in the way
         :attr:`data_properties` is checked against this shape's Property rows.
         Repointing ``master_page_ID`` or ``master_shape_ID``, as
-        :meth:`vsdx.Connect.create` does, resolves the new master rather than
+        :meth:`vsdxkit.Connect.create` does, resolves the new master rather than
         answering with the old one, and a cell added to, removed from or
         swapped on the master is picked up on the next read. One limitation
         remains, the same one :attr:`data_properties` has: the key covers the
@@ -710,7 +710,7 @@ class Shape(DocumentPart):
         return master_shape
 
     @property
-    def master_page(self) -> vsdx.Page | None:
+    def master_page(self) -> vsdxkit.Page | None:
         """Get this pages master
 
         Returns this Page's master as a Page object (or None)
@@ -1140,7 +1140,7 @@ class Shape(DocumentPart):
             self.begin_y = self.begin_y + y_delta
         self.y = (self.y or 0.0) + y_delta
 
-    def get_or_create_cell(self, name: str, v: str | None = None, f: str | None = None) -> vsdx.Cell:
+    def get_or_create_cell(self, name: str, v: str | None = None, f: str | None = None) -> vsdxkit.Cell:
         """Set or create a named cell on this shape.
 
         Existing cells have their V/F attributes updated in place. New cells
@@ -1168,10 +1168,10 @@ class Shape(DocumentPart):
         cell_el = make_cell_element(name, v=v, f=f)
         insert_at = 0
         for i, child in enumerate(list(self.xml)):
-            if child.tag == f"{vsdx.namespace}Cell":
+            if child.tag == f"{vsdxkit.namespace}Cell":
                 insert_at = i + 1
         self.xml.insert(insert_at, cell_el)
-        cell = vsdx.Cell(xml=cell_el, shape=self)
+        cell = vsdxkit.Cell(xml=cell_el, shape=self)
         self.cells[name] = cell
         return cell
 
@@ -1280,7 +1280,7 @@ class Shape(DocumentPart):
                 self.set_cell_value(name="Control/TextPosition/XDyn", value=text_x)
                 self.set_cell_value(name="Control/TextPosition/YDyn", value=text_y)
                 # print(cp1.cells.keys())
-            cells: list[Cell | vsdx.GeometryCell] = list(self.cells.values())
+            cells: list[Cell | vsdxkit.GeometryCell] = list(self.cells.values())
             if self.geometry is not None:
                 cells.extend(self.geometry.cells)
                 for r in self.geometry.rows.values():
@@ -1296,7 +1296,7 @@ class Shape(DocumentPart):
                         formula = master_c.formula if master_c else formula
                     if formula is None:
                         continue
-                    v = vsdx.calc_value(self, formula)
+                    v = vsdxkit.calc_value(self, formula)
                     if v is not None:
                         c.value = v
 
@@ -1340,7 +1340,7 @@ class Shape(DocumentPart):
     @deprecation.deprecated(
         deprecated_in="0.5.0",
         removed_in="1.0.0",
-        current_version=vsdx.__version__,
+        current_version=vsdxkit.__version__,
         details="Use Shape.child_shapes property to access shapes within a shape",
     )
     def sub_shapes(self) -> list[Shape]:
@@ -1398,7 +1398,7 @@ class Shape(DocumentPart):
         Recursively search for a shape, based on a known shape_id, and return a single Shape
 
         :param shape_id:
-        :return: vsdx.Shape
+        :return: vsdxkit.Shape
         """
         # recursively search for shapes by text and return first match
         for shape in self.all_shapes:  # type: Shape
@@ -1415,7 +1415,7 @@ class Shape(DocumentPart):
 
         :param attr:
         :param attr_value:
-        :return: vsdx.Shape
+        :return: vsdxkit.Shape
         """
         #  xml.attrib.get('NameU') or xml.get('Name')
         # recursively search for shapes by text and return first match
@@ -1587,7 +1587,7 @@ class Shape(DocumentPart):
 
         The annotation quotes ``Connect`` so ``typing.get_type_hints`` stays
         runtime-resolvable while avoiding an import cycle with
-        ``vsdx.connectors`` (resolved lazily by the type checker).
+        ``vsdxkit.connectors`` (resolved lazily by the type checker).
         """
         connects = list()
         for c in self.page.connects:

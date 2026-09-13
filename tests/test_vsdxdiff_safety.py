@@ -5,7 +5,7 @@ import os
 import pytest
 from helpers.broken_package import make_package
 
-from vsdx.vsdxdiff import VisioFileDiff
+from vsdxkit.vsdxdiff import VisioFileDiff
 
 # Every package here is a two-member archive built to exercise the differ's
 # byte comparison. There is no document in them to have structural defects.

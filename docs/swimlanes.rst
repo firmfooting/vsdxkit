@@ -10,7 +10,7 @@ Find the container
 
 .. code-block:: python
 
-   from vsdx import VisioFile
+   from vsdxkit import VisioFile
 
    with VisioFile("cross-functional-flow.vsdx") as vis:
        page = vis.pages[0]
@@ -22,13 +22,13 @@ Find the container
        for lane in container.lanes:
            print(lane.shape_name, container.members(lane))
 
-:attr:`vsdx.containers.Container.lanes` returns the lane shapes in visual order,
+:attr:`vsdxkit.containers.Container.lanes` returns the lane shapes in visual order,
 from top to bottom.
 
 Add a lane
 ----------
 
-:meth:`vsdx.pages.Page.add_swimlane` clones the current top lane, places the
+:meth:`vsdxkit.pages.Page.add_swimlane` clones the current top lane, places the
 new lane above it, sets the heading and grows the Swimlane List and CFF
 Container to match.
 

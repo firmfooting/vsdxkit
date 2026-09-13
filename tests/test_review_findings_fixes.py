@@ -7,9 +7,9 @@ import zipfile
 import pytest
 from helpers.broken_package import make_package
 
-import vsdx
-from vsdx import PackageLimitError, VisioFile
-from vsdx.vsdxdiff import VisioFileDiff
+import vsdxkit
+from vsdxkit import PackageLimitError, VisioFile
+from vsdxkit.vsdxdiff import VisioFileDiff
 
 # Most packages here are synthetic archives built to exercise the zip reader:
 # declared entry counts that lie, directories that disagree with their bounds,
@@ -31,7 +31,7 @@ def _copy(name: str, tmp_path) -> str:
 def test_eocd_preflight_rejects_declared_entry_overflow(tmp_path):
     """An EOCD declaring more entries than max_members is rejected before ZipFile runs."""
     path = _copy("test1.vsdx", tmp_path)
-    limits = vsdx.PackageLimits(max_members=20)
+    limits = vsdxkit.PackageLimits(max_members=20)
     VisioFile._preflight_eocd(path, limits)  # real fixture declares 14 < 20: passes
 
     with open(path, "rb") as handle:
@@ -106,7 +106,7 @@ def test_zip64_low_count_with_real_directory_bounds_is_rejected(tmp_path):
         handle.write(payload)
 
     with pytest.raises(PackageLimitError) as excinfo:
-        VisioFile(lying, limits=vsdx.PackageLimits(max_members=10))
+        VisioFile(lying, limits=vsdxkit.PackageLimits(max_members=10))
     assert excinfo.value.reason == "member_count"
 
 
@@ -122,7 +122,7 @@ def test_low_declared_count_with_swollen_directory_is_rejected(tmp_path):
     payload[eocd + 10 : eocd + 12] = struct.pack("<H", 3)  # declared count lied low
 
     with pytest.raises(PackageLimitError) as excinfo:
-        VisioFile(path, limits=vsdx.PackageLimits(max_members=20))
+        VisioFile(path, limits=vsdxkit.PackageLimits(max_members=20))
     assert excinfo.value.reason == "member_count"
 
 
@@ -143,7 +143,7 @@ def test_zero_declared_count_with_nonempty_directory_is_rejected(tmp_path):
     payload[eocd + 10 : eocd + 12] = struct.pack("<H", 0)  # declared count zero
 
     with pytest.raises(PackageLimitError) as excinfo:
-        VisioFile(path, limits=vsdx.PackageLimits(max_members=20))
+        VisioFile(path, limits=vsdxkit.PackageLimits(max_members=20))
     assert excinfo.value.reason == "member_count"
 
 
@@ -180,7 +180,7 @@ def test_eocd_preflight_reads_zip64_entry_count(tmp_path):
         handle.write(payload)
 
     with pytest.raises(PackageLimitError) as excinfo:
-        VisioFile(lying, limits=vsdx.PackageLimits(max_members=20))
+        VisioFile(lying, limits=vsdxkit.PackageLimits(max_members=20))
     assert excinfo.value.reason == "member_count"
     assert "40000" in str(excinfo.value)
 
@@ -189,8 +189,8 @@ def test_get_type_hints_resolves_connect_to_class():
     """get_type_hints must resolve the quoted annotation to the real class."""
     import typing
 
-    from vsdx.connectors import Connect
-    from vsdx.shapes import Shape
+    from vsdxkit.connectors import Connect
+    from vsdxkit.shapes import Shape
 
     hints = typing.get_type_hints(Shape.connects.fget)
     assert hints["return"].__args__[0] is Connect

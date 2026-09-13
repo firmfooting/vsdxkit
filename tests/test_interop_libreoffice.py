@@ -17,7 +17,7 @@ import subprocess
 
 import pytest
 
-import vsdx
+import vsdxkit
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
@@ -54,7 +54,7 @@ def _assert_converts_to_pdf(document: str, tmp_path) -> None:
 @pytest.mark.parametrize("filename", ["test1.vsdx", "test4_connectors.vsdx", "test3_house.vsdx"])
 def test_edited_package_converts_in_libreoffice(filename, tmp_path):
     out = os.path.join(str(tmp_path), filename)
-    with vsdx.VisioFile(os.path.join(FIXTURES, filename)) as vis:
+    with vsdxkit.VisioFile(os.path.join(FIXTURES, filename)) as vis:
         page = vis.pages[0]
         shape = page.child_shapes[0]
         shape.text = "converted by libreoffice"
@@ -74,9 +74,9 @@ def test_created_connector_package_converts_in_libreoffice(tmp_path):
     than copied wholesale with the masters folder.
     """
     out = os.path.join(str(tmp_path), "created_connector.vsdx")
-    with vsdx.VisioFile(os.path.join(FIXTURES, "test3_house.vsdx")) as vis:
+    with vsdxkit.VisioFile(os.path.join(FIXTURES, "test3_house.vsdx")) as vis:
         page = vis.pages[0]
-        connector = vsdx.Connect.create(
+        connector = vsdxkit.Connect.create(
             page=page,
             from_shape=page.find_shape_by_text("Shape to copy"),
             to_shape=page.find_shape_by_text("Shape to remove"),

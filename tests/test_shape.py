@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
-from vsdx import (
+from vsdxkit import (
     DataProperty,
     Shape,
     VisioFile,
