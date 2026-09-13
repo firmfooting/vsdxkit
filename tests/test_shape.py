@@ -1,12 +1,15 @@
 """Tests for Shape class"""
 
 import os
+import xml.etree.ElementTree as ET
 
 import pytest
 
 from vsdx import (
     DataProperty,
+    Shape,
     VisioFile,
+    namespace,
 )
 
 
@@ -228,7 +231,7 @@ def test_shape_copy(filename: str, shape_name: str, tmp_path, basedir):
         shape = page.find_shape_by_text(shape_name)  # type: Shape
         assert shape  # check shape found
         print(f"found {shape.ID}")
-        max_id = page.max_id
+        max_id = max(int(existing.ID) for existing in page.all_shapes)
 
         new_shape = shape.copy()
         assert new_shape  # check new shape exists
@@ -787,3 +790,158 @@ def test_set_shape_line_color(
             assert shape.text_color == expected_colour
         elif color_param == "fill":
             assert shape.fill_color == expected_colour
+
+
+def _loose_shape(page, shape_id: str = "1"):
+    """A Shape wrapping a standalone <Shape> element, not yet placed anywhere."""
+    xml = ET.fromstring(f'<Shape xmlns="{namespace[1:-1]}" ID="{shape_id}" Type="Shape"><Text>appended</Text></Shape>')
+    return Shape(xml=xml, parent=page, page=page)
+
+
+def test_append_shape_puts_the_shape_inside_the_group(vsdx_copy, tmp_path):
+    """A group holds its children in a <Shapes> container, not in the group element.
+
+    Appending to the group element itself makes the new shape a sibling of that
+    container, which the schema does not allow and which child_shapes and
+    page.all_shapes cannot see.
+    """
+    filename = vsdx_copy("test2.vsdx")
+    out_file = os.path.join(str(tmp_path), "test2_append_shape.vsdx")
+
+    with VisioFile(filename) as vis:
+        page = vis.pages[0]
+        group = page.find_shape_by_id("9")
+        assert group.shape_type == "Group"
+        ids_before = [s.ID for s in page.all_shapes]
+
+        new_shape = _loose_shape(page)
+        group.append_shape(new_shape)
+
+        assert group.xml.findall(f"{namespace}Shape") == []  # no <Shape> directly under the group
+        shapes_tag = group.xml.find(f"{namespace}Shapes")
+        assert new_shape.xml in list(shapes_tag)
+
+        new_id = new_shape.xml.attrib["ID"]
+        assert new_id not in ids_before
+        assert new_id in [s.ID for s in group.child_shapes]
+        assert new_id in [s.ID for s in page.all_shapes]
+        vis.save_vsdx(out_file)
+
+    with VisioFile(out_file) as vis:
+        page = vis.pages[0]
+        group = page.find_shape_by_id("9")
+        assert new_id in [s.ID for s in group.child_shapes]
+        ids = [s.ID for s in page.all_shapes]
+        assert len(ids) == len(set(ids))
+        assert page.find_shape_by_id(new_id).text.strip() == "appended"
+
+
+def test_append_shape_creates_a_shapes_container_for_an_empty_group(vsdx_copy):
+    """A group that has been emptied has no <Shapes> tag; appending must make one."""
+    filename = vsdx_copy("test2.vsdx")
+
+    with VisioFile(filename) as vis:
+        page = vis.pages[0]
+        group = page.find_shape_by_id("9")
+        group.xml.remove(group.xml.find(f"{namespace}Shapes"))
+        assert group.child_shapes == []
+
+        new_shape = _loose_shape(page)
+        group.append_shape(new_shape)
+
+        shapes_tag = group.xml.find(f"{namespace}Shapes")
+        assert shapes_tag is not None
+        assert list(shapes_tag) == [new_shape.xml]
+        assert [s.ID for s in group.child_shapes] == [new_shape.xml.attrib["ID"]]
+
+
+def test_append_shape_to_the_page_shapes_container(vsdx_copy):
+    """Shape also wraps a page's <Shapes> tag, which takes <Shape> children directly."""
+    filename = vsdx_copy("test2.vsdx")
+
+    with VisioFile(filename) as vis:
+        page = vis.pages[0]
+        page_shapes = page._shapes[0]
+        ids_before = [s.ID for s in page.all_shapes]
+
+        new_shape = _loose_shape(page)
+        page_shapes.append_shape(new_shape)
+
+        new_id = new_shape.xml.attrib["ID"]
+        assert new_id not in ids_before
+        assert new_shape.xml in list(page_shapes.xml)
+        assert new_id in [s.ID for s in page.child_shapes]
+
+
+def test_append_shape_rejects_a_shape_that_cannot_hold_sub_shapes(vsdx_copy):
+    """Only a group holds sub-shapes; anything else produces XML Visio repairs."""
+    filename = vsdx_copy("test2.vsdx")
+
+    with VisioFile(filename) as vis:
+        page = vis.pages[0]
+        plain = page.find_shape_by_id("6")
+        assert plain.shape_type != "Group"
+
+        with pytest.raises(ValueError, match="cannot contain shapes"):
+            plain.append_shape(_loose_shape(page))
+
+        assert plain.xml.find(f"{namespace}Shapes") is None
+
+
+def test_append_shape_moves_a_shape_that_is_already_on_the_page(vsdx_copy):
+    """A shape already on the page is moved into the group, not rejected.
+
+    Rejecting it left no usable route: `Shape.copy()` attaches its clone to the
+    destination page, so `group.append_shape(other.copy())` -- the call the old
+    error message recommended -- raised. Detaching first is also what prevents
+    the element gaining a second parent.
+    """
+    with VisioFile(vsdx_copy("test2.vsdx")) as vis:
+        page = vis.pages[0]
+        group = page.find_shape_by_id("9")
+        existing = page.find_shape_by_id("6")
+
+        group.append_shape(existing)
+
+        assert "6" in [s.ID for s in group.child_shapes]
+        ids = [s.ID for s in page.all_shapes]
+        assert ids.count("6") == 1, "the shape must not be on the page twice"
+        assert len(ids) == len(set(ids))
+
+
+def test_appending_a_copy_places_it_in_the_group(vsdx_copy):
+    """The documented copy-and-append path works end to end."""
+    with VisioFile(vsdx_copy("test2.vsdx")) as vis:
+        page = vis.pages[0]
+        group = page.find_shape_by_id("9")
+        before = {s.ID for s in page.all_shapes}
+
+        group.append_shape(page.find_shape_by_id("6").copy())
+
+        ids = [s.ID for s in page.all_shapes]
+        assert len(ids) == len(set(ids)), "the copy must get an id of its own"
+        assert set(ids) - before, "a new shape should have appeared"
+
+
+def test_moving_a_shape_into_a_group_keeps_its_id(vsdx_copy):
+    """A move is the same shape, so Connect records naming it stay valid."""
+    with VisioFile(vsdx_copy("test2.vsdx")) as vis:
+        page = vis.pages[0]
+        group = page.find_shape_by_id("9")
+        existing = page.find_shape_by_id("6")
+
+        group.append_shape(existing)
+
+        assert existing.ID == "6"
+
+
+def test_append_shape_rejects_a_shape_built_against_another_page(vsdx_copy):
+    """IDs are page-scoped, so a shape may only be appended on its own page."""
+    filename = vsdx_copy("test2.vsdx")
+
+    with VisioFile(filename) as vis:
+        page, other_page = vis.pages[0], vis.pages[1]
+        group = page.find_shape_by_id("9")
+
+        with pytest.raises(ValueError, match="belongs to page"):
+            group.append_shape(_loose_shape(other_page))

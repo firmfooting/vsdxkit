@@ -40,7 +40,7 @@ from . import (  # noqa: E402
 )
 from .masters import MastersImportMixin  # noqa: E402
 from .pages import Page, PagePosition  # noqa: E402
-from .shapes import Shape  # noqa: E402
+from .shapes import Shape, find_or_create_shapes_tag  # noqa: E402
 from .templating import JinjaTemplatingMixin  # noqa: E402
 from .xmlio import (  # noqa: E402
     file_to_xml,
@@ -1250,7 +1250,8 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         id_map = self.increment_shape_ids(shape.xml, page, id_map)
         self.update_ids(shape.xml, id_map)
         for s in shape.child_shapes:
-            id_map = self.increment_shape_ids(s.xml, page, id_map)
+            # the page mark was synced on the way in; the children continue that run
+            id_map = self._increment_shape_ids(s.xml, page, id_map)
             self.update_ids(s.xml, id_map)
             if s.child_shapes:
                 id_map = self.increment_sub_shape_ids(s, page, id_map)
@@ -1273,12 +1274,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
 
         new_shape = ET.fromstring(ET.tostring(shape))
 
-        page.set_max_ids()
-        # find or create Shapes tag
-        shapes_tag = page.xml.find(f"{namespace}Shapes")
-        if shapes_tag is None:
-            shapes_tag = Element(f"{namespace}Shapes")
-            page.xml.getroot().append(shapes_tag)
+        shapes_tag = find_or_create_shapes_tag(page.xml.getroot())
 
         id_map = self.increment_shape_ids(new_shape, page)  # page_obj)
         self.update_ids(new_shape, id_map)
@@ -1298,19 +1294,32 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         return shapes
 
     def increment_shape_ids(self, shape: Element, page: Page, id_map: dict[str, int] | None = None) -> dict[str, int]:
-        if id_map is None:
-            id_map = {}
+        """Give ``shape`` and the shapes inside it IDs unused by ``page``, and map old to new.
+
+        Allocation owns the page's high-water mark rather than trusting callers
+        to prime it: ``Page._max_id`` is 0 on a freshly loaded page, so a caller
+        that forgot handed out 1 to a page whose first shape was already 1.
+        Duplicate IDs make ``Connect`` records ambiguous and Visio offers to
+        repair the file. Every entry into this method syncs, including one that
+        passes an ``id_map`` to collect the mapping, because a caller who has to
+        remember is the fault being fixed. Only ``_increment_shape_ids``
+        recurses, so the page is scanned once per call rather than per shape.
+        """
+        page._set_max_ids()
+        return self._increment_shape_ids(shape, page, {} if id_map is None else id_map)
+
+    def _increment_shape_ids(self, shape: Element, page: Page, id_map: dict[str, int]) -> dict[str, int]:
+        """Allocate IDs within a run whose page mark is already synced."""
         self.set_new_id(shape, page, id_map)
         for e in shape.findall(f"{namespace}Shapes"):
-            self.increment_shape_ids(e, page, id_map)
+            self._increment_shape_ids(e, page, id_map)
         for e in shape.findall(f"{namespace}Shape"):
             self.set_new_id(e, page, id_map)
 
         return id_map
 
     def set_new_id(self, element: Element, page: Page, id_map: dict[str, int]) -> int:
-        page.max_id += 1
-        max_id = page.max_id
+        max_id = page._next_shape_id()
         if element.attrib.get("ID"):
             current_id = element.attrib["ID"]
             id_map[current_id] = max_id  # record mappings

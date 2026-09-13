@@ -160,7 +160,6 @@ class Container:
         shapes_tag = self.page.xml.find(f"{vsdx.namespace}Shapes")
         if shapes_tag is None:
             raise ValueError("page has no Shapes tag")
-        self.page.set_max_ids()  # ensure max_id reflects existing shapes
         id_map = self.page.vis.increment_shape_ids(new_xml, self.page)
         self.page.vis.update_ids(new_xml, id_map)
         shapes_tag.append(new_xml)
@@ -181,7 +180,6 @@ class Container:
 
         if label:
             self.set_lane_label(new_lane, label)
-        self.page.set_max_ids()
         return new_lane
 
     def set_lane_label(self, lane: Shape, label: str) -> None:
