@@ -6,7 +6,7 @@ from xml.etree.ElementTree import Element
 
 import vsdxkit
 
-from .errors import InvalidOperationError
+from .errors import InvalidOperationError, MalformedPackageError
 from .shapes import Shape
 
 namespace = "{http://schemas.microsoft.com/office/visio/2012/main}"
@@ -35,9 +35,11 @@ class Connect:
             raise ValueError("Connect requires the connection's XML element")
         if type(xml) is not Element or xml.tag != f"{namespace}Connect":
             raise ValueError(f"Connect requires a {namespace}Connect element, got {xml.tag!r}")
+        # Not an argument check like the three above: these attributes come from
+        # the package, and `page.connects` builds a Connect per element in it.
         missing = [name for name in ("FromSheet", "ToSheet") if name not in xml.attrib]
         if missing:
-            raise ValueError(f"Connect element is missing required attribute(s): {', '.join(missing)}")
+            raise MalformedPackageError(f"Connect element is missing required attribute(s): {', '.join(missing)}")
         self.xml = xml
         self.page = page
 

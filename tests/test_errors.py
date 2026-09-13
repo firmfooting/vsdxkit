@@ -8,6 +8,7 @@ A hierarchy nobody raises documents a contract the code does not keep.
 """
 
 import pathlib
+import struct
 import xml.etree.ElementTree as ET
 import zipfile
 
@@ -276,6 +277,54 @@ def test_a_file_that_is_not_a_readable_archive_raises_malformed_package_error(vs
     destination.write_bytes(payload)
 
     with pytest.raises(MalformedPackageError, match="not a readable package"):
+        vsdxkit.VisioFile(str(destination))
+
+
+def test_a_malformed_page_dimension_raises_malformed_package_error(vsdx_copy):
+    """Page dimensions parsed with a bare `float()` while shape cells did not.
+
+    A ShapeSheet number that is not a number already reported
+    `MalformedPackageError`; `Page.width` and `Page.height` read the same kind
+    of cell and raised a plain `ValueError` (#365 review).
+    """
+    with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        page = vis.pages[0]
+        page._pagesheet_cell("PageWidth").attrib["V"] = "not-a-number"
+        with pytest.raises(MalformedPackageError, match="PageWidth"):
+            _ = page.width
+
+
+def test_a_connect_record_missing_its_sheet_attributes_raises_malformed_package_error(vsdx_copy):
+    """Reading `page.connects` builds these from package XML, so it is content, not an argument."""
+    with vsdxkit.VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
+        page = vis.pages[0]
+        connect = page.connects[0]
+        del connect.xml.attrib["FromSheet"]
+        with pytest.raises(MalformedPackageError, match="FromSheet"):
+            _ = page.connects
+
+
+@pytest.mark.allow_invalid_package
+def test_an_encrypted_member_raises_malformed_package_error(vsdx_copy, tmp_path):
+    """`ZipFile.open` reports an encrypted member as `RuntimeError`, not `BadZipFile`.
+
+    The encryption bit is set in the raw headers rather than through `writestr`,
+    which drops a modified `flag_bits` on the way out.
+    """
+    raw = bytearray(pathlib.Path(vsdx_copy("test1.vsdx")).read_bytes())
+    # bit 0 of the general purpose flag: offset 6 in a local file header,
+    # offset 8 in a central directory entry
+    for signature, offset in ((b"PK\x03\x04", 6), (b"PK\x01\x02", 8)):
+        at = raw.find(signature)
+        while at != -1:
+            position = at + offset
+            (flags,) = struct.unpack_from("<H", raw, position)
+            struct.pack_into("<H", raw, position, flags | 0x1)
+            at = raw.find(signature, at + 4)
+    destination = tmp_path / "encrypted.vsdx"
+    destination.write_bytes(bytes(raw))
+
+    with pytest.raises(MalformedPackageError, match="cannot be read"):
         vsdxkit.VisioFile(str(destination))
 
 

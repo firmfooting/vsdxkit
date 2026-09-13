@@ -315,9 +315,23 @@ def _members_within(source: str, limits: PackageLimits) -> list[tuple[str, bytes
             )
         members: list[tuple[str, bytes]] = []
         for info in file_infos:
-            with archive.open(info, "r") as member_reader:
-                members.append((info.filename, _read_bounded(member_reader, info.file_size, info.filename, limits)))
+            members.append((info.filename, _member_bytes(archive, info, limits)))
     return members
+
+
+def _member_bytes(archive: zipfile.ZipFile, info: zipfile.ZipInfo, limits: PackageLimits) -> bytes:
+    """One member's bytes, or a MalformedPackageError saying it cannot be decoded.
+
+    `ZipFile.open` reports an encrypted member as `RuntimeError` and a
+    compression method it does not implement as `NotImplementedError`. Neither
+    is a `BadZipFile`, and a package whose parts cannot be decoded is one this
+    library cannot read, whichever of them says so.
+    """
+    try:
+        with archive.open(info, "r") as member_reader:
+            return _read_bounded(member_reader, info.file_size, info.filename, limits)
+    except (RuntimeError, NotImplementedError) as error:
+        raise MalformedPackageError(f"package member {info.filename!r} cannot be read: {error}") from error
 
 
 # --------------------------------------------------------------------------

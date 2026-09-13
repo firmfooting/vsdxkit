@@ -19,7 +19,7 @@ from vsdxkit import namespace
 
 from .connectors import Connect
 from .errors import InvalidOperationError, MissingPartError, NotFoundError
-from .shapes import Shape, parent_of
+from .shapes import Shape, parent_of, to_float
 from .xmlio import require_element, xml_value
 
 # the two places a Connect record names a shape: the connector it leads from,
@@ -50,6 +50,17 @@ class PagePosition(IntEnum):
     END = -1
     AFTER = -2
     BEFORE = -3
+
+
+def _page_dimension(cell: ET.Element, name: str) -> float:
+    """A page dimension off its PageSheet cell, the way a shape cell is read.
+
+    `to_float` is the one place a ShapeSheet number that is not a number is
+    reported; a page's PageWidth is the same kind of cell and was read with a
+    bare `float()`, so the same malformed document gave two different errors.
+    """
+    value = to_float(cell.attrib.get("V"), name)
+    return 0.0 if value is None else value
 
 
 def _pages_root(vis: VisioFile) -> ET.Element:
@@ -211,7 +222,7 @@ class Page:
 
     @property
     def width(self) -> float:
-        return float(self._pagesheet_cell("PageWidth").attrib.get("V", 0.0))
+        return _page_dimension(self._pagesheet_cell("PageWidth"), "PageWidth")
 
     @width.setter
     def width(self, value: float | str | None) -> None:
@@ -220,7 +231,7 @@ class Page:
 
     @property
     def height(self) -> float:
-        return float(self._pagesheet_cell("PageHeight").attrib.get("V", 0.0))
+        return _page_dimension(self._pagesheet_cell("PageHeight"), "PageHeight")
 
     @height.setter
     def height(self, value: float | str | None) -> None:
