@@ -6,6 +6,8 @@ history precedes 0.6.3 here, remains available at
 
 ## Unreleased
 
+## 0.7.0 - 2026-09-13
+
 ### Added
 
 - The documentation is published to GitHub Pages at
@@ -118,6 +120,28 @@ history precedes 0.6.3 here, remains available at
 
 ### Fixed
 
+- Every XML part is serialised with the namespace prefixes Visio itself writes.
+  `ET.register_namespace` evicts any previous holder of a prefix, so registering
+  four namespaces as the default left only the last one holding it and every
+  Visio element serialised under a generated `ns0:` prefix. libvisio, which
+  backs LibreOffice Draw's import filter, and draw.io's importer are stricter
+  about prefixes than Visio is and reject such a package. Prefixes are now
+  applied per part, so each part carries its own root vocabulary as the default.
+  A CI job converts library output through LibreOffice Draw to keep it that way.
+  Shape text no longer depends on the prefix either: the `cp`/`pp` formatting
+  runs that bracket it are located by walking the `Text` element's children
+  rather than by matching `ns0:` in serialised text.
+- Copying a shape remaps every `Sheet.N!` and `SheetN!` reference in a formula,
+  not only those a formula begins with. The connector engine writes
+  `_XFTRIGGER(Sheet5!EventXFMod)` and `PAR(PNT(Sheet5!Connections.X1,...))` —
+  no dot, and nested inside a function call — so a copied connector kept
+  pointing at the source shapes and Visio dropped the glue. The walk also
+  reaches the copied shape's own cells and cells nested inside `Section`s,
+  which a copied group previously lost.
+- Archive preflight derives the central directory's start from the end-of-
+  central-directory record and detects ZIP64 by its locator, rather than
+  trusting the declared values. A falsified declared count no longer stops the
+  directory scan early, and a directory declaring zero entries is still scanned.
 - `Page.delete_shape()` identifies the shape by element rather than by ID.
   Visio shape IDs are page-scoped and collide, so handing a page a shape
   belonging to a different page satisfied the guard and then deleted whichever
