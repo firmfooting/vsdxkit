@@ -152,3 +152,79 @@ def test_a_missing_section_is_created_rather_than_taking_one_that_is_named(maste
     headings, titles = _app_xml(out)
     assert headings == [masters_label, "3", "Pages", "1"]
     assert titles == ["Dynamic connector", "Switch", "Router", "NewPage"]
+
+
+def test_renaming_the_only_page_of_a_localised_document_still_renames_its_title(tmp_path, basedir):
+    """One page, and the name is the thing being changed.
+
+    `Page.name` updates the page before it updates app.xml, so at the moment the
+    section has to be found, the document says the page is called the new name
+    and app.xml still says the old one. With one page there is nothing else to
+    recognise the section by, and asking which section names the document's
+    pages gets the answer "none of them".
+
+    The caller knows the name it is replacing, so it says so. Fails if the
+    resolver goes back to asking only what the pages are called now.
+    """
+    localised = str(tmp_path / "german_house.vsdx")
+    _localise(os.path.join(basedir, "test3_house.vsdx"), localised, {"Pages": "Seiten", "Masters": "Master"})
+    out = str(tmp_path / "out.vsdx")
+    with vsdxkit.VisioFile(localised) as vis:
+        vis.pages[0].name = "Umbenannt"
+        vis.save_vsdx(out)
+    headings, titles = _app_xml(out)
+    assert headings == ["Seiten", "1", "Master", "1"]
+    assert titles == ["Umbenannt", "House"]
+
+
+def test_a_master_sharing_the_only_page_s_name_does_not_make_the_masters_the_pages(tmp_path, basedir):
+    """Two sections, the same overlap, and no way to tell them apart.
+
+    A master may be called what a page is called -- the library allows it -- so
+    on a one-page document a masters section listed first scores exactly what
+    the pages section scores. Taking the first is how the page title ends up
+    among the masters.
+
+    What this pins is the damage, not the choice: an ambiguous answer must not
+    be resolved by picking one. Fails if the tie goes back to first-wins.
+    """
+    source = os.path.join(basedir, "test3_house.vsdx")
+    colliding = str(tmp_path / "collision.vsdx")
+    with zipfile.ZipFile(source) as archive:
+        order = archive.namelist()
+        members = {name: archive.read(name) for name in order}
+    root = ET.fromstring(members["docProps/app.xml"])
+
+    headings = root.find(f"{EXT}HeadingPairs").find(f"{VT}vector")
+    pairs = list(headings)
+    assert len(pairs) == 4, f"expected two pairs, got {len(pairs) // 2}"
+    for variant in pairs:  # masters first, so a tie resolved by position picks them
+        headings.remove(variant)
+    for variant in pairs[2:] + pairs[:2]:
+        headings.append(variant)
+    for entry in headings.iter(f"{VT}lpstr"):
+        if entry.text == "Pages":
+            entry.text = "Seiten"
+        elif entry.text == "Masters":
+            entry.text = "Master"
+
+    titles = root.find(f"{EXT}TitlesOfParts").find(f"{VT}vector")
+    entries = list(titles)
+    assert [e.text for e in entries] == ["Page-1", "House"], [e.text for e in entries]
+    entries[1].text = "Page-1"  # the master is now called what the page is called
+    titles.remove(entries[0])
+    titles.append(entries[0])  # masters first here too, matching the headings
+
+    members["docProps/app.xml"] = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+    with zipfile.ZipFile(colliding, "w") as archive:
+        for name in order:
+            archive.writestr(name, members[name])
+
+    out = str(tmp_path / "out.vsdx")
+    with vsdxkit.VisioFile(colliding) as vis:
+        vis.add_page("NewPage")
+        vis.save_vsdx(out)
+    headings_out, titles_out = _app_xml(out)
+    master_count = int(headings_out[headings_out.index("Master") + 1])
+    assert master_count == 1, f"the new page was counted among the masters: {headings_out}"
+    assert titles_out[:master_count] == ["Page-1"], f"the new page's title landed in the masters slice: {titles_out}"
