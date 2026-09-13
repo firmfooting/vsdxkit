@@ -15,8 +15,9 @@ Microsoft Visio is not required at runtime.
    the only write. The `1.0 design
    <https://github.com/firmfooting/vsdxkit/blob/main/.hermes/plans/2026-09-12_simplification-usability-refactor.md>`_
    lists every change, and a migration guide lands at
-   ``docs/migration-1.0.rst`` with the first breaking release. Pin
-   ``vsdxkit<1`` to stay on the 0.x names.
+   ``docs/migration-1.0.rst`` with the first breaking release. Once there is a
+   release on PyPI again, pin ``vsdxkit<1`` to stay on the 0.x names; the note
+   below says what the index holds today.
 
 The library works on the XML parts inside an existing Visio package. It can
 query and edit shapes, create common flowchart shapes, create and re-anchor
@@ -25,8 +26,11 @@ Jinja-backed templates.
 
 .. note::
 
-   ``vsdxkit`` is not yet published on PyPI. Install it from the GitHub
-   repository as described in :doc:`quickstart`.
+   **As of 2026-09-13 there is no release on PyPI.** The first release was
+   withdrawn after a security defect and cannot be republished, so
+   ``pip install vsdxkit`` finds no versions until the next one lands. Install
+   from the GitHub repository as described in :doc:`quickstart`. The `PyPI
+   project page <https://pypi.org/project/vsdxkit/>`_ shows the current state.
 
 .. toctree::
    :maxdepth: 2
@@ -42,7 +46,7 @@ Jinja-backed templates.
 Format support
 --------------
 
-* Python 3.10–3.14 on Linux and Windows
+* Python 3.10–3.14 on Linux, Windows and macOS
 * read, edit and save ``.vsdx``
 * read, edit and save ``.vsdm``, which must stay ``.vsdm``
 * no Microsoft Visio dependency at runtime

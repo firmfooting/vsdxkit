@@ -7,7 +7,7 @@
 
 Create, edit and analyse Microsoft Visio `.vsdx` files with Python. Visio is not required at runtime.
 
-> **0.x API notice.** 0.7 is the last release of the inherited API. 1.0 renames `VisioFile` to `Document` and `Container` to `SwimlaneDiagram`, splits `Connect` into an internal `ConnectionRecord` and a public `Connector`, and drops the context manager: opening closes the archive before it returns, and `save()` is the only write. The [1.0 design](https://github.com/firmfooting/vsdxkit/blob/main/.hermes/plans/2026-09-12_simplification-usability-refactor.md) lists every change, and a migration guide lands at `docs/migration-1.0.rst` with the first breaking release. Pin `vsdxkit<1` to stay on the 0.x names.
+> **0.x API notice.** 0.7 is the last release of the inherited API. 1.0 renames `VisioFile` to `Document` and `Container` to `SwimlaneDiagram`, splits `Connect` into an internal `ConnectionRecord` and a public `Connector`, and drops the context manager: opening closes the archive before it returns, and `save()` is the only write. The [1.0 design](https://github.com/firmfooting/vsdxkit/blob/main/.hermes/plans/2026-09-12_simplification-usability-refactor.md) lists every change, and a migration guide lands at `docs/migration-1.0.rst` with the first breaking release. Once there is a release on PyPI again, pin `vsdxkit<1` to stay on the 0.x names; see [Installation](#installation) for what the index holds today.
 
 The distribution is named **`vsdxkit`**. The import remains **`vsdx`**, so existing code keeps working.
 
@@ -25,15 +25,23 @@ vsdxkit adds shape creation, Visio-faithful connectors, connector re-anchoring, 
 - Renders data into Visio templates with Jinja.
 - Saves to a new file or safely replaces the source file in place.
 
-The implementation edits the XML parts inside the Open Packaging Convention archive. It does not drive the Visio user interface. Generated connector and swimlane files are nevertheless checked against Microsoft Visio through COM as a release gate.
+The implementation edits the XML parts inside the Open Packaging Convention archive. It does not drive the Visio user interface. Generated connector and swimlane files are checked against Microsoft Visio through COM before a connector or swimlane change is considered done. That check is manual; no workflow runs Visio. See [When a change needs Visio](CONTRIBUTING.md#when-a-change-needs-visio).
 
 ## Installation
 
-`vsdxkit` is not yet published on PyPI. Install it from GitHub:
+**As of 2026-09-13 there is no release on PyPI.** The first release was
+withdrawn after a security defect was found in it and cannot be republished, so
+`pip install vsdxkit` finds no versions until the next one lands. The
+[PyPI project page](https://pypi.org/project/vsdxkit/) shows the current state.
+
+Install from GitHub in the meantime:
 
 ```bash
 python -m pip install "vsdxkit @ git+https://github.com/firmfooting/vsdxkit.git"
 ```
+
+That tracks `main`, so pin a commit if you need a reproducible install. Once
+there is a release on the index, install it with `pip install vsdxkit`.
 
 For development:
 
@@ -43,9 +51,9 @@ cd vsdxkit
 uv sync --locked
 ```
 
-Python 3.10–3.14 is supported on Linux and Windows. Add `--group docs` to that
-sync if you also want to build the documentation; Sphinx needs Python 3.12 or
-later.
+Python 3.10–3.14 is supported on Linux, Windows and macOS. Add `--group docs` to
+that sync if you also want to build the documentation; Sphinx needs Python 3.12
+or later.
 
 ## Open, edit and save
 
@@ -180,14 +188,14 @@ The package also supports its existing group-shape loop and `showif` conventions
 
 ```bash
 uv run --no-sync python -m pytest tests -q
-uv run --no-sync ruff check vsdx tests/test_imports.py tests/test_shape_coordinates.py
-uv run --no-sync ruff format --check vsdx tests/test_imports.py tests/test_shape_coordinates.py
+uv run --no-sync ruff check vsdx tests tools
+uv run --no-sync ruff format --check vsdx tests tools
 uv run --no-sync pyrefly check vsdx --min-severity warn --output-format min-text
 uv run --no-sync sphinx-build -W --keep-going -b html docs docs/_build/html
 uv run --no-sync python -m build
 ```
 
-The package is held at pyrefly's `strict` preset. CI tests Python 3.10–3.14 on Ubuntu and Windows. Connector and swimlane changes also run through `tools/visio_check.ps1`, which opens generated files in an invisible Microsoft Visio instance and fails on package repair or automation errors.
+The package is held at pyrefly's `strict` preset. CI tests Python 3.10–3.14 on Linux and Windows, and 3.10 and 3.14 on macOS. Connector and swimlane changes also run through `tools/visio_check.ps1`, which opens generated files in an invisible Microsoft Visio instance and reports package repair or automation errors. That step is manual, on a maintainer's Windows machine; GitHub's runners have no Visio.
 
 ## Documentation
 

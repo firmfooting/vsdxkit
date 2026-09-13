@@ -10,16 +10,21 @@ The repository uses [uv](https://docs.astral.sh/uv/) with a committed lockfile:
 ```
 uv sync --group docs    # test, lint and build groups plus Sphinx (needs Python 3.12+)
 uv run pytest tests -q
-uv run ruff check vsdx tests
-uv run ruff format --check vsdx tests
+uv run ruff check vsdx tests tools
+uv run ruff format --check vsdx tests tools
 uv run pyrefly check vsdx --min-severity warn
 uv run zizmor .github/workflows
 uv run sphinx-build -W --keep-going -b html docs docs/_build/html
 ```
 
-CI runs exactly these gates, plus a lowest-direct dependency-floor job and a
-distribution build-and-smoke-test, across Python 3.10–3.14 on Linux and
-Windows. Please make sure they pass locally before submitting.
+CI runs the tests across Python 3.10–3.14 on Linux and Windows, and on 3.10 and
+3.14 on macOS. The ruff, pyrefly and Sphinx gates run once, on Linux under
+Python 3.12. There is more besides: a lowest-direct dependency-floor job, a
+distribution build-and-smoke-test, a LibreOffice import test, a coverage
+threshold, a mypy consumer fixture, and `tools/check_action_pins.py` and
+`tools/check_public_annotations.py`. zizmor runs as its own workflow rather than
+inside CI. You do not need to run those locally; the list above is what to run
+before submitting.
 
 Commit messages follow Conventional Commits (`feat:`, `fix:`, `docs:`, `ci:`,
 `chore:`), matching the existing history.
@@ -159,6 +164,11 @@ vsdxkit began as a fork of [dave-howard/vsdx](https://github.com/dave-howard/vsd
 and is now developed independently — it does not track that project. If a change
 you are making is a plain bug fix that would help users of the original too,
 offering it there as well is a kindness, but nothing here depends on it.
+
+Maintainers: [`docs/maintainers/upstream-sync.md`](docs/maintainers/upstream-sync.md)
+records when to check that repository for fixes worth taking, how to take one
+with attribution that survives a squash merge, and the last sync point. It is
+not part of the published documentation, so the path is the only way in.
 
 #### Security
 Please report vulnerabilities privately — see [SECURITY.md](SECURITY.md).

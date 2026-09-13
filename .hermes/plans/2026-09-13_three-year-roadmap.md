@@ -1,5 +1,15 @@
 # vsdxkit three-year roadmap (September 2026 – August 2029)
 
+> **Historical record, as designed on 2026-09-13.** This is kept as written and
+> is not maintained. Its issue numbers predate the move to
+> `firmfooting/vsdxkit` and no longer name the work they were written against,
+> and parts of what it lists as future shipped differently: release-please
+> replaced the tag-triggered release, and GitHub Pages replaced Read the Docs.
+> Python 3.15 does not arrive until 2026-10-01. The
+> [milestones](https://github.com/firmfooting/vsdxkit/milestones) and the
+> "vsdxkit roadmap 2026–2029" project board are authoritative for what is
+> planned and what is done.
+
 **Status:** design, tracked in the GitHub project "vsdxkit roadmap 2026–2029" (milestones, epics and tickets)
 **Date:** 2026-09-13
 **Base:** `main` at `67098c0` (v0.6.3 plus the 2026-09 hardening PRs)

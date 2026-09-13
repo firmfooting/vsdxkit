@@ -55,13 +55,23 @@ a project may be further defined and clarified by project maintainers.
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may
-be reported by contacting the project team at dave@codypy.com. All
-complaints will be reviewed and investigated and will result in a
-response that is deemed necessary and appropriate to the circumstances.
-The project team is obligated to maintain confidentiality with regard to
-the reporter of an incident. Further details of specific enforcement
-policies may be posted separately.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be
+reported to the vsdxkit maintainers at Firm Footing. Report privately: please do
+not open a public issue, and do not use the security advisory form, which is for
+vulnerabilities only.
+
+Firm Footing does not yet publish a dedicated address for this. Until it does,
+contact the maintainer [@shauneccles](https://github.com/shauneccles) at the
+e-mail address on that GitHub profile. If a report concerns that maintainer, or
+you would rather not go through them, GitHub's
+[report abuse](https://github.com/contact/report-abuse) form covers conduct that
+took place on GitHub.
+
+All complaints will be reviewed and investigated and will result in a response
+that is deemed necessary and appropriate to the circumstances. The project team
+is obligated to maintain confidentiality with regard to the reporter of an
+incident. Further details of specific enforcement policies may be posted
+separately.
 
 Project maintainers who do not follow or enforce the Code of Conduct in good
 faith may face temporary or permanent repercussions as determined by other
