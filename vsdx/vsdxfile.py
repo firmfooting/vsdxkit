@@ -26,6 +26,7 @@ else:
 
 import vsdx
 
+from . import relationships
 from .logging_support import attach_debug_stream_handler, get_logger
 
 logger = get_logger(__name__)
@@ -672,19 +673,13 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
                 # remove internal references to page
                 self._remove_page_from_app_xml(page.name)
 
-                # remove the page's relationship from pages.xml.rels (issue #7:
-                # a dangling rId pointing at a deleted part corrupts the OPC graph)
-                rels_root = self._part_root(self.pages_xml_rels, "pages.xml.rels")
-                page_rel = rels_root.find(f'{document_rels_namespace}Relationship[@Id="{page.rel_id}"]')
-                if page_rel is not None:
-                    rels_root.remove(page_rel)
-
-                # remove the page's content-type override
-                content_types = self._part_root(self.content_types_xml, "[Content_Types].xml")
-                part_name = f"/visio/pages/{os.path.basename(page.filename)}"
-                override = content_types.find(f'{cont_types_namespace}Override[@PartName="{part_name}"]')
-                if override is not None:
-                    content_types.remove(override)
+                # issue #7: a dangling rId pointing at a deleted part corrupts
+                # the OPC graph, and so does an Override naming one
+                relationships.remove(self._part_root(self.pages_xml_rels, "pages.xml.rels"), page.rel_id or "")
+                relationships.remove_override(
+                    self._part_root(self.content_types_xml, "[Content_Types].xml"),
+                    f"/visio/pages/{os.path.basename(page.filename)}",
+                )
 
                 # remove the page's own rels part if one exists
                 if page.rels_xml_filename and page.rels_xml_filename in self.zip_file_contents:
@@ -717,21 +712,12 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         """Updates the pages.xml.rels file with a reference to the new page and returns the new relid"""
 
         rels_root = self._part_root(self.pages_xml_rels, "pages.xml.rels")
-        # allocate an unused rel-id rather than assuming count+1 (issue #7)
-        used_rel_ids = {rel.attrib["Id"] for rel in rels_root}
-        counter = 1
-        while f"rId{counter}" in used_rel_ids:
-            counter += 1
-        new_page_relid = f"rId{counter}"
-
-        new_page_rel = {
-            "Target": new_page_filename,
-            "Type": "http://schemas.microsoft.com/visio/2010/relationships/page",
-            "Id": new_page_relid,
-        }
-        rels_root.append(Element("{http://schemas.openxmlformats.org/package/2006/relationships}Relationship", new_page_rel))
-
-        return new_page_relid
+        relationship = relationships.append_if_absent(
+            rels_root,
+            rel_type="http://schemas.microsoft.com/visio/2010/relationships/page",
+            target=new_page_filename,
+        )
+        return relationship.attrib["Id"]
 
     def _get_new_page_name(self, new_page_name: str) -> str:
         i = 1
@@ -786,67 +772,20 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
 
     @override
     def _add_content_types_override(self, part_name_path: str, content_type: str) -> None:
-        content_types = self._part_root(self.content_types_xml, "[Content_Types].xml")
-
-        # idempotent: skip if this exact PartName is already registered
-        for existing in content_types.findall(f"{cont_types_namespace}Override"):
-            if existing.attrib.get("PartName") == part_name_path:
-                return
-
-        content_types_attribs = {
-            "PartName": part_name_path,
-            "ContentType": content_type,
-        }
-        override_element = Element(f"{cont_types_namespace}Override", content_types_attribs)
-        # find existing elements with same content_type
-        matching_overrides = content_types.findall(f'{cont_types_namespace}Override[@ContentType="{content_type}"]')
-        if len(matching_overrides):  # insert after similar elements
-            idx = list(content_types).index(matching_overrides[-1])
-            content_types.insert(idx + 1, override_element)
-        else:  # add at end of list
-            content_types.append(override_element)
-
-    def _update_content_types_xml(self, new_page_filename: str) -> None:
-        # todo: use generic function above
-        content_types = self._part_root(self.content_types_xml, "[Content_Types].xml")
-
-        content_types_attribs = {
-            "PartName": f"/visio/pages/{new_page_filename}",
-            "ContentType": "application/vnd.ms-visio.page+xml",
-        }
-        content_types_element = Element(f"{cont_types_namespace}Override", content_types_attribs)
-
-        # add the new element after the last such element
-        # first find the index:
-        all_page_overrides = content_types.findall(
-            f'{cont_types_namespace}Override[@ContentType="application/vnd.ms-visio.page+xml"]'
+        relationships.ensure_override(
+            self._part_root(self.content_types_xml, "[Content_Types].xml"), part_name_path, content_type
         )
-        idx = list(content_types).index(all_page_overrides[-1])
-
-        # then add it:
-        content_types.insert(idx + 1, content_types_element)
 
     def document_rels(self) -> list[Element]:
-        rels_root = self._part_root(self.document_xml_rels, "_rels/.rels")
+        rels_root = self._part_root(self.document_xml_rels, "visio/_rels/document.xml.rels")
         rels = rels_root.findall(f"{document_rels_namespace}Relationship")
         return rels
 
     @override
     def _add_document_rel(self, rel_type: str, target: str) -> None:
-        # idempotent: skip if an identical relationship already exists
-        for r in self.document_rels():
-            if r.attrib.get("Type") == rel_type and r.attrib.get("Target") == target:
-                return
-        rel_ids = [int(str(r.attrib.get("Id")).replace("rId", "")) for r in self.document_rels()]
-        new_rel = Element(
-            f"{document_rels_namespace}Relationship",
-            {
-                "Id": f"rId{max(rel_ids) + 1}",
-                "Type": rel_type,
-                "Target": target,
-            },
+        relationships.append_if_absent(
+            self._part_root(self.document_xml_rels, "visio/_rels/document.xml.rels"), rel_type=rel_type, target=target
         )
-        self._part_root(self.document_xml_rels, "_rels/.rels").append(new_rel)
 
     def _style_sheets(self) -> Element:
         # return StyleSheets element from document.xml
@@ -995,7 +934,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         self._part_root(self.pages_xml, "pages.xml").insert(index, new_page_element)
 
         # update [Content_Types].xml - insert reference to the new page
-        self._update_content_types_xml(new_page_filename)
+        self._add_content_types_override(f"/visio/pages/{new_page_filename}", "application/vnd.ms-visio.page+xml")
 
         # update app.xml, if it exists
         if self.app_xml:

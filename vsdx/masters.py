@@ -11,10 +11,10 @@ import copy as copy_module
 import io
 import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING, cast
-from xml.etree.ElementTree import Element
 
-from vsdx import document_rels_namespace, namespace, r_namespace
+from vsdx import namespace, r_namespace
 
+from . import relationships
 from .logging_support import get_logger
 from .pages import Page
 from .shapes import Shape
@@ -87,7 +87,18 @@ class MastersImportMixin:
             for f in self.zip_file_contents
             if f.startswith(prefix) and f.endswith(".xml") and f[len(prefix) : -4].isdigit()
         ]
+        master_rels_path = f"{self._masters_folder}/_rels/masters.xml.rels"
+        rels_tree = file_to_xml(master_rels_path, self.zip_file_contents)
+        rels_root = rels_tree.getroot() if rels_tree is not None else None
+        if rels_root is None:
+            rels_root = ET.fromstring('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
+
+        # The part name is settled against the existing targets before the bytes
+        # are written, and the rel id is allocated separately.
+        taken_targets = {r.attrib.get("Target") for r in relationships.all_of(rels_root)}
         next_num = max(existing_numbers, default=0) + 1
+        while f"master{next_num}.xml" in taken_targets:
+            next_num += 1
         part_name = f"master{next_num}.xml"
         part_path = f"{self._masters_folder}/{part_name}"
         self.zip_file_contents[part_path] = src_vis.zip_file_contents[source_master_page.filename]
@@ -104,45 +115,20 @@ class MastersImportMixin:
             new_id = 2
         new_master_element = copy_module.deepcopy(source_element)
         new_master_element.attrib["ID"] = str(new_id)
-        new_rel_id = f"rId{next_num}"
+
+        # 4. masters.xml.rels: map a fresh rel id to the part filename
+        relationship = relationships.append_if_absent(
+            rels_root,
+            rel_type="http://schemas.microsoft.com/visio/2010/relationships/master",
+            target=part_name,
+        )
         rel_el = new_master_element.find(f"{namespace}Rel")
         if rel_el is not None:
-            rel_el.attrib[f"{r_namespace}id"] = new_rel_id
+            rel_el.attrib[f"{r_namespace}id"] = relationship.attrib["Id"]
         self.masters_xml.append(new_master_element)
         # persist masters.xml (save_vsdx does not write it)
         xml_to_file(ET.ElementTree(self.masters_xml), f"{self._masters_folder}/masters.xml", self.zip_file_contents)
-
-        # 4. masters.xml.rels: map the new rel id -> part filename
-        master_rels_path = f"{self._masters_folder}/_rels/masters.xml.rels"
-        rels_tree = file_to_xml(master_rels_path, self.zip_file_contents)
-        rels_root = rels_tree.getroot() if rels_tree is not None else None
-        if rels_root is not None:
-            existing_targets = {r.attrib.get("Target") for r in rels_root}
-            while part_name in existing_targets:  # never clobber an existing mapping
-                next_num += 1
-                part_name = f"master{next_num}.xml"
-                new_rel_id = f"rId{next_num}"
-            rel_el = new_master_element.find(f"{namespace}Rel")
-            if rel_el is not None:
-                rel_el.attrib[f"{r_namespace}id"] = new_rel_id
-        else:
-            rels_root = ET.fromstring('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
-        rels_root.append(
-            Element(
-                f"{document_rels_namespace}Relationship",
-                {
-                    "Id": new_rel_id,
-                    "Type": "http://schemas.microsoft.com/visio/2010/relationships/master",
-                    "Target": part_name,
-                },
-            )
-        )
         xml_to_file(ET.ElementTree(rels_root), master_rels_path, self.zip_file_contents)
-
-        # keep the copied part path in sync with any collision rename
-        final_part_path = f"{self._masters_folder}/{part_name}"
-        if final_part_path != part_path:
-            self.zip_file_contents[final_part_path] = self.zip_file_contents.pop(part_path)
 
         # 5. package wiring (helpers are idempotent); PartName paths are
         # archive-relative, never absolute
@@ -158,15 +144,15 @@ class MastersImportMixin:
 
         # 6. register the new master directly - a full load_master_pages()
         # reload would re-append every existing master to master_pages
-        master_page_xml = file_to_xml(final_part_path, self.zip_file_contents)
+        master_page_xml = file_to_xml(part_path, self.zip_file_contents)
         if master_page_xml is None:
-            raise ValueError(f"imported master part {final_part_path} missing from package")
+            raise ValueError(f"imported master part {part_path} missing from package")
         new_master_page = Page(
             master_page_xml,
-            final_part_path,
+            part_path,
             master_name,
             str(new_id),
-            new_rel_id,
+            relationship.attrib["Id"],
             cast("VisioFile", self),
         )
         new_master_page.master_unique_id = new_master_element.attrib.get("UniqueID")
