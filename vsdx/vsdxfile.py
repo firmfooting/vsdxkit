@@ -1165,44 +1165,27 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         cell_PinY.attrib["V"] = str(y)
 
     @staticmethod
-    # TODO: is this never used?
-    def get_shape_text(shape: Element) -> str:
-        # technically the below is not an exact replacement of the above...
-        text = ""
-        text_elem = shape.find(f"{namespace}Text")
-        if text_elem is not None:
-            text = "".join(text_elem.itertext())
-        return text
-
-    @staticmethod
-    # TODO: is this never used?
-    def set_shape_text(shape: Element, text: str) -> None:
-        t = shape.find(f"{namespace}Text")  # type: Element
-        if t is not None:
-            if t.text:
-                t.text = text
-            else:
-                t[0].tail = text
-
-    # context = {'customer_name':'codypy.com', 'year':2020 }
-    # example shape text "For {{customer_name}}  (c){{year}}" -> "For codypy.com (c)2020"
-    @staticmethod
     def apply_text_context(shapes: Element, context: dict[str, object]) -> None:
+        """Substitute `{{key}}` in the text of every shape under `shapes`.
 
-        def _replace_shape_text(shape: Element, context: dict[str, object]) -> None:
-            text = VisioFile.get_shape_text(shape)
+        For example a shape reading "For {{customer_name}} (c){{year}}" becomes
+        "For codypy.com (c)2020".
 
-            for key in context:
-                r_key = "{{" + key + "}}"
-                text = text.replace(r_key, str(context[key]))
-            VisioFile.set_shape_text(shape, text)
+        `iter` rather than a hand-rolled descent: a group holds its children in
+        its own `<Shapes>`, and the recursion this replaced never went in there.
 
-        for shape in shapes.findall(f"{namespace}Shapes"):
-            VisioFile.apply_text_context(shape, context)  # recursive call
-            _replace_shape_text(shape, context)
-
-        for shape in shapes.findall(f"{namespace}Shape"):
-            _replace_shape_text(shape, context)
+        This reads a shape's own `<Text>` and does not resolve master
+        inheritance, because it is handed elements rather than Shapes and has no
+        master to consult. A shape showing its master's text is left alone;
+        `Page.apply_text_context` is the route that resolves it.
+        """
+        for shape in shapes.iter(f"{namespace}Shape"):
+            prefix, text, suffix, trailing = vsdx.shapes._text_runs_of(shape.find(f"{namespace}Text"))
+            substituted = vsdx.shapes.substitute(text, context)
+            # see Shape.apply_text_filter: visiting a shape that needs no
+            # substitution is not free, so do not write one back unchanged
+            if substituted != text:
+                vsdx.shapes._write_text(shape, substituted, prefix=prefix, suffix=suffix, trailing=trailing)
 
     @staticmethod
     def get_shape_id(shape: Element) -> str:
