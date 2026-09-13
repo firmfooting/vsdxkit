@@ -1,16 +1,29 @@
 from __future__ import annotations
 
+import copy
+import sys
 import xml.etree.ElementTree as ET
 from xml.etree.ElementTree import Element
 
+if sys.version_info >= (3, 12):
+    from typing import override
+else:
+    from typing_extensions import override
+
 import vsdx
 
+from .inheritance import InheritedRow
 from .logging_support import get_logger
 from .xmlio import xml_value
 
 logger = get_logger(__name__)
 
 namespace = "{http://schemas.microsoft.com/office/visio/2012/main}"  # visio file name space
+
+
+def _row_index_sort_key(index: str) -> tuple[int, int, str]:
+    """Order row indexes as numbers, with anything unparseable left at the end."""
+    return (0, int(index), "") if index.isdigit() else (1, 0, index)
 
 
 class Geometry:
@@ -23,17 +36,19 @@ class Geometry:
     list, not a dict, so an instance cell is *appended* after the inherited one
     of the same name rather than replacing it.
 
-    An inherited row is the master's :class:`GeometryRow` object, and its cells
-    are the master's XML. Writing to one through :attr:`GeometryRow.x`, or
-    through :meth:`move`, edits the master and so moves every other shape
-    drawn from it. :meth:`set_move_to` and :meth:`set_line_to` avoid that by
-    copying the row down onto the instance first.
+    An inherited row reads the master's cells but is marked
+    :attr:`~vsdx.inheritance.InheritedRow.inherited`. The first write to it,
+    through :attr:`GeometryRow.x`, :meth:`move`, :meth:`set_move_to` or
+    :meth:`set_line_to`, materialises an override row on this shape and leaves
+    the master alone.
 
-    The merge also takes the master's :attr:`rows` dict by reference rather
-    than copying it, so applying a ``Del`` row deletes it from the master
-    Geometry's view too. That is harmless only because ``Shape.master_shape``
-    rebuilds the master on every access, leaving the mutated object to be
-    discarded; it would not survive the master being cached.
+    The merge copies the master's :attr:`cells` list and :attr:`rows` dict
+    rather than taking them by reference, so an instance applying a ``Del``
+    row, or gaining a row of its own, does not change what the master
+    Geometry sees. That holds however long the master object lives. The
+    copies are shallow: an inherited :class:`GeometryCell` is still the
+    master's until a setter replaces it, so writing a cell's value without
+    going through the row still edits the master.
     """
 
     def __init__(self, xml: Element, shape: vsdx.Shape):
@@ -44,14 +59,21 @@ class Geometry:
         self.rows: dict[str, GeometryRow] = {}  # rows keyed by IX: type(T) + index(IX), each with named cells
         self.shape = shape
 
-        if shape.master_shape and shape.master_shape.geometry:
-            self.cells = shape.master_shape.geometry.cells
+        # `Shape.master_shape` rebuilds the master on every access, so ask for
+        # it once; asking twice doubled the work for the same answer
+        master_shape = shape.master_shape
+        master_geometry = master_shape.geometry if master_shape else None
+
+        if master_geometry is not None:
+            # copy the list rather than alias it, so what this instance merges,
+            # deletes or adds stays out of the master Geometry's view
+            self.cells = list(master_geometry.cells)
 
         for cell in self.xml.findall(f"{namespace}Cell"):
             self.cells.append(GeometryCell(parent=self, xml=cell))
 
-        if shape.master_shape and shape.master_shape.geometry:
-            self.rows = shape.master_shape.geometry.rows  # type: dict
+        if master_geometry is not None:
+            self.rows = {index: row.inherited_by(self) for index, row in master_geometry.rows.items()}
         for row in self.xml.findall(f"{namespace}Row"):
             index = row.attrib.get("IX")
             if index is None:
@@ -85,8 +107,8 @@ class Geometry:
         from the previous point and stay as they are. A coordinate the row
         does not define is left undefined rather than treated as zero.
 
-        An inherited row is shifted in the master's XML, which moves every
-        other shape drawn from that master too.
+        An inherited row is read from the master and written to a copy on this
+        shape, so no other shape drawn from that master moves with it.
         """
         for r in self.rows.values():  # type: GeometryRow
             logger.debug("r=%s %s", type(r), r)
@@ -111,15 +133,10 @@ class Geometry:
         re-evaluates that formula over the value written here.
         """
         move_tos = [r for r in self.rows.values() if str(r.row_type).lower() == "moveto"]
-        # print(f"move_tos={move_tos}")
         if len(move_tos) > move_to_index:
             move_to = move_tos[move_to_index]  # type: GeometryRow
-            if move_to.geometry.shape.master_page_ID != self.shape.master_page_ID:
-                move_to = GeometryRow(geometry=self, xml=None, master_geometry_row=move_to, T="MoveTo", IX=move_to.index)
-                logger.debug("set_move_to() created: %s", move_to)
             move_to.x = x
             move_to.y = y
-            # print(f"move_to[{move_to_index}]={move_to.x},{move_to.y}")
 
     def set_line_to(self, x: float, y: float, line_to_index: int = 0) -> None:
         """Set the coordinates of one LineTo row.
@@ -127,15 +144,10 @@ class Geometry:
         Behaves as :meth:`set_move_to` does, over LineTo rows.
         """
         line_tos = [r for r in self.rows.values() if str(r.row_type).lower() == "lineto"]
-        # print(f"line_tos={line_tos}")
         if len(line_tos) > line_to_index:
             line_to = line_tos[line_to_index]  # type: GeometryRow
-            if line_to.geometry.shape.master_page_ID != self.shape.master_page_ID:
-                line_to = GeometryRow(geometry=self, xml=None, master_geometry_row=line_to, T="LineTo", IX=line_to.index)
-                logger.debug("set_line_to() created: %s", line_to)
             line_to.x = x
             line_to.y = y
-            # print(f"line_to[{line_to_index}]={line_to.x},{line_to.y}")
 
     def __repr__(self):
         s = f"Geometry: {self.cells} {[(r.row_type, r.index, r.x, r.y) for r in self.rows.values()]}"
@@ -143,7 +155,7 @@ class Geometry:
         return s
 
 
-class GeometryRow:
+class GeometryRow(InheritedRow):
     """A row with type(T) and index(IX), each containing a list of Cells"""
 
     """See: https://docs.microsoft.com/en-us/office/client-developer/visio/row-element-geometry-sectionvisio-xml """
@@ -167,14 +179,41 @@ class GeometryRow:
             if g_cell.name is not None:
                 self.cells[g_cell.name] = g_cell
 
+    def inherited_by(self, geometry: Geometry) -> GeometryRow:
+        """This row as an instance's Geometry sees it, marked inherited.
+
+        The copy reads the master's Row element and the master's cells; the
+        first write to it calls :meth:`make_local`, which gives the instance a
+        Row of its own to hold the change.
+        """
+        row = copy.copy(self)
+        row.geometry = geometry
+        row.cells = dict(self.cells)
+        row.inherited = True
+        return row
+
+    @override
+    def _materialise(self) -> None:
+        """Add this row to the instance's Geometry section, in place.
+
+        The object keeps its identity, because :attr:`Geometry.rows` already
+        holds it and :meth:`Geometry.move` may be iterating over it. Only the
+        XML changes, from the master's Row element to a new, empty one on the
+        instance. The cells stay the master's until a setter replaces one, so
+        a coordinate the caller does not write is still inherited.
+        """
+        row_type, index = self.row_type, self.index
+        self.xml = self.create_row_xml(row_type or "", str(index))
+        logger.debug("materialised inherited row on the instance: %s", self)
+
     def create_row_xml(self, T: str, IX: str) -> Element:
         """Add a Row element for this row to the parent Geometry section.
 
-        Placement is unreliable in two ways. The position is worked out over
-        the section's Row elements alone but applied to all of its children,
-        so a new row can land between the section's Cell elements, which the
-        Visio schema does not allow. Indexes are also sorted as text, so IX 10
-        lands ahead of IX 2, and row order is the order the path is drawn in.
+        The row is placed in index order among the section's existing rows,
+        after the Cell and Trigger children the Visio schema requires them all
+        to follow. Row order is the order the path is drawn in, so indexes are
+        compared as numbers. Sorted as text, IX 10 would land ahead of IX 2 and
+        redraw the path in a different order.
 
         Both arguments have already been stringified by the caller, so
         ``IX=None`` arrives as the literal ``"None"`` and passes the
@@ -184,14 +223,17 @@ class GeometryRow:
             raise ValueError(f"cannot create a geometry row without T and IX (got T={T!r}, IX={IX!r})")
         # Create new row xml
         row = ET.fromstring(f'<Row xmlns="{namespace[1:-1]}" T="{T}" IX="{IX}" />')
-        # get all indexes
-        indexes = [x.attrib.get("IX") for x in self.geometry.xml.findall(f"{namespace}Row") if x.attrib.get("IX")]
+        children = list(self.geometry.xml)
+        indexes = [x.attrib["IX"] for x in children if x.tag == f"{namespace}Row" and x.attrib.get("IX")]
         if IX in indexes:
             # todo: replace existing row with new one
             raise ValueError(f"geometry row IX={IX} already exists")
         indexes.append(IX)
-        indexes.sort()
-        self.geometry.xml.insert(indexes.index(IX), row)
+        indexes.sort(key=_row_index_sort_key)
+        # count positions from the section's first Row, so the Cells ahead of
+        # it are not counted as places a Row could go
+        first_row = next((i for i, child in enumerate(children) if child.tag == f"{namespace}Row"), len(children))
+        self.geometry.xml.insert(first_row + indexes.index(IX), row)
 
         self.geometry.rows[IX] = self
         return row
@@ -221,22 +263,20 @@ class GeometryRow:
     def x(self) -> float | None:
         """The row's X coordinate, or ``None`` if the row does not set one.
 
-        Setting it adds the cell if the row lacks one. If this row is itself
-        inherited from a master, the write lands in the master's XML; copy the
-        row down first (as :meth:`Geometry.set_move_to` does) to avoid that.
+        Setting it adds the cell if the row lacks one. A row or cell inherited
+        from a master is copied onto this shape first, so the master keeps the
+        coordinate every other instance reads.
         """
         x_cell = self.cells.get("X")
         return float(x_cell.value) if x_cell and x_cell.value else None
 
     @x.setter
     def x(self, value: float | str) -> None:
+        self.make_local()  # an inherited row gets one of its own before it is written
         cell_value = xml_value(value)
         x_cell = self.cells.get("X")  # type: GeometryCell
-        if not x_cell or (
-            type(x_cell.parent) is GeometryRow
-            and x_cell.parent.geometry.shape.master_page_ID != self.geometry.shape.master_page_ID
-        ):
-            # create new cell if none exists, or if existing cell is from master shape
+        if x_cell is None or x_cell.parent is not self:
+            # create new cell if none exists, or if the existing one is the master's
             x_cell = GeometryCell(parent=self, xml=None, name="X", value=cell_value)
             logger.debug("x_cell=%s", x_cell)
         x_cell.value = cell_value
@@ -249,13 +289,11 @@ class GeometryRow:
 
     @y.setter
     def y(self, value: float | str) -> None:
+        self.make_local()
         cell_value = xml_value(value)
         y_cell = self.cells.get("Y")
-        if not y_cell or (
-            type(y_cell.parent) is GeometryRow
-            and y_cell.parent.geometry.shape.master_page_ID != self.geometry.shape.master_page_ID
-        ):
-            # create new cell if none exists, or if existing cell is from master shape
+        if y_cell is None or y_cell.parent is not self:
+            # create new cell if none exists, or if the existing one is the master's
             y_cell = GeometryCell(parent=self, xml=None, name="Y", value=cell_value)
             logger.debug("y_cell=%s", y_cell)
         y_cell.value = cell_value

@@ -175,3 +175,80 @@ def test_creating_a_value_cell_does_not_assert_a_unit(vsdx_copy):
         created = prop.xml.find(f'{namespace}Cell[@N="Value"]')
         assert created.attrib["V"] == "3.5"
         assert "U" not in created.attrib
+
+
+# --- writing through a property inherited from a master ----------------------
+
+# Shape 3 on Page-1 of test_master_multiple_child_shapes carries no Property
+# section of its own; its `title` property comes from master shape 7.
+INHERITED = "test_master_multiple_child_shapes.vsdx"
+
+
+def _master_title_row(shape):
+    section = shape.master_shape.xml.find(f'{namespace}Section[@N="Property"]')
+    return section.find(f'{namespace}Row[@N="Row_1"]')
+
+
+def test_an_inherited_property_is_marked_inherited(vsdx_copy):
+    with VisioFile(vsdx_copy(INHERITED)) as vis:
+        shape = vis.pages[0].find_shape_by_id("3")
+
+        prop = shape.data_properties["title"]
+
+        assert prop.inherited is True
+        assert prop.shape is shape  # the instance, not the master it reads from
+        assert shape.xml.find(f'{namespace}Section[@N="Property"]') is None
+
+
+def test_setting_an_inherited_value_overrides_it_on_the_instance(vsdx_copy, tmp_path):
+    """Issue #247: the write used to land in the master, changing every instance.
+
+    Visio holds an overridden property in a row on the instance, matched to the
+    master's row by name and carrying nothing but the new value.
+    """
+    out = os.path.join(str(tmp_path), "out.vsdx")
+    with VisioFile(vsdx_copy(INHERITED)) as vis:
+        shape = vis.pages[0].find_shape_by_id("3")
+        prop = shape.data_properties["title"]
+        master_row = _master_title_row(shape)
+        before = ElementTree.tostring(master_row)
+
+        prop.value = "written through the instance"
+
+        assert prop.value == "written through the instance"
+        assert prop.inherited is False
+        assert ElementTree.tostring(_master_title_row(shape)) == before
+        row = shape.xml.find(f'{namespace}Section[@N="Property"]/{namespace}Row[@N="Row_1"]')
+        assert [(c.attrib.get("N"), c.attrib.get("V")) for c in row] == [("Value", "written through the instance")]
+        vis.save_vsdx(out)
+
+    with VisioFile(out) as vis:
+        shape = vis.pages[0].find_shape_by_id("3")
+        prop = shape.data_properties["title"]
+        # the override still resolves its label, type and prompt from the master
+        assert (prop.label, prop.value, prop.value_type) == ("title", "written through the instance", "0")
+        assert shape.master_shape.data_properties["title"].value == "0"
+
+
+def test_a_second_write_reuses_the_row_the_first_one_created(vsdx_copy):
+    with VisioFile(vsdx_copy(INHERITED)) as vis:
+        shape = vis.pages[0].find_shape_by_id("3")
+        prop = shape.data_properties["title"]
+
+        prop.value = "first"
+        prop.value = "second"
+
+        rows = shape.xml.findall(f'{namespace}Section[@N="Property"]/{namespace}Row')
+        assert len(rows) == 1
+        assert prop.value == "second"
+
+
+def test_an_override_section_is_placed_before_the_shapes_text(vsdx_copy):
+    """Visio rejects a Section that follows Text, so the new one goes ahead of it."""
+    with VisioFile(vsdx_copy(INHERITED)) as vis:
+        shape = vis.pages[0].find_shape_by_id("3")
+        shape.xml.append(ElementTree.fromstring(f'<Text xmlns="{namespace[1:-1]}">hello</Text>'))
+
+        shape.data_properties["title"].value = "written through the instance"
+
+        assert [child.tag for child in shape.xml] == [f"{namespace}Section", f"{namespace}Text"]

@@ -69,10 +69,11 @@ def test_rows_absent_from_the_instance_are_inherited_from_the_master():
         assert sorted(rows) == ["1", "2"]
         assert (rows["1"].row_type, rows["1"].x, rows["1"].y) == ("MoveTo", 0.0, 0.0)
         assert (rows["2"].row_type, rows["2"].x, rows["2"].y) == ("LineTo", 3.543307044802283, 0.7874015655116189)
-        # an inherited row still belongs to the master's Geometry, which is
-        # what `set_move_to()` and the coordinate setters test below
-        assert rows["1"].geometry is not connector.geometry
+        # every row belongs to this shape's Geometry; the inherited one is
+        # flagged, which is what the setters below act on
+        assert rows["1"].geometry is connector.geometry
         assert rows["2"].geometry is connector.geometry
+        assert (rows["1"].inherited, rows["2"].inherited) == (True, False)
 
 
 def test_an_overridden_row_keeps_the_master_cells_it_does_not_replace():
@@ -97,21 +98,26 @@ def test_a_row_deleted_by_the_instance_is_dropped_from_the_merge():
         assert "3" not in connector.geometry.rows
 
 
-def test_the_merge_deletes_the_row_from_the_master_geometry_too():
-    """The merge takes the master's `rows` dict by reference, not a copy.
+def test_the_merge_leaves_the_master_geometry_alone(monkeypatch):
+    """The merge copies the master's rows and cells rather than aliasing them.
 
-    Applying the instance's `Del` row therefore removes the row from the
-    master `Geometry` object's view as well, leaving it only in the master
-    XML. Nothing breaks today because `Shape.master_shape` rebuilds the master
-    on every access, so the mutated object is thrown away; caching the master
-    would let one shape's deletion reach every other.
+    The instance deletes row 3 and overrides row 2. Both used to be applied to
+    the master `Geometry` object's own dict, which only ever went unnoticed
+    because `Shape.master_shape` rebuilt the master on every access and the
+    mutated object was thrown away. Memoise the master, as #261 needs to, and
+    one shape's merge would reach every other, so this test pins it.
     """
     with VisioFile(TEST9) as vis:
         connector = vis.pages[0].find_shape_by_text("Conn A")
-        master_geometry = connector.geometry.rows["1"].geometry
+        master = connector.master_shape
+        monkeypatch.setattr(Shape, "master_shape", property(lambda self: master))
 
-        assert sorted(master_geometry.rows) == ["1", "2"]
-        assert [row.attrib.get("IX") for row in master_geometry.xml.findall(f"{namespace}Row")] == ["1", "2", "3"]
+        instance_geometry = reparse(connector).geometry
+
+        assert sorted(instance_geometry.rows) == ["1", "2"]
+        assert sorted(master.geometry.rows) == ["1", "2", "3"]
+        assert [cell.name for cell in master.geometry.cells] == ["NoFill", "NoLine", "NoShow", "NoSnap", "NoQuickDrag"]
+        assert master.geometry.rows["2"].x == 0.0  # not the instance's 3.543307044802283
 
 
 def test_section_cells_are_inherited_and_instance_cells_appended():
@@ -256,11 +262,11 @@ def test_move_leaves_a_missing_coordinate_missing():
         assert "X" not in row.cells
 
 
-def test_move_writes_inherited_coordinates_into_the_master():
-    """Moving one instance edits the master, so every other instance moves too.
+def test_move_copies_an_inherited_row_onto_the_instance():
+    """Moving one instance leaves the master alone, so no other instance moves.
 
-    `Geometry.move()` writes through the inherited `GeometryRow`, whose cells
-    live in the master page's XML. Recorded here so a fix has a test to flip.
+    Row 1 is the master's. `Geometry.move()` reads the coordinates from there
+    and writes the shifted pair to a row of the instance's own (#239).
     """
     with VisioFile(TEST9) as vis:
         connector = vis.pages[0].find_shape_by_text("Conn A")
@@ -268,16 +274,34 @@ def test_move_writes_inherited_coordinates_into_the_master():
 
         connector.move(1.0, 2.0)
 
-        assert cell_values(row_element(connector.master_shape, "1")) == {"X": "1.0", "Y": "2.0"}
-        # and the instance gained no row of its own to hold the new position
-        assert row_indexes(connector) == ["2", "3"]
+        assert cell_values(row_element(connector.master_shape, "1")) == {"X": "0", "Y": "0"}
+        assert cell_values(row_element(connector, "1")) == {"X": "1.0", "Y": "2.0"}
+        assert row_indexes(connector) == ["1", "2", "3"]
+        assert (connector.geometry.rows["1"].x, connector.geometry.rows["1"].y) == (1.0, 2.0)
+
+
+def test_a_row_copied_down_by_move_lands_after_the_sections_cells():
+    """`Conn A` overrides a section cell, and every row has to come after it.
+
+    A Section is `Cell*, Trigger*, Row*`, so a row wedged among the cells is a
+    file Visio offers to repair.
+    """
+    with VisioFile(TEST9) as vis:
+        connector = vis.pages[0].find_shape_by_text("Conn A")
+        geometry_xml(connector).insert(0, ET.fromstring(f'<Cell xmlns="{namespace[1:-1]}" N="NoShow" V="1"/>'))
+        connector = reparse(connector)
+
+        connector.move(1.0, 2.0)
+
+        assert [child.tag.rpartition("}")[2] for child in geometry_xml(connector)] == ["Cell", "Row", "Row", "Row"]
+        assert row_indexes(connector) == ["1", "2", "3"]
 
 
 # --- set_move_to / set_line_to ----------------------------------------------
 
 
 def test_set_move_to_materialises_an_inherited_row_on_the_instance(vsdx_copy):
-    """Unlike `move()`, `set_move_to()` copies an inherited row down first."""
+    """The copy survives a round trip through the saved package."""
     path = vsdx_copy("test9_rect_and_line.vsdx")
     with VisioFile(path) as vis:
         connector = vis.pages[0].find_shape_by_text("Conn A")
@@ -310,7 +334,7 @@ def test_set_line_to_materialises_an_inherited_row_on_the_instance():
         connector = vis.pages[0].find_shape_by_text("Conn A")
         geometry_xml(connector).remove(row_element(connector, "2"))
         connector = reparse(connector)
-        assert connector.geometry.rows["2"].geometry is not connector.geometry
+        assert connector.geometry.rows["2"].inherited
 
         connector.geometry.set_line_to(9.0, 8.0)
 
@@ -412,30 +436,40 @@ def test_creating_a_row_with_no_index_yields_the_string_none():
         assert geometry.rows["None"] is row
 
 
-def test_a_new_row_is_misplaced_in_the_section():
-    """Two placement faults, both visible in a tenth row.
+def test_a_new_row_is_placed_after_the_sections_cells_and_in_index_order():
+    """A tenth row used to show two placement faults; it now shows neither.
 
-    The insert position is worked out over the section's Row elements but
-    applied to all of its children, so the new row lands among the Cell
-    elements, which the Visio schema forbids. Indexes also sort as text, so
-    IX 10 goes ahead of IX 1, reordering the path that gets drawn.
+    The row goes after the Cell children the Visio schema requires rows to
+    follow, and IX 10 sorts after IX 2 rather than as the text "10" would, so
+    the path is still drawn in index order.
     """
     with VisioFile(TEST9) as vis:
         line = vis.pages[0].find_shape_by_text("Line A")
 
         GeometryRow(geometry=line.geometry, xml=None, master_geometry_row=None, T="LineTo", IX=10)
 
-        assert row_indexes(line) == ["10", "1", "2"]
+        assert row_indexes(line) == ["1", "2", "10"]
         assert [child.tag.rpartition("}")[2] for child in geometry_xml(line)] == [
             "Cell",
-            "Row",  # wedged between the section's cells
             "Cell",
             "Cell",
             "Cell",
             "Cell",
+            "Row",
             "Row",
             "Row",
         ]
+
+
+def test_a_row_index_that_is_not_a_number_sorts_last():
+    """`IX="None"` is unorderable against real indexes, so it goes at the end."""
+    with VisioFile(TEST9) as vis:
+        line = vis.pages[0].find_shape_by_text("Line A")
+
+        GeometryRow(geometry=line.geometry, xml=None, master_geometry_row=None, T="LineTo", IX=None)
+        GeometryRow(geometry=line.geometry, xml=None, master_geometry_row=None, T="LineTo", IX=3)
+
+        assert row_indexes(line) == ["1", "2", "3", "None"]
 
 
 def test_coordinate_setters_create_the_cells_they_need():
@@ -452,20 +486,22 @@ def test_coordinate_setters_create_the_cells_they_need():
         assert cell_values(row.xml) == {"X": "3", "Y": "4.5"}
 
 
-def test_setting_a_coordinate_on_an_inherited_row_writes_to_the_master():
-    """Same fault as `move()`, reached through the row's own setter.
+def test_setting_a_coordinate_on_an_inherited_row_copies_it_onto_the_instance():
+    """The row's own setter goes through the same path `move()` does.
 
-    The guard in `GeometryRow.x` compares the cell's owner with the row's own
-    shape; for an inherited row those are the same master shape, so the cell
-    is written where it lies, in the master.
+    Only X is written, so the instance's row carries X alone and Y is still
+    read from the master (#239).
     """
     with VisioFile(TEST9) as vis:
         connector = vis.pages[0].find_shape_by_text("Conn A")
+        row = connector.geometry.rows["1"]
 
-        connector.geometry.rows["1"].x = 42.0
+        row.x = 42.0
 
-        assert cell_values(row_element(connector.master_shape, "1")) == {"X": "42.0", "Y": "0"}
-        assert geometry_xml(connector).find(f'{namespace}Row[@IX="1"]') is None
+        assert cell_values(row_element(connector.master_shape, "1")) == {"X": "0", "Y": "0"}
+        assert cell_values(row_element(connector, "1")) == {"X": "42.0"}
+        assert (row.x, row.y) == (42.0, 0.0)
+        assert row.inherited is False
 
 
 def test_del_bool_can_be_set_and_cleared():
