@@ -294,6 +294,22 @@ def test_a_malformed_page_dimension_raises_malformed_package_error(vsdx_copy):
             _ = page.width
 
 
+@pytest.mark.parametrize("coordinate", ["X", "Y"])
+def test_a_malformed_geometry_coordinate_raises_malformed_package_error(vsdx_copy, coordinate):
+    """Geometry rows read the same ShapeSheet cells, and read them with a bare `float()`."""
+    with vsdxkit.VisioFile(vsdx_copy("test9_rect_and_line.vsdx")) as vis:
+        row = next(
+            row
+            for shape in vis.pages[0].all_shapes
+            if shape.geometry is not None
+            for row in shape.geometry.rows.values()
+            if coordinate in row.cells
+        )
+        row.cells[coordinate].value = "not-a-number"
+        with pytest.raises(MalformedPackageError, match=coordinate):
+            getattr(row, coordinate.lower())
+
+
 def test_a_connect_record_missing_its_sheet_attributes_raises_malformed_package_error(vsdx_copy):
     """Reading `page.connects` builds these from package XML, so it is content, not an argument."""
     with vsdxkit.VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
