@@ -25,20 +25,10 @@ def _zip_graph(path: str) -> tuple[set[str], dict[str, str], list[str]]:
 
 
 def _content_type_part_names(path: str) -> set[str]:
+    """Return the PartName of every Override in [Content_Types].xml."""
     with zipfile.ZipFile(path) as archive:
         types_root = ET.fromstring(archive.read("[Content_Types].xml"))
-    return (
-        {
-            override.attrib["PartName"]
-            for override in types_root.iter(f"{RELS_NS.replace('package/2006/relationships', 'opc-package')}Override")
-        }
-        if False
-        else {
-            override.attrib["PartName"]
-            for override in ET.fromstring(zipfile.ZipFile(path).read("[Content_Types].xml")).iter()
-            if override.tag.endswith("Override") and "PartName" in override.attrib
-        }
-    )
+    return {el.attrib["PartName"] for el in types_root.iter() if el.tag.endswith("Override") and "PartName" in el.attrib}
 
 
 def _save_copy(tmp_path, name: str = "doc.vsdx") -> str:
@@ -59,9 +49,10 @@ def test_remove_page_clears_relationship_and_content_type(tmp_path):
     assert "page2.xml" not in set(rel_pairs.values()), "dangling relationship to removed part"
     for rel_id, target in rel_pairs.items():
         assert f"visio/pages/{target}" in names, f"{rel_id} targets missing part {target}"
-    for part_name in _content_type_part_names(document):
-        if part_name.startswith("/visio/pages/"):
-            assert part_name.lstrip("/") in names, f"content-type override for missing part {part_name}"
+    page_overrides = {n for n in _content_type_part_names(document) if n.startswith("/visio/pages/")}
+    assert page_overrides, "no page content-type overrides; the loop below would assert nothing"
+    for part_name in page_overrides:
+        assert part_name.lstrip("/") in names, f"content-type override for missing part {part_name}"
 
 
 def test_remove_then_add_allocates_unused_part_and_resolves_graph(tmp_path):

@@ -6,12 +6,9 @@ import pytest
 from vsdx import Connect, VisioFile
 from vsdx.vsdxdiff import VisioFileDiff
 
-# code to get basedir of this test file in either linux/windows
-basedir = os.path.dirname(os.path.relpath(__file__))
-
 
 @pytest.mark.parametrize(("filename_a", "filename_b"), [("test1.vsdx", "test2.vsdx"), ("test1.vsdx", "test4_connectors.vsdx")])
-def test_create_visiodiff(filename_a: str, filename_b: str):
+def test_create_visiodiff(filename_a: str, filename_b: str, basedir):
     filepath_a = os.path.join(basedir, filename_a)
     filepath_b = os.path.join(basedir, filename_b)
     print(basedir)

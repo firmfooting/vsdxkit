@@ -3,19 +3,17 @@ import shutil
 
 from vsdx import VisioFile
 
-basedir = os.path.realpath(os.path.join(os.getcwd(), "tests"))
-
 SENTINELS = ["PALETTE_PROCESS", "PALETTE_DECISION", "PALETTE_START_END", "PALETTE_PARALLELOGRAM", "PALETTE_DATABASE"]
 
 
-def test_palette_fixture_contains_all_sentinels():
+def test_palette_fixture_contains_all_sentinels(basedir):
     with VisioFile(os.path.join(basedir, "fixtures", "palette_extended.vsdx")) as vis:
         page = vis.pages[0]
         for sentinel in SENTINELS:
             assert page.find_shape_by_text(sentinel) is not None, sentinel
 
 
-def test_palette_shape_copies_into_stock_template(tmp_path):
+def test_palette_shape_copies_into_stock_template(tmp_path, basedir):
     dst = str(tmp_path / "target.vsdx")
     shutil.copy(os.path.join(basedir, "test8_simple_connector.vsdx"), dst)
     with VisioFile(os.path.join(basedir, "fixtures", "palette_extended.vsdx")) as palette:

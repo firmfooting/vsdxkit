@@ -7,7 +7,19 @@ import subprocess
 import pytest
 
 # resolve relative to this file, independent of pytest's working directory
-basedir = os.path.dirname(os.path.realpath(__file__))
+BASEDIR = os.path.dirname(os.path.realpath(__file__))
+
+
+@pytest.fixture(scope="session")
+def basedir() -> str:
+    """Return the tests directory, for building paths to the .vsdx fixtures.
+
+    Take this fixture rather than deriving a path from ``os.getcwd()`` or from
+    a relative ``__file__``. Both of those resolve only when pytest is invoked
+    from the repository root, so a run started from an IDE, a parent directory
+    or an unpacked sdist fails on missing files instead of on behaviour.
+    """
+    return BASEDIR
 
 
 @pytest.fixture
@@ -15,7 +27,7 @@ def vsdx_copy(tmp_path):
     """Return a factory giving a fresh copy of a test file in tmp_path."""
 
     def _copy(filename: str) -> str:
-        source = os.path.join(basedir, filename)
+        source = os.path.join(BASEDIR, filename)
         destination = os.path.join(str(tmp_path), filename)
         os.makedirs(os.path.dirname(destination), exist_ok=True)
         shutil.copy(source, destination)
@@ -34,7 +46,7 @@ def _git_status() -> frozenset[str] | None:
     """
     try:
         result = subprocess.run(
-            ["git", "-C", basedir, "status", "--porcelain", "--untracked-files=all"],
+            ["git", "-C", BASEDIR, "status", "--porcelain", "--untracked-files=all"],
             capture_output=True,
             text=True,
             timeout=30,

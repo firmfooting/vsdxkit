@@ -200,9 +200,12 @@ def test_diff_chunk_boundary_crlf_is_one_newline(tmp_path):
 
     document = str(tmp_path / "split.vsdx")
     other = str(tmp_path / "plain.vsdx")
-    payload = b"<xml>" + b" " * (VisioFileDiff._CHUNK - 1) + b"\r\n</xml>"
+    # pad so the CR is the final byte of chunk one and the LF opens chunk two
+    padding = b" " * (VisioFileDiff._CHUNK - len(b"<xml>") - 1)
+    payload = b"<xml>" + padding + b"\r\n</xml>"
+    assert payload[VisioFileDiff._CHUNK - 1 : VisioFileDiff._CHUNK + 1] == b"\r\n"
     _make_vsdx(document, {"visio/document.xml": payload})
-    _make_vsdx(other, {"visio/document.xml": b"<xml>" + b" " * (VisioFileDiff._CHUNK - 1) + b"\n</xml>"})
+    _make_vsdx(other, {"visio/document.xml": b"<xml>" + padding + b"\n</xml>"})
 
     file_diff = VisioFileDiff(document, other)
     assert file_diff.diffs == {}
@@ -214,8 +217,10 @@ def test_diff_incomplete_utf8_at_eof_is_binary(tmp_path):
     """A member ending in an incomplete multibyte sequence hashes as binary."""
     document = str(tmp_path / "truncated.vsdx")
     other = str(tmp_path / "truncated2.vsdx")
-    _make_vsdx(document, {"custom/binary.dat": b"\xff\xfe\xc3"})  # trailing partial sequence
-    _make_vsdx(other, {"custom/binary.dat": b"\xff\xfe\xc4"})
+    # valid UTF-8 until a trailing lead byte with no continuation, which only
+    # the final=True flush rejects
+    _make_vsdx(document, {"custom/binary.dat": b"ok\xc3"})
+    _make_vsdx(other, {"custom/binary.dat": b"ok\xc4"})
 
     file_diff = VisioFileDiff(document, other)
     assert "custom/binary.dat" in file_diff.diffs
