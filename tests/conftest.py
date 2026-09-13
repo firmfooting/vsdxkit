@@ -1,10 +1,12 @@
 """Shared pytest fixtures for the vsdx test suite."""
 
+import functools
 import os
 import shutil
 import subprocess
 
 import pytest
+from helpers.package_validator import describe_defects, validate_package
 
 # resolve relative to this file, independent of pytest's working directory
 BASEDIR = os.path.dirname(os.path.realpath(__file__))
@@ -82,3 +84,99 @@ def _hermetic_working_tree():
             "raised at session teardown, so the test it is attached to is not necessarily the "
             "one that leaked; go by the paths above."
         )
+
+
+def _is_package_file(filename: str) -> bool:
+    return filename.lower().endswith((".vsdx", ".vsdm"))
+
+
+@functools.cache
+def _defects_by_fixture() -> tuple[tuple[str, frozenset], ...]:
+    """Each fixture's own defects, longest name first, for provenance matching."""
+    found = []
+    for name in os.listdir(BASEDIR):
+        if not _is_package_file(name):
+            continue
+        defects = frozenset(validate_package(os.path.join(BASEDIR, name)))
+        if defects:
+            found.append((os.path.splitext(name)[0], defects))
+    return tuple(sorted(found, key=lambda entry: -len(entry[0])))
+
+
+def _inherited_by(filename: str, request) -> frozenset:
+    """Defects the input already had, for an output derived from that input.
+
+    A test that opens a non-conformant fixture and saves reproduces its defects,
+    which is the library behaving correctly - a writer whose contract is
+    fidelity should not quietly repair its input. Blaming the test that saved it
+    would make the check unusable.
+
+    Provenance is established two ways, because neither alone is enough. Most
+    outputs are named after their input, which `vsdx_copy` and the save helpers
+    both do; but a test that writes to a fixed name like `out.vsdx` keeps no
+    trace of where it came from, and there the fixture name is usually the test
+    parameter instead.
+
+    Both are narrow on purpose. An earlier version subtracted one fixture's
+    defects from every output whatever its provenance, and because every fixture
+    came off the same Visio generator the relationship ids coincide exactly - so
+    a package that had silently lost all four of its `docProps` parts came back
+    clean, in every test. An exemption that cannot say which input it is
+    excusing excuses everything.
+    """
+    stem = os.path.splitext(filename)[0]
+    named = {stem}
+    callspec = getattr(request.node, "callspec", None)
+    for value in () if callspec is None else callspec.params.values():
+        if isinstance(value, str) and _is_package_file(value):
+            named.add(os.path.splitext(value)[0])
+
+    inherited: frozenset = frozenset()
+    for fixture_stem, defects in _defects_by_fixture():
+        if fixture_stem in named or stem.startswith(fixture_stem):
+            inherited |= defects
+    return inherited
+
+
+@pytest.fixture(autouse=True)
+def _packages_written_are_structurally_sound(request, tmp_path):
+    """Validate every .vsdx a test leaves in tmp_path, whether it meant to or not.
+
+    Most tests that write a package assert one thing about it and say nothing
+    about the rest. This catches the rest: a duplicate shape id, glue naming a
+    shape that is not there, a relationship pointing at a part that does not
+    exist. It is free to the test author by design, because the defects it finds
+    are the ones nobody thinks to check for.
+
+    Every `.vsdx` and `.vsdm` is checked, with no sniffing for "is this really a
+    Visio package". A sniff has to read some part, and every part it could read
+    is one whose absence is itself a defect - gating on `visio/pages/pages.xml`
+    means a package that lost it switches the check off instead of failing it.
+    So the exceptions are declared, not inferred:
+
+        @pytest.mark.allow_invalid_package
+
+    Tests that deliberately write a broken or synthetic archive say so, and the
+    marker is enforced by `--strict-markers`, so a typo is an error rather than
+    a silent no-op.
+    """
+    # `tmp_path` is taken as an argument rather than looked up on demand: pytest
+    # finalises fixtures in reverse dependency order, and a fixture that merely
+    # asks for it at teardown finds it already gone.
+    yield
+    if request.node.get_closest_marker("allow_invalid_package"):
+        return
+    for directory, _, filenames in os.walk(str(tmp_path)):
+        for filename in sorted(filenames):
+            if not _is_package_file(filename):
+                continue
+            path = os.path.join(directory, filename)
+            inherited = _inherited_by(filename, request)
+            defects = tuple(d for d in validate_package(path) if d not in inherited)
+            if defects:
+                raise AssertionError(
+                    f"{filename} was written with {len(defects)} structural defect(s):\n"
+                    + describe_defects(defects)
+                    + "\n\nThese are defects on the file format's own terms. If this test means to "
+                    "produce a broken package, mark it @pytest.mark.allow_invalid_package."
+                )

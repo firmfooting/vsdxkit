@@ -10,6 +10,12 @@ import vsdx
 from vsdx import PackageLimitError, VisioFile
 from vsdx.vsdxdiff import VisioFileDiff
 
+# Most packages here are synthetic archives built to exercise the zip reader:
+# declared entry counts that lie, directories that disagree with their bounds,
+# members past the size cap. They are named .vsdx because that is what the code
+# under test accepts.
+pytestmark = pytest.mark.allow_invalid_package
+
 basedir = os.path.dirname(os.path.realpath(__file__))
 
 
@@ -48,6 +54,7 @@ def test_eocd_preflight_rejects_declared_entry_overflow(tmp_path):
     assert excinfo.value.reason == "member_count"
 
 
+@pytest.mark.allow_invalid_package  # the package is padded past the cap on purpose
 def test_diff_rejects_member_above_cap(tmp_path):
     """A member declaring more than the diff cap is refused, not inflated."""
     document = str(tmp_path / "big.vsdx")

@@ -11,6 +11,12 @@ import pytest
 import vsdx
 from vsdx.vsdxfile import PackageLimits, _read_bounded
 
+# Every test here builds a package designed to be wrong - padding members to
+# trip a count cap, names that escape the archive, payloads that expand out of
+# all proportion. The structural validator would report all of it, correctly
+# and uselessly.
+pytestmark = pytest.mark.allow_invalid_package
+
 basedir = os.path.dirname(os.path.realpath(__file__))
 
 LIMITS_FILENAME = "vsdx.limits.json"
