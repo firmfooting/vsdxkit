@@ -10,7 +10,7 @@ import pytest
 from helpers.broken_package import append_member
 
 import vsdxkit
-from vsdxkit.vsdxfile import PackageLimits, _read_bounded
+from vsdxkit.package import PackageLimits, _read_bounded
 
 # Every test here builds a package designed to be wrong - padding members to
 # trip a count cap, names that escape the archive, payloads that expand out of

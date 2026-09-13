@@ -42,9 +42,10 @@ from .formulae import calc_value  # noqa: E402
 from .geometry import Geometry, GeometryCell, GeometryRow  # noqa: E402
 from .logging_support import attach_debug_stream_handler, get_logger  # noqa: E402
 from .media import Media  # noqa: E402
+from .package import PackageLimitError, PackageLimits  # noqa: E402
 from .pages import Page, PagePosition  # noqa: E402
 from .shapes import Cell, DataProperty, Shape  # noqa: E402
-from .vsdxfile import PackageLimitError, PackageLimits, VisioFile, VisioFileNotOpen  # noqa: E402
+from .vsdxfile import VisioFile, VisioFileNotOpen  # noqa: E402
 
 _shapes_module.Connect = Connect
 

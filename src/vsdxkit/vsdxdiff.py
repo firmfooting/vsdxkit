@@ -4,7 +4,7 @@ import hashlib
 import zipfile
 
 from .logging_support import get_logger
-from .vsdxfile import PackageLimitError
+from .package import PackageLimitError
 
 logger = get_logger(__name__)
 

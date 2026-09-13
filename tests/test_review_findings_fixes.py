@@ -9,6 +9,7 @@ from helpers.broken_package import make_package
 
 import vsdxkit
 from vsdxkit import PackageLimitError, VisioFile
+from vsdxkit.package import _preflight_eocd
 from vsdxkit.vsdxdiff import VisioFileDiff
 
 # Most packages here are synthetic archives built to exercise the zip reader:
@@ -32,7 +33,7 @@ def test_eocd_preflight_rejects_declared_entry_overflow(tmp_path):
     """An EOCD declaring more entries than max_members is rejected before ZipFile runs."""
     path = _copy("test1.vsdx", tmp_path)
     limits = vsdxkit.PackageLimits(max_members=20)
-    VisioFile._preflight_eocd(path, limits)  # real fixture declares 14 < 20: passes
+    _preflight_eocd(path, limits)  # real fixture declares 14 < 20: passes
 
     with open(path, "rb") as handle:
         payload = bytearray(handle.read())
