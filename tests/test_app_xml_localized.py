@@ -89,3 +89,41 @@ def test_renaming_a_page_renames_its_title(german, tmp_path):
     headings, titles = _app_xml(out)
     assert headings == ["Seiten", "3", "Master", "3"]
     assert titles[:3] == ["Page-1", "Umbenannt", "Page-3"]
+
+
+def test_a_missing_section_is_created_rather_than_taking_one_that_is_named(tmp_path, basedir):
+    """The ordinal fallback must not claim an entry another section already owns.
+
+    A document that names Masters and not Pages has Masters at ordinal 0. Taking
+    the ordinal on faith puts the new page's title in the Masters slice and
+    increments the master count, which is worse than not finding the section at
+    all: there is no Pages pair afterwards either.
+
+    The label is only a hint, but a label that matches a *different* known
+    section is positive evidence, not a miss. Fails if the fallback goes back to
+    returning `section.ordinal` without checking what is there.
+    """
+    source = os.path.join(basedir, "test4_connectors.vsdx")
+    stripped = str(tmp_path / "masters_only.vsdx")
+    with zipfile.ZipFile(source) as archive:
+        order = archive.namelist()
+        members = {name: archive.read(name) for name in order}
+    root = ET.fromstring(members["docProps/app.xml"])
+    vector = root.find(f"{EXT}HeadingPairs").find(f"{VT}vector")
+    variants = list(vector)
+    assert len(variants) == 4, "expected Pages and Masters pairs to strip one from"
+    for variant in variants[:2]:  # drop the Pages name and its count
+        vector.remove(variant)
+    vector.set("size", str(len(vector)))
+    members["docProps/app.xml"] = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+    with zipfile.ZipFile(stripped, "w") as archive:
+        for name in order:
+            archive.writestr(name, members[name])
+
+    out = str(tmp_path / "out.vsdx")
+    with vsdxkit.VisioFile(stripped) as vis:
+        vis.add_page("NewPage")
+        vis.save_vsdx(out)
+    headings, titles = _app_xml(out)
+    assert headings == ["Masters", "3", "Pages", "1"]
+    assert titles[-1] == "NewPage"

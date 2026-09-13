@@ -627,12 +627,22 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         order is still read correctly. By position when no name matches, which
         is what a localised file needs: the names are translated but the
         sections are still pages then masters.
+
+        An entry whose name is another section's label is never taken on
+        position. A document naming Masters and not Pages has Masters at
+        ordinal 0, and claiming it would put page titles in the masters slice
+        and leave no Pages pair behind -- worse than reporting the section
+        missing, which at least gets one created. A name that matches a
+        different known section is evidence, not a miss.
         """
         pairs = self._heading_pairs_list()
         for index, (name, _) in enumerate(pairs):
             if name == section.label:
                 return index
-        return section.ordinal if section.ordinal < len(pairs) else None
+        if section.ordinal >= len(pairs):
+            return None
+        spoken_for = {other.label for other in (VisioFile.PAGES, VisioFile.MASTERS)} - {section.label}
+        return None if pairs[section.ordinal][0] in spoken_for else section.ordinal
 
     def _titles_of_parts_section(self, section: _Section) -> tuple[Element, int, int]:
         """The TitlesOfParts vector, and the ``[start, stop)`` slice of it `section` owns.
