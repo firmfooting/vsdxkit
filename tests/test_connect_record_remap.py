@@ -12,6 +12,7 @@ defect and a formula naming one is `stale-sheet-reference`; renumbering produced
 the first before #278 and the second before #328.
 """
 
+import os
 import xml.etree.ElementTree as ET
 
 from vsdx import Shape, VisioFile, namespace
@@ -68,7 +69,7 @@ def test_renumbering_a_group_moves_records_naming_a_shape_inside_it(vsdx_copy, t
         vis.save_vsdx(str(tmp_path / "renumbered_group.vsdx"))
 
 
-POINT_GLUE_FIXTURE = "fixtures/com_reference/s07_point_glue_masters.vsdx"
+POINT_GLUE_FIXTURE = os.path.join("fixtures", "com_reference", "s07_point_glue_masters.vsdx")
 
 
 def test_renumbering_a_shape_moves_the_formulas_elsewhere_that_name_it(vsdx_copy, tmp_path):

@@ -486,12 +486,18 @@ def test_reordering_pages_permutes_them_and_changes_nothing_within_them(package_
 # reaches it is named here rather than the rule being weakened for everything.
 # Tracked as #334; when the delete sweep lands, this entry and the marks it
 # drives go.
-_DELETE_LEAVES_STALE_REFERENCES = frozenset({"fixtures/com_reference/s05_swimlanes_cfflow.vsdx"})
+#
+# Matched on the file name rather than the relative path, which `os.walk` spells
+# with the platform's separator: the same entry has to name the fixture on
+# Windows as well.
+_DELETE_LEAVES_STALE_REFERENCES = frozenset({"s05_swimlanes_cfflow.vsdx"})
 
 _DELETE_PACKAGES = [
     pytest.param(
         name,
-        marks=[pytest.mark.allow_invalid_package("stale-sheet-reference")] if name in _DELETE_LEAVES_STALE_REFERENCES else [],
+        marks=[pytest.mark.allow_invalid_package("stale-sheet-reference")]
+        if os.path.basename(name) in _DELETE_LEAVES_STALE_REFERENCES
+        else [],
     )
     for name in FIXTURE_PACKAGES
 ]
