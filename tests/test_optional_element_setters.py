@@ -185,7 +185,7 @@ def test_a_rejected_colour_leaves_the_shape_untouched(basedir):
 
 
 def test_add_swimlane_with_a_label_adds_no_lane_it_cannot_label(vsdx_copy):
-    """The label is written last; the refusal must come before the clone."""
+    """A lane whose heading row is missing adds no lane at all (#263, #330)."""
     with VisioFile(vsdx_copy(CFF_FIXTURE)) as vis:
         page = vis.pages[0]
         container = page.get_container()
