@@ -110,6 +110,11 @@ project-includes = ["vsdx"]
 # strict preset: the package type-checks clean at this level, so keep it there
 preset = "strict"
 
+[tool.pytest.ini_options]
+markers = [
+    "allow_invalid_package: this test deliberately writes a structurally invalid .vsdx",
+]
+
 [tool.coverage.report]
 # fail_under compares the rounded total, so two decimal places: at the default
 # precision of 0, a threshold of 90 would really mean 89.5.

@@ -48,6 +48,7 @@ def test_eocd_preflight_rejects_declared_entry_overflow(tmp_path):
     assert excinfo.value.reason == "member_count"
 
 
+@pytest.mark.allow_invalid_package  # the package is padded past the cap on purpose
 def test_diff_rejects_member_above_cap(tmp_path):
     """A member declaring more than the diff cap is refused, not inflated."""
     document = str(tmp_path / "big.vsdx")
