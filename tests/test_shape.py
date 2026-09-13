@@ -888,24 +888,51 @@ def test_append_shape_rejects_a_shape_that_cannot_hold_sub_shapes(vsdx_copy):
         assert plain.xml.find(f"{namespace}Shapes") is None
 
 
-def test_append_shape_rejects_a_shape_already_on_the_page(vsdx_copy):
-    """Appending places a shape; an element already in the page would gain a second parent.
+def test_append_shape_moves_a_shape_that_is_already_on_the_page(vsdx_copy):
+    """A shape already on the page is moved into the group, not rejected.
 
-    ElementTree elements have no parent to change, so the page would hold the
-    same shape twice under one ID, and save it twice.
+    Rejecting it left no usable route: `Shape.copy()` attaches its clone to the
+    destination page, so `group.append_shape(other.copy())` -- the call the old
+    error message recommended -- raised. Detaching first is also what prevents
+    the element gaining a second parent.
     """
-    filename = vsdx_copy("test2.vsdx")
-
-    with VisioFile(filename) as vis:
+    with VisioFile(vsdx_copy("test2.vsdx")) as vis:
         page = vis.pages[0]
         group = page.find_shape_by_id("9")
         existing = page.find_shape_by_id("6")
 
-        with pytest.raises(ValueError, match="already on page"):
-            group.append_shape(existing)
+        group.append_shape(existing)
+
+        assert "6" in [s.ID for s in group.child_shapes]
+        ids = [s.ID for s in page.all_shapes]
+        assert ids.count("6") == 1, "the shape must not be on the page twice"
+        assert len(ids) == len(set(ids))
+
+
+def test_appending_a_copy_places_it_in_the_group(vsdx_copy):
+    """The documented copy-and-append path works end to end."""
+    with VisioFile(vsdx_copy("test2.vsdx")) as vis:
+        page = vis.pages[0]
+        group = page.find_shape_by_id("9")
+        before = {s.ID for s in page.all_shapes}
+
+        group.append_shape(page.find_shape_by_id("6").copy())
 
         ids = [s.ID for s in page.all_shapes]
-        assert len(ids) == len(set(ids))
+        assert len(ids) == len(set(ids)), "the copy must get an id of its own"
+        assert set(ids) - before, "a new shape should have appeared"
+
+
+def test_moving_a_shape_into_a_group_keeps_its_id(vsdx_copy):
+    """A move is the same shape, so Connect records naming it stay valid."""
+    with VisioFile(vsdx_copy("test2.vsdx")) as vis:
+        page = vis.pages[0]
+        group = page.find_shape_by_id("9")
+        existing = page.find_shape_by_id("6")
+
+        group.append_shape(existing)
+
+        assert existing.ID == "6"
 
 
 def test_append_shape_rejects_a_shape_built_against_another_page(vsdx_copy):

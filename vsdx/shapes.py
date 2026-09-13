@@ -41,6 +41,14 @@ def __getattr__(name: str):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
+def _parent_of(root: Element, element: Element) -> Element | None:
+    """The element that holds `element`, or None if it is not in this tree."""
+    for candidate in root.iter():
+        if element in list(candidate):
+            return candidate
+    return None
+
+
 def find_or_create_shapes_tag(parent: Element) -> Element:
     """Return the ``<Shapes>`` container inside ``parent``, creating it if absent.
 
@@ -1202,15 +1210,21 @@ class Shape:
                 f"shape ID={append_shape.ID} belongs to page {append_shape.page.name!r}, not {self.page.name!r}; "
                 "use Shape.copy(page) to place a shape on another page"
             )
-        page_root = self.page.xml.getroot()
-        if any(element is append_shape.xml for element in page_root.iter()):
-            raise ValueError(
-                f"shape ID={append_shape.ID} is already on page {self.page.name!r}; "
-                "append_shape places a shape rather than moving one, so append a copy of it instead"
-            )
-        id_map = self.page.vis.increment_shape_ids(append_shape.xml, self.page)
-        self.page.vis.update_ids(append_shape.xml, id_map)
+        # A shape already on this page is moved, not placed. Rejecting it would
+        # leave no usable route: Shape.copy() attaches its clone to the
+        # destination page, so `group.append_shape(other.copy())` -- the obvious
+        # call, and the one the old error message recommended -- would raise.
+        # Detaching first is also what stops the element gaining a second
+        # parent, which is the problem the rejection existed to prevent.
+        current_parent = _parent_of(self.page.xml.getroot(), append_shape.xml)
+        if current_parent is not None:
+            current_parent.remove(append_shape.xml)
         container = self.xml if wraps_shapes_tag else find_or_create_shapes_tag(self.xml)
+        if current_parent is None:
+            # New to the page, so it needs ids; a move keeps the ones it has,
+            # or every Connect record naming the shape would be left dangling.
+            id_map = self.page.vis.increment_shape_ids(append_shape.xml, self.page)
+            self.page.vis.update_ids(append_shape.xml, id_map)
         container.append(append_shape.xml)
         # The Shape object cached its ID and its parent at construction; both
         # have just changed underneath it.
