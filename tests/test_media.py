@@ -2,7 +2,7 @@ from pathlib import Path
 
 from vsdx import VisioFile
 
-basedir = Path(__file__).resolve().parents[1] / "vsdx" / "media"
+MEDIA_DIR = Path(__file__).resolve().parents[1] / "vsdx" / "media"
 
 
 def test_bundled_media_path_is_absolute_and_cwd_independent(tmp_path, monkeypatch):
@@ -27,7 +27,7 @@ def test_media_curved_connector_returns_curved():
         straight = media.straight_connector
         assert curved is not None and straight is not None
         assert curved.ID != straight.ID
-        with VisioFile(str(basedir / "media.vsdx")) as vis:
+        with VisioFile(str(MEDIA_DIR / "media.vsdx")) as vis:
             page = vis.pages[0]
             expected_curved = page.find_shape_by_text("CURVED_CONNECTOR")
             assert expected_curved is not None
