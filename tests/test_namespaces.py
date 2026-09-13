@@ -215,6 +215,10 @@ def test_two_namespaces_that_chose_the_same_prefix_are_kept_distinct():
     assert not GENERATED_PREFIX_RE.search(written.encode("utf-8"))
 
 
+# `test5_master.vsdx` is the only non-conformant fixture in the corpus (#298)
+# and these three read it by name rather than by parameter, so the structural
+# check cannot tell its inherited defects from ones a save introduced.
+@pytest.mark.allow_invalid_package
 def test_the_lucidchart_prefix_survives_a_real_save(tmp_path):
     """The whole save path, not `xmlio` alone.
 
@@ -249,6 +253,10 @@ def _page_part(path: str, member: str = "visio/pages/page1.xml") -> str:
         return archive.read(member).decode("utf-8")
 
 
+# `test5_master.vsdx` is the only non-conformant fixture in the corpus (#298)
+# and these three read it by name rather than by parameter, so the structural
+# check cannot tell its inherited defects from ones a save introduced.
+@pytest.mark.allow_invalid_package
 def test_a_copied_page_keeps_the_prefixes_its_source_declared(tmp_path):
     """Otherwise one package spells the same vocabulary two ways.
 
@@ -263,6 +271,10 @@ def test_a_copied_page_keeps_the_prefixes_its_source_declared(tmp_path):
     assert "lucidchartcom" not in _page_part(out, "visio/pages/page2.xml")
 
 
+# `test5_master.vsdx` is the only non-conformant fixture in the corpus (#298)
+# and these three read it by name rather than by parameter, so the structural
+# check cannot tell its inherited defects from ones a save introduced.
+@pytest.mark.allow_invalid_package
 def test_a_rendered_page_keeps_the_prefixes_it_declared(tmp_path):
     """Rendering a template replaces the page tree with one parsed from a string."""
     out = os.path.join(str(tmp_path), "rendered.vsdx")

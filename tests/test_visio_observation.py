@@ -172,6 +172,7 @@ def test_a_page_declaring_one_id_twice_is_reported_even_when_the_sides_agree():
     assert "package" in duplicate.detail
 
 
+@pytest.mark.allow_invalid_package  # the package is broken on purpose
 def test_reading_a_package_whose_group_member_collides_with_a_top_level_id(tmp_path, basedir):
     """The same collision, through the reader that has to sort real shapes."""
     import zipfile
@@ -209,6 +210,7 @@ def test_the_same_glue_record_written_twice_is_reported():
     assert "twice" in differences[0].detail
 
 
+@pytest.mark.allow_invalid_package  # the package is broken on purpose
 def test_a_page_whose_relationship_does_not_resolve_keeps_its_position(tmp_path, basedir):
     """A page that cannot be read must not renumber the pages after it.
 
