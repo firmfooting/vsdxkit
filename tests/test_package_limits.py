@@ -216,9 +216,15 @@ UNDERSTATED_PAYLOAD = bytes(range(256)) * 64
 
 
 def test_a_member_that_understates_its_size_is_refused(tmp_path):
+    """`ZipFile` fails the CRC; the loader reports it as a malformed package.
+
+    The `BadZipFile` this used to raise is still the cause, and it is still
+    CPython's refusal that does the work: the type is what changed.
+    """
     path = understated(os.path.join(str(tmp_path), "understated.vsdx"), "visio/pages/pad.bin", UNDERSTATED_PAYLOAD, 1)
-    with pytest.raises(zipfile.BadZipFile):
+    with pytest.raises(vsdxkit.MalformedPackageError) as excinfo:
         read_archive_members(path, PackageLimits())
+    assert isinstance(excinfo.value.__cause__, zipfile.BadZipFile)
 
 
 def test_a_member_cannot_deliver_more_bytes_than_it_declares(tmp_path):

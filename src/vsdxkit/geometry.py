@@ -13,6 +13,7 @@ else:
 import vsdxkit
 
 from .document_part import DocumentPart
+from .errors import InvalidOperationError
 from .inheritance import InheritedRow
 from .logging_support import get_logger
 from .xmlio import make_cell_element, xml_value
@@ -248,7 +249,7 @@ class GeometryRow(InheritedRow, DocumentPart):
         indexes = [x.attrib["IX"] for x in children if x.tag == f"{namespace}Row" and x.attrib.get("IX")]
         if IX in indexes:
             # todo: replace existing row with new one
-            raise ValueError(f"geometry row IX={IX} already exists")
+            raise InvalidOperationError(f"geometry row IX={IX} already exists")
         indexes.append(IX)
         indexes.sort(key=_row_index_sort_key)
         # count positions from the section's first Row, so the Cells ahead of

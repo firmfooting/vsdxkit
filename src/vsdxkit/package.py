@@ -43,6 +43,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from .errors import MalformedPackageError, MissingPartError, PackageLimitError
 from .xmlio import parse_part, serialise_part
 
 __all__ = [
@@ -60,19 +61,6 @@ __all__ = [
 # --------------------------------------------------------------------------
 # load limits
 # --------------------------------------------------------------------------
-
-
-class PackageLimitError(OSError):
-    """A package violated a load limit: size, member count, ratio, names or duplicates.
-
-    ``reason`` is a stable slug (``member_size``, ``total_size``,
-    ``member_count``, ``compression_ratio``, ``duplicate_member``,
-    ``member_name``, ``limits_file``) so callers can branch by failure mode.
-    """
-
-    def __init__(self, reason: str, message: str) -> None:
-        super().__init__(message)
-        self.reason = reason
 
 
 @dataclass(frozen=True)
@@ -284,6 +272,17 @@ def read_archive_members(path: str | os.PathLike[str], limits: PackageLimits) ->
     """
     source = os.fspath(path)
     _preflight_eocd(source, limits)
+    try:
+        return _members_within(source, limits)
+    except zipfile.BadZipFile as error:
+        # A file that is not an archive, or one whose members do not read back
+        # as they were declared, is a malformed package rather than a zipfile
+        # problem the caller of this library asked for.
+        raise MalformedPackageError(f"{source} is not a readable package: {error}") from error
+
+
+def _members_within(source: str, limits: PackageLimits) -> list[tuple[str, bytes]]:
+    """`read_archive_members` without the archive-level error translation."""
     with zipfile.ZipFile(source, "r") as archive:
         infos = archive.infolist()
         if len(infos) > limits.max_members:
@@ -444,10 +443,9 @@ PartValue = BytesPart | XmlPart
 
 
 def _promoted(name: str, data: bytes) -> XmlPart:
-    try:
-        tree = parse_part(data)
-    except ET.ParseError as error:
-        raise ValueError(f"package part {name} is not well-formed XML: {error}") from error
+    # `parse_part` reports a part that will not parse, and names it from the
+    # argument below: one translation for both routes into the parser.
+    tree = parse_part(data, name)
     return XmlPart(tree=tree, original_bytes=data, original_canonical_hash=canonical_hash(tree))
 
 
@@ -515,10 +513,10 @@ class PackageStore:
         return promoted.tree
 
     def require_xml(self, name: str) -> ET.ElementTree[ET.Element]:
-        """This part's tree, or a ValueError naming the part that is not there."""
+        """This part's tree, or a MissingPartError naming the part that is not there."""
         tree = self.read_xml(name)
         if tree is None:
-            raise ValueError(f"expected XML part not found: {name}")
+            raise MissingPartError(f"expected XML part not found: {name}")
         return tree
 
     def write_xml(self, name: str, tree: ET.ElementTree[ET.Element]) -> None:

@@ -10,6 +10,8 @@ import xml.etree.ElementTree as ET
 from collections.abc import Generator
 from contextlib import contextmanager
 
+from .errors import MalformedPackageError, MissingPartError
+
 # Prefixes Visio itself writes. ElementTree invents `ns0:`, `ns1:`, ... for any
 # namespace it has no prefix for, and consumers stricter than Visio -- libvisio
 # (LibreOffice Draw) and draw.io's importer -- reject parts that arrive that
@@ -214,31 +216,48 @@ def make_cell_element(name: str, v: object | None = None, f: object | None = Non
     return cell
 
 
-def parse_part(data: bytes) -> ET.ElementTree[ET.Element]:
+def parse_part(data: bytes, name: str = "") -> ET.ElementTree[ET.Element]:
     """Parse one package part, recording the namespace prefixes it declares.
 
     A parsed tree holds expanded names and nothing else: by the time `ET.parse`
     returns, which prefix stood for which namespace is gone, and the write side
     has to guess one. The bindings are visible only during the parse, so they
     are collected here and kept against the root element.
+
+    A part that will not parse is reported here rather than at each call site.
+    Both routes into the parser -- `file_to_xml`, which is how a document is
+    opened, and `PackageStore`'s promotion -- come through this function, so a
+    translation at one of them would leave the other raising whatever
+    ElementTree raised. The original stays as the cause: `ET.ParseError` holds
+    the `position` a caller needs to find the byte that broke.
     """
+    subject = f"package part {name}" if name else "package part"
     root: ET.Element | None = None
     declared: dict[str, str] = {}
-    for event, payload in ET.iterparse(io.BytesIO(data), events=("start-ns", "start")):
-        if event == "start-ns":
-            prefix, uri = payload
-            # `ns0:` is ElementTree's invention, not a spelling any document
-            # chose: a part carrying one was written by a vsdx older than the
-            # per-part prefix fix, and keeping it would re-create #60
-            if _GENERATED_PREFIX_RE.fullmatch(prefix):
-                continue
-            # first binding wins: a part may bind the same namespace twice, and
-            # only one spelling of it can be written back
-            declared.setdefault(uri, prefix)
-        elif root is None:
-            root = payload
+    try:
+        for event, payload in ET.iterparse(io.BytesIO(data), events=("start-ns", "start")):
+            if event == "start-ns":
+                prefix, uri = payload
+                # `ns0:` is ElementTree's invention, not a spelling any document
+                # chose: a part carrying one was written by a vsdx older than the
+                # per-part prefix fix, and keeping it would re-create #60
+                if _GENERATED_PREFIX_RE.fullmatch(prefix):
+                    continue
+                # first binding wins: a part may bind the same namespace twice, and
+                # only one spelling of it can be written back
+                declared.setdefault(uri, prefix)
+            elif root is None:
+                root = payload
+    except ET.ParseError as error:
+        raise MalformedPackageError(f"{subject} is not well-formed XML: {error}") from error
+    except LookupError as error:
+        # A part may name any encoding it likes in its declaration, and one
+        # nothing can decode arrives as LookupError rather than ParseError.
+        # Nothing in the loop body looks anything up, so this catches the
+        # parser and only the parser.
+        raise MalformedPackageError(f"{subject} declares an encoding that cannot be decoded: {error}") from error
     if root is None:  # pragma: no cover - a part with no root element fails to parse first
-        raise ValueError("XML part has no root element")
+        raise MalformedPackageError(f"{subject} has no root element")
     _declared_prefixes[root] = declared
     return ET.ElementTree(root)
 
@@ -259,7 +278,7 @@ def adopt_prefixes(root: ET.Element, source: ET.Element) -> None:
 def file_to_xml(filename: str, zip_file_contents: dict[str, io.BytesIO]) -> ET.ElementTree[ET.Element] | None:
     """Import a file as an ElementTree."""
     if filename in zip_file_contents:
-        return parse_part(zip_file_contents[filename].getvalue())
+        return parse_part(zip_file_contents[filename].getvalue(), filename)
     return None
 
 
@@ -301,7 +320,7 @@ def xml_value(value: object) -> str:
 def require_tree(tree: ET.ElementTree[ET.Element] | None, description: str) -> ET.ElementTree[ET.Element]:
     """A required in-memory ElementTree (already parsed from the package)."""
     if tree is None:
-        raise ValueError(f"expected document part not found: {description}")
+        raise MissingPartError(f"expected document part not found: {description}")
     return tree
 
 
@@ -309,7 +328,7 @@ def require_xml_tree(filename: str, zip_file_contents: dict[str, io.BytesIO], de
     """Parse a required XML part from the zip and return its ElementTree."""
     tree = file_to_xml(filename, zip_file_contents)
     if tree is None:
-        raise ValueError(f"expected XML part not found: {description} ({filename})")
+        raise MissingPartError(f"expected XML part not found: {description} ({filename})")
     return tree
 
 
@@ -326,5 +345,19 @@ def require_element(element: ET.Element | None, description: str) -> ET.Element:
     Fail loudly with the path instead of raising AttributeError on None.
     """
     if element is None:
-        raise ValueError(f"expected XML element not found: {description}")
+        raise MissingPartError(f"expected XML element not found: {description}")
     return element
+
+
+def require_attribute(element: ET.Element, name: str, description: str) -> str:
+    """Return an attribute the schema requires, or say which element is missing it.
+
+    `MalformedPackageError` rather than `MissingPartError`: the element is
+    there, and what is wrong is that it does not carry what the format says it
+    must. Indexing `element.attrib` directly reports the same fault as
+    `KeyError: 'Id'`, which names neither the part nor the element.
+    """
+    value = element.attrib.get(name)
+    if value is None:
+        raise MalformedPackageError(f"{description} has no {name} attribute")
+    return value

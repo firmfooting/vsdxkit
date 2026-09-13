@@ -23,6 +23,7 @@ else:
 import vsdxkit
 
 from . import relationships
+from .errors import InvalidOperationError, MissingPartError, NotFoundError, VisioFileNotOpen
 from .logging_support import attach_debug_stream_handler, get_logger
 from .package import PackageLimits, read_archive_members
 
@@ -44,6 +45,7 @@ from .xmlio import (  # noqa: E402
     adopt_prefixes,
     file_to_xml,
     register_namespaces,
+    require_attribute,
     require_element,
     require_root,
     require_tree,
@@ -102,12 +104,6 @@ def _remap_sheet_references(formula: str, id_map: dict[str, int]) -> str:
         return f"Sheet{separator}{id_map[shape_id]}!"
 
     return _SHEET_REFERENCE_RE.sub(replace, formula)
-
-
-class VisioFileNotOpen(Exception):
-    """Error class to report when a VisioFile is attempted to be saved when no longer open"""
-
-    pass
 
 
 class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
@@ -278,8 +274,8 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         relid_page_dict = {}
 
         for rel in rels:
-            rel_id = rel.attrib["Id"]
-            page_file = rel.attrib["Target"]
+            rel_id = require_attribute(rel, "Id", "pages.xml.rels Relationship")
+            page_file = require_attribute(rel, "Target", f"pages.xml.rels Relationship {rel.attrib.get('Id', '')!r}")
             relid_page_dict[rel_id] = page_file
 
         pages_filename = self._pages_filename()  # pages contains Page name, width, height, mapped to Id
@@ -289,12 +285,14 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             logger.debug("Pages(%s)\n%s", pages_filename, VisioFile.pretty_print_element(pages))
 
         for page in pages:  # type: Element
-            rel_id = require_element(page.find(f"{namespace}Rel"), "Page/Rel").attrib[f"{r_namespace}id"]
-            page_name = page.attrib["Name"]
+            rel_id = require_attribute(
+                require_element(page.find(f"{namespace}Rel"), "Page/Rel"), f"{r_namespace}id", "pages.xml Page/Rel"
+            )
+            page_name = require_attribute(page, "Name", "pages.xml Page")
 
             page_file = relid_page_dict.get(rel_id)
             if page_file is None:
-                raise ValueError(f"no page part found for relationship {rel_id}")
+                raise MissingPartError(f"no page part found for relationship {rel_id}")
             page_path = page_dir + page_file
             page_id = page.attrib.get("ID", "")
 
@@ -336,10 +334,13 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         # populate relid to master path
         relid_to_path: dict[str, str] = {}
         for rel in master_rels:
-            master_id = rel.attrib.get("Id")
-            if master_id is None:
-                continue
-            relid_to_path[master_id] = f"{self.directory}/visio/masters/{rel.attrib.get('Target')}"
+            # Skipping a relationship with no Id used to leave the master that
+            # names it with no path, and the lookup below reported that as
+            # `KeyError: 'rId1'`; the Target went in unchecked and spelled a
+            # part called "None".
+            subject = "masters.xml.rels Relationship"
+            target = require_attribute(rel, "Target", subject)
+            relid_to_path[require_attribute(rel, "Id", subject)] = f"{self.directory}/visio/masters/{target}"
 
         # load masters.xml file
         masters_path = f"{self.directory}/visio/masters/masters.xml"
@@ -351,12 +352,16 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         # for each master page, create the Page object
         for master in self.masters_xml if self.masters_xml is not None else []:
             master_name = master.attrib.get("NameU") or master.attrib.get("Name") or "Unknown"
-            rel_id = require_element(master.find(f"{namespace}Rel"), "Master/Rel").attrib[f"{r_namespace}id"]
-            master_id = master.attrib["ID"]
+            rel_id = require_attribute(
+                require_element(master.find(f"{namespace}Rel"), "Master/Rel"), f"{r_namespace}id", "masters.xml Master/Rel"
+            )
+            master_id = require_attribute(master, "ID", "masters.xml Master")
             master_unique_id = master.attrib.get("UniqueID")
             master_base_id = master.attrib.get("BaseID")
 
-            master_path = relid_to_path[rel_id]
+            master_path = relid_to_path.get(rel_id)
+            if master_path is None:
+                raise MissingPartError(f"no master part found for relationship {rel_id}")
 
             master_page = Page(
                 require_xml_tree(master_path, self.zip_file_contents, "master part"),
@@ -1013,11 +1018,11 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         media = page.vis._shared_media()
         source = media.palette.pages[0].find_shape_by_text(palette_name)
         if source is None:
-            raise ValueError(f"palette has no shape named {palette_name}")
+            raise NotFoundError(f"palette has no shape named {palette_name}")
         new_shape_xml = self.copy_shape(source.xml, page)
         new_shape = page.find_shape_by_id(new_shape_xml.attrib["ID"])
         if new_shape is None:
-            raise ValueError("newly created shape not found on page")
+            raise NotFoundError("newly created shape not found on page")
 
         # palette shapes are drawn around their centre: position via PinX/PinY
         new_shape.get_or_create_cell("PinX", v=str(x))
@@ -1245,12 +1250,12 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         if given is None or given == expected:
             return given
         if macro_enabled:
-            raise ValueError(
+            raise InvalidOperationError(
                 f"cannot save a macro-enabled package as {filename!r}: it declares "
                 f"{MACRO_ENABLED_CONTENT_TYPE} and still contains its vbaProject part, so it must be saved "
                 "with a .vsdm extension"
             )
-        raise ValueError(
+        raise InvalidOperationError(
             f"cannot save {filename!r}: the .vsdm extension is for macro-enabled packages, and this "
             f"package declares {self._main_part_content_type() or DRAWING_CONTENT_TYPE}"
         )
@@ -1281,12 +1286,12 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             matching extension appended. Omit it to save over the source file,
             which is checked the same way but never renamed.
         :type new_filename: str
-        :raises ValueError: if the extension contradicts the package kind
+        :raises InvalidOperationError: if the extension contradicts the package kind
 
         """
         self._require_open("VisioFile.save_vsdx()")
         if not self.zip_file_contents:
-            raise ValueError("cannot save an empty package")
+            raise InvalidOperationError("cannot save an empty package")
 
         # resolve the destination before re-serialising anything, so a refused
         # extension leaves the in-memory package untouched

@@ -6,6 +6,7 @@ from xml.etree.ElementTree import Element
 
 import vsdxkit
 
+from .errors import InvalidOperationError
 from .shapes import Shape
 
 namespace = "{http://schemas.microsoft.com/office/visio/2012/main}"
@@ -198,7 +199,7 @@ class Connect:
         for shape, cp in ((from_shape, from_cp), (to_shape, to_cp)):
             cp_count = Connect._connection_point_count(shape)
             if cp < 0 or cp >= cp_count:
-                raise ValueError(
+                raise InvalidOperationError(
                     f"Shape ID {shape.ID} has {cp_count} connection point(s); cannot glue to connection point index {cp}"
                 )
 
@@ -211,8 +212,8 @@ class Connect:
         Shape glue (default): _WALKGLUE formulas + GlueType=2, matching what
         Visio writes for a dynamic connector glued to shape PinX.
         Point glue (route='point'): PAR(PNT(...)) formulas referencing
-        Connections.Xn/Yn rows; raises ValueError if the shape has too few
-        connection points.
+        Connections.Xn/Yn rows; raises InvalidOperationError if the shape has too
+        few connection points.
         route may also set routing behaviour: 'straight' (ShapeRouteStyle=16),
         'rightangle' (ShapeRouteStyle=1), 'curved' (ShapeRouteStyle=17 +
         ConLineRouteExt=2).
@@ -225,7 +226,7 @@ class Connect:
             for prefix, _opposite_cell, shape, cp in ends:
                 cp_count = Connect._connection_point_count(shape)
                 if cp >= cp_count:
-                    raise ValueError(
+                    raise InvalidOperationError(
                         f"Shape ID {shape.ID} has {cp_count} connection point(s); cannot glue to connection point index {cp}"
                     )
                 k = cp + 1
@@ -325,7 +326,7 @@ class Connect:
         new_from = from_shape if from_shape is not None else current_from
         new_to = to_shape if to_shape is not None else current_to
         if new_from is None or new_to is None:
-            raise ValueError("connector has no resolvable endpoints to keep")
+            raise InvalidOperationError("connector has no resolvable endpoints to keep")
 
         # validate everything _apply_glue can reject BEFORE removing the
         # existing records (issue #9 atomicity)

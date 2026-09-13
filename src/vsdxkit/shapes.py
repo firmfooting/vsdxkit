@@ -20,6 +20,7 @@ import vsdxkit
 from vsdxkit import namespace
 
 from .document_part import DocumentPart
+from .errors import InvalidOperationError, MalformedPackageError
 from .inheritance import InheritedRow
 from .logging_support import get_logger
 from .xmlio import make_cell_element, xml_value
@@ -84,7 +85,7 @@ def to_float(val: str | None, cell: str | None = None) -> float | None:
         return float(val)
     except ValueError as error:
         label = f" for {cell}" if cell else ""
-        raise ValueError(f"malformed numeric ShapeSheet value{label}: {val!r}") from error
+        raise MalformedPackageError(f"malformed numeric ShapeSheet value{label}: {val!r}") from error
 
 
 def _coordinate_value(value: float | str | None) -> str:
@@ -1272,7 +1273,7 @@ class Shape(DocumentPart):
                 else:
                     text_x, text_y = self.center_x_y
                     if text_x is None or text_y is None:
-                        raise ValueError("shape text coordinates cannot be None")
+                        raise InvalidOperationError("shape text coordinates cannot be None")
                 txt_pin_x.value = text_x
                 txt_pin_y.value = text_y
                 self.set_cell_value(name="Control/TextPosition/X", value=text_x)
@@ -1540,12 +1541,12 @@ class Shape(DocumentPart):
         self._require_open("Shape.append_shape()")
         wraps_shapes_tag = self.tag == f"{namespace}Shapes"
         if not wraps_shapes_tag and self.shape_type != "Group":
-            raise ValueError(
+            raise InvalidOperationError(
                 f"shape ID={self.ID} has type {self.shape_type!r} and cannot contain shapes; "
                 "only a group shape holds sub-shapes"
             )
         if append_shape.page is not self.page:
-            raise ValueError(
+            raise InvalidOperationError(
                 f"shape ID={append_shape.ID} belongs to page {append_shape.page.name!r}, not {self.page.name!r}; "
                 "use Shape.copy(page) to place a shape on another page"
             )
@@ -1561,7 +1562,7 @@ class Shape(DocumentPart):
             # shapes (they are detached from the page and re-parented into each
             # other) and every walk of the subtree recurses forever. `a.append_
             # shape(b); b.append_shape(a)` is the way in.
-            raise ValueError(
+            raise InvalidOperationError(
                 f"shape ID={append_shape.ID} cannot be placed inside shape ID={self.ID}, "
                 "which is the shape itself or one of the shapes inside it"
             )

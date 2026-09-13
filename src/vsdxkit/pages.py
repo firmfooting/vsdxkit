@@ -17,6 +17,7 @@ import vsdxkit
 from vsdxkit import namespace
 
 from .connectors import Connect
+from .errors import InvalidOperationError, MissingPartError, NotFoundError
 from .shapes import Shape, parent_of
 from .xmlio import require_element, xml_to_file, xml_value
 
@@ -54,7 +55,7 @@ def _pages_root(vis: VisioFile) -> ET.Element:
     """The required root element of the document's pages.xml part."""
     pages_xml = vis.pages_xml
     if pages_xml is None:
-        raise ValueError("document has no pages.xml part")
+        raise MissingPartError("document has no pages.xml part")
     return require_element(pages_xml.getroot(), "Pages root")
 
 
@@ -111,7 +112,7 @@ class Page:
             pages_filename, self.vis.zip_file_contents
         )  # this contains a list of pages with rel_id and filename
         if pages is None:
-            raise ValueError(f"no pages.xml part found at {pages_filename}")
+            raise MissingPartError(f"no pages.xml part found at {pages_filename}")
         pages_root = require_element(pages.getroot(), "Pages root")
         page = pages_root.find(f"{namespace}Page[{self._index() + 1}]")
         if page:
@@ -143,7 +144,7 @@ class Page:
         """Zero-based index of this page in its VisioFile (required)."""
         index = self.index_num
         if index is None:
-            raise ValueError("page is not attached to a VisioFile")
+            raise InvalidOperationError("page is not attached to a VisioFile")
         return index
 
     def _page_xml(self) -> ET.Element:
@@ -361,7 +362,7 @@ class Page:
         shape_a = self.find_shape_by_id(shape_a_id) if shape_a_id else self.find_shape_by_text(shape_a_text)
         shape_b = self.find_shape_by_id(shape_b_id) if shape_b_id else self.find_shape_by_text(shape_b_text)
         if shape_a is None or shape_b is None:
-            raise ValueError("get_connectors_between() requires two shapes that exist on this page")
+            raise NotFoundError("get_connectors_between() requires two shapes that exist on this page")
         connector_ids = {a.ID for a in shape_a.connected_shapes}.intersection({b.ID for b in shape_b.connected_shapes})
 
         connectors: set[Shape] = set()
@@ -495,7 +496,7 @@ class Page:
         self.vis._require_open("Page.add_swimlane()")
         container = self.get_container()
         if container is None:
-            raise ValueError("page has no CFF Container")
+            raise InvalidOperationError("page has no CFF Container")
         return container.add_swimlane(label)
 
     def add_shape_to_lane(self, shape: Shape, lane: Shape) -> None:
@@ -503,7 +504,7 @@ class Page:
         self.vis._require_open("Page.add_shape_to_lane()")
         container = self.get_container()
         if container is None:
-            raise ValueError("page has no CFF Container")
+            raise InvalidOperationError("page has no CFF Container")
         container.add_shape_to_lane(shape, lane)
 
     def reanchor_connector(
@@ -538,7 +539,7 @@ class Page:
         records naming one are removed alongside the group's own. Connectors
         are deleted first (including their Connect records), then the shape.
 
-        :raises ValueError: if the shape is not on this page
+        :raises NotFoundError: if the shape is not on this page
         """
         self.vis._require_open("Page.delete_shape()")
         shape_id = str(shape.ID)
@@ -564,7 +565,7 @@ class Page:
                 if id_is_taken_by_another_shape
                 else ""
             )
-            raise ValueError(f"shape ID {shape.ID} is not on page {self.name!r}{collision}")
+            raise NotFoundError(f"shape ID {shape.ID} is not on page {self.name!r}{collision}")
         # every id that is about to disappear: the shape and, for a group,
         # everything it contains
         doomed_ids = {shape_id} | {str(s.ID) for s in shape.all_shapes}
