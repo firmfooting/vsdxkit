@@ -143,6 +143,26 @@ class TestReadingARealPackage:
         assert compare(observation_from_package(path, "a"), observation_from_package(path, "b")) == ()
 
 
+def test_a_duplicated_id_is_reported_when_one_of_the_two_is_inside_a_group():
+    """The duplicate need not be a pair of siblings.
+
+    Shapes are ordered by id and then by whatever distinguishes two that share
+    one, and a group member sorts against a top-level shape whose parent is
+    None. Getting that wrong does not produce a wrong answer, it produces a
+    TypeError out of the reader - so the harness crashes on precisely the file
+    it was built to describe.
+    """
+    package = Observation(
+        label="package",
+        pages=(_page(shapes=(_shape(2, parent_id=None), _shape(2, parent_id=5), _shape(5))),),
+    )
+    visio = Observation(label="visio", pages=(_page(shapes=(_shape(2), _shape(5))),))
+
+    differences = compare(package, visio)
+
+    assert [d.kind for d in differences] == ["shape-duplicate-id"]
+
+
 def test_a_page_declaring_one_id_twice_is_reported_even_when_the_sides_agree():
     """Duplicate ids are what this harness was built for, so they get their own name.
 
@@ -160,3 +180,22 @@ def test_a_page_declaring_one_id_twice_is_reported_even_when_the_sides_agree():
     duplicate = next(d for d in differences if d.kind == "shape-duplicate-id")
     assert duplicate.locus == "page 1 shape 2"
     assert "package" in duplicate.detail
+
+
+def test_reading_a_package_whose_group_member_collides_with_a_top_level_id(tmp_path, basedir):
+    """The same collision, through the reader that has to sort real shapes."""
+    import zipfile
+
+    source = f"{basedir}/test10_nested_shapes.vsdx"
+    broken = str(tmp_path / "collide.vsdx")
+    with zipfile.ZipFile(source) as original, zipfile.ZipFile(broken, "w") as rewritten:
+        for entry in original.infolist():
+            data = original.read(entry.filename)
+            if entry.filename == "visio/pages/page1.xml":
+                # shape 7 is top level and shape 1 sits two groups deep
+                data = data.decode("utf-8").replace("<Shape ID='1'", "<Shape ID='7'", 1).encode("utf-8")
+            rewritten.writestr(entry, data)
+
+    observation = observation_from_package(broken)
+
+    assert any(d.kind == "shape-duplicate-id" for d in compare(observation, observation))

@@ -73,7 +73,7 @@ _REL_NS = "{http://schemas.openxmlformats.org/package/2006/relationships}"
 _DOC_REL_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 
 
-@dataclass(frozen=True, order=True)
+@dataclass(frozen=True)
 class ShapeObservation:
     """One shape, identified by the id that both sides agree to use.
 
@@ -87,6 +87,18 @@ class ShapeObservation:
     id: int
     parent_id: int | None = None
     name: str = ""
+
+    @property
+    def sort_key(self) -> tuple[int, int, str]:
+        """Order shapes without comparing a group id against None.
+
+        A generated ordering would compare `parent_id` whenever two shapes share
+        an id - which is the duplicate-id case, the one thing this type exists to
+        describe - and `None < 5` raises. The harness would then crash on exactly
+        the file it was built to report on. -1 sorts a top-level shape first and
+        cannot collide with a real id.
+        """
+        return (self.id, -1 if self.parent_id is None else self.parent_id, self.name)
 
 
 @dataclass(frozen=True, order=True)
@@ -131,6 +143,10 @@ class Difference:
     kind: str
     locus: str
     detail: str
+
+
+def _by_shape(shape: ShapeObservation) -> tuple[int, int, str]:
+    return shape.sort_key
 
 
 def compare(expected: Observation, actual: Observation) -> tuple[Difference, ...]:
@@ -196,8 +212,10 @@ def _compare_shapes(
     # silence, leaving both sides holding the same set of ids, so a comparison
     # that went straight to the join would call this file clean. It is the
     # failure the harness exists for; it is not allowed to pass through quietly.
+    ambiguous = False
     for label, page in ((expected_label, expected), (actual_label, actual)):
         for shape_id in _repeated_ids(page):
+            ambiguous = True
             out.append(
                 Difference(
                     kind="shape-duplicate-id",
@@ -205,10 +223,18 @@ def _compare_shapes(
                     detail=(
                         f"{label} declares shape {shape_id} more than once on this page. "
                         "Ids are page-scoped and unique; Visio keeps one and drops the rest without "
-                        "an error, so the rest of this page cannot be compared."
+                        "an error, so the shapes on this page cannot be matched up."
                     ),
                 )
             )
+    if ambiguous:
+        # Matching by id from here would compare whichever of the duplicates
+        # happened to be read last against whichever one Visio kept, and report
+        # the coincidence as if it were a finding. The glue records below are
+        # still worth comparing: they are separate assertions about the file,
+        # and a connector left pointing at a discarded shape is the consequence
+        # worth seeing.
+        return
 
     mine = expected.shapes_by_id
     theirs = actual.shapes_by_id
@@ -307,7 +333,7 @@ def _observation_from_archive(archive: zipfile.ZipFile, label: str, digest: str)
     pages: list[PageObservation] = []
     for index, (name, part) in enumerate(_page_parts(archive), start=1):
         contents = ET.fromstring(archive.read(part))
-        shapes = tuple(sorted(_shapes_in(contents.find(f"{_MAIN_NS}Shapes"), parent_id=None)))
+        shapes = tuple(sorted(_shapes_in(contents.find(f"{_MAIN_NS}Shapes"), parent_id=None), key=_by_shape))
         connects = tuple(sorted(_connects_in(contents.find(f"{_MAIN_NS}Connects"))))
         pages.append(PageObservation(index=index, name=name, shapes=shapes, connects=connects))
     return Observation(label=label, pages=tuple(pages), source_sha256=digest)
@@ -423,12 +449,15 @@ def observation_from_com_json(payload: str | dict[str, Any], label: str = "visio
     for page in data.get("pages", []):
         shapes = tuple(
             sorted(
-                ShapeObservation(
-                    id=int(shape["id"]),
-                    parent_id=None if shape.get("parent_id") is None else int(shape["parent_id"]),
-                    name=shape.get("name", ""),
-                )
-                for shape in page.get("shapes", [])
+                (
+                    ShapeObservation(
+                        id=int(shape["id"]),
+                        parent_id=None if shape.get("parent_id") is None else int(shape["parent_id"]),
+                        name=shape.get("name", ""),
+                    )
+                    for shape in page.get("shapes", [])
+                ),
+                key=_by_shape,
             )
         )
         connects = tuple(
