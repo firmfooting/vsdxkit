@@ -35,18 +35,31 @@ PUBLIC_ERRORS = (
 )
 
 
-@pytest.fixture
-def broken_document_package(vsdx_copy, tmp_path) -> str:
-    """A real package whose `visio/document.xml` is truncated mid-tag."""
-    source = vsdx_copy("test1.vsdx")
-    destination = str(tmp_path / "broken.vsdx")
-    with zipfile.ZipFile(source) as original, zipfile.ZipFile(destination, "w") as broken:
+def _package_with_document(source: str, destination: str, document: bytes) -> str:
+    """A copy of `source` whose `visio/document.xml` holds `document` instead."""
+    with zipfile.ZipFile(source) as original, zipfile.ZipFile(destination, "w") as rewritten:
         for member in original.infolist():
             data = original.read(member.filename)
             if member.filename == "visio/document.xml":
-                data = b"<VisioDocument"
-            broken.writestr(member, data)
+                data = document
+            rewritten.writestr(member, data)
     return destination
+
+
+@pytest.fixture
+def broken_document_package(vsdx_copy, tmp_path) -> str:
+    """A real package whose `visio/document.xml` is truncated mid-tag."""
+    return _package_with_document(vsdx_copy("test1.vsdx"), str(tmp_path / "broken.vsdx"), b"<VisioDocument")
+
+
+@pytest.fixture
+def bad_encoding_package(vsdx_copy, tmp_path) -> str:
+    """A real package whose `visio/document.xml` names an encoding nothing can decode."""
+    return _package_with_document(
+        vsdx_copy("test1.vsdx"),
+        str(tmp_path / "bad-encoding.vsdx"),
+        b'<?xml version="1.0" encoding="NOT-A-CODEC"?><VisioDocument/>',
+    )
 
 
 # --------------------------------------------------------------------------
@@ -195,6 +208,16 @@ def test_the_parse_error_is_kept_as_the_cause(broken_document_package):
     with pytest.raises(MalformedPackageError) as caught:
         vsdxkit.VisioFile(broken_document_package)
     assert isinstance(caught.value.__cause__, ET.ParseError)
+
+
+def test_a_part_declaring_an_unknown_encoding_raises_malformed_package_error(bad_encoding_package):
+    """`ET.iterparse` reports an unusable encoding as `LookupError`, not `ParseError`.
+
+    Catching only `ET.ParseError` let a bare builtin out of the one function
+    both load paths go through (#365 review).
+    """
+    with pytest.raises(MalformedPackageError, match="encoding"):
+        vsdxkit.VisioFile(bad_encoding_package)
 
 
 def test_malformed_shapesheet_number_raises_malformed_package_error(vsdx_copy):

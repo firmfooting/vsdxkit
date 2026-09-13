@@ -227,9 +227,9 @@ def parse_part(data: bytes, name: str = "") -> ET.ElementTree[ET.Element]:
     A part that will not parse is reported here rather than at each call site.
     Both routes into the parser -- `file_to_xml`, which is how a document is
     opened, and `PackageStore`'s promotion -- come through this function, so a
-    translation at one of them would leave the other raising `ET.ParseError`.
-    The `ET.ParseError` stays as the cause, because its `position` is how a
-    caller finds the byte that broke.
+    translation at one of them would leave the other raising whatever
+    ElementTree raised. The original stays as the cause: `ET.ParseError` holds
+    the `position` a caller needs to find the byte that broke.
     """
     subject = f"package part {name}" if name else "package part"
     root: ET.Element | None = None
@@ -250,6 +250,12 @@ def parse_part(data: bytes, name: str = "") -> ET.ElementTree[ET.Element]:
                 root = payload
     except ET.ParseError as error:
         raise MalformedPackageError(f"{subject} is not well-formed XML: {error}") from error
+    except LookupError as error:
+        # A part may name any encoding it likes in its declaration, and one
+        # nothing can decode arrives as LookupError rather than ParseError.
+        # Nothing in the loop body looks anything up, so this catches the
+        # parser and only the parser.
+        raise MalformedPackageError(f"{subject} declares an encoding that cannot be decoded: {error}") from error
     if root is None:  # pragma: no cover - a part with no root element fails to parse first
         raise MalformedPackageError(f"{subject} has no root element")
     _declared_prefixes[root] = declared
