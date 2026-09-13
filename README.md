@@ -194,9 +194,9 @@ The package also supports its existing group-shape loop and `showif` conventions
 
 ```bash
 uv run --no-sync python -m pytest tests -q
-uv run --no-sync ruff check vsdx tests tools
-uv run --no-sync ruff format --check vsdx tests tools
-uv run --no-sync pyrefly check vsdx --min-severity warn --output-format min-text
+uv run --no-sync ruff check src tests tools
+uv run --no-sync ruff format --check src tests tools
+uv run --no-sync pyrefly check src/vsdxkit --min-severity warn --output-format min-text
 uv run --no-sync sphinx-build -W --keep-going -b html docs docs/_build/html
 uv run --no-sync python -m build
 ```

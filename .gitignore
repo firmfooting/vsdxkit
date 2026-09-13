@@ -3,7 +3,10 @@
 /.pytest_cache/
 /.venv/
 /venv*/
-/vsdxkit.egg-info/
+# Not anchored: setuptools writes this next to the package, so under a src
+# layout it lands in src/. A rooted rule stopped matching when the package
+# moved and the generated metadata was committed by mistake.
+*.egg-info/
 /docs/_build/
 __pycache__/
 settings.json

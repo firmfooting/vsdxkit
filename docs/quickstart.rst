@@ -79,9 +79,9 @@ Development install
    cd vsdxkit
    uv sync --locked --group docs
    uv run --no-sync python -m pytest tests -q
-   uv run --no-sync ruff check vsdx tests tools
-   uv run --no-sync ruff format --check vsdx tests tools
-   uv run --no-sync pyrefly check vsdx --min-severity warn --output-format min-text
+   uv run --no-sync ruff check src tests tools
+   uv run --no-sync ruff format --check src tests tools
+   uv run --no-sync pyrefly check src/vsdxkit --min-severity warn --output-format min-text
    uv run --no-sync sphinx-build -W --keep-going -b html docs docs/_build/html
 
 The ``docs`` group pins Sphinx, which requires Python 3.12 or later. Drop

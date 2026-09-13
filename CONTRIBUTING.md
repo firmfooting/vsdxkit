@@ -1,7 +1,7 @@
 # Contributions are welcome!
 
 This repository is `vsdxkit`. The distribution
-installs as `vsdxkit` and imports as `vsdx`. Python 3.10 or later is required.
+installs as `vsdxkit` and imports as `vsdxkit`. Python 3.10 or later is required.
 
 #### Development environment
 
@@ -10,9 +10,9 @@ The repository uses [uv](https://docs.astral.sh/uv/) with a committed lockfile:
 ```
 uv sync --group docs    # test, lint and build groups plus Sphinx (needs Python 3.12+)
 uv run pytest tests -q
-uv run ruff check vsdx tests tools
-uv run ruff format --check vsdx tests tools
-uv run pyrefly check vsdx --min-severity warn
+uv run ruff check src tests tools
+uv run ruff format --check src tests tools
+uv run pyrefly check src/vsdxkit --min-severity warn
 uv run zizmor .github/workflows
 uv run sphinx-build -W --keep-going -b html docs docs/_build/html
 ```
@@ -186,7 +186,7 @@ already has a tag.
 built from commit subjects are terser than what a reader usually wants; you can
 edit the PR's `CHANGELOG.md` to add detail, and release-please will respect it.
 
-The version lives in one place, `vsdx/__init__.py`, marked with an
+The version lives in one place, `src/vsdxkit/__init__.py`, marked with an
 `x-release-please-version` annotation. `pyproject.toml` reads it through
 `tool.setuptools.dynamic`; a static `[project].version` would go stale in
 `uv.lock` on every bump and fail the `uv sync --locked` gate.
@@ -200,11 +200,6 @@ vsdxkit began as a fork of [dave-howard/vsdx](https://github.com/dave-howard/vsd
 and is now developed independently — it does not track that project. If a change
 you are making is a plain bug fix that would help users of the original too,
 offering it there as well is a kindness, but nothing here depends on it.
-
-Maintainers: [`docs/maintainers/upstream-sync.md`](docs/maintainers/upstream-sync.md)
-records when to check that repository for fixes worth taking, how to take one
-with attribution that survives a squash merge, and the last sync point. It is
-not part of the published documentation, so the path is the only way in.
 
 #### Security
 Please report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
