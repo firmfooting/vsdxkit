@@ -47,10 +47,11 @@ def diag_width(shape: Shape) -> float:
 
 
 def angle(shape: Shape) -> float:
-    # ATAN2(EndY-BeginY,EndX-BeginX)
+    # ATAN2(EndY-BeginY,EndX-BeginX). Both Visio's ATAN2 and math.atan2 take the
+    # ordinate first, so the rise goes in front of the run.
     w = _f(shape.end_x) - _f(shape.begin_x)
     h = _f(shape.end_y) - _f(shape.begin_y)
-    return math.atan2(w, h)
+    return math.atan2(h, w)
 
 
 def width(shape: Shape) -> float:
