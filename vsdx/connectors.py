@@ -39,10 +39,31 @@ class Connect:
             raise ValueError(f"Connect element is missing required attribute(s): {', '.join(missing)}")
         self.xml = xml
         self.page = page
-        self.from_id = xml.attrib["FromSheet"]  # ref to the connector shape
-        self.to_id = xml.attrib["ToSheet"]  # ref to the shape where the connector terminates
-        self.from_rel = xml.attrib.get("FromCell")  # i.e. EndX / BeginX; optional per Connect_Type
-        self.to_rel = xml.attrib.get("ToCell")  # i.e. PinX; optional per Connect_Type
+
+    # Read from the element on each access, not copied in. `_remap_connect_records`
+    # rewrites these very attributes when a shape is renumbered, so a Connect
+    # built before the renumber would otherwise keep naming the vacated id - the
+    # same second-store drift that #320 fixed on Shape.
+
+    @property
+    def from_id(self) -> str:
+        """The connector shape this record leads from."""
+        return self.xml.attrib["FromSheet"]
+
+    @property
+    def to_id(self) -> str:
+        """The shape this record's connector terminates at."""
+        return self.xml.attrib["ToSheet"]
+
+    @property
+    def from_rel(self) -> str | None:
+        """Which end of the connector is glued: ``BeginX``, ``EndX``, or absent."""
+        return self.xml.attrib.get("FromCell")
+
+    @property
+    def to_rel(self) -> str | None:
+        """What the connector is glued to: ``PinX``, a ``Connections.Xn`` row, or absent."""
+        return self.xml.attrib.get("ToCell")
 
     @staticmethod
     def create(
@@ -116,7 +137,6 @@ class Connect:
             connector_shape.text = ""  # clear text used to find shape
             if new_master_id:
                 # repoint the copied shape at this document's imported master
-                connector_shape.xml.attrib["Master"] = new_master_id
                 connector_shape.master_page_ID = new_master_id
 
             # per-page relationship for whichever master the connector uses

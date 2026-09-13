@@ -27,7 +27,7 @@ Shape, Cell and DataProperty
 ----------------------------
 
 .. autoclass:: vsdx.shapes.Shape
-   :members: all_shapes, bounds, cell_value, cells, center_x_y, child_shapes, connected_shapes, connects, copy, data_properties, fill_color, find_replace, find_shape_by_text, find_shapes_by_text, geometry, get_or_create_cell, height, line_color, line_weight, move, remove, shape_name, text, text_color, width, x, y
+   :members: ID, all_shapes, bounds, cell_value, cells, center_x_y, child_shapes, connected_shapes, connects, copy, data_properties, fill_color, find_replace, find_shape_by_text, find_shapes_by_text, geometry, get_or_create_cell, height, line_color, line_weight, master_page_ID, master_shape_ID, move, remove, shape_name, shape_type, tag, text, text_color, width, x, y
    :undoc-members:
 
 .. autoclass:: vsdx.shapes.Cell
