@@ -105,7 +105,7 @@ def test_the_merge_leaves_the_master_geometry_alone(monkeypatch):
     the master `Geometry` object's own dict, which only ever went unnoticed
     because `Shape.master_shape` rebuilt the master on every access and the
     mutated object was thrown away. Memoise the master, as #261 needs to, and
-    one shape's merge reaches every other; so pin the master here.
+    one shape's merge would reach every other, so this test pins it.
     """
     with VisioFile(TEST9) as vis:
         connector = vis.pages[0].find_shape_by_text("Conn A")
@@ -263,7 +263,7 @@ def test_move_leaves_a_missing_coordinate_missing():
 
 
 def test_move_copies_an_inherited_row_onto_the_instance():
-    """Moving one instance leaves the master, and every other instance, put.
+    """Moving one instance leaves the master alone, so no other instance moves.
 
     Row 1 is the master's. `Geometry.move()` reads the coordinates from there
     and writes the shifted pair to a row of the instance's own (#239).
@@ -281,7 +281,7 @@ def test_move_copies_an_inherited_row_onto_the_instance():
 
 
 def test_a_row_copied_down_by_move_lands_after_the_sections_cells():
-    """`Conn A` overrides a section cell, which rows have to follow.
+    """`Conn A` overrides a section cell, and every row has to come after it.
 
     A Section is `Cell*, Trigger*, Row*`, so a row wedged among the cells is a
     file Visio offers to repair.
@@ -437,7 +437,7 @@ def test_creating_a_row_with_no_index_yields_the_string_none():
 
 
 def test_a_new_row_is_placed_after_the_sections_cells_and_in_index_order():
-    """Both placement faults a tenth row used to show.
+    """A tenth row used to show two placement faults; it now shows neither.
 
     The row goes after the Cell children the Visio schema requires rows to
     follow, and IX 10 sorts after IX 2 rather than as the text "10" would, so

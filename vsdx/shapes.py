@@ -123,8 +123,8 @@ class DataProperty(InheritedRow):
 
     A property a shape inherits from its master is handed out marked
     :attr:`~vsdx.inheritance.InheritedRow.inherited`. Setting :attr:`value` on
-    one materialises an override row on the instance instead of writing to the
-    master page's XML, which is what Visio does.
+    one materialises an override row on the instance rather than writing to the
+    master page's XML.
     """
 
     shape: Shape
@@ -195,7 +195,7 @@ class DataProperty(InheritedRow):
 
         Visio matches an override to the master's row by the row's ``N``
         attribute, and reads label, type and prompt from the master, so the
-        new row needs nothing but that name -- the caller is about to write the
+        new row needs nothing but that name; the caller is about to write the
         ``Value`` cell. A master row with no name has nothing to match on, so
         the label is carried down to keep the property addressable.
         """
@@ -250,8 +250,8 @@ class DataProperty(InheritedRow):
         declares no unit rather than guessing one from the value.
 
         A property inherited from a master is given an override row on this
-        shape first, so the master's value -- and every other shape drawn from
-        it -- is left as it was.
+        shape first, so the master's value is left as it was, and with it every
+        other shape drawn from that master.
         """
         self.make_local()
         text = "" if value is None else str(value)

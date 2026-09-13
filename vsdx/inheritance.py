@@ -9,9 +9,9 @@ every other shape drawn from it.
 
 :class:`InheritedRow` is what tells the two apart. A row merged down from a
 master is flagged :attr:`inherited`, and every setter calls :meth:`make_local`
-before it writes. That materialises an override row on the instance -- which is
-what Visio does -- and clears the flag, leaving the master untouched. A row the
-shape already owns is written in place.
+before it writes. That materialises an override row on the instance and clears
+the flag, leaving the master untouched. An override row on the instance is what
+Visio itself writes. A row the shape already owns is written in place.
 """
 
 from __future__ import annotations

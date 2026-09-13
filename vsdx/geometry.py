@@ -37,17 +37,17 @@ class Geometry:
     of the same name rather than replacing it.
 
     An inherited row reads the master's cells but is marked
-    :attr:`~vsdx.inheritance.InheritedRow.inherited`, so the first write to it
-    -- through :attr:`GeometryRow.x`, :meth:`move`, :meth:`set_move_to` or
-    :meth:`set_line_to` -- materialises an override row on this shape and
-    leaves the master alone. That is what Visio does.
+    :attr:`~vsdx.inheritance.InheritedRow.inherited`. The first write to it,
+    through :attr:`GeometryRow.x`, :meth:`move`, :meth:`set_move_to` or
+    :meth:`set_line_to`, materialises an override row on this shape and leaves
+    the master alone.
 
     The merge copies the master's :attr:`cells` list and :attr:`rows` dict
     rather than taking them by reference, so an instance applying a ``Del``
     row, or gaining a row of its own, does not change what the master
     Geometry sees. That holds however long the master object lives. The
-    copies are shallow -- an inherited :class:`GeometryCell` is still the
-    master's until a setter replaces it -- so writing a cell's value without
+    copies are shallow: an inherited :class:`GeometryCell` is still the
+    master's until a setter replaces it, so writing a cell's value without
     going through the row still edits the master.
     """
 
@@ -59,14 +59,14 @@ class Geometry:
         self.rows: dict[str, GeometryRow] = {}  # rows keyed by IX: type(T) + index(IX), each with named cells
         self.shape = shape
 
-        # one resolution of the master: `Shape.master_shape` rebuilds it on
-        # every access, so asking twice doubles the work for the same answer
+        # `Shape.master_shape` rebuilds the master on every access, so ask for
+        # it once; asking twice doubled the work for the same answer
         master_shape = shape.master_shape
         master_geometry = master_shape.geometry if master_shape else None
 
         if master_geometry is not None:
-            # copies, not the master's own list and dict: what this instance
-            # merges, deletes or adds must not reach the master's view
+            # copy the list rather than alias it, so what this instance merges,
+            # deletes or adds stays out of the master Geometry's view
             self.cells = list(master_geometry.cells)
 
         for cell in self.xml.findall(f"{namespace}Cell"):
@@ -196,11 +196,11 @@ class GeometryRow(InheritedRow):
     def _materialise(self) -> None:
         """Add this row to the instance's Geometry section, in place.
 
-        The object keeps its identity -- :attr:`Geometry.rows` already holds
-        it, and :meth:`Geometry.move` may be iterating over it -- and swaps the
-        master's Row element for a new, empty one on the instance. The cells
-        stay the master's until a setter replaces one, so a coordinate the
-        caller does not write is still inherited.
+        The object keeps its identity, because :attr:`Geometry.rows` already
+        holds it and :meth:`Geometry.move` may be iterating over it. Only the
+        XML changes, from the master's Row element to a new, empty one on the
+        instance. The cells stay the master's until a setter replaces one, so
+        a coordinate the caller does not write is still inherited.
         """
         row_type, index = self.row_type, self.index
         self.xml = self.create_row_xml(row_type or "", str(index))
@@ -211,9 +211,9 @@ class GeometryRow(InheritedRow):
 
         The row is placed in index order among the section's existing rows,
         after the Cell and Trigger children the Visio schema requires them all
-        to follow. Row order is the order the path is drawn in, so the indexes
-        are compared as numbers: sorted as text, IX 10 would land ahead of
-        IX 2 and redraw the path in a different order.
+        to follow. Row order is the order the path is drawn in, so indexes are
+        compared as numbers. Sorted as text, IX 10 would land ahead of IX 2 and
+        redraw the path in a different order.
 
         Both arguments have already been stringified by the caller, so
         ``IX=None`` arrives as the literal ``"None"`` and passes the
