@@ -112,24 +112,65 @@ class JinjaTemplatingMixin:
             JinjaTemplatingMixin.jinja_set_selfs(s, context)
             JinjaTemplatingMixin.jinja_render_shape(shape=s, context=context, loop_shape_ids=loop_shape_ids)
 
+    # One `{% set self.<name> = <expression> %}` statement. Both names are bound
+    # to an identifier rather than left as `.*`: a `.*` on the right-hand side
+    # is greedy to the end of the statement, so an expression naming two
+    # attributes yielded one match covering both, and only the first was ever
+    # substituted. The dot is escaped in both, which it was not before.
+    # `\s*`, not `\s?`: the pattern that strips these statements back out of the
+    # text allows any amount of whitespace, so a single optional space here meant
+    # `{% set self.x  =  2 %}` was removed without ever being assigned.
+    _SET_SELF_STATEMENT = re.compile(r"{% set self\.([A-Za-z_]\w*)\s*=\s*(.*?) %}")
+    _SELF_REFERENCE = re.compile(r"self\.([A-Za-z_]\w*)")
+
+    # What a statement may assign. Reading stays wider on purpose: an expression
+    # may reference any attribute of the shape.
+    _SETTABLE = ("x", "y")
+
+    @staticmethod
+    def _resolve_self_references(shape: Shape, expression: str, statement: str) -> str:
+        """Replace each `self.<name>` in `expression` with the shape's value.
+
+        One pass, not one `str.replace` per name: replacing them one at a time
+        rewrites `self.ab` inside `self.abc`, because the names come back in the
+        order they appear rather than longest first.
+        """
+
+        def resolve(reference: re.Match[str]) -> str:
+            name = reference.group(1)
+            try:
+                return str(getattr(shape, name))
+            except AttributeError as error:
+                # Chained, not suppressed: a property that raises AttributeError
+                # from inside its own getter arrives here too, and reporting
+                # that as "no such attribute" would bury the real fault.
+                raise ValueError(f"{statement} refers to self.{name}, which is not an attribute of a shape") from error
+
+        return JinjaTemplatingMixin._SELF_REFERENCE.sub(resolve, expression)
+
     @staticmethod
     def jinja_set_selfs(shape: Shape, context: dict[str, object]) -> None:
-        # apply any {% self self.xxx = yyy %} statements in shape properties
+        """Apply every `{% set self.x = ... %}` statement in the shape's text.
+
+        The expression may reference the shape's own attributes as `self.<name>`,
+        including more than one in the same expression. Each is replaced by the
+        shape's current value before the expression is rendered, so `self.x`
+        means the value on the way in, not the one being assigned.
+
+        Only `x` and `y` can be assigned. A statement assigning anything else is
+        still evaluated and still removed from the text, but the result is
+        discarded -- longstanding behaviour, and a trap worth knowing about.
+        """
         jinja_source = shape.text or ""
-        matches = re.findall(r"{% set self.(.*?)\s?=\s?(.*?) %}", jinja_source)  # non-greedy search for all {%...%} strings
-        for m in matches:  # type: tuple  # expect ('property', 'value') such as ('x', '10') or ('y', 'n*2')
-            property_name = m[0]
-            value = "{{ " + m[1] + " }}"  # Jinja to be processed
-            # todo: replace any self references in value with actual value - i.e. {% set self.x = self.x+1 %}
-            self_refs = re.findall(r"self.(.*)[\s+-/*//]?", m[1])  # greedy search for all self.? between +, -, *, or /
-            for self_ref in self_refs:  # type: tuple  # expect ('property', 'value') such as ('x', '10') or ('y', 'n*2')
-                ref_val = str(shape.__getattribute__(self_ref[0]))
-                value = value.replace("self." + self_ref[0], ref_val)
+        for statement in JinjaTemplatingMixin._SET_SELF_STATEMENT.finditer(jinja_source):
+            property_name, expression = statement.group(1), statement.group(2)
+            expression = JinjaTemplatingMixin._resolve_self_references(shape, expression, statement.group(0))
+            value = "{{ " + expression + " }}"  # Jinja to be processed
             # use Jinja template to calculate any self refs found
             template = _template(value)  # value might be '{{ 1.0+2.4*3 }}'
             value = template.render(context)
-            if property_name in ["x", "y"]:
-                shape.__setattr__(property_name, value)
+            if property_name in JinjaTemplatingMixin._SETTABLE:
+                setattr(shape, property_name, value)
 
         # remove any {% set self %} statements, leaving any remaining text
         matches = re.findall("{% set self.*?%}", jinja_source)
