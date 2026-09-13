@@ -33,7 +33,9 @@ def test_apply_text_context_coerces_non_string_values():
 
     shape = root.find(f".//{namespace}Shape")
     assert shape is not None
-    assert VisioFile.get_shape_text(shape) == "Year 2020"
+    text = shape.find(f"{namespace}Text")
+    assert text is not None
+    assert "".join(text.itertext()) == "Year 2020"
 
 
 def test_insert_shape_rejects_mismatched_page_path(vsdx_copy):

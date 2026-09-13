@@ -106,6 +106,98 @@ def _is_formatting_run(element: Element) -> bool:
     return element.tag in _TEXT_RUN_TAGS and len(element) == 0 and not element.text
 
 
+def _text_runs_of(text_element: Element | None) -> tuple[list[Element], str, list[Element], str]:
+    """Split a `<Text>` element into leading runs, content, trailing runs and newlines.
+
+    The leading and trailing runs are the element's own children, not copies, so
+    a caller may re-append them after clearing it. Visio ends a Text element
+    with a newline that is not part of the text; it is reported separately so
+    that writing the text back puts it there again.
+
+    Module level rather than a Shape method because it is also needed where
+    there is no Shape to ask: `VisioFile.apply_text_context` is handed bare
+    elements.
+
+    A run between two pieces of content is folded into the content string and
+    cannot be recovered from it, which corrupts the text on write. See #317;
+    fixing it means modelling the middle children as elements too.
+    """
+    if not isinstance(text_element, Element):
+        return [], "", [], ""
+
+    children = list(text_element)
+    start = 0
+    if not text_element.text:
+        while start < len(children) and _is_formatting_run(children[start]):
+            start += 1
+            if children[start - 1].tail:
+                break  # this run's trailing text is where the content starts
+
+    end = len(children)
+    while end > start:
+        candidate = children[end - 1]
+        tail = candidate.tail or ""
+        if not _is_formatting_run(candidate):
+            break
+        # only whitespace may follow the final run; nothing at all may sit
+        # between two runs, or the text before it belongs to the content
+        if tail.strip() if end == len(children) else tail:
+            break
+        end -= 1
+
+    leading = (text_element.text if start == 0 else children[start - 1].tail) or ""
+    content = leading + "".join(html.unescape(ET.tostring(child, encoding="unicode")) for child in children[start:end])
+    suffix = children[end:]
+    trailing = ""
+    if not suffix:
+        # nothing follows the content, so a newline at its end is Visio's
+        # terminator rather than text; a trailing run keeps its own tail
+        stripped = content.rstrip("\n")
+        content, trailing = stripped, content[len(stripped) :]
+    return children[:start], content, suffix, trailing
+
+
+def substitute(text: str, context: dict[str, object]) -> str:
+    """Replace every `{{key}}` in `text` with its value from `context`."""
+    for key, value in context.items():
+        text = text.replace("{{" + key + "}}", str(value))
+    return text
+
+
+def _write_text(
+    shape_xml: Element,
+    value: str,
+    *,
+    prefix: list[Element],
+    suffix: list[Element],
+    trailing: str,
+) -> None:
+    """Write `value` as a shape element's text, putting back the runs around it.
+
+    Every argument is required: this writes back a split the caller already
+    holds, and deriving a missing one here would silently discard whichever the
+    caller did pass.
+    """
+    value += trailing
+    tag = f"{namespace}Text"
+    text_element = shape_xml.find(tag)
+    if not isinstance(text_element, Element):  # create Text element if not found
+        text_element = Element(tag)
+        shape_xml.append(text_element)
+    attrib = dict(text_element.attrib)  # e.g. xml:space="preserve"
+    text_element.clear()
+    text_element.attrib.update(attrib)
+    for run in prefix:
+        run.tail = None
+        text_element.append(run)
+    if prefix:
+        prefix[-1].tail = value
+    else:
+        text_element.text = value
+    for run in suffix:
+        text_element.append(run)
+
+
 class Cell:
     """Represents a Cell element in a vsdx xml file"""
 
@@ -1113,53 +1205,18 @@ class Shape:
         return ""
 
     def _text_runs(self) -> tuple[list[Element], str, list[Element], str]:
-        """Split the shape's text into leading runs, content, trailing runs and trailing newlines.
+        """This shape's text, split by `text_runs`, with master inheritance applied.
 
-        The leading and trailing runs are the Text element's own child
-        elements, not copies, so a caller may re-append them after clearing it.
-        Visio ends a Text element with a newline that is not part of the text;
-        it is reported separately so that setting the text puts it back.
+        Inheritance is the part only a Shape can resolve: a shape with no Text
+        element of its own shows its master's text, and inherits none of the
+        master's formatting runs.
         """
         text_element = self.xml.find(f"{namespace}Text")
-        if not isinstance(text_element, Element):
-            # A shape with no Text element of its own shows its master's text,
-            # and inherits none of the master's formatting runs.
-            if self.master_page_ID:
-                master = self.master_shape
-                if master is not None and master.text:
-                    return [], master.text, [], ""
-            return [], "", [], ""
-
-        children = list(text_element)
-        start = 0
-        if not text_element.text:
-            while start < len(children) and _is_formatting_run(children[start]):
-                start += 1
-                if children[start - 1].tail:
-                    break  # this run's trailing text is where the content starts
-
-        end = len(children)
-        while end > start:
-            candidate = children[end - 1]
-            tail = candidate.tail or ""
-            if not _is_formatting_run(candidate):
-                break
-            # only whitespace may follow the final run; nothing at all may sit
-            # between two runs, or the text before it belongs to the content
-            if tail.strip() if end == len(children) else tail:
-                break
-            end -= 1
-
-        leading = (text_element.text if start == 0 else children[start - 1].tail) or ""
-        content = leading + "".join(html.unescape(ET.tostring(child, encoding="unicode")) for child in children[start:end])
-        suffix = children[end:]
-        trailing = ""
-        if not suffix:
-            # nothing follows the content, so a newline at its end is Visio's
-            # terminator rather than text; a trailing run keeps its own tail
-            stripped = content.rstrip("\n")
-            content, trailing = stripped, content[len(stripped) :]
-        return children[:start], content, suffix, trailing
+        if not isinstance(text_element, Element) and self.master_page_ID:
+            master = self.master_shape
+            if master is not None and master.text:
+                return [], master.text, [], ""
+        return _text_runs_of(text_element)
 
     @property
     def text(self) -> str:
@@ -1168,24 +1225,7 @@ class Shape:
     @text.setter
     def text(self, value: str) -> None:
         prefix, _, suffix, trailing = self._text_runs()
-        value += trailing
-        tag = f"{namespace}Text"
-        text_element = self.xml.find(tag)
-        if not isinstance(text_element, Element):  # create Text element if not found
-            text_element = Element(tag)
-            self.xml.append(text_element)
-        attrib = dict(text_element.attrib)  # e.g. xml:space="preserve"
-        text_element.clear()
-        text_element.attrib.update(attrib)
-        for run in prefix:
-            run.tail = None
-            text_element.append(run)
-        if prefix:
-            prefix[-1].tail = value
-        else:
-            text_element.text = value
-        for run in suffix:
-            text_element.append(run)
+        _write_text(self.xml, value, prefix=prefix, suffix=suffix, trailing=trailing)
 
     @deprecation.deprecated(
         deprecated_in="0.5.0",
@@ -1320,12 +1360,13 @@ class Shape:
         ]
 
     def apply_text_filter(self, context: dict[str, object]) -> None:
-        # check text against all context keys
         text = self.text
-        for key in context:
-            r_key = "{{" + key + "}}"
-            text = text.replace(r_key, str(context[key]))
-        self.text = text
+        substituted = substitute(text, context)
+        # Writing back text that did not change is not free: a run between two
+        # pieces of content does not survive the round trip (#317), so a shape
+        # with nothing to substitute would be corrupted by being visited.
+        if substituted != text:
+            self.text = substituted
 
         for s in self.child_shapes:
             s.apply_text_filter(context)
