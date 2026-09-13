@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import io
+import re
 import threading
+import weakref
 import xml.etree.ElementTree as ET
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -11,12 +13,15 @@ from contextlib import contextmanager
 # Prefixes Visio itself writes. ElementTree invents `ns0:`, `ns1:`, ... for any
 # namespace it has no prefix for, and consumers stricter than Visio -- libvisio
 # (LibreOffice Draw) and draw.io's importer -- reject parts that arrive that
-# way (upstream dave-howard/vsdx#90, #35). Every vocabulary the library can
-# serialise therefore needs an entry here.
+# way (upstream dave-howard/vsdx#90, #35). Every vocabulary the library
+# introduces itself therefore needs an entry here.
 #
 # Two entries may share a prefix (`vt` belongs to both docPropsVTypes and the
 # Visio theme schema) because the map is applied per part, and no single part
 # uses both. `_prefixes_for` resolves any collision that does occur.
+#
+# A namespace that arrived already spelled is not respelled from this table: a
+# part keeps the prefixes it declared, which `_declared_prefixes` records.
 NAMESPACE_PREFIXES: dict[str, str] = {
     "http://schemas.microsoft.com/office/visio/2012/main": "",
     "http://schemas.microsoft.com/office/visio/2012/theme": "vt",
@@ -53,6 +58,19 @@ _GLOBAL_PREFIXES = {
 _registration_lock = threading.RLock()
 _registered = False
 
+# What each parsed part declared for itself: `{namespace uri: prefix}`, keyed by
+# the root element of the tree it was parsed into. A prefix is a property of the
+# document that chose it -- Lucidchart writes `lc:`, and inventing a prefix from
+# its URI wrote `<xwwwlucidchartcom:Property>` where Visio wrote `<lc:Property>`
+# (#282).
+#
+# Keyed on the root element rather than on the ElementTree because a part is
+# routinely rewrapped in a fresh tree before it is written, and held weakly so
+# that a part dropped from the package takes its prefixes with it.
+_declared_prefixes: weakref.WeakKeyDictionary[ET.Element, dict[str, str]] = weakref.WeakKeyDictionary()
+
+_GENERATED_PREFIX_RE = re.compile(r"ns\d+")
+
 
 def register_namespaces() -> None:
     """Register the process-wide namespace prefixes. Safe to call repeatedly."""
@@ -84,22 +102,43 @@ def _fallback_prefix(uri: str) -> str:
     return f"x{cleaned[:16]}" if cleaned else "x"
 
 
-def _prefixes_for(root: ET.Element) -> dict[str, str]:
-    """Map every namespace in a part to the prefix Visio writes for it.
+def _default_namespace_for(root: ET.Element, declared: dict[str, str], used: set[str]) -> str | None:
+    """The namespace to write unprefixed, or None to prefix them all.
 
-    The part's root vocabulary takes the default (empty) prefix, exactly as
-    Visio writes it; everything else keeps its conventional prefix.
+    Only one namespace can hold the default prefix, so a part that rebinds it on
+    a descendant has to give it to whichever came first. A part that declared
+    nothing about its own root vocabulary was built in memory rather than
+    parsed, and that vocabulary takes the default the way Visio writes it.
+    """
+    for uri, prefix in declared.items():
+        if prefix == "" and uri in used:
+            return uri
+    root_uri = root.tag[1:].partition("}")[0] if isinstance(root.tag, str) and root.tag.startswith("{") else None
+    return None if root_uri in declared else root_uri
+
+
+def _prefixes_for(root: ET.Element) -> dict[str, str]:
+    """Map every namespace in a part to the prefix it should be written with.
+
+    A namespace the part declared keeps the prefix the part gave it. Anything
+    else -- a vocabulary this library introduced, or a tree it built itself --
+    takes its conventional prefix from `NAMESPACE_PREFIXES`.
     """
     used = _namespaces_in(root) - {_XML_NAMESPACE}
-    default_uri = root.tag[1:].partition("}")[0] if isinstance(root.tag, str) and root.tag.startswith("{") else None
+    declared = _declared_prefixes.get(root, {})
+    default_uri = _default_namespace_for(root, declared, used)
 
     prefixes: dict[str, str] = {}
     taken: set[str] = {"xml", "xmlns"}
     if default_uri is not None:
         prefixes[default_uri] = ""
         taken.add("")
-    for uri in sorted(used - set(prefixes)):
-        prefix = NAMESPACE_PREFIXES.get(uri) or _fallback_prefix(uri)
+    # The part's own prefixes are claimed first, in the order it declared them.
+    # Where a declared prefix and a registered one collide, one of them has to
+    # be suffixed, and which one cannot be left to whichever URI sorts first.
+    chosen = [uri for uri in declared if declared[uri] and uri in used and uri not in prefixes]
+    for uri in [*chosen, *sorted(used - set(prefixes) - set(chosen))]:
+        prefix = declared.get(uri) or NAMESPACE_PREFIXES.get(uri) or _fallback_prefix(uri)
         if not prefix or prefix in taken:
             base = prefix or _fallback_prefix(uri)
             index = 2
@@ -175,11 +214,52 @@ def make_cell_element(name: str, v: object | None = None, f: object | None = Non
     return cell
 
 
+def _parse_part(data: bytes) -> ET.ElementTree[ET.Element]:
+    """Parse one package part, recording the namespace prefixes it declares.
+
+    A parsed tree holds expanded names and nothing else: by the time `ET.parse`
+    returns, which prefix stood for which namespace is gone, and the write side
+    has to guess one. The bindings are visible only during the parse, so they
+    are collected here and kept against the root element.
+    """
+    root: ET.Element | None = None
+    declared: dict[str, str] = {}
+    for event, payload in ET.iterparse(io.BytesIO(data), events=("start-ns", "start")):
+        if event == "start-ns":
+            prefix, uri = payload
+            # `ns0:` is ElementTree's invention, not a spelling any document
+            # chose: a part carrying one was written by a vsdx older than the
+            # per-part prefix fix, and keeping it would re-create #60
+            if _GENERATED_PREFIX_RE.fullmatch(prefix):
+                continue
+            # first binding wins: a part may bind the same namespace twice, and
+            # only one spelling of it can be written back
+            declared.setdefault(uri, prefix)
+        elif root is None:
+            root = payload
+    if root is None:  # pragma: no cover - a part with no root element fails to parse first
+        raise ValueError("XML part has no root element")
+    _declared_prefixes[root] = declared
+    return ET.ElementTree(root)
+
+
+def adopt_prefixes(root: ET.Element, source: ET.Element) -> None:
+    """Give a tree rebuilt from another the prefixes that other one declared.
+
+    Copying a page and rendering a template both serialise a part and parse the
+    string back, which loses the bindings `_parse_part` captured. Without this
+    the copy is written with an invented prefix while its source keeps `lc:`,
+    and one package spells the same vocabulary two ways.
+    """
+    declared = _declared_prefixes.get(source)
+    if declared is not None:
+        _declared_prefixes[root] = declared
+
+
 def file_to_xml(filename: str, zip_file_contents: dict[str, io.BytesIO]) -> ET.ElementTree[ET.Element] | None:
     """Import a file as an ElementTree."""
     if filename in zip_file_contents:
-        content: io.BytesIO = zip_file_contents[filename]
-        return ET.parse(io.BytesIO(content.getvalue()))
+        return _parse_part(zip_file_contents[filename].getvalue())
     return None
 
 

@@ -43,6 +43,7 @@ from .pages import Page, PagePosition  # noqa: E402
 from .shapes import Shape, find_or_create_shapes_tag  # noqa: E402
 from .templating import JinjaTemplatingMixin  # noqa: E402
 from .xmlio import (  # noqa: E402
+    adopt_prefixes,
     file_to_xml,
     register_namespaces,
     require_element,
@@ -960,7 +961,12 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         page_dir = f"{self.directory}/visio/pages/"  # TODO: better concatenation
 
         # create pageX.xml
-        new_page_xml: ET.ElementTree[ET.Element] = ET.ElementTree(ET.fromstring(new_page_xml_str))
+        new_page_root = ET.fromstring(new_page_xml_str)
+        if source_page is not None:
+            # a copied page reaches here as a string, which drops the prefixes
+            # its source declared; the copy is still the same page
+            adopt_prefixes(new_page_root, require_element(source_page.xml.getroot(), "source page root"))
+        new_page_xml: ET.ElementTree[ET.Element] = ET.ElementTree(new_page_root)
         new_page_path = page_dir + new_page_filename  # TODO: better concatenation
 
         # update pages.xml - insert the PageElement Element in it's correct location

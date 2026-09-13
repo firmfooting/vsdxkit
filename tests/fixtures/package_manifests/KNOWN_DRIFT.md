@@ -40,6 +40,10 @@ Across every fixture:
   source archive untouched.
 - **Attribute order inside an element.** ElementTree keeps the order it parsed,
   and no element in the corpus comes back rearranged.
+- **The XML itself.** Every part of an unchanged package comes back
+  canonically equal to the one that went in, third-party vocabularies
+  included: the prefix a document chose is the prefix it is written back
+  with (#282). What moves below is spelling.
 - **The content type declared for `/visio/document.xml`**, which is what makes a
   package macro-enabled. `diagram_with_macro.vsdm` is still macro-enabled after
   a round trip.
@@ -62,13 +66,11 @@ from that one round trip through ElementTree.
 | `visio/pages/_rels/pageN.xml.rels` | declaration, bytes | all that have them |
 | `visio/document.xml` | declaration, namespaces, bytes | 29 of 29 |
 | `visio/masters/masterN.xml` | declaration, namespaces, bytes | all 15 that have them |
-| `visio/pages/pageN.xml` | declaration, namespaces, bytes | all but the two below |
+| `visio/pages/pageN.xml` | declaration, namespaces, bytes | all but the one below |
 | `page1.xml` in `fixtures/com_reference/s05_swimlanes_cfflow.vsdx` | declaration, bytes | 1 |
-| `page1.xml` in `test5_master.vsdx` | declaration, namespaces, canonical, bytes | 1 |
 
 In the middle column, *declaration* is the XML declaration, *namespaces* is the
-set of prefixes the part binds, *canonical* means the XML itself changed and not
-only its spelling, and *bytes* is everything else.
+set of prefixes the part binds, and *bytes* is everything else.
 
 ### The causes
 
@@ -97,26 +99,12 @@ only its spelling, and *bytes* is everything else.
    `s05_swimlanes_cfflow.vsdx`, which carries a `ForeignData` image reference.
    It keeps its `xmlns:r`, which is why that fixture is the exception in the
    table.
-
-### The Lucidchart prefix rewrite
-
-`test5_master.vsdx`'s `visio/pages/page1.xml` carries Lucidchart
-`<lc:Property>` elements bound to `http://www.lucidchart.com`. That namespace is
-not in `vsdx.xmlio.NAMESPACE_PREFIXES`, so `_fallback_prefix` invents a prefix
-from the URI, and the part comes back as
-`<xwwwlucidchartcom:Property xmlns:xwwwlucidchartcom="http://www.lucidchart.com">`
-where Visio wrote `<lc:Property xmlns:lc="…">`. ElementTree also hoists the
-declaration to the root rather than leaving it on the element that uses it.
-
-Nothing is lost semantically: the elements resolve to the same expanded names
-either way. It is recorded here because the canonical hash can see it, and
-because it runs on the same machinery as issue #60. Consumers stricter than
-Visio do read prefixes, and the library does not preserve the ones it was
-handed. Any part carrying a vocabulary the library has no entry for will be
-respelled this way.
-
-#89's byte-preserving save removes it along with everything else here, so it
-needs no fix of its own.
+7. **Namespace declarations are hoisted to the root.** `test5_master.vsdx`
+   declares `xmlns:lc="http://www.lucidchart.com"` on each of the 28
+   `<lc:Property>` elements that use it; ElementTree declares it once, on
+   `<PageContents>`. The prefix is the one Lucidchart chose and the part is
+   canonically unchanged, so the hoisting costs bytes and nothing else; that
+   part's `namespaces` record moves for cause 6, like every other page.
 
 ## What #89 has to do
 
@@ -124,6 +112,6 @@ Two things empty this file. A part the library did not modify has to go back out
 exactly as it came in, which covers most of the table: `save_vsdx` currently
 rewrites all of those parts on every save whether anything in them changed or
 not. A part that was modified has to be re-serialised in Visio's own spelling:
-the same declaration, the same quoting, the same empty-element form, the same
-namespace declarations including the unused ones, and the prefixes the source
-used.
+the same declaration, the same quoting, the same empty-element form, and the
+same namespace declarations, including the unused ones, on the elements that
+declared them.
