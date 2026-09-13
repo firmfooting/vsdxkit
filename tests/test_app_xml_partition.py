@@ -77,6 +77,18 @@ def _counts(root: ET.Element) -> dict[str, int]:
     return counts
 
 
+def _heading_pairs_values(root: ET.Element) -> list[str]:
+    """HeadingPairs flattened to the text of each variant, in order.
+
+    `_counts` pairs the variants up, which a document holding something else
+    among them cannot be read that way at all. This says what is written, and
+    leaves the reading to the test.
+    """
+    heading_pairs = root.find(f"{ext_prop_namespace}HeadingPairs")
+    assert heading_pairs is not None, "app.xml has no HeadingPairs element"
+    return [(next(iter(variant)).text or "") for variant in heading_pairs.findall(f".//{vt_namespace}variant")]
+
+
 def _titles(root: ET.Element) -> list[str]:
     titles = root.find(f"{ext_prop_namespace}TitlesOfParts")
     assert titles is not None, "app.xml has no TitlesOfParts element"
@@ -309,3 +321,41 @@ def test_renaming_a_page_in_a_document_that_lists_no_parts_leaves_app_xml_alone(
 
     assert _page_names(saved) == ["Page-1", "Renamed", "Page-3"]
     assert _app_xml(saved).find(f"{ext_prop_namespace}TitlesOfParts") is None
+
+
+def test_a_variant_that_is_neither_a_name_nor_a_count_moves_no_section(basedir, tmp_path):
+    """One reading of HeadingPairs, for placing a title and for writing a count.
+
+    A variant holding something else sits between the names and the counts, so
+    a reader that pairs them off by position reads every name as the one
+    before it. A reader that takes the count from the variant after the name
+    is unmoved. Where those two readings were one each side of the same
+    operation, the count was read from a section that was not there and
+    written to one that was.
+    """
+    source = rewritten(
+        os.path.join(basedir, "test4_connectors.vsdx"),
+        os.path.join(str(tmp_path), "test4_connectors-odd-variant.vsdx"),
+        {
+            APP_PART: (
+                '<HeadingPairs><vt:vector size="4" baseType="variant">',
+                '<HeadingPairs><vt:vector size="5" baseType="variant"><vt:variant><vt:bool>true</vt:bool></vt:variant>',
+            )
+        },
+    )
+
+    with VisioFile(source) as vis:
+        vis.add_page("NewPage")
+        saved = _saved(vis, tmp_path, "odd-variant-add.vsdx")
+
+    app_xml = _app_xml(saved)
+    assert _heading_pairs_values(app_xml) == ["true", "Pages", "4", "Masters", "3"]
+    assert _titles(app_xml) == [
+        "Page-1",
+        "Page-2",
+        "Page-3",
+        "NewPage",
+        "Dynamic connector",
+        "Switch",
+        "Router",
+    ]

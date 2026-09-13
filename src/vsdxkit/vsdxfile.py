@@ -811,26 +811,29 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         root = self._part_root(self.app_xml, "docProps/app.xml")
         return require_element(root.find(f"{ext_prop_namespace}TitlesOfParts"), "app.xml TitlesOfParts")
 
-    def _heading_pairs_list(self) -> list[tuple[str, int]]:
-        """Each HeadingPairs entry as (name, count), in the order app.xml writes them.
+    def _heading_pairs_list(self) -> list[tuple[str, Element]]:
+        """Each section HeadingPairs names, as (name, the element holding its count).
 
-        HeadingPairs is a flat vector of alternating variants, a name then a
-        count, and that order is what cuts TitlesOfParts into sections. So the
-        count for one section is not enough to place anything: where its titles
-        begin is the sum of every count written before it.
+        HeadingPairs is a flat vector of variants holding a name and then a
+        count, and that order is what cuts TitlesOfParts into sections: where
+        one section's titles begin is the sum of every count written before it.
+
+        The count is taken from the variant after the name rather than from an
+        even/odd position in the vector, so one variant that is neither leaves
+        every section after it where it was. This is the only reading of
+        HeadingPairs in the package, and it yields the element rather than the
+        number so that writing a count does not need a second one. Two readings
+        is how a count came to be read from a section that was not there and
+        written to one that was.
         """
         variants = self._heading_pairs().findall(f".//{vt_namespace}variant")
-        # A variant holding neither a name nor a count names no section and
-        # counts no titles, which leaves the sections after it at the offsets
-        # they already had. `strict=False` drops a trailing variant with no
-        # partner for the same reason.
-        return [
-            (
-                name_variant.findtext(f".//{vt_namespace}lpstr", ""),
-                int(count_variant.findtext(f".//{vt_namespace}i4", "") or 0),
-            )
-            for name_variant, count_variant in zip(variants[::2], variants[1::2], strict=False)
-        ]
+        pairs: list[tuple[str, Element]] = []
+        for position, variant in enumerate(variants[:-1]):
+            name = variant.find(f".//{vt_namespace}lpstr")
+            count = variants[position + 1].find(f".//{vt_namespace}i4")
+            if name is not None and count is not None:
+                pairs.append((name.text or "", count))
+        return pairs
 
     def _titles_of_parts_section(self, section: str) -> tuple[Element, int, int]:
         """The TitlesOfParts vector, and the ``[start, stop)`` slice of it `section` owns.
@@ -848,9 +851,10 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         total = len(vector)
         start = 0
         for name, count in self._heading_pairs_list():
+            titles_here = int(count.text or 0)
             if name == section:
-                return vector, min(start, total), min(start + count, total)
-            start += count
+                return vector, min(start, total), min(start + titles_here, total)
+            start += titles_here
         return vector, total, total
 
     def _section_count(self, section: str, change: int) -> None:
@@ -917,21 +921,14 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         """The count HeadingPairs gives `name`, or None if it names no such section."""
         for section, count in self._heading_pairs_list():
             if section == name:
-                return str(count)
+                return count.text or ""
         return None
 
     def _set_app_xml_value(self, name: str, value: str) -> None:
-        variants = self._heading_pairs().findall(f".//{vt_namespace}variant")
-        # find Pages in headings
-        for index in range(len(variants)):
-            v = variants[index]
-            lpstr = v.find(f".//{vt_namespace}lpstr")
-            if type(lpstr) is Element and lpstr.text == name:
-                next_v = variants[index + 1] if index < (len(variants) - 1) else None  # next variant if there is one
-                i4 = next_v.find(f".//{vt_namespace}i4") if type(next_v) is Element else None
-                if type(i4) is Element:
-                    i4.text = value
-                    return
+        for section, count in self._heading_pairs_list():
+            if section == name:
+                count.text = value
+                return
         # no matching variant found - so create new item and populate it
         vector = require_element(
             self._heading_pairs().find(f".//{vt_namespace}vector"), "HeadingPairs vector"
