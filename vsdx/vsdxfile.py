@@ -1247,14 +1247,14 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
 
     @override
     def increment_sub_shape_ids(self, shape: Shape, page: Page, id_map: dict[str, int] | None = None) -> dict[str, int]:
+        """Renumber a shape and everything under it, then remap its formulas.
+
+        The layer-by-layer re-walk this used to do is gone: it made up for an
+        allocation walk that stopped short, and gave every child a second ID it
+        then threw away. ``increment_shape_ids`` now reaches the whole subtree.
+        """
         id_map = self.increment_shape_ids(shape.xml, page, id_map)
         self.update_ids(shape.xml, id_map)
-        for s in shape.child_shapes:
-            # the page mark was synced on the way in; the children continue that run
-            id_map = self._increment_shape_ids(s.xml, page, id_map)
-            self.update_ids(s.xml, id_map)
-            if s.child_shapes:
-                id_map = self.increment_sub_shape_ids(s, page, id_map)
         return id_map
 
     def copy_shape(self, shape: Element, page: Page) -> Element:
@@ -1302,23 +1302,41 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         Duplicate IDs make ``Connect`` records ambiguous and Visio offers to
         repair the file. Every entry into this method syncs, including one that
         passes an ``id_map`` to collect the mapping, because a caller who has to
-        remember is the fault being fixed. Only ``_increment_shape_ids``
-        recurses, so the page is scanned once per call rather than per shape.
+        remember is the fault being fixed. The page is scanned once here, and
+        the walk below allocates without scanning again.
+
+        That walk covers the whole subtree, to any depth. It used to descend
+        into a ``Shapes`` container but then only stamp the ``Shape`` elements
+        directly inside it, so a group's grandchildren arrived in the copy
+        still carrying their original IDs.
+
+        Only ``Shape`` elements are numbered. A ``Shapes`` container is not a
+        shape and takes no ``ID`` in the schema, and numbering one consumed an
+        ID that ``Page._set_max_ids`` could not see, since that scan looks at
+        shapes; a later allocation could then hand the same number to a real
+        shape. A root element outside the Visio namespace is left alone for the
+        same reason, so a caller that hand-builds one must namespace it to have
+        it numbered.
+
+        :param shape: root of the copied subtree, normally a ``Shape`` element
+        :param page: destination page, which owns the ID high-water mark
+        :param id_map: mapping to extend, so several subtrees copied together
+            share one map; a new one is started when omitted
+        :return: the ID map, old ID -> new ID, for ``update_ids`` to apply
         """
         page._set_max_ids()
-        return self._increment_shape_ids(shape, page, {} if id_map is None else id_map)
-
-    def _increment_shape_ids(self, shape: Element, page: Page, id_map: dict[str, int]) -> dict[str, int]:
-        """Allocate IDs within a run whose page mark is already synced."""
-        self.set_new_id(shape, page, id_map)
-        for e in shape.findall(f"{namespace}Shapes"):
-            self._increment_shape_ids(e, page, id_map)
-        for e in shape.findall(f"{namespace}Shape"):
-            self.set_new_id(e, page, id_map)
-
+        if id_map is None:
+            id_map = {}
+        for element in shape.iter(f"{namespace}Shape"):
+            self.set_new_id(element, page, id_map)
         return id_map
 
     def set_new_id(self, element: Element, page: Page, id_map: dict[str, int]) -> int:
+        """Stamp the next free page ID onto one Shape element.
+
+        Call this only for a ``Shape``; ``increment_shape_ids`` is what decides
+        which elements qualify.
+        """
         max_id = page._next_shape_id()
         if element.attrib.get("ID"):
             current_id = element.attrib["ID"]
