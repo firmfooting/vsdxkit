@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from enum import IntEnum
 from typing import TYPE_CHECKING
 
@@ -20,6 +20,10 @@ from vsdx import namespace
 from .connectors import Connect
 from .shapes import Shape, parent_of
 from .xmlio import require_element, xml_value
+
+# the two places a Connect record names a shape: the connector it leads from,
+# and the shape that connector is glued to
+_CONNECT_SHEET_ATTRIBUTES = ("FromSheet", "ToSheet")
 
 
 def _dimension_value(value: float | str | None) -> str:
@@ -603,14 +607,40 @@ class Page:
         if connects_el is None:
             return
         normalised_ids = {str(connector_id) for connector_id in connector_ids}
+        attributes = ("FromSheet",) if match == "from" else _CONNECT_SHEET_ATTRIBUTES
         for connect in list(connects_el):
-            named = (
-                {connect.attrib.get("FromSheet")}
-                if match == "from"
-                else {
-                    connect.attrib.get("FromSheet"),
-                    connect.attrib.get("ToSheet"),
-                }
-            )
-            if normalised_ids & named:
+            if normalised_ids & {connect.attrib.get(attribute) for attribute in attributes}:
                 connects_el.remove(connect)
+
+    def _remap_connect_records(self, id_map: Mapping[str, int]) -> None:
+        """Point the records at the new ids of shapes this page has renumbered.
+
+        Shape ids live in two places: the ``Sheet.N!`` references inside cell
+        formulas, which ``VisioFile.update_ids`` rewrites, and the ``FromSheet``
+        and ``ToSheet`` attributes here. Only the formulas were maintained, so a
+        renumbered shape left its glue naming an id that was no longer on the
+        page, and Visio rebinds glue like that silently.
+
+        Private plumbing for ``VisioFile.renumber_shape_ids()``, which decides
+        what belongs in the map: only the ids that renumbering vacated. An id
+        still in use, or one that was never on this page, names a record that
+        means what it says, and remapping it would hand a copy the original's
+        glue or let an arriving shape inherit glue from a record some other
+        writer left behind.
+        """
+        connects_el = self.xml.find(f".//{namespace}Connects")
+        if connects_el is None:
+            return
+        for connect in connects_el:
+            for attribute in _CONNECT_SHEET_ATTRIBUTES:
+                new_id = id_map.get(connect.attrib.get(attribute, ""))
+                if new_id is not None:
+                    connect.attrib[attribute] = str(new_id)
+
+    def _shape_ids(self) -> set[str]:
+        """Every shape id the page's xml declares right now.
+
+        Read off the elements rather than through ``all_shapes``, which builds a
+        ``Shape`` per element to answer a question about the xml.
+        """
+        return {shape_id for element in self.xml.iter(f"{namespace}Shape") if (shape_id := element.attrib.get("ID"))}

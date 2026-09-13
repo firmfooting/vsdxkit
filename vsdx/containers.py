@@ -166,8 +166,7 @@ class Container:
         shapes_tag = self.page.xml.find(f"{vsdx.namespace}Shapes")
         if shapes_tag is None:
             raise ValueError("page has no Shapes tag")
-        id_map = self.page.vis.increment_shape_ids(new_xml, self.page)
-        self.page.vis.update_ids(new_xml, id_map)
+        self.page.vis.renumber_shape_ids(new_xml, self.page)
         shapes_tag.append(new_xml)
         new_lane = Shape(xml=new_xml, parent=self.page, page=self.page)
 
