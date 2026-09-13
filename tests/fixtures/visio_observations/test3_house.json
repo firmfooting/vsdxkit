@@ -1,0 +1,73 @@
+{
+  "error": null,
+  "pages": [
+    {
+      "background": false,
+      "connects": [],
+      "index": 1,
+      "name": "Page-1",
+      "shapes": [
+        {
+          "id": 1,
+          "name": "Sheet.1",
+          "parent_id": null
+        },
+        {
+          "id": 5,
+          "name": "Sheet.5",
+          "parent_id": null
+        },
+        {
+          "id": 7,
+          "name": "Sheet.7",
+          "parent_id": null
+        },
+        {
+          "id": 8,
+          "name": "Sheet.8",
+          "parent_id": 7
+        },
+        {
+          "id": 9,
+          "name": "Sheet.9",
+          "parent_id": 7
+        },
+        {
+          "id": 10,
+          "name": "Sheet.10",
+          "parent_id": 7
+        },
+        {
+          "id": 11,
+          "name": "Sheet.11",
+          "parent_id": null
+        },
+        {
+          "id": 12,
+          "name": "Sheet.12",
+          "parent_id": 11
+        },
+        {
+          "id": 13,
+          "name": "Sheet.13",
+          "parent_id": 11
+        },
+        {
+          "id": 14,
+          "name": "Sheet.14",
+          "parent_id": 11
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "source": {
+    "name": "test3_house.vsdx",
+    "sha256": "e454217e49d1ec2aaa7c9b8f38b148ffc0d028ce44ba096fe3386e9894b1775f"
+  },
+  "status": "opened",
+  "viewer": {
+    "product": "Visio",
+    "version": "16.0"
+  }
+}

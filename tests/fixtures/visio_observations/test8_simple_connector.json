@@ -1,0 +1,33 @@
+{
+  "error": null,
+  "pages": [
+    {
+      "background": false,
+      "connects": [],
+      "index": 1,
+      "name": "Page-1",
+      "shapes": [
+        {
+          "id": 1,
+          "name": "Sheet.1",
+          "parent_id": null
+        },
+        {
+          "id": 5,
+          "name": "Sheet.5",
+          "parent_id": null
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "source": {
+    "name": "test8_simple_connector.vsdx",
+    "sha256": "92e8ad6155c95a3e9f94e62215a3ba7c7b0739ac870deadb63cab5d6b2dd30bc"
+  },
+  "status": "opened",
+  "viewer": {
+    "product": "Visio",
+    "version": "16.0"
+  }
+}

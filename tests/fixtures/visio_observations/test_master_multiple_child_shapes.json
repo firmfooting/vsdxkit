@@ -1,0 +1,58 @@
+{
+  "error": null,
+  "pages": [
+    {
+      "background": false,
+      "connects": [],
+      "index": 1,
+      "name": "Page-1",
+      "shapes": [
+        {
+          "id": 1,
+          "name": "Sheet.1",
+          "parent_id": null
+        },
+        {
+          "id": 2,
+          "name": "Sheet.2",
+          "parent_id": 1
+        },
+        {
+          "id": 3,
+          "name": "Sheet.3",
+          "parent_id": 1
+        },
+        {
+          "id": 4,
+          "name": "Sheet.4",
+          "parent_id": 1
+        },
+        {
+          "id": 5,
+          "name": "Sheet.5",
+          "parent_id": 4
+        },
+        {
+          "id": 6,
+          "name": "Sheet.6",
+          "parent_id": 4
+        },
+        {
+          "id": 7,
+          "name": "Sheet.7",
+          "parent_id": 4
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "source": {
+    "name": "test_master_multiple_child_shapes.vsdx",
+    "sha256": "0475359308d251f5ee00eb2127d4f4104adf79f1ecc61ddc610ffce5ab019170"
+  },
+  "status": "opened",
+  "viewer": {
+    "product": "Visio",
+    "version": "16.0"
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "error": null,
+  "pages": [
+    {
+      "background": false,
+      "connects": [
+        {
+          "from_cell": "BeginX",
+          "from_shape": 7,
+          "to_cell": "PinX",
+          "to_shape": 5
+        },
+        {
+          "from_cell": "EndX",
+          "from_shape": 7,
+          "to_cell": "PinX",
+          "to_shape": 2
+        }
+      ],
+      "index": 1,
+      "name": "Page-1",
+      "shapes": [
+        {
+          "id": 1,
+          "name": "Sheet.1",
+          "parent_id": null
+        },
+        {
+          "id": 2,
+          "name": "Sheet.2",
+          "parent_id": null
+        },
+        {
+          "id": 5,
+          "name": "Sheet.5",
+          "parent_id": null
+        },
+        {
+          "id": 6,
+          "name": "Sheet.6",
+          "parent_id": null
+        },
+        {
+          "id": 7,
+          "name": "Sheet.7",
+          "parent_id": null
+        },
+        {
+          "id": 8,
+          "name": "Sheet.8",
+          "parent_id": null
+        },
+        {
+          "id": 9,
+          "name": "Sheet.9",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "background": false,
+      "connects": [],
+      "index": 2,
+      "name": "Page-2",
+      "shapes": []
+    },
+    {
+      "background": false,
+      "connects": [],
+      "index": 3,
+      "name": "Page-3",
+      "shapes": [
+        {
+          "id": 1,
+          "name": "Sheet.1",
+          "parent_id": null
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "source": {
+    "name": "test7_with_connector.vsdx",
+    "sha256": "c78114794b3e344c489748b5debe4a85332685c9bcda7fe848f2ddc33f63a50f"
+  },
+  "status": "opened",
+  "viewer": {
+    "product": "Visio",
+    "version": "16.0"
+  }
+}
