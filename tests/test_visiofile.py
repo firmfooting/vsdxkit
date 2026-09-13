@@ -9,8 +9,8 @@ from xml.etree.ElementTree import Element
 
 import pytest
 
-from vsdx import Media, PagePosition, VisioFile, ext_prop_namespace, namespace, vt_namespace
-from vsdx.vsdxfile import file_to_xml
+from vsdxkit import Media, PagePosition, VisioFile, ext_prop_namespace, namespace, vt_namespace
+from vsdxkit.vsdxfile import file_to_xml
 
 
 def _media_filename() -> str:
@@ -133,7 +133,7 @@ def test_open_abs_path():
 
 
 def test_page_relationship_lookup_uses_opc_path_separator():
-    from vsdx.vsdxfile import _page_relationship_path
+    from vsdxkit.vsdxfile import _page_relationship_path
 
     rel_dir = "C:\\diagram/visio/pages/_rels/"
     page_path = "C:\\diagram/visio/pages/page1.xml"

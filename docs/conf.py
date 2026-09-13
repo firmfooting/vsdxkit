@@ -5,13 +5,13 @@ import sys
 
 sys.path.insert(0, os.path.abspath(".."))
 
-import vsdx
+import vsdxkit
 
 project = "vsdxkit"
 copyright = "2020–2026, Dave Howard and Firm Footing"  # noqa: RUF001  # holders as in LICENSE
 author = "Dave Howard and Firm Footing"
-release = vsdx.__version__
-version = vsdx.__version__
+release = vsdxkit.__version__
+version = vsdxkit.__version__
 
 extensions = [
     "sphinx.ext.autodoc",

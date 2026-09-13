@@ -24,7 +24,7 @@ import tarfile
 import tempfile
 from pathlib import Path
 
-# Directories whose tracked contents must reach the sdist in full. vsdx/ is not
+# Directories whose tracked contents must reach the sdist in full. vsdxkit/ is not
 # among them: the wheel smoke test already covers the package, and setuptools
 # puts the package in the sdist with or without a manifest.
 REQUIRED_TREES = ("tests", "tools")

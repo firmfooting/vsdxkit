@@ -1,15 +1,15 @@
 import pkgutil
 from importlib import import_module
 
-import vsdx
+import vsdxkit
 
 
 def test_all_package_modules_import():
     discovery_errors: list[str] = []
     modules = list(
         pkgutil.walk_packages(
-            vsdx.__path__,
-            f"{vsdx.__name__}.",
+            vsdxkit.__path__,
+            f"{vsdxkit.__name__}.",
             onerror=discovery_errors.append,
         )
     )

@@ -5,7 +5,7 @@ Run by the release workflow before anything is built:
     python tools/check_version_tag.py "$GITHUB_REF"
 
 PyPI accepts each version exactly once, so a tag that disagrees with
-`vsdx.__version__` publishes an uncorrectable mistake. The tag may be given as
+`vsdxkit.__version__` publishes an uncorrectable mistake. The tag may be given as
 a bare version, a `v`-prefixed tag, or a full `refs/tags/...` ref.
 """
 
@@ -37,11 +37,11 @@ def mismatch(tag: str, version: str) -> str | None:
 
 
 def packaged_version() -> str:
-    """Read `vsdx.__version__` without importing the package's dependencies."""
-    source = (Path(__file__).resolve().parent.parent / "vsdx" / "__init__.py").read_text(encoding="utf-8")
+    """Read `vsdxkit.__version__` without importing the package's dependencies."""
+    source = (Path(__file__).resolve().parent.parent / "src" / "vsdxkit" / "__init__.py").read_text(encoding="utf-8")
     found = re.search(r'^__version__\s*=\s*["\']([^"\']+)["\']', source, re.MULTILINE)
     if found is None:
-        raise SystemExit("could not find __version__ in vsdx/__init__.py")
+        raise SystemExit("could not find __version__ in src/vsdxkit/__init__.py")
     return found.group(1)
 
 
@@ -58,7 +58,7 @@ def main(argv: list[str]) -> int:
     if problem is not None:
         print(f"FAIL: {problem}")
         return 1
-    print(f"ok: tag {argv[0]} matches vsdx.__version__ {version}")
+    print(f"ok: tag {argv[0]} matches vsdxkit.__version__ {version}")
     return 0
 
 

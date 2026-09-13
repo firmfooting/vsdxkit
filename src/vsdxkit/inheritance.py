@@ -1,9 +1,9 @@
 """One marker for a row a shape inherits from its master.
 
-A shape with a master reads through the master's rows. :class:`vsdx.Geometry`
-merges the master's :class:`vsdx.GeometryRow` objects into its own, and
-:attr:`vsdx.Shape.data_properties` merges the master's
-:class:`vsdx.DataProperty` objects. Either way the object handed back holds the
+A shape with a master reads through the master's rows. :class:`vsdxkit.Geometry`
+merges the master's :class:`vsdxkit.GeometryRow` objects into its own, and
+:attr:`vsdxkit.Shape.data_properties` merges the master's
+:class:`vsdxkit.DataProperty` objects. Either way the object handed back holds the
 *master page's* XML, so a setter that writes to it edits the master and changes
 every other shape drawn from it.
 

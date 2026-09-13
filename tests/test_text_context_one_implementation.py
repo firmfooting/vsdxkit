@@ -6,8 +6,8 @@ both claim to do this. They used to disagree.
 
 import xml.etree.ElementTree as ET
 
-import vsdx
-from vsdx import VisioFile, namespace
+import vsdxkit
+from vsdxkit import VisioFile, namespace
 
 NS = namespace[1:-1]
 
@@ -121,7 +121,7 @@ def _seed_some(path: str) -> int:
     local text and dissolve the one case where the two routes differ - leaving
     a parity assertion that cannot fail.
     """
-    with vsdx.VisioFile(path) as document:
+    with vsdxkit.VisioFile(path) as document:
         seeded = 0
         for shape in document.pages[0].all_shapes:
             if shape.xml.find(f"{namespace}Text") is None:
@@ -141,14 +141,14 @@ def test_the_two_entry_points_agree_on_shapes_that_hold_their_own_text(vsdx_copy
     seeded = _seed_some(through_page)
     assert seeded > 1, "the fixture has to have shapes with text for this to compare anything"
 
-    with vsdx.VisioFile(through_page) as document:
+    with vsdxkit.VisioFile(through_page) as document:
         page = document.pages[0]
         page.apply_text_context({"tok": "SUBSTITUTED"})
         by_page = sorted(shape.text for shape in page.all_shapes)
 
     through_static = vsdx_copy("test2.vsdx")
     _seed_some(through_static)
-    with vsdx.VisioFile(through_static) as document:
+    with vsdxkit.VisioFile(through_static) as document:
         page = document.pages[0]
         VisioFile.apply_text_context(page.xml.getroot(), {"tok": "SUBSTITUTED"})
         by_static = sorted(shape.text for shape in page.all_shapes)

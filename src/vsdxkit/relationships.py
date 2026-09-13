@@ -16,8 +16,8 @@ from __future__ import annotations
 
 from xml.etree.ElementTree import Element
 
-from vsdx import cont_types_namespace as CONTENT_TYPES_NS
-from vsdx import document_rels_namespace as RELATIONSHIPS_NS
+from vsdxkit import cont_types_namespace as CONTENT_TYPES_NS
+from vsdxkit import document_rels_namespace as RELATIONSHIPS_NS
 
 __all__ = [
     "all_of",

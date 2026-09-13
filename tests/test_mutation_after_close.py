@@ -11,17 +11,17 @@ from collections.abc import Callable
 
 import pytest
 
-import vsdx
+import vsdxkit
 
 BASE = "test4_connectors.vsdx"
 
-Mutation = Callable[[vsdx.VisioFile, vsdx.Page, vsdx.Shape, vsdx.Shape], object]
+Mutation = Callable[[vsdxkit.VisioFile, vsdxkit.Page, vsdxkit.Shape, vsdxkit.Shape], object]
 
 
 @pytest.fixture
 def closed_document(vsdx_copy):
     """Handles taken while open, so each test mutates through a live reference."""
-    vis = vsdx.VisioFile(vsdx_copy(BASE))
+    vis = vsdxkit.VisioFile(vsdx_copy(BASE))
     page = vis.pages[0]
     shapes = page.child_shapes
     connect = page.connects[0]
@@ -67,21 +67,21 @@ ALL_MUTATIONS: dict[str, Mutation] = DOCUMENT_MUTATIONS | PAGE_MUTATIONS
 @pytest.mark.parametrize("mutation", DOCUMENT_MUTATIONS.values(), ids=list(DOCUMENT_MUTATIONS))
 def test_document_mutation_after_close_raises(closed_document, mutation):
     vis, page, shape_a, shape_b, _ = closed_document
-    with pytest.raises(vsdx.VisioFileNotOpen):
+    with pytest.raises(vsdxkit.VisioFileNotOpen):
         mutation(vis, page, shape_a, shape_b)
 
 
 @pytest.mark.parametrize("mutation", PAGE_MUTATIONS.values(), ids=list(PAGE_MUTATIONS))
 def test_page_mutation_after_close_raises(closed_document, mutation):
     vis, page, shape_a, shape_b, _ = closed_document
-    with pytest.raises(vsdx.VisioFileNotOpen):
+    with pytest.raises(vsdxkit.VisioFileNotOpen):
         mutation(vis, page, shape_a, shape_b)
 
 
 def test_add_connect_after_close_raises(closed_document):
     """Kept out of the table: the Connect has to be taken before the close."""
     _, page, _, _, connect = closed_document
-    with pytest.raises(vsdx.VisioFileNotOpen):
+    with pytest.raises(vsdxkit.VisioFileNotOpen):
         page.add_connect(connect)
 
 
@@ -96,7 +96,7 @@ def test_a_refused_mutation_changes_nothing(closed_document, mutation):
     before = [ET.tostring(p.xml.getroot()) for p in vis.pages]
     page_names = vis.get_page_names()
 
-    with pytest.raises(vsdx.VisioFileNotOpen):
+    with pytest.raises(vsdxkit.VisioFileNotOpen):
         mutation(vis, page, shape_a, shape_b)
 
     assert [ET.tostring(p.xml.getroot()) for p in vis.pages] == before
@@ -105,9 +105,9 @@ def test_a_refused_mutation_changes_nothing(closed_document, mutation):
 
 def test_deprecated_name_aliases_are_guarded(closed_document):
     _, page, _, _, _ = closed_document
-    with pytest.deprecated_call(), pytest.raises(vsdx.VisioFileNotOpen):
+    with pytest.deprecated_call(), pytest.raises(vsdxkit.VisioFileNotOpen):
         page.set_name("renamed")
-    with pytest.deprecated_call(), pytest.raises(vsdx.VisioFileNotOpen):
+    with pytest.deprecated_call(), pytest.raises(vsdxkit.VisioFileNotOpen):
         page.page_name = "renamed"
 
 
@@ -130,8 +130,8 @@ def test_the_guard_follows_the_page_not_the_receiver(vsdx_copy):
     Guarding the receiver instead would refuse a copy out of a closed source
     into a live document, and wave through a copy into a closed one.
     """
-    source = vsdx.VisioFile(vsdx_copy(BASE))
-    destination = vsdx.VisioFile(vsdx_copy("test1.vsdx"))
+    source = vsdxkit.VisioFile(vsdx_copy(BASE))
+    destination = vsdxkit.VisioFile(vsdx_copy("test1.vsdx"))
     from_closed_source = source.pages[0].child_shapes[0]
     into_closed_destination = destination.pages[0].child_shapes[0]
 
@@ -140,33 +140,33 @@ def test_the_guard_follows_the_page_not_the_receiver(vsdx_copy):
     assert destination.pages[0].find_shape_by_id(str(copied.ID)) is not None
 
     destination.close_vsdx()
-    with pytest.raises(vsdx.VisioFileNotOpen):
+    with pytest.raises(vsdxkit.VisioFileNotOpen):
         into_closed_destination.copy(destination.pages[0])
 
 
-def record_media_builds(monkeypatch) -> list[vsdx.Media]:
+def record_media_builds(monkeypatch) -> list[vsdxkit.Media]:
     """Record every Media built for the duration of a test."""
-    built: list[vsdx.Media] = []
-    real_media = vsdx.Media
+    built: list[vsdxkit.Media] = []
+    real_media = vsdxkit.Media
 
     class RecordingMedia(real_media):  # type: ignore[misc, valid-type]
         def __init__(self) -> None:
             built.append(self)
             super().__init__()
 
-    monkeypatch.setattr(vsdx, "Media", RecordingMedia)
+    monkeypatch.setattr(vsdxkit, "Media", RecordingMedia)
     return built
 
 
 def test_create_shape_after_close_builds_no_second_donor(vsdx_copy, monkeypatch):
     built = record_media_builds(monkeypatch)
-    vis = vsdx.VisioFile(vsdx_copy(BASE))
+    vis = vsdxkit.VisioFile(vsdx_copy(BASE))
     page = vis.pages[0]
     vis.create_shape(page, "PALETTE_PROCESS", 1.0, 1.0, text="A")
     assert len(built) == 1
 
     vis.close_vsdx()
-    with pytest.raises(vsdx.VisioFileNotOpen):
+    with pytest.raises(vsdxkit.VisioFileNotOpen):
         vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="B")
 
     assert len(built) == 1, "a closed document built a second donor pair that nothing will close"
@@ -177,19 +177,19 @@ def test_create_shape_after_close_builds_no_second_donor(vsdx_copy, monkeypatch)
 
 def test_connect_shapes_after_close_builds_no_donor(vsdx_copy, monkeypatch):
     built = record_media_builds(monkeypatch)
-    vis = vsdx.VisioFile(vsdx_copy(BASE))
+    vis = vsdxkit.VisioFile(vsdx_copy(BASE))
     page = vis.pages[0]
     shapes = page.child_shapes
 
     vis.close_vsdx()
-    with pytest.raises(vsdx.VisioFileNotOpen):
+    with pytest.raises(vsdxkit.VisioFileNotOpen):
         page.connect_shapes(shapes[0], shapes[1])
 
     assert built == []
     assert vis._media is None
 
 
-def _page_xml(vis: vsdx.VisioFile) -> list[bytes]:
+def _page_xml(vis: vsdxkit.VisioFile) -> list[bytes]:
     """Every page's XML, master pages included.
 
     A write through a row a shape inherits lands on the *master* page, so a
@@ -198,14 +198,14 @@ def _page_xml(vis: vsdx.VisioFile) -> list[bytes]:
     return [ET.tostring(page.xml.getroot()) for page in list(vis.pages) + list(vis.master_pages)]
 
 
-def _geometry(shape: vsdx.Shape) -> vsdx.Geometry:
+def _geometry(shape: vsdxkit.Shape) -> vsdxkit.Geometry:
     """The shape's Geometry; fails the test if the fixture shape has none."""
     geometry = shape.geometry
     assert geometry is not None, "fixture shape has no Geometry section"
     return geometry
 
 
-def _first_row(shape: vsdx.Shape) -> vsdx.GeometryRow:
+def _first_row(shape: vsdxkit.Shape) -> vsdxkit.GeometryRow:
     return next(iter(_geometry(shape).rows.values()))
 
 
@@ -269,7 +269,7 @@ SHAPE_LEVEL_MUTATIONS: dict[str, Mutation] = SHAPE_MUTATIONS | CELL_MUTATIONS | 
 def test_shape_level_mutation_after_close_raises(closed_document, mutation):
     """Issue #329: the guard belongs to the operation, not to VisioFile and Page alone."""
     vis, page, shape_a, shape_b, _ = closed_document
-    with pytest.raises(vsdx.VisioFileNotOpen):
+    with pytest.raises(vsdxkit.VisioFileNotOpen):
         mutation(vis, page, shape_a, shape_b)
 
 
@@ -278,7 +278,7 @@ def test_a_refused_shape_level_mutation_changes_nothing(closed_document, mutatio
     vis, page, shape_a, shape_b, _ = closed_document
     before = _page_xml(vis)
 
-    with pytest.raises(vsdx.VisioFileNotOpen):
+    with pytest.raises(vsdxkit.VisioFileNotOpen):
         mutation(vis, page, shape_a, shape_b)
 
     assert _page_xml(vis) == before
@@ -286,7 +286,7 @@ def test_a_refused_shape_level_mutation_changes_nothing(closed_document, mutatio
 
 def test_data_property_mutation_after_close_raises(vsdx_copy):
     """Kept out of the table: only this fixture carries data properties."""
-    vis = vsdx.VisioFile(vsdx_copy("test6_shape_properties.vsdx"))
+    vis = vsdxkit.VisioFile(vsdx_copy("test6_shape_properties.vsdx"))
     page = vis.pages[0]
     shape = page.find_shape_by_id("1")
     assert shape is not None
@@ -300,7 +300,7 @@ def test_data_property_mutation_after_close_raises(vsdx_copy):
         lambda: prop.remove_attribute("Value", "V"),
     ]
     for mutation in mutations:
-        with pytest.raises(vsdx.VisioFileNotOpen):
+        with pytest.raises(vsdxkit.VisioFileNotOpen):
             mutation()
     assert ET.tostring(page.xml.getroot()) == before
 
@@ -310,7 +310,7 @@ CFF_FIXTURE = "fixtures/com_reference/s05_swimlanes_cfflow.vsdx"
 
 def test_container_mutation_after_close_raises(vsdx_copy):
     """`Page.add_swimlane` is guarded; the Container behind it was not."""
-    vis = vsdx.VisioFile(vsdx_copy(CFF_FIXTURE))
+    vis = vsdxkit.VisioFile(vsdx_copy(CFF_FIXTURE))
     page = vis.pages[0]
     container = page.get_container()
     assert container is not None
@@ -325,7 +325,7 @@ def test_container_mutation_after_close_raises(vsdx_copy):
         (lambda: container.add_shape_to_lane(member, container.lanes[1]), "Container.add_shape_to_lane()"),
     ]
     for mutation, method in named:
-        with pytest.raises(vsdx.VisioFileNotOpen) as excinfo:
+        with pytest.raises(vsdxkit.VisioFileNotOpen) as excinfo:
             mutation()
         assert method in str(excinfo.value)
     assert ET.tostring(page.xml.getroot()) == before
@@ -334,14 +334,14 @@ def test_container_mutation_after_close_raises(vsdx_copy):
 def test_moving_a_shape_into_a_group_after_close_raises(vsdx_copy):
     """`append_shape` raised on one branch only: its guard came from
     `renumber_shape_ids`, which a shape already on the page never reaches."""
-    vis = vsdx.VisioFile(vsdx_copy("test10_nested_shapes.vsdx"))
+    vis = vsdxkit.VisioFile(vsdx_copy("test10_nested_shapes.vsdx"))
     page = vis.pages[0]
     group = next(s for s in page.child_shapes if s.shape_type == "Group")
     moving = next(s for s in page.child_shapes if s.shape_type != "Group")
     before = ET.tostring(page.xml.getroot())
     vis.close_vsdx()
 
-    with pytest.raises(vsdx.VisioFileNotOpen):
+    with pytest.raises(vsdxkit.VisioFileNotOpen):
         group.append_shape(moving)
     assert ET.tostring(page.xml.getroot()) == before
 
@@ -354,27 +354,27 @@ def test_a_refused_append_shape_creates_no_shapes_container(vsdx_copy):
     statement reorder underneath it is belt and braces for any later reason
     the allocation might refuse.
     """
-    vis = vsdx.VisioFile(vsdx_copy("test10_nested_shapes.vsdx"))
+    vis = vsdxkit.VisioFile(vsdx_copy("test10_nested_shapes.vsdx"))
     page = vis.pages[0]
     group = next(s for s in page.child_shapes if s.shape_type == "Group")
     # an empty group carries no <Shapes> child until something is put into it
-    shapes_tag = group.xml.find(f"{vsdx.namespace}Shapes")
+    shapes_tag = group.xml.find(f"{vsdxkit.namespace}Shapes")
     assert shapes_tag is not None
     group.xml.remove(shapes_tag)
     # new to the page, so append_shape would allocate ids for it
-    arriving = vsdx.Shape(xml=ET.fromstring(ET.tostring(shapes_tag[0])), parent=page, page=page)
+    arriving = vsdxkit.Shape(xml=ET.fromstring(ET.tostring(shapes_tag[0])), parent=page, page=page)
     vis.close_vsdx()
 
-    with pytest.raises(vsdx.VisioFileNotOpen):
+    with pytest.raises(vsdxkit.VisioFileNotOpen):
         group.append_shape(arriving)
-    assert group.xml.find(f"{vsdx.namespace}Shapes") is None
+    assert group.xml.find(f"{vsdxkit.namespace}Shapes") is None
 
 
 def test_materialising_an_inherited_data_property_after_close_raises(vsdx_copy):
     """The tables never reach `make_local`: no shape in test4_connectors
     inherits anything, so the whole materialisation path went untested and
     unguarded."""
-    vis = vsdx.VisioFile(vsdx_copy("test_master_multiple_child_shapes.vsdx"))
+    vis = vsdxkit.VisioFile(vsdx_copy("test_master_multiple_child_shapes.vsdx"))
     shape = vis.pages[0].find_shape_by_id("3")
     assert shape is not None
     prop = shape.data_properties["title"]
@@ -382,15 +382,15 @@ def test_materialising_an_inherited_data_property_after_close_raises(vsdx_copy):
     before = _page_xml(vis)
     vis.close_vsdx()
 
-    with pytest.raises(vsdx.VisioFileNotOpen):
+    with pytest.raises(vsdxkit.VisioFileNotOpen):
         prop.make_local()
-    with pytest.raises(vsdx.VisioFileNotOpen):
+    with pytest.raises(vsdxkit.VisioFileNotOpen):
         prop.value = "changed"
     assert _page_xml(vis) == before
 
 
 def test_materialising_an_inherited_geometry_row_after_close_raises(vsdx_copy):
-    vis = vsdx.VisioFile(vsdx_copy(CFF_FIXTURE))
+    vis = vsdxkit.VisioFile(vsdx_copy(CFF_FIXTURE))
     shape = vis.pages[0].find_shape_by_id("36")
     assert shape is not None
     row = _geometry(shape).rows["1"]
@@ -398,18 +398,18 @@ def test_materialising_an_inherited_geometry_row_after_close_raises(vsdx_copy):
     before = _page_xml(vis)
     vis.close_vsdx()
 
-    with pytest.raises(vsdx.VisioFileNotOpen):
+    with pytest.raises(vsdxkit.VisioFileNotOpen):
         row.make_local()
-    with pytest.raises(vsdx.VisioFileNotOpen):
+    with pytest.raises(vsdxkit.VisioFileNotOpen):
         row.x = 1.0
-    with pytest.raises(vsdx.VisioFileNotOpen):
+    with pytest.raises(vsdxkit.VisioFileNotOpen):
         row.create_row_xml("LineTo", "99")
     assert _page_xml(vis) == before
 
 
 def test_building_a_geometry_cell_after_close_raises_before_it_appends(vsdx_copy):
     """The constructor wrote the element and then raised on the name."""
-    vis = vsdx.VisioFile(vsdx_copy(CFF_FIXTURE))
+    vis = vsdxkit.VisioFile(vsdx_copy(CFF_FIXTURE))
     shape = vis.pages[0].find_shape_by_id("36")
     assert shape is not None
     geometry = _geometry(shape)
@@ -417,8 +417,8 @@ def test_building_a_geometry_cell_after_close_raises_before_it_appends(vsdx_copy
     before = _page_xml(vis)
     vis.close_vsdx()
 
-    with pytest.raises(vsdx.VisioFileNotOpen):
-        vsdx.GeometryCell(parent=row, xml=None, name="X", value=1.0)
+    with pytest.raises(vsdxkit.VisioFileNotOpen):
+        vsdxkit.GeometryCell(parent=row, xml=None, name="X", value=1.0)
     assert "X" not in row.cells or row.cells["X"].parent is not row
     assert _page_xml(vis) == before
 
@@ -437,7 +437,7 @@ GUARD_NAMES: dict[str, tuple[Mutation, str]] = {
         "VisioFile.increment_shape_ids()",
     ),
     "connect_create": (
-        lambda vis, page, a, b: vsdx.Connect.create(page=page, from_shape=a, to_shape=b),
+        lambda vis, page, a, b: vsdxkit.Connect.create(page=page, from_shape=a, to_shape=b),
         "Connect.create()",
     ),
     # the chokepoint guards describe the write instead, since the setter the
@@ -457,30 +457,30 @@ GUARD_NAMES: dict[str, tuple[Mutation, str]] = {
 def test_a_guard_names_the_operation_that_refused(closed_document, mutation, named):
     """One guard covering a family reported the wrong method to four callers."""
     vis, page, shape_a, shape_b, _ = closed_document
-    with pytest.raises(vsdx.VisioFileNotOpen) as excinfo:
+    with pytest.raises(vsdxkit.VisioFileNotOpen) as excinfo:
         mutation(vis, page, shape_a, shape_b)
     assert named in str(excinfo.value)
 
 
 def test_append_shape_names_itself_when_it_refuses(vsdx_copy):
-    vis = vsdx.VisioFile(vsdx_copy("test10_nested_shapes.vsdx"))
+    vis = vsdxkit.VisioFile(vsdx_copy("test10_nested_shapes.vsdx"))
     page = vis.pages[0]
     group = next(s for s in page.child_shapes if s.shape_type == "Group")
     moving = next(s for s in page.child_shapes if s.shape_type != "Group")
     vis.close_vsdx()
 
-    with pytest.raises(vsdx.VisioFileNotOpen) as excinfo:
+    with pytest.raises(vsdxkit.VisioFileNotOpen) as excinfo:
         group.append_shape(moving)
     assert "Shape.append_shape()" in str(excinfo.value)
 
 
 def test_add_swimlane_names_itself_when_it_refuses(vsdx_copy):
-    vis = vsdx.VisioFile(vsdx_copy(CFF_FIXTURE))
+    vis = vsdxkit.VisioFile(vsdx_copy(CFF_FIXTURE))
     container = vis.pages[0].get_container()
     assert container is not None
     vis.close_vsdx()
 
-    with pytest.raises(vsdx.VisioFileNotOpen) as excinfo:
+    with pytest.raises(vsdxkit.VisioFileNotOpen) as excinfo:
         container.add_swimlane("new lane")
     assert "Container.add_swimlane()" in str(excinfo.value)
 
@@ -489,6 +489,6 @@ def test_retarget_names_itself_when_it_refuses(closed_document):
     _, page, shape_a, shape_b, _ = closed_document
     connector = next(s for s in page.child_shapes if s.begin_x is not None)
 
-    with pytest.raises(vsdx.VisioFileNotOpen) as excinfo:
-        vsdx.Connect.retarget(page, connector, from_shape=shape_a, to_shape=shape_b)
+    with pytest.raises(vsdxkit.VisioFileNotOpen) as excinfo:
+        vsdxkit.Connect.retarget(page, connector, from_shape=shape_a, to_shape=shape_b)
     assert "Connect.retarget()" in str(excinfo.value)

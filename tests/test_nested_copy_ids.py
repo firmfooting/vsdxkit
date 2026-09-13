@@ -21,7 +21,7 @@ import os
 import xml.etree.ElementTree as ET
 import zipfile
 
-from vsdx import VisioFile, namespace
+from vsdxkit import VisioFile, namespace
 
 # a three-level group: 7 contains 3 and 4, which each contain a pair of leaves
 NESTED = "test10_nested_shapes.vsdx"

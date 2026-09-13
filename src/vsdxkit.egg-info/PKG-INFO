@@ -1,3 +1,33 @@
+Metadata-Version: 2.4
+Name: vsdxkit
+Version: 0.8.0
+Summary: vsdxkit - create, edit and analyse Microsoft Visio .vsdx files, headlessly
+Author: Firm Footing
+License-Expression: BSD-3-Clause
+Project-URL: Homepage, https://github.com/firmfooting/vsdxkit
+Project-URL: Documentation, https://firmfooting.github.io/vsdxkit/
+Project-URL: Issues, https://github.com/firmfooting/vsdxkit/issues
+Project-URL: Original project, https://github.com/dave-howard/vsdx
+Keywords: vsdx,visio,diagram,flowchart
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Topic :: Multimedia :: Graphics
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: Jinja2>=3.1.6
+Requires-Dist: deprecation>=2.1.0
+Requires-Dist: typing-extensions>=4.4.0; python_version < "3.12"
+Dynamic: license-file
+
 # vsdxkit
 
 [![CI](https://github.com/firmfooting/vsdxkit/actions/workflows/ci.yml/badge.svg)](https://github.com/firmfooting/vsdxkit/actions/workflows/ci.yml)

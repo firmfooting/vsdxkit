@@ -8,7 +8,7 @@ against the installed distribution.
 
 from pathlib import Path
 
-from vsdx import Connect, PackageLimits, Page, Shape, VisioFile
+from vsdxkit import Connect, PackageLimits, Page, Shape, VisioFile
 
 
 def open_document(path: str) -> VisioFile:

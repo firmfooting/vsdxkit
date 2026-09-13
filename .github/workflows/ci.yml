@@ -62,7 +62,7 @@ jobs:
         # fails the job when coverage drops below it.
         id: coverage
         if: ${{ matrix.coverage }}
-        run: uv run --no-sync python -m pytest tests --cov=vsdx --cov-report=xml --cov-report=term
+        run: uv run --no-sync python -m pytest tests --cov=vsdxkit --cov-report=xml --cov-report=term
       # Both steps below run whether the step above passed or failed, so a run
       # under the threshold still shows which files lost coverage. They are
       # skipped when it was skipped, because then the install failed and there
@@ -156,11 +156,11 @@ jobs:
       - name: Install lint and documentation tools
         run: uv sync --locked --no-default-groups --group lint --group docs
       - name: ruff check
-        run: uv run --no-sync ruff check vsdx tests tools
+        run: uv run --no-sync ruff check src tests tools
       - name: ruff format
-        run: uv run --no-sync ruff format --check vsdx tests tools
+        run: uv run --no-sync ruff format --check src tests tools
       - name: pyrefly strict
-        run: uv run --no-sync pyrefly check vsdx --min-severity warn --output-format min-text
+        run: uv run --no-sync pyrefly check src/vsdxkit --min-severity warn --output-format min-text
       - name: Verify action pin annotations
         run: uv run --no-sync python tools/check_action_pins.py
       - name: Public type-completeness gate

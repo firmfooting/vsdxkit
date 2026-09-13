@@ -21,7 +21,7 @@ somebody remembers to ask.
 So: Visio is for questions only Visio can answer. Everything below is a question
 the format answers, and it is answered on every platform in milliseconds.
 
-Nothing here imports `vsdx`: a validator sharing the library's parser would
+Nothing here imports `vsdxkit`: a validator sharing the library's parser would
 inherit the assumptions it is supposed to be checking.
 """
 

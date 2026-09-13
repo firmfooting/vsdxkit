@@ -50,7 +50,7 @@ from helpers.visio_observation import (
     observation_from_package,
 )
 
-import vsdx
+import vsdxkit
 
 BASEDIR = os.path.dirname(os.path.realpath(__file__))
 PACKAGE_SUFFIXES = (".vsdx", ".vsdm")
@@ -82,13 +82,13 @@ FIXTURE_PACKAGES = _fixture_packages()
 # --------------------------------------------------------------------------
 
 
-def _saved(source: str, destination: str, edit: Callable[[vsdx.VisioFile], None] | None = None) -> str:
+def _saved(source: str, destination: str, edit: Callable[[vsdxkit.VisioFile], None] | None = None) -> str:
     """Open `source`, apply `edit` if there is one, save to `destination`.
 
     Every relation below is a pair of calls to this, so the only difference
     between the two sides of a comparison is the edit.
     """
-    with vsdx.VisioFile(source) as vis:
+    with vsdxkit.VisioFile(source) as vis:
         if edit is not None:
             edit(vis)
         vis.save_vsdx(destination)
@@ -118,7 +118,7 @@ def _shape_ids(source: str) -> dict[int, list[int]]:
     expectation was built for, so the position and the id have to come from the
     same list.
     """
-    with vsdx.VisioFile(source) as vis:
+    with vsdxkit.VisioFile(source) as vis:
         return {index: [int(shape.ID) for shape in page.all_shapes] for index, page in enumerate(vis.pages)}
 
 
@@ -131,7 +131,7 @@ def _page_part_names(source: str) -> dict[int, str]:
     allowed to touch, and that is enough to catch an edit that reaches across
     pages.
     """
-    with vsdx.VisioFile(source) as vis:
+    with vsdxkit.VisioFile(source) as vis:
         return {index: f"visio/pages/{os.path.basename(page.filename)}" for index, page in enumerate(vis.pages)}
 
 
@@ -251,10 +251,10 @@ def _without(observation: Observation, page_index: int, doomed: Iterable[int]) -
     return Observation(label="expected", pages=tuple(pages))
 
 
-def _copy_first_shape(page_index: int) -> Callable[[vsdx.VisioFile], None]:
+def _copy_first_shape(page_index: int) -> Callable[[vsdxkit.VisioFile], None]:
     """Copy the first top-level shape of a page - the edit that draws on its id allocator."""
 
-    def edit(vis: vsdx.VisioFile) -> None:
+    def edit(vis: vsdxkit.VisioFile) -> None:
         vis.pages[page_index].child_shapes[0].copy()
 
     return edit
@@ -359,7 +359,7 @@ def test_copying_a_shape_and_deleting_the_copy_restores_the_package(package_path
     if not pages.get(0):
         pytest.skip("page 1 holds no shape to copy")
 
-    def copy_then_delete(vis: vsdx.VisioFile) -> None:
+    def copy_then_delete(vis: vsdxkit.VisioFile) -> None:
         page = vis.pages[0]
         copy = page.child_shapes[0].copy()
         assert int(copy.ID) not in pages[0], "the copy reused an id the page was already using"
@@ -394,13 +394,13 @@ def test_deleting_a_copy_made_before_the_last_save_restores_the_package(package_
 
     copied_id = 0
 
-    def copy_a_shape(vis: vsdx.VisioFile) -> None:
+    def copy_a_shape(vis: vsdxkit.VisioFile) -> None:
         nonlocal copied_id
         copied_id = int(vis.pages[0].child_shapes[0].copy().ID)
 
     with_copy = _saved(source, _output(tmp_path, package_path, "with-copy"), copy_a_shape)
 
-    def delete_the_copy(vis: vsdx.VisioFile) -> None:
+    def delete_the_copy(vis: vsdxkit.VisioFile) -> None:
         page = vis.pages[0]
         reopened = [shape for shape in page.all_shapes if int(shape.ID) == copied_id]
         assert reopened, f"the copy with id {copied_id} is not on page 1 after the save"
@@ -416,7 +416,7 @@ def test_deleting_a_copy_made_before_the_last_save_restores_the_package(package_
     )
     _assert_same_package("deleting a copy from an earlier session is a no-op", package_path, untouched, restored)
 
-    with vsdx.VisioFile(restored) as vis:
+    with vsdxkit.VisioFile(restored) as vis:
         next_id = int(vis.pages[0].child_shapes[0].copy().ID)
     assert next_id == copied_id, (
         f"the next copy on page 1 of {package_path} got id {next_id}, not the {copied_id} the deleted "
@@ -535,7 +535,7 @@ def test_deleting_a_shape_removes_exactly_it(package_path, vsdx_copy, tmp_path):
             if shape_id not in {shape.id for shape in page.shapes}:
                 continue  # a shape marked Del="1": present in the part, not in the document
 
-            def delete(vis: vsdx.VisioFile, page_index=page_index, position=position, shape_id=shape_id) -> None:
+            def delete(vis: vsdxkit.VisioFile, page_index=page_index, position=position, shape_id=shape_id) -> None:
                 page = vis.pages[page_index]
                 target = page.all_shapes[position]
                 # the position and the id were read off the same list in an

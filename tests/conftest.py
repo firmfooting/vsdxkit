@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for the vsdx test suite."""
+"""Shared pytest fixtures for the vsdxkit test suite."""
 
 import functools
 import os

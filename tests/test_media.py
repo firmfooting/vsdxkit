@@ -1,12 +1,12 @@
 from pathlib import Path
 
-from vsdx import VisioFile
+from vsdxkit import VisioFile
 
-MEDIA_DIR = Path(__file__).resolve().parents[1] / "vsdx" / "media"
+MEDIA_DIR = Path(__file__).resolve().parents[1] / "src" / "vsdxkit" / "media"
 
 
 def test_bundled_media_path_is_absolute_and_cwd_independent(tmp_path, monkeypatch):
-    from vsdx import Media
+    from vsdxkit import Media
 
     monkeypatch.chdir(tmp_path)
     media = Media()
@@ -19,7 +19,7 @@ def test_bundled_media_path_is_absolute_and_cwd_independent(tmp_path, monkeypatc
 
 def test_media_curved_connector_returns_curved():
     """Regression: Media.curved_connector returned the straight connector."""
-    from vsdx import Media
+    from vsdxkit import Media
 
     media = Media()
     try:

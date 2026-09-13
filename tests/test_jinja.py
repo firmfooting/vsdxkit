@@ -3,7 +3,7 @@ from datetime import datetime
 
 import pytest
 
-from vsdx import (
+from vsdxkit import (
     VisioFile,
 )
 

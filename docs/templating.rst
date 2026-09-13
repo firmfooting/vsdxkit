@@ -10,7 +10,7 @@ Render ordinary expressions
 
 .. code-block:: python
 
-   from vsdx import VisioFile
+   from vsdxkit import VisioFile
 
    context = {
        "project": "Ward refurbishment",

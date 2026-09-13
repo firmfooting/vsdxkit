@@ -1,6 +1,6 @@
 import pytest
 
-from vsdx import VisioFile
+from vsdxkit import VisioFile
 
 
 @pytest.mark.parametrize(

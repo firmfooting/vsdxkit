@@ -13,7 +13,7 @@ on:
     branches: [main]
     paths:
       - 'docs/**'
-      - 'vsdx/**'
+      - 'src/vsdxkit/**'
       - 'pyproject.toml'
       - 'uv.lock'
       - '.github/workflows/docs.yml'

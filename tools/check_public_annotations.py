@@ -41,7 +41,7 @@ def public_definitions(package_dir: Path) -> list[tuple[Path, int, str]]:
 
 
 def main() -> int:
-    package_dir = Path("vsdx")
+    package_dir = Path("src") / "vsdxkit"
     if not package_dir.is_dir():
         print(f"error: {package_dir}/ not found; run from the repository root", file=sys.stderr)
         return 2

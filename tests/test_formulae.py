@@ -10,8 +10,8 @@ import math
 
 import pytest
 
-import vsdx
-from vsdx import namespace
+import vsdxkit
+from vsdxkit import namespace
 
 NS = namespace[1:-1]
 
@@ -44,7 +44,7 @@ def test_angle_measures_anticlockwise_from_east(begin, end, expected, heading):
     Visio's ATAN2 and Python's `math.atan2` agree on argument order, so the
     formula the key names maps directly onto the call.
     """
-    angle = vsdx.calc_value(_Connector(begin, end), ATAN2)
+    angle = vsdxkit.calc_value(_Connector(begin, end), ATAN2)
 
     assert angle == pytest.approx(expected), f"a connector running {heading}"
 
@@ -57,7 +57,7 @@ def test_a_diagonal_cannot_pin_the_argument_order():
     way round and stayed that way.
     """
     rise, run = 1.0, 1.0
-    diagonal = vsdx.calc_value(_Connector((0.0, 0.0), (run, rise)), ATAN2)
+    diagonal = vsdxkit.calc_value(_Connector((0.0, 0.0), (run, rise)), ATAN2)
 
     assert diagonal == pytest.approx(math.pi / 4)
     assert math.atan2(rise, run) == math.atan2(run, rise), "this case is blind to the swap"
@@ -65,7 +65,7 @@ def test_a_diagonal_cannot_pin_the_argument_order():
 
 def test_every_formula_in_the_table_is_callable():
     """The table is a lookup from Visio formula text to an implementation."""
-    from vsdx.formulae import func_map
+    from vsdxkit.formulae import func_map
 
     assert func_map, "the formula table is empty"
     assert all(callable(f) for f in func_map.values())

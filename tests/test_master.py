@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from vsdx import (
+from vsdxkit import (
     VisioFile,
 )
 

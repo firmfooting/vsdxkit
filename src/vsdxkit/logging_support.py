@@ -18,7 +18,7 @@ Usage in a vsdx module:
 import logging
 from typing import TYPE_CHECKING, TextIO
 
-_PACKAGE_ROOT = "vsdx"
+_PACKAGE_ROOT = "vsdxkit"
 
 if TYPE_CHECKING:
     _StreamHandler = logging.StreamHandler[TextIO]

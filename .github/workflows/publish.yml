@@ -17,7 +17,7 @@
 # 0.5.0 waited eight days that way. An installation token is a real actor, so
 # ci.yml and zizmor.yml run on the release PR like any other.
 #
-# The version lives ONCE, in vsdx/__init__.py, marked with the
+# The version lives ONCE, in src/vsdxkit/__init__.py, marked with the
 # x-release-please-version annotation. pyproject.toml reads it via
 # tool.setuptools.dynamic; a static [project].version would stale uv.lock on
 # every bump and fail the `uv sync --locked` gate on the merge commit.
@@ -137,7 +137,7 @@ jobs:
               exit 1
             fi
           fi
-          # Unconditional, both paths: release-please rewrites vsdx/__init__.py
+          # Unconditional, both paths: release-please rewrites src/vsdxkit/__init__.py
           # through the extra-files entry in release-please-config.json, and if
           # that entry stops matching, the tag and the package disagree
           # silently. PyPI takes a version once, so check rather than trust.
@@ -165,9 +165,9 @@ jobs:
         run: uv run --no-sync python -m pytest tests -q
       - name: Lint and type check
         run: |
-          uv run --no-sync ruff check vsdx tests tools
-          uv run --no-sync ruff format --check vsdx tests tools
-          uv run --no-sync pyrefly check vsdx --min-severity warn --output-format min-text
+          uv run --no-sync ruff check src tests tools
+          uv run --no-sync ruff format --check src tests tools
+          uv run --no-sync pyrefly check src/vsdxkit --min-severity warn --output-format min-text
       - name: Build sdist and wheel
         run: uv build
       - name: Smoke test the wheel
