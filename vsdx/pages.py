@@ -97,6 +97,7 @@ class Page:
         deprecated_in="v0.5.0", removed_in="1.0.0", current_version=vsdx.__version__, details="Use Page.name property instead"
     )
     def set_name(self, value: str) -> None:
+        self.vis._require_open("Page.set_name()")
         from .vsdxfile import file_to_xml  # to break circular imports - is this really needed?
 
         pages_filename = self.vis._pages_filename()  # pages contains Page name, width, height, mapped to Id
@@ -123,6 +124,7 @@ class Page:
 
     @name.setter
     def name(self, value: str) -> None:
+        self.vis._require_open("Setting Page.name")
         page = self._page_xml()
         page.attrib["Name"] = value
         page.attrib["NameU"] = value
@@ -151,6 +153,7 @@ class Page:
 
     @background.setter
     def background(self, value: bool) -> None:
+        self.vis._require_open("Setting Page.background")
         self._page_xml().attrib["Background"] = "1" if value else "0"
         self._background = value
 
@@ -201,6 +204,7 @@ class Page:
 
     @width.setter
     def width(self, value: float | str | None) -> None:
+        self.vis._require_open("Setting Page.width")
         self._pagesheet_cell("PageWidth").attrib["V"] = _dimension_value(value)
 
     @property
@@ -209,6 +213,7 @@ class Page:
 
     @height.setter
     def height(self, value: float | str | None) -> None:
+        self.vis._require_open("Setting Page.height")
         self._pagesheet_cell("PageHeight").attrib["V"] = _dimension_value(value)
 
     @property
@@ -217,6 +222,7 @@ class Page:
 
     @xml.setter
     def xml(self, value: ET.ElementTree[ET.Element]) -> None:
+        self.vis._require_open("Setting Page.xml")
         self._xml = value
 
     @property
@@ -291,6 +297,7 @@ class Page:
         return self.vis.pages.index(self) if self in self.vis.pages else None
 
     def add_connect(self, connect: Connect) -> None:
+        self.vis._require_open("Page.add_connect()")
         connects = self.xml.find(f".//{namespace}Connects")
         if connects is None:
             connects = ET.fromstring(
@@ -355,10 +362,12 @@ class Page:
         return connectors
 
     def apply_text_context(self, context: dict[str, object]) -> None:
+        self.vis._require_open("Page.apply_text_context()")
         for s in self._shapes:
             s.apply_text_filter(context)
 
     def find_replace(self, old: str, new: str) -> None:
+        self.vis._require_open("Page.find_replace()")
         for s in self._shapes:
             s.find_replace(old, new)
 
@@ -459,6 +468,7 @@ class Page:
         :returns: the new connector Shape
         :rtype: Shape
         """
+        self.vis._require_open("Page.connect_shapes()")
         return vsdx.Connect.create(
             page=self, from_shape=from_shape, to_shape=to_shape, route=route, from_cp=from_cp, to_cp=to_cp
         )
@@ -472,6 +482,7 @@ class Page:
 
         :returns: the new lane Shape
         """
+        self.vis._require_open("Page.add_swimlane()")
         container = self.get_container()
         if container is None:
             raise ValueError("page has no CFF Container")
@@ -479,6 +490,7 @@ class Page:
 
     def add_shape_to_lane(self, shape: Shape, lane: Shape) -> None:
         """Move a shape so its centre lies within a CFF swimlane's geometric band."""
+        self.vis._require_open("Page.add_shape_to_lane()")
         container = self.get_container()
         if container is None:
             raise ValueError("page has no CFF Container")
@@ -498,6 +510,7 @@ class Page:
 
         :returns: the connector Shape
         """
+        self.vis._require_open("Page.reanchor_connector()")
         return vsdx.Connect.retarget(
             page=self,
             connector_shape=connector_shape,
@@ -517,6 +530,7 @@ class Page:
 
         :raises ValueError: if the shape is not on this page
         """
+        self.vis._require_open("Page.delete_shape()")
         shape_id = str(shape.ID)
         # Identity, not id: Visio shape ids are page-scoped and collide freely
         # across pages, so matching on the number would accept a shape from a
@@ -582,6 +596,7 @@ class Page:
         connector's own glue. ``match="either"`` also removes records pointing
         at them, for a shape that is going away entirely.
         """
+        self.vis._require_open("Page.remove_connect_records()")
         if match not in ("from", "either"):
             raise ValueError(f"match must be 'from' or 'either', not {match!r}")
         connects_el = self.xml.find(f".//{namespace}Connects")
