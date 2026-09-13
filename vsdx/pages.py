@@ -501,40 +501,74 @@ class Page:
     def delete_shape(self, shape: Shape) -> None:
         """Delete a shape from this page, removing any incident connectors.
 
-        Connectors whose Begin or End glue references the shape are deleted
-        first (including their Connect records), then the shape itself.
+        A group takes its children with it, so connectors glued to a child and
+        records naming one are removed alongside the group's own. Connectors
+        are deleted first (including their Connect records), then the shape.
+
+        :raises ValueError: if the shape is not on this page
         """
         shape_id = str(shape.ID)
-        # connectors are the FromSheet of Connect records whose ToSheet is the
-        # doomed shape, on a begin/end relationship
-        connector_ids = {c.from_id for c in self.connects if c.to_id == shape_id and c.from_rel in ("BeginX", "EndX")}
+        if not any(str(s.ID) == shape_id for s in self.all_shapes):
+            # silently doing nothing would hide a double delete, or a shape
+            # taken from another page
+            raise ValueError(f"shape ID {shape.ID} is not on page {self.name!r}")
+        # every id that is about to disappear: the shape and, for a group,
+        # everything it contains
+        doomed_ids = {shape_id} | {str(s.ID) for s in shape.all_shapes}
+        # connectors are the FromSheet of Connect records whose ToSheet is one
+        # of the doomed shapes, on a begin/end relationship
+        connector_ids = {c.from_id for c in self.connects if c.to_id in doomed_ids and c.from_rel in ("BeginX", "EndX")}
         doomed = set()
         for s in self.all_shapes:
             sid = str(s.ID)
-            if sid == shape_id or (sid in connector_ids and "BeginX" in s.cells):
+            # cell_value, not `in s.cells`: a connector may inherit BeginX from
+            # its master, and one missed here survives as a detached line whose
+            # glue record has just been removed
+            if sid == shape_id or (sid in connector_ids and s.cell_value("BeginX") is not None):
                 doomed.add(s)
         for s in doomed:
             self._remove_shape_xml(s)
+        # a record naming a group child outlives the child otherwise: the child
+        # goes with the group element rather than through _remove_shape_xml
+        self.remove_connect_records(doomed_ids, match="either")
 
-    def _remove_shape_xml(self, shape: Shape):
-        """Remove a shape's xml, its Connect records, and (if 1-D) its connectors' records."""
-        sid = str(shape.ID)
-        self.remove_connect_records({sid})
+    def _remove_shape_xml(self, shape: Shape) -> None:
+        """Remove a shape's xml and every Connect record that names it.
+
+        Records naming the shape on either side go: one pointing *at* a shape
+        that is gone dangles just as surely as one leading from it. Connectors
+        glued to the shape are separate shapes and are passed through here in
+        their own right by :meth:`delete_shape`.
+        """
+        self.remove_connect_records({str(shape.ID)}, match="either")
         for shapes_el in self.xml.iter(f"{namespace}Shapes"):
             if shape.xml in list(shapes_el):
                 shapes_el.remove(shape.xml)
                 break
 
-    def remove_connect_records(self, connector_ids: Iterable[str | int]) -> None:
-        """Remove all Connect records whose FromSheet is one of connector_ids.
+    def remove_connect_records(self, connector_ids: Iterable[str | int], *, match: str = "from") -> None:
+        """Remove Connect records naming any of these shapes.
 
-        Single record-removal path, shared by the delete cascade and
-        connector retargeting.
+        Single record-removal path, shared by the delete cascade and connector
+        retargeting. ``match="from"`` removes only the records leading from
+        these shapes, which is what retargeting wants: it is replacing a
+        connector's own glue. ``match="either"`` also removes records pointing
+        at them, for a shape that is going away entirely.
         """
+        if match not in ("from", "either"):
+            raise ValueError(f"match must be 'from' or 'either', not {match!r}")
         connects_el = self.xml.find(f".//{namespace}Connects")
         if connects_el is None:
             return
         normalised_ids = {str(connector_id) for connector_id in connector_ids}
         for connect in list(connects_el):
-            if connect.attrib.get("FromSheet") in normalised_ids:
+            named = (
+                {connect.attrib.get("FromSheet")}
+                if match == "from"
+                else {
+                    connect.attrib.get("FromSheet"),
+                    connect.attrib.get("ToSheet"),
+                }
+            )
+            if normalised_ids & named:
                 connects_el.remove(connect)

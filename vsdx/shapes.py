@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import html
 import re
+import warnings
 import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING
 from xml.etree.ElementTree import Element
@@ -1066,10 +1067,26 @@ class Shape:
             s.find_replace(old, new)
 
     def remove(self) -> None:
-        parent_xml = self.parent.xml
-        root = parent_xml.getroot() if isinstance(parent_xml, ET.ElementTree) else parent_xml
-        if root is not None:
-            root.remove(self.xml)
+        """Remove this shape from its page or group.
+
+        Deprecated in favour of :meth:`Page.delete_shape`, which this now calls:
+        it is the single path that also deletes the connectors glued to the
+        shape and their ``Connect`` records. Detaching the element alone left
+        orphan connectors and dangling records behind, and Visio repairs such a
+        package on open. It also raised ``ValueError`` for a shape inside a
+        group, whose XML is held by the group's ``Shapes`` container rather than
+        by the group element the parent Shape wraps.
+        """
+        # Not `@deprecation.deprecated`: that decorator is version-gated and
+        # would stay silent until __version__ reaches the release this landed
+        # in, so nothing would warn during the cycle the replacement is in.
+        warnings.warn(
+            "Shape.remove() is deprecated and will be removed in 1.0.0. Use Page.delete_shape(shape), "
+            "which also removes the connectors glued to the shape and their Connect records.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        self.page.delete_shape(self)
 
     def append_shape(self, append_shape: Shape) -> None:
         # insert shape into shapes tag, and return updated shapes tag

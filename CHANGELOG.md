@@ -83,6 +83,19 @@ history precedes 0.6.3 here, remains available at
 
 ### Fixed
 
+- `Shape.remove()` is deprecated and now delegates to `Page.delete_shape()`, the
+  single deletion path. It previously detached the element and nothing else,
+  leaving orphan connectors and dangling `Connect` records that Visio repairs on
+  open, and it raised `ValueError` outright for a shape inside a group, whose
+  XML is held by the group's `Shapes` container rather than by the group element.
+  Deleting a shape through either API now also removes `Connect` records that
+  name it as the target, not only those leading from it, and deleting a group
+  removes the records naming its children — they disappear with the group, so a
+  record pointing at one dangled. Deleting a shape that is not on the page now
+  raises `ValueError` instead of silently doing nothing, and a connector that
+  inherits `BeginX` from its master is recognised as a connector rather than
+  surviving as a detached line. `Page.remove_connect_records()` takes a
+  `match="from" | "either"` argument for those two cases.
 - Reading Shape Data no longer changes the document. `DataProperty.value`'s
   getter used to clear a `No Formula` formula and stamp a `STR` unit while
   reading, so merely inspecting a shape's properties altered the bytes the
