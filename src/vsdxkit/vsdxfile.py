@@ -578,23 +578,23 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         return require_element(root.find(f"{ext_prop_namespace}TitlesOfParts"), "app.xml TitlesOfParts")
 
     class _Section(NamedTuple):
-        """One section of TitlesOfParts, named two ways because one is not enough.
+        """One section of TitlesOfParts.
 
-        `label` is what Visio writes in English and what we write when the
+        `label` is what Visio writes in English, and what we write when the
         section has to be created. It cannot be the only handle: HeadingPairs
         names are display strings chosen by the producer and Office localises
-        them, so a German file says `Seiten` and matching "Pages" finds nothing.
+        them -- a German Excel writes `Arbeitsblätter` for `Worksheets` -- so a
+        German file says `Seiten` and matching "Pages" finds nothing.
 
-        `ordinal` is the position among the sections, which survives
-        translation. It cannot be the only handle either -- nothing guarantees
-        an order -- so the label is tried first and this answers when it misses.
+        `is_pages` says which section this is in terms the file cannot
+        translate, which is what `_resolve_section` falls back on.
         """
 
         label: str
-        ordinal: int
+        is_pages: bool
 
-    PAGES = _Section("Pages", 0)
-    MASTERS = _Section("Masters", 1)
+    PAGES = _Section("Pages", is_pages=True)
+    MASTERS = _Section("Masters", is_pages=False)
 
     def _heading_pairs_list(self) -> list[tuple[str, Element]]:
         """Each section HeadingPairs names, as (name, the element holding its count).
@@ -624,25 +624,55 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         """Which HeadingPairs entry is `section`, or None if the file has no such entry.
 
         By name first, so a document that writes its sections in an unusual
-        order is still read correctly. By position when no name matches, which
-        is what a localised file needs: the names are translated but the
-        sections are still pages then masters.
+        order is still read correctly.
 
-        An entry whose name is another section's label is never taken on
-        position. A document naming Masters and not Pages has Masters at
-        ordinal 0, and claiming it would put page titles in the masters slice
-        and leave no Pages pair behind -- worse than reporting the section
-        missing, which at least gets one created. A name that matches a
-        different known section is evidence, not a miss.
+        When the name misses, position is not a safe answer. A document naming
+        only Masters has it at position 0, and a localised document names it
+        something we would not recognise either -- so "the first section" would
+        claim the masters and put page titles among them, which is worse than
+        reporting the section missing, since that at least gets one created.
+
+        What the producer cannot translate is the titles themselves. The pages
+        section is the one naming this document's pages, so it is found by
+        asking which section's titles those are. The masters section is then
+        whatever the other one is, where there are two.
         """
         pairs = self._heading_pairs_list()
         for index, (name, _) in enumerate(pairs):
             if name == section.label:
                 return index
-        if section.ordinal >= len(pairs):
+        pages_index = self._section_naming_the_pages(pairs)
+        if section.is_pages:
+            return pages_index
+        if len(pairs) == 2 and pages_index is not None:
+            return 1 - pages_index
+        return None
+
+    def _section_naming_the_pages(self, pairs: list[tuple[str, Element]]) -> int | None:
+        """Which section's titles are this document's page names, or None if none are.
+
+        Overlap rather than equality, because a caller is usually part-way
+        through changing one of them: `Page.name` updates the page before
+        app.xml, and the section still holding the old title has to be found by
+        the other titles it holds. A section overlapping nothing is not the
+        pages section however few pages there are.
+        """
+        vector = self._titles_of_parts().find(f"{vt_namespace}vector")
+        if vector is None:
             return None
-        spoken_for = {other.label for other in (VisioFile.PAGES, VisioFile.MASTERS)} - {section.label}
-        return None if pairs[section.ordinal][0] in spoken_for else section.ordinal
+        page_names = {page.name for page in self.pages}
+        if not page_names:
+            return None
+        best_index, best_overlap = None, 0
+        start = 0
+        for index, (_, count) in enumerate(pairs):
+            titles_here = int(count.text or 0)
+            stop = min(start + titles_here, len(vector))
+            overlap = sum(1 for position in range(min(start, len(vector)), stop) if vector[position].text in page_names)
+            if overlap > best_overlap:
+                best_index, best_overlap = index, overlap
+            start += titles_here
+        return best_index
 
     def _titles_of_parts_section(self, section: _Section) -> tuple[Element, int, int]:
         """The TitlesOfParts vector, and the ``[start, stop)`` slice of it `section` owns.

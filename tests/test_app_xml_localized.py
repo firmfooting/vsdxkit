@@ -91,20 +91,14 @@ def test_renaming_a_page_renames_its_title(german, tmp_path):
     assert titles[:3] == ["Page-1", "Umbenannt", "Page-3"]
 
 
-def test_a_missing_section_is_created_rather_than_taking_one_that_is_named(tmp_path, basedir):
-    """The ordinal fallback must not claim an entry another section already owns.
+def _without_the_pages_section(source: str, destination: str, masters_label: str) -> None:
+    """A document that names only a masters section, and only master titles.
 
-    A document that names Masters and not Pages has Masters at ordinal 0. Taking
-    the ordinal on faith puts the new page's title in the Masters slice and
-    increments the master count, which is worse than not finding the section at
-    all: there is no Pages pair afterwards either.
-
-    The label is only a hint, but a label that matches a *different* known
-    section is positive evidence, not a miss. Fails if the fallback goes back to
-    returning `section.ordinal` without checking what is there.
+    Both halves matter. Dropping the HeadingPairs pair but leaving the page
+    titles in the vector describes no real document: the masters count would
+    then cover the page titles, and any reader is entitled to conclude those
+    three titles are the masters.
     """
-    source = os.path.join(basedir, "test4_connectors.vsdx")
-    stripped = str(tmp_path / "masters_only.vsdx")
     with zipfile.ZipFile(source) as archive:
         order = archive.namelist()
         members = {name: archive.read(name) for name in order}
@@ -112,18 +106,49 @@ def test_a_missing_section_is_created_rather_than_taking_one_that_is_named(tmp_p
     vector = root.find(f"{EXT}HeadingPairs").find(f"{VT}vector")
     variants = list(vector)
     assert len(variants) == 4, "expected Pages and Masters pairs to strip one from"
-    for variant in variants[:2]:  # drop the Pages name and its count
+    for variant in variants[:2]:
         vector.remove(variant)
     vector.set("size", str(len(vector)))
+    label = vector.find(f".//{VT}lpstr")
+    assert label.text == "Masters", f"expected the surviving pair to be Masters, got {label.text!r}"
+    label.text = masters_label
+
+    titles = root.find(f"{EXT}TitlesOfParts").find(f"{VT}vector")
+    entries = list(titles)
+    assert len(entries) == 6, f"expected 3 pages and 3 masters, got {len(entries)}"
+    for entry in entries[:3]:  # the page titles go with the section that named them
+        titles.remove(entry)
+    titles.set("size", str(len(titles)))
+
     members["docProps/app.xml"] = ET.tostring(root, encoding="utf-8", xml_declaration=True)
-    with zipfile.ZipFile(stripped, "w") as archive:
+    with zipfile.ZipFile(destination, "w") as archive:
         for name in order:
             archive.writestr(name, members[name])
+
+
+@pytest.mark.parametrize("masters_label", ["Masters", "Master"], ids=["english", "localised"])
+def test_a_missing_section_is_created_rather_than_taking_one_that_is_named(masters_label, tmp_path, basedir):
+    """The fallback must not claim a section that is demonstrably the other one.
+
+    A document naming only masters has them at position 0, so "the first
+    section" puts the new page's title among the masters and increments their
+    count -- leaving no pages section behind either, which is worse than
+    reporting it missing, since that at least gets one created.
+
+    The `localised` case is the one that matters and the one an English-label
+    guard cannot answer: a guard listing "Masters" as spoken for says nothing
+    about `Master`, `Schablonen` or anything else the producer chose. What the
+    producer cannot translate is the titles, so that is what is asked.
+
+    Fails if the fallback goes back to taking a position on faith.
+    """
+    stripped = str(tmp_path / "masters_only.vsdx")
+    _without_the_pages_section(os.path.join(basedir, "test4_connectors.vsdx"), stripped, masters_label)
 
     out = str(tmp_path / "out.vsdx")
     with vsdxkit.VisioFile(stripped) as vis:
         vis.add_page("NewPage")
         vis.save_vsdx(out)
     headings, titles = _app_xml(out)
-    assert headings == ["Masters", "3", "Pages", "1"]
-    assert titles[-1] == "NewPage"
+    assert headings == [masters_label, "3", "Pages", "1"]
+    assert titles == ["Dynamic connector", "Switch", "Router", "NewPage"]
