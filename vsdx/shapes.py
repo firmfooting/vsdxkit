@@ -19,6 +19,7 @@ import deprecation
 import vsdx
 from vsdx import namespace
 
+from .document_part import DocumentPart
 from .inheritance import InheritedRow
 from .logging_support import get_logger
 from .xmlio import make_cell_element, xml_value
@@ -198,7 +199,7 @@ def _write_text(
         text_element.append(run)
 
 
-class Cell:
+class Cell(DocumentPart):
     """Represents a Cell element in a vsdx xml file"""
 
     def __init__(self, xml: Element, shape: Shape):
@@ -206,11 +207,17 @@ class Cell:
         self.shape = shape
 
     @property
+    @override
+    def _document(self) -> vsdx.VisioFile:
+        return self.shape._document
+
+    @property
     def value(self) -> str | None:
         return self.xml.attrib.get("V")
 
     @value.setter
     def value(self, value: float | str) -> None:
+        self._require_open(f"writing the value of cell {self.name!r}")
         self.xml.attrib["V"] = xml_value(value)
 
     @property
@@ -219,6 +226,7 @@ class Cell:
 
     @formula.setter
     def formula(self, value: str) -> None:
+        self._require_open(f"writing the formula of cell {self.name!r}")
         self.xml.attrib["F"] = xml_value(value)
 
     @property
@@ -233,7 +241,7 @@ class Cell:
         return f"Cell: name={self.name} val={self.value} func={self.func}"
 
 
-class DataProperty(InheritedRow):
+class DataProperty(InheritedRow, DocumentPart):
     """Represents a single Data Property item associated with a Shape object
 
     A property a shape inherits from its master is handed out marked
@@ -292,6 +300,11 @@ class DataProperty(InheritedRow):
                 self.prompt = master_prop.prompt
                 self.sort_key = master_prop.sort_key
 
+    @property
+    @override
+    def _document(self) -> vsdx.VisioFile:
+        return self.shape._document
+
     def inherited_by(self, shape: Shape) -> DataProperty:
         """This property as an instance of the master sees it, marked inherited.
 
@@ -314,6 +327,9 @@ class DataProperty(InheritedRow):
         ``Value`` cell. A master row with no name has nothing to match on, so
         the label is carried down to keep the property addressable.
         """
+        # make_local() is public and reaches here directly, not only through
+        # the guarded value setter, and this is the only materialisation path
+        self._require_open("materialising an inherited data property")
         section = self.shape.xml.find(f'{namespace}Section[@N="Property"]')
         if section is None:
             section = ET.fromstring(f'<Section xmlns="{namespace[1:-1]}" N="Property"/>')
@@ -361,6 +377,9 @@ class DataProperty(InheritedRow):
         shape first, so the master's value is left as it was, and with it every
         other shape drawn from that master.
         """
+        # ahead of make_local(), which materialises an override row: a refused
+        # write must not leave an empty property behind on the shape
+        self._require_open(f"writing data property {(self.label or self.name)!r}")
         self.make_local()
         text = "" if value is None else str(value)
         value_cell = self.xml.find(f'{namespace}Cell[@N="Value"]')
@@ -385,6 +404,7 @@ class DataProperty(InheritedRow):
 
     def set_attribute(self, name: str, attrib: str, value: str) -> bool:
         """Set the attribute value of the cell element"""
+        self._require_open("DataProperty.set_attribute()")
         element = self._get_element(name)
         if isinstance(element, Element):
             element.attrib[attrib] = value
@@ -393,6 +413,7 @@ class DataProperty(InheritedRow):
 
     def remove_attribute(self, name: str, attrib: str) -> bool:
         """Remove the attribute from the cell element"""
+        self._require_open("DataProperty.remove_attribute()")
         element = self._get_element(name)
         if isinstance(element, Element) and attrib in element.attrib:
             del element.attrib[attrib]
@@ -405,7 +426,7 @@ class DataProperty(InheritedRow):
         return element
 
 
-class Shape:
+class Shape(DocumentPart):
     """Represents a single shape, or a group shape containing other shapes"""
 
     xml: Element
@@ -492,6 +513,11 @@ class Shape:
         return hash((self.ID, self.page.name, self.page.vis.filename))
 
     @property
+    @override
+    def _document(self) -> vsdx.VisioFile:
+        return self.page.vis
+
+    @property
     def geometry(self) -> vsdx.Geometry | None:
         """This shape's Geometry section, merged with the master's, or ``None``.
 
@@ -523,6 +549,9 @@ class Shape:
         and assigning it worked. It writes nothing to the shape's XML, so the
         two part company until the shape is read again.
         """
+        # guarded although it writes no XML: it points the Shape at geometry
+        # that the document it belongs to can no longer be saved with
+        self._require_open("replacing a shape's geometry")
         self._geometry = value
         self._geometry_xml = value.xml if value is not None else None
 
@@ -725,6 +754,10 @@ class Shape:
         A cell the master defines is copied down first, so the attribute that
         is not being set keeps what it inherits.
         """
+        # nearly every coordinate, size and colour setter arrives here, so one
+        # guard covers them all; the message describes the write because which
+        # setter the caller used is not knowable from here (issue #329)
+        self._require_open(f"writing shape cell {name!r}")
         cell = self.cells.get(name)
         if cell is not None:  # update in place
             if f is not None:
@@ -760,13 +793,23 @@ class Shape:
         """Set a named cell's formula, creating the cell if absent."""
         self._write_cell(name, f=value)
 
+    def _write_style_attribute(self, attribute: str, value: str | int) -> None:
+        """Set one of the style references a Shape element carries as an attribute.
+
+        LineStyle, FillStyle and TextStyle are attributes of the Shape element
+        rather than cells, so they do not pass through :meth:`_write_cell` and
+        need the closed-document guard of their own (issue #329).
+        """
+        self._require_open(f"writing shape attribute {attribute!r}")
+        self.xml.attrib[attribute] = str(value)
+
     @property
     def line_style_id(self) -> str | None:
         return self.xml.attrib.get("LineStyle")
 
     @line_style_id.setter
     def line_style_id(self, value: str | int) -> None:
-        self.xml.attrib["LineStyle"] = str(value)
+        self._write_style_attribute("LineStyle", value)
 
     @property
     def fill_style_id(self) -> str | None:
@@ -774,7 +817,7 @@ class Shape:
 
     @fill_style_id.setter
     def fill_style_id(self, value: str | int) -> None:
-        self.xml.attrib["FillStyle"] = str(value)
+        self._write_style_attribute("FillStyle", value)
 
     @property
     def text_style_id(self) -> str | None:
@@ -782,7 +825,7 @@ class Shape:
 
     @text_style_id.setter
     def text_style_id(self, value: str | int) -> None:
-        self.xml.attrib["TextStyle"] = str(value)
+        self._write_style_attribute("TextStyle", value)
 
     @property
     def line_weight(self) -> float | None:
@@ -920,6 +963,9 @@ class Shape:
     @text_color.setter
     def text_color(self, value: str | int) -> None:
         """Set text color of shape - the colour formatting the start of its text"""
+        # text colour lives in a Character section row, not in a cell, so it
+        # does not reach the _write_cell guard
+        self._require_open("writing a shape's text colour")
         # coerced before anything is created: a rejected value used to leave a
         # Character row and a text run behind and then raise
         text = xml_value(value)
@@ -1050,6 +1096,9 @@ class Shape:
         :param f: formula to set on the F attribute (optional)
         :return: the Cell object
         """
+        # second entry point for writing a named cell; #319 folds it into
+        # _write_cell, and the guard has to be on both until it does
+        self._require_open(f"writing shape cell {name!r}")
         cell = self.cells.get(name)
         if cell is not None:
             if f is not None:
@@ -1133,7 +1182,11 @@ class Shape:
     def set_start_and_finish(
         self, start: tuple[float | None, float | None], finish: tuple[float | None, float | None]
     ) -> None:
-        # set start and finish of a simple line or connector
+        """Set the start and finish of a simple line or connector."""
+        # nothing at all is written on a shape with no BeginX, so leaving this
+        # to the coordinate setters below would make the refusal depend on the
+        # shape it was asked of
+        self._require_open("Shape.set_start_and_finish()")
         if self.begin_x is not None:  # only apply changes to lines and connector shapes
             start_x, start_y = start
             finish_x, finish_y = finish
@@ -1224,6 +1277,7 @@ class Shape:
 
     @text.setter
     def text(self, value: str) -> None:
+        self._require_open("writing a shape's text")
         prefix, _, suffix, trailing = self._text_runs()
         _write_text(self.xml, value, prefix=prefix, suffix=suffix, trailing=trailing)
 
@@ -1360,6 +1414,9 @@ class Shape:
         ]
 
     def apply_text_filter(self, context: dict[str, object]) -> None:
+        # a shape whose text has nothing to substitute never reaches the text
+        # setter, so its guard alone would let this one through
+        self._require_open("Shape.apply_text_filter()")
         text = self.text
         substituted = substitute(text, context)
         # Writing back text that did not change is not free: a run between two
@@ -1420,6 +1477,11 @@ class Shape:
         hold the same shape twice, under one ID and at one position. Copy the
         shape and append the copy instead.
         """
+        # ahead of every check and every write: the guard used to be inherited
+        # from renumber_shape_ids, which is reached only when the shape is new
+        # to the page, so moving a shape already on it edited a closed document
+        # and returned (issue #329)
+        self._require_open("Shape.append_shape()")
         wraps_shapes_tag = self.tag == f"{namespace}Shapes"
         if not wraps_shapes_tag and self.shape_type != "Group":
             raise ValueError(
@@ -1438,13 +1500,16 @@ class Shape:
         # Detaching first is also what stops the element gaining a second
         # parent, which is the problem the rejection existed to prevent.
         current_parent = parent_of(self.page.xml.getroot(), append_shape.xml)
-        if current_parent is not None:
-            current_parent.remove(append_shape.xml)
-        container = self.xml if wraps_shapes_tag else find_or_create_shapes_tag(self.xml)
         if current_parent is None:
             # New to the page, so it needs ids; a move keeps the ones it has,
             # or every Connect record naming the shape would be left dangling.
             self.page.vis.renumber_shape_ids(append_shape.xml, self.page)
+        else:
+            current_parent.remove(append_shape.xml)
+        # last, because it creates the <Shapes> element an empty group lacks:
+        # running it ahead of the id allocation left that element behind when
+        # the allocation refused the call
+        container = self.xml if wraps_shapes_tag else find_or_create_shapes_tag(self.xml)
         container.append(append_shape.xml)
         # The Shape object cached its ID and its parent at construction; both
         # have just changed underneath it.

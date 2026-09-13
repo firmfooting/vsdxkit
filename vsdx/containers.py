@@ -19,10 +19,17 @@ Model (verified against the capture):
 
 from __future__ import annotations
 
+import sys
 import xml.etree.ElementTree as ET
+
+if sys.version_info >= (3, 12):
+    from typing import override
+else:
+    from typing_extensions import override
 
 import vsdx
 
+from .document_part import DocumentPart
 from .shapes import Shape
 
 # observed lane pitch in the Visio 16 CFF capture (inches)
@@ -59,7 +66,7 @@ def set_user_row_value(shape: Shape, name: str, value: str) -> bool:
     return False
 
 
-class Container:
+class Container(DocumentPart):
     """Read/write view over a CFF (swimlane) diagram structure.
 
     Membership is geometric: :meth:`lane_of` maps a shape to the lane whose
@@ -69,6 +76,11 @@ class Container:
 
     def __init__(self, page: vsdx.Page):
         self.page = page
+
+    @property
+    @override
+    def _document(self) -> vsdx.VisioFile:
+        return self.page.vis
 
     # ---- discovery -------------------------------------------------------
 
@@ -151,6 +163,10 @@ class Container:
 
         :return: the new lane Shape
         """
+        # the Page.* wrappers are guarded; a Container reached through
+        # Page.get_container() was not, and took its refusal from
+        # renumber_shape_ids, which the caller never called (issue #329)
+        self._require_open("Container.add_swimlane()")
         lanes = self.lanes
         if not lanes:
             raise ValueError("page has no Swimlane lanes; not a CFF diagram")
@@ -199,6 +215,7 @@ class Container:
 
         :raises ValueError: if ``lane`` has no ``visHeadingText`` row.
         """
+        self._require_open("Container.set_lane_label()")
         if not set_user_row_value(lane, ROW_HEADING_TEXT, label):
             raise ValueError(f"shape {lane.ID} has no writable {ROW_HEADING_TEXT} row, so it is not a swimlane lane")
         heading = self.lane_heading(lane)
@@ -220,6 +237,7 @@ class Container:
         lane's centre, keeping its PinX. Mirrors Visio's own behaviour when a
         shape is dragged into a lane; membership stays geometric.
         """
+        self._require_open("Container.add_shape_to_lane()")
         if self.lane_of(shape) is lane:
             return
         shape.get_or_create_cell("PinY", v=str(lane.y or 0.0))

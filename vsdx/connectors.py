@@ -67,6 +67,7 @@ class Connect:
             raise ValueError("Connect.create() requires a page")
         if from_shape is None or to_shape is None:
             raise ValueError("Connect.create() requires both from_shape and to_shape")
+        page.vis._require_open("Connect.create()")
         Connect._parse_route(route)
         # validate everything _apply_glue can reject BEFORE provisioning
         # masters, copying shapes or appending records (issue #9 atomicity)
@@ -284,6 +285,9 @@ class Connect:
 
         :returns: the connector Shape
         """
+        # its own guard: the first write is page.remove_connect_records(), so
+        # without this the error names a method the caller never called
+        page.vis._require_open("Connect.retarget()")
         current_from = current_to = None
         current_from_cp = current_to_cp = 0
         for connect in page.connects:
