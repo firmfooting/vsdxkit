@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import xml.etree.ElementTree as ET
 from xml.etree.ElementTree import Element
 
@@ -74,7 +75,7 @@ class Connect:
             from_shape is not None and to_shape is not None
         ):  # create new connector shape and connect items between this and the two shapes
             # create new connect shape and get id
-            media = vsdx.Media()
+            media = page.vis._shared_media()
             media_shape = media.straight_connector
             # state-based guard: masters provisioned if the document already
             # carries the masters relationship (the on-disk folder only exists
@@ -138,8 +139,10 @@ class Connect:
                 # assume same if is ok, todo: use names for match and increment IDs
                 media_style = media.media._get_style_by_id(line_style_id)
                 if media_style is not None:
-                    page.vis._style_sheets().append(media_style)
-            media.close()
+                    # copy, not alias: the donor document now outlives this
+                    # call, so appending its live element would leave the two
+                    # documents sharing one mutable StyleSheet
+                    page.vis._style_sheets().append(copy.deepcopy(media_style))
 
             # wire glue to the from/to shapes (Visio-faithful formulas, see
             # tests/fixtures/com_reference/manifest.json for ground truth)

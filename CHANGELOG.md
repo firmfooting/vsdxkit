@@ -139,6 +139,14 @@ history precedes 0.6.3 here, remains available at
 
 ### Changed
 
+- The bundled media and palette documents are now parsed once per `VisioFile`
+  rather than once per `create_shape` and `connect_shapes` call. A loop building
+  N shapes and N connectors re-opened and re-parsed `media.vsdx` and
+  `palette_extended.vsdx` 2N times; it now opens each at most once. The shared
+  `Media` is owned by the document and released by `close_vsdx()`, which stays
+  safe to call more than once, and a create or connect call after a close builds
+  a fresh one instead of reusing a closed instance. `Media` remains public and
+  independently constructible.
 - `save_vsdx` now keeps the saved extension in step with the package kind. The
   kind comes from the content type of `visio/document.xml`, not the filename, so
   saving a macro-enabled package to a `.vsdx` destination — or a plain drawing to
