@@ -125,5 +125,5 @@ after a COM error and records it in the notes. Read those rather than the exit
 code.
 
 [CONTRIBUTING.md](../../../CONTRIBUTING.md) covers this script and
-`tools/visio_check.ps1` from the contributor's side, under "When a change needs
+`tools/visio_verify.py` from the contributor's side, under "When a change needs
 Visio".

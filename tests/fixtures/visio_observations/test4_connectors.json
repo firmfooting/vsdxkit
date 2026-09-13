@@ -1,0 +1,200 @@
+{
+  "error": null,
+  "pages": [
+    {
+      "background": false,
+      "connects": [
+        {
+          "from_cell": "BeginX",
+          "from_shape": 6,
+          "to_cell": "PinX",
+          "to_shape": 1
+        },
+        {
+          "from_cell": "EndX",
+          "from_shape": 6,
+          "to_cell": "PinX",
+          "to_shape": 2
+        },
+        {
+          "from_cell": "BeginX",
+          "from_shape": 7,
+          "to_cell": "PinX",
+          "to_shape": 2
+        },
+        {
+          "from_cell": "EndX",
+          "from_shape": 7,
+          "to_cell": "PinX",
+          "to_shape": 5
+        }
+      ],
+      "index": 1,
+      "name": "Page-1",
+      "shapes": [
+        {
+          "id": 1,
+          "name": "Sheet.1",
+          "parent_id": null
+        },
+        {
+          "id": 2,
+          "name": "Sheet.2",
+          "parent_id": null
+        },
+        {
+          "id": 5,
+          "name": "Sheet.5",
+          "parent_id": null
+        },
+        {
+          "id": 6,
+          "name": "Sheet.6",
+          "parent_id": null
+        },
+        {
+          "id": 7,
+          "name": "Sheet.7",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "background": false,
+      "connects": [
+        {
+          "from_cell": "BeginX",
+          "from_shape": 6,
+          "to_cell": "PinX",
+          "to_shape": 1
+        },
+        {
+          "from_cell": "EndX",
+          "from_shape": 6,
+          "to_cell": "PinX",
+          "to_shape": 2
+        },
+        {
+          "from_cell": "BeginX",
+          "from_shape": 7,
+          "to_cell": "PinX",
+          "to_shape": 2
+        },
+        {
+          "from_cell": "EndX",
+          "from_shape": 7,
+          "to_cell": "PinX",
+          "to_shape": 5
+        }
+      ],
+      "index": 2,
+      "name": "Page-2",
+      "shapes": [
+        {
+          "id": 1,
+          "name": "Sheet.1",
+          "parent_id": null
+        },
+        {
+          "id": 2,
+          "name": "Sheet.2",
+          "parent_id": null
+        },
+        {
+          "id": 5,
+          "name": "Sheet.5",
+          "parent_id": null
+        },
+        {
+          "id": 6,
+          "name": "Sheet.6",
+          "parent_id": null
+        },
+        {
+          "id": 7,
+          "name": "Sheet.7",
+          "parent_id": null
+        }
+      ]
+    },
+    {
+      "background": false,
+      "connects": [],
+      "index": 3,
+      "name": "Page-3",
+      "shapes": [
+        {
+          "id": 1,
+          "name": "Sheet.1",
+          "parent_id": null
+        },
+        {
+          "id": 2,
+          "name": "Sheet.2",
+          "parent_id": 1
+        },
+        {
+          "id": 3,
+          "name": "Sheet.3",
+          "parent_id": 1
+        },
+        {
+          "id": 4,
+          "name": "Sheet.4",
+          "parent_id": 1
+        },
+        {
+          "id": 5,
+          "name": "Sheet.5",
+          "parent_id": 1
+        },
+        {
+          "id": 6,
+          "name": "Sheet.6",
+          "parent_id": null
+        },
+        {
+          "id": 7,
+          "name": "Sheet.7",
+          "parent_id": 6
+        },
+        {
+          "id": 8,
+          "name": "Sheet.8",
+          "parent_id": 6
+        },
+        {
+          "id": 9,
+          "name": "Sheet.9",
+          "parent_id": 6
+        },
+        {
+          "id": 10,
+          "name": "Sheet.10",
+          "parent_id": 6
+        },
+        {
+          "id": 11,
+          "name": "Sheet.11",
+          "parent_id": null
+        },
+        {
+          "id": 12,
+          "name": "Sheet.12",
+          "parent_id": null
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "source": {
+    "name": "test4_connectors.vsdx",
+    "sha256": "6c0f92fe2ba10e2323609ee97391dd17f5e1fd3cefdcdfb726a5ef7d5ca6a566",
+    "transform": "roundtrip"
+  },
+  "status": "opened",
+  "viewer": {
+    "product": "Visio",
+    "version": "16.0"
+  }
+}
