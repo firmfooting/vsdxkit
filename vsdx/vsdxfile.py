@@ -1280,9 +1280,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         allocation walk that stopped short, and gave every child a second ID it
         then threw away. ``increment_shape_ids`` now reaches the whole subtree.
         """
-        id_map = self.increment_shape_ids(shape.xml, page, id_map)
-        self.update_ids(shape.xml, id_map)
-        return id_map
+        return self.renumber_shape_ids(shape.xml, page, id_map)
 
     def copy_shape(self, shape: Element, page: Page) -> Element:
         """Insert shape into first Shapes tag in destination page, and return the copy.
@@ -1304,8 +1302,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
 
         shapes_tag = find_or_create_shapes_tag(page.xml.getroot())
 
-        id_map = self.increment_shape_ids(new_shape, page)  # page_obj)
-        self.update_ids(new_shape, id_map)
+        self.renumber_shape_ids(new_shape, page)
         shapes_tag.append(new_shape)
 
         return new_shape
@@ -1317,10 +1314,40 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         if _normalise_page_path(page.filename) != _normalise_page_path(page_path):
             raise ValueError(f"page_path {page_path!r} does not match page filename {page.filename!r}")
 
-        id_map = self.increment_shape_ids(shape, page)
-        self.update_ids(shape, id_map)
+        self.renumber_shape_ids(shape, page)
         shapes.append(shape)
         return shapes
+
+    def renumber_shape_ids(self, shape: Element, page: Page, id_map: dict[str, int] | None = None) -> dict[str, int]:
+        """Give a subtree IDs unused by ``page``, and follow them everywhere the page writes them.
+
+        One primitive, because a shape ID is written in two places: the
+        ``Sheet.N!`` references inside cell formulas, and the ``FromSheet`` and
+        ``ToSheet`` attributes of the page's ``Connect`` records. Allocating and
+        then sweeping only the formulas is what left a renumbered shape's glue
+        naming an ID that was no longer on the page.
+
+        A record follows only the IDs this call vacated: on the page before,
+        gone after. Renumbering does not always retire an ID - ``copy_shape``
+        leaves the original where it was, and the Jinja loop renumbers the
+        duplicates while the shape they were copied from keeps its ID. Nor is
+        every ID in the map one this page ever had: a subtree arriving from
+        elsewhere brings its own, and a stale record that happens to name one
+        of those numbers belongs to whatever wrote the file, not to the shape
+        now carrying it.
+
+        :param shape: root of the subtree to renumber, normally a ``Shape`` element
+        :param page: page that owns the ID high-water mark and the records
+        :param id_map: mapping to extend, so several subtrees renumbered
+            together share one map; a new one is started when omitted
+        :return: the ID map, old ID -> new ID
+        """
+        before = page._shape_ids()
+        id_map = self.increment_shape_ids(shape, page, id_map)
+        self.update_ids(shape, id_map)
+        after = page._shape_ids()
+        page._remap_connect_records({old: new for old, new in id_map.items() if old in before and old not in after})
+        return id_map
 
     def increment_shape_ids(self, shape: Element, page: Page, id_map: dict[str, int] | None = None) -> dict[str, int]:
         """Give ``shape`` and the shapes inside it IDs unused by ``page``, and map old to new.

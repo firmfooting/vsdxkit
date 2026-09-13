@@ -1403,8 +1403,7 @@ class Shape:
         if current_parent is None:
             # New to the page, so it needs ids; a move keeps the ones it has,
             # or every Connect record naming the shape would be left dangling.
-            id_map = self.page.vis.increment_shape_ids(append_shape.xml, self.page)
-            self.page.vis.update_ids(append_shape.xml, id_map)
+            self.page.vis.renumber_shape_ids(append_shape.xml, self.page)
         container.append(append_shape.xml)
         # The Shape object cached its ID and its parent at construction; both
         # have just changed underneath it.
