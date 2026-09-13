@@ -270,10 +270,11 @@ def serialise_part(xml: ET.ElementTree[ET.Element]) -> bytes:
     and one written through `xml_to_file` cannot disagree about the
     declaration, the encoding or the per-part prefix map.
 
-    Two parts are still written without coming through here: `masters.py` and
-    `pages.py` each build a tree and hand it straight to `ET.tostring`, which
-    resolves prefixes from whatever the global table happens to hold. Both are
-    on #91's list.
+    Every tree that becomes an archive member goes through here. The two that
+    did not -- `masters.py` and `pages.py` each handed a tree straight to
+    `ET.tostring`, which resolves prefixes from whatever the global table
+    happens to hold, and so wrote the page rels part as `<ns0:Relationships>`
+    -- were routed back through it in #360.
     """
     root = xml.getroot()
     file: io.BytesIO = io.BytesIO()

@@ -168,9 +168,10 @@ class MastersImportMixin:
             'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>'
         )
         self.masters_xml = masters_root
-        self.zip_file_contents[f"{self._masters_folder}/masters.xml"] = io.BytesIO(
-            ET.tostring(masters_root, xml_declaration=True, encoding="UTF-8")
-        )
+        # `ET.tostring` happens to spell this part correctly, because the Visio
+        # namespace is the one holding the process-wide default prefix. Written
+        # through `xml_to_file` so it does not depend on that (#360).
+        xml_to_file(ET.ElementTree(masters_root), f"{self._masters_folder}/masters.xml", self.zip_file_contents)
         self.zip_file_contents[f"{self._masters_folder}/_rels/masters.xml.rels"] = io.BytesIO(
             b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'
             b'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>'

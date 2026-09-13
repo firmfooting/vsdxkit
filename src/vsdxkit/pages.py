@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .vsdxfile import VisioFile
-import io
 import xml.etree.ElementTree as ET
 
 import deprecation
@@ -19,7 +18,7 @@ from vsdxkit import namespace
 
 from .connectors import Connect
 from .shapes import Shape, parent_of
-from .xmlio import require_element, xml_value
+from .xmlio import require_element, xml_to_file, xml_value
 
 # the two places a Connect record names a shape: the connector it leads from,
 # and the shape that connector is glued to
@@ -344,11 +343,12 @@ class Page:
         )
         rels_root.append(rel_element)
         # persist into the zip contents so save picks it up even for pages
-        # that never had a rels part before
+        # that never had a rels part before. Through `xml_to_file` rather than
+        # `ET.tostring`: this part is in the package-relationships namespace,
+        # which does not hold the process-wide default prefix, so serialising
+        # it outside the per-part prefix map wrote `<ns0:Relationships>` (#360).
         if self.rels_xml_filename:
-            self.vis.zip_file_contents[self.rels_xml_filename] = io.BytesIO(
-                ET.tostring(rels_root, xml_declaration=True, encoding="UTF-8")
-            )
+            xml_to_file(self.rels_xml, self.rels_xml_filename, self.vis.zip_file_contents)
 
     def get_connects(self) -> list[Connect]:
         elements = self.xml.findall(f".//{namespace}Connect")  # search recursively
