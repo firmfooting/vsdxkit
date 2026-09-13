@@ -15,6 +15,16 @@ history precedes 0.6.3 here, remains available at
   job summary, uploads `coverage.xml` as an artifact, and fails the run below
   the `fail_under` threshold in `pyproject.toml`. The threshold starts at the
   suite's measured 90% and only ever rises.
+- `Geometry`, `GeometryRow` and `GeometryCell` have direct tests, covering every
+  line of `vsdx/geometry.py`: the master-geometry merge, `start_pos()`,
+  `move()`, the `set_move_to()`/`set_line_to()` no-ops, and `RelMoveTo`
+  handling. The tests characterise the code as it stands, faults included, and
+  the docstrings now say what those faults are. `start_pos()` answers in
+  shape-local coordinates for a `MoveTo` row but returns the shape's pin for a
+  `RelMoveTo` one; `move()` and the coordinate setters write through an
+  inherited row into the master, moving every other shape drawn from it; and a
+  row added to a section is placed among the section's cells, ordered by index
+  as text. Issues #239, #240 and #241 track the fixes.
 - Package expansion limits: `VisioFile` inspects archive metadata before reading
   members and enforces caps on member count, per-member and total uncompressed
   size and compression ratio, and rejects duplicate and path-unsafe member names,

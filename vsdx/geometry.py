@@ -14,7 +14,27 @@ namespace = "{http://schemas.microsoft.com/office/visio/2012/main}"  # visio fil
 
 
 class Geometry:
-    """class to represent, and manipulate, the geometry of a shape"""
+    """The geometry of a shape: a Geometry section's cells and rows.
+
+    A shape that has a master starts from the master's section and layers its
+    own on top. Rows merge by index and then by cell name, so a row that
+    overrides only X keeps the master's Y; a row carrying ``Del="1"`` removes
+    the inherited row entirely. Section cells merge less carefully: they are a
+    list, not a dict, so an instance cell is *appended* after the inherited one
+    of the same name rather than replacing it.
+
+    An inherited row is the master's :class:`GeometryRow` object, and its cells
+    are the master's XML. Writing to one through :attr:`GeometryRow.x`, or
+    through :meth:`move`, edits the master and so moves every other shape
+    drawn from it. :meth:`set_move_to` and :meth:`set_line_to` avoid that by
+    copying the row down onto the instance first.
+
+    The merge also takes the master's :attr:`rows` dict by reference rather
+    than copying it, so applying a ``Del`` row deletes it from the master
+    Geometry's view too. That is harmless only because ``Shape.master_shape``
+    rebuilds the master on every access, leaving the mutated object to be
+    discarded; it would not survive the master being cached.
+    """
 
     def __init__(self, xml: Element, shape: vsdx.Shape):
         # get shape master geometry, and append/overwrite with actual shape instance data
@@ -42,7 +62,14 @@ class Geometry:
                 del self.rows[index]
 
     def start_pos(self) -> tuple[float | None, float | None] | None:
-        # find start position of shape based on first MoveTo or RelMoveTo row in geometry
+        """The start of the path, from the first MoveTo or RelMoveTo row.
+
+        The two row types answer in different coordinate systems. MoveTo gives
+        the row's own X/Y, relative to the shape. RelMoveTo ignores the row's
+        offset altogether and gives the shape's PinX/PinY, measured from the
+        page or from the enclosing group. Check the row type before relying on
+        the result. Returns ``None`` if the shape has neither row.
+        """
         for row in self.rows.values():  # type: GeometryRow
             if str(row.row_type).lower() == "moveto":
                 return row.x, row.y
@@ -52,7 +79,15 @@ class Geometry:
         return None
 
     def move(self, x_delta: float, y_delta: float) -> None:
-        # update any absolute references to co-ordinates
+        """Shift the rows that hold absolute coordinates.
+
+        Only MoveTo and LineTo rows are shifted; relative rows are offsets
+        from the previous point and stay as they are. A coordinate the row
+        does not define is left undefined rather than treated as zero.
+
+        An inherited row is shifted in the master's XML, which moves every
+        other shape drawn from that master too.
+        """
         for r in self.rows.values():  # type: GeometryRow
             logger.debug("r=%s %s", type(r), r)
             if str(r.row_type).lower() in ["moveto", "lineto"]:  # todo: include other absolute row types
@@ -65,6 +100,16 @@ class Geometry:
                 logger.debug("r=%s %s after move %s, %s", type(r), r, x_delta, y_delta)
 
     def set_move_to(self, x: float, y: float, move_to_index: int = 0) -> None:
+        """Set the coordinates of one MoveTo row.
+
+        ``move_to_index`` counts MoveTo rows in order, and is not a row IX.
+        Nothing happens if the shape has no MoveTo row at that position.
+
+        An inherited row is copied down onto this shape first, so the master is
+        left alone; the copy carries the value but not the master cell's ``F``
+        formula. A cell this shape already owns keeps its formula, and Visio
+        re-evaluates that formula over the value written here.
+        """
         move_tos = [r for r in self.rows.values() if str(r.row_type).lower() == "moveto"]
         # print(f"move_tos={move_tos}")
         if len(move_tos) > move_to_index:
@@ -77,6 +122,10 @@ class Geometry:
             # print(f"move_to[{move_to_index}]={move_to.x},{move_to.y}")
 
     def set_line_to(self, x: float, y: float, line_to_index: int = 0) -> None:
+        """Set the coordinates of one LineTo row.
+
+        Behaves as :meth:`set_move_to` does, over LineTo rows.
+        """
         line_tos = [r for r in self.rows.values() if str(r.row_type).lower() == "lineto"]
         # print(f"line_tos={line_tos}")
         if len(line_tos) > line_to_index:
@@ -119,6 +168,18 @@ class GeometryRow:
                 self.cells[g_cell.name] = g_cell
 
     def create_row_xml(self, T: str, IX: str) -> Element:
+        """Add a Row element for this row to the parent Geometry section.
+
+        Placement is unreliable in two ways. The position is worked out over
+        the section's Row elements alone but applied to all of its children,
+        so a new row can land between the section's Cell elements, which the
+        Visio schema does not allow. Indexes are also sorted as text, so IX 10
+        lands ahead of IX 2, and row order is the order the path is drawn in.
+
+        Both arguments have already been stringified by the caller, so
+        ``IX=None`` arrives as the literal ``"None"`` and passes the
+        emptiness check.
+        """
         if not T or not IX:
             raise ValueError(f"cannot create a geometry row without T and IX (got T={T!r}, IX={IX!r})")
         # Create new row xml
@@ -145,6 +206,11 @@ class GeometryRow:
 
     @property
     def index(self) -> str | None:
+        """The row's IX attribute.
+
+        :attr:`Geometry.rows` is keyed when the section is read, so setting
+        this afterwards leaves the row filed under its old index.
+        """
         return self.xml.attrib.get("IX")
 
     @index.setter
@@ -153,6 +219,12 @@ class GeometryRow:
 
     @property
     def x(self) -> float | None:
+        """The row's X coordinate, or ``None`` if the row does not set one.
+
+        Setting it adds the cell if the row lacks one. If this row is itself
+        inherited from a master, the write lands in the master's XML; copy the
+        row down first (as :meth:`Geometry.set_move_to` does) to avoid that.
+        """
         x_cell = self.cells.get("X")
         return float(x_cell.value) if x_cell and x_cell.value else None
 
@@ -171,6 +243,7 @@ class GeometryRow:
 
     @property
     def y(self) -> float | None:
+        """The row's Y coordinate. Behaves as :attr:`x` does."""
         y_cell = self.cells.get("Y")
         return float(y_cell.value) if y_cell and y_cell.value else None
 
@@ -189,7 +262,11 @@ class GeometryRow:
 
     @property
     def del_bool(self) -> str | None:
-        # Specifies whether a row that would otherwise be inherited from a master shape has been deleted.
+        """The Del attribute: whether a row inherited from a master is deleted.
+
+        Assigning a falsy value removes the attribute, and raises ``KeyError``
+        if it was not set to begin with.
+        """
         return self.xml.attrib.get("Del")
 
     @del_bool.setter
