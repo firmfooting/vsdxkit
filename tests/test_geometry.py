@@ -15,15 +15,17 @@ import pytest
 import vsdx
 from vsdx import Geometry, GeometryCell, GeometryRow, Shape, VisioFile, namespace
 
-basedir = os.path.dirname(os.path.realpath(__file__))
+# Named for what it holds, not `basedir`: conftest.py has a session fixture of
+# that name, and a module global shadows it for every test in the file.
+FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
 # `Conn A` in test9 is the one instance shape in the suite that inherits a
 # Geometry section: master page 2 supplies five section cells and rows IX 1-3,
 # the instance overrides row 2 and deletes row 3.
-TEST9 = os.path.join(basedir, "test9_rect_and_line.vsdx")
-PALETTE = os.path.join(basedir, "fixtures", "palette_extended.vsdx")
-HOUSE = os.path.join(basedir, "test3_house.vsdx")
-NESTED = os.path.join(basedir, "test10_nested_shapes.vsdx")
+TEST9 = os.path.join(FIXTURES, "test9_rect_and_line.vsdx")
+PALETTE = os.path.join(FIXTURES, "fixtures", "palette_extended.vsdx")
+HOUSE = os.path.join(FIXTURES, "test3_house.vsdx")
+NESTED = os.path.join(FIXTURES, "test10_nested_shapes.vsdx")
 
 
 def geometry_xml(shape: Shape) -> ET.Element:
@@ -673,7 +675,7 @@ def test_the_section_is_located_when_the_shape_is_built():
 
 def test_repointing_a_shape_at_a_master_drops_the_memo():
     """`master_page_ID` is writable, and `Connect.create` repoints it."""
-    with VisioFile(os.path.join(basedir, "test4_connectors.vsdx")) as vis:
+    with VisioFile(os.path.join(FIXTURES, "test4_connectors.vsdx")) as vis:
         shapes = vis.pages[0].all_shapes
         mastered = next(s for s in shapes if s.master_page_ID)
         masterless = next(s for s in shapes if not s.master_page_ID)
@@ -686,7 +688,7 @@ def test_repointing_a_shape_at_a_master_drops_the_memo():
 
 def test_a_cell_added_to_the_master_is_picked_up_by_a_shape_holding_it():
     """The memo is keyed on the master element's children, not taken on trust."""
-    with VisioFile(os.path.join(basedir, "test5_master.vsdx")) as vis:
+    with VisioFile(os.path.join(FIXTURES, "test5_master.vsdx")) as vis:
         page = vis.pages[0]
         shape = next(s for s in page.all_shapes if s.master_page_ID)
         master_page = shape.master_page

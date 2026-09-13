@@ -9,9 +9,9 @@ the kind can pass with the rule it names deleted.
 import glob
 import os
 import sys
-import zipfile
 
 import pytest
+from helpers.broken_package import Edit, rewritten
 from helpers.package_validator import Defect, _extension, describe_defects, validate_package
 
 PAGE1 = "visio/pages/page1.xml"
@@ -23,27 +23,10 @@ CONTENT_TYPES = "[Content_Types].xml"
 MAIN_NS = "http://schemas.microsoft.com/office/visio/2012/main"
 
 
-def _rewritten(source: str, destination: str, edits: dict[str, tuple[str, str] | None]) -> str:
-    """Copy a package, applying at most one edit per member."""
-    with zipfile.ZipFile(source) as original, zipfile.ZipFile(destination, "w") as rewritten:
-        for entry in original.infolist():
-            if entry.filename in edits and edits[entry.filename] is None:
-                continue  # drop the member entirely
-            data = original.read(entry.filename)
-            edit = edits.get(entry.filename)
-            if edit is not None:
-                old, new = edit
-                text = data.decode("utf-8")
-                assert old in text, f"{old!r} not found in {entry.filename}; the fixture has changed"
-                data = text.replace(old, new, 1).encode("utf-8")
-            rewritten.writestr(entry, data)
-    return destination
-
-
 @pytest.fixture
 def broken(tmp_path, basedir):
-    def _make(fixture: str, edits: dict[str, tuple[str, str] | None], name: str = "broken.vsdx") -> str:
-        return _rewritten(f"{basedir}/{fixture}", str(tmp_path / name), edits)
+    def _make(fixture: str, edits: dict[str, Edit], name: str = "broken.vsdx", **kwargs) -> str:
+        return rewritten(f"{basedir}/{fixture}", str(tmp_path / name), edits, **kwargs)
 
     return _make
 
@@ -251,7 +234,7 @@ class TestPackagesThatCannotBeRead:
 
         assert "unreadable-part" in _kinds(path)
 
-    def test_a_page_nested_deeper_than_the_interpreter_will_recurse_is_a_defect(self, tmp_path, basedir):
+    def test_a_page_nested_deeper_than_the_interpreter_will_recurse_is_a_defect(self, broken):
         """The walks over a shape tree recurse, and groups can nest without limit.
 
         `zipfile` also raises for a compression method it does not implement and
@@ -261,13 +244,8 @@ class TestPackagesThatCannotBeRead:
         """
         depth = sys.getrecursionlimit() * 2
         nested = "<Shape ID='1'><Shapes>" * depth + "</Shapes></Shape>" * depth
-        path = str(tmp_path / "deep.vsdx")
-        with zipfile.ZipFile(f"{basedir}/test1.vsdx") as original, zipfile.ZipFile(path, "w") as rewritten:
-            for entry in original.infolist():
-                data = original.read(entry.filename)
-                if entry.filename == PAGE1:
-                    data = f"<PageContents xmlns='{MAIN_NS}'><Shapes>{nested}</Shapes></PageContents>".encode()
-                rewritten.writestr(entry, data)
+        page = f"<PageContents xmlns='{MAIN_NS}'><Shapes>{nested}</Shapes></PageContents>".encode()
+        path = broken("test1.vsdx", {PAGE1: page}, name="deep.vsdx")
 
         assert [kind for kind in _kinds(path) if kind.startswith("unreadable")]
 
@@ -280,19 +258,16 @@ class TestPackagesThatCannotBeRead:
 
 @pytest.mark.allow_invalid_package
 class TestArchiveShape:
-    def test_a_part_named_twice_is_a_defect(self, tmp_path, basedir):
+    def test_a_part_named_twice_is_a_defect(self, broken):
         """`zipfile` reads the last entry and ignores the first, silently.
 
         `ZipFile.writestr` emits a duplicate name with only a warning, so a
         writer can produce this, and readers disagree about which copy counts.
         A set of member names would hide it.
         """
-        path = str(tmp_path / "dupe.vsdx")
-        with zipfile.ZipFile(f"{basedir}/test1.vsdx") as original, zipfile.ZipFile(path, "w") as rewritten:
-            for entry in original.infolist():
-                rewritten.writestr(entry, original.read(entry.filename))
-            with pytest.warns(UserWarning, match="Duplicate name"):
-                rewritten.writestr(PAGE1, b"<PageContents/>")
+        # catching the warning is what says the archive really ended up with two
+        with pytest.warns(UserWarning, match="Duplicate name"):
+            path = broken("test1.vsdx", {}, name="dupe.vsdx", added={PAGE1: b"<PageContents/>"})
 
         assert "duplicate-member" in _kinds(path)
 
@@ -309,27 +284,25 @@ class TestNamesThatLookWrongButAreNot:
 
         assert _kinds(path) == []
 
-    def test_a_percent_encoded_relationship_target_resolves(self, tmp_path, basedir):
+    def test_a_percent_encoded_relationship_target_resolves(self, broken):
         """A Target is a URI reference; a zip member name is not.
 
         A part whose name holds a space arrives percent-encoded in the
         relationship and has to be decoded before it matches anything. Embedded
         images are where this usually turns up.
         """
-        path = str(tmp_path / "encoded.vsdx")
-        with zipfile.ZipFile(f"{basedir}/test1.vsdx") as original, zipfile.ZipFile(path, "w") as rewritten:
-            for entry in original.infolist():
-                data = original.read(entry.filename)
-                if entry.filename == "visio/_rels/document.xml.rels":
-                    data = data.replace(
-                        b'<Relationship Id="rId1"',
-                        b'<Relationship Id="rIdImage" Type="http://x" Target="media/image%201.png"/><Relationship Id="rId1"',
-                        1,
-                    )
-                elif entry.filename == CONTENT_TYPES:
-                    data = data.replace(b"<Default", b'<Default Extension="png" ContentType="image/png"/><Default', 1)
-                rewritten.writestr(entry, data)
-            rewritten.writestr("visio/media/image 1.png", b"\x89PNG")
+        path = broken(
+            "test1.vsdx",
+            {
+                "visio/_rels/document.xml.rels": (
+                    b'<Relationship Id="rId1"',
+                    b'<Relationship Id="rIdImage" Type="http://x" Target="media/image%201.png"/><Relationship Id="rId1"',
+                ),
+                CONTENT_TYPES: (b"<Default", b'<Default Extension="png" ContentType="image/png"/><Default'),
+            },
+            name="encoded.vsdx",
+            added={"visio/media/image 1.png": b"\x89PNG"},
+        )
 
         assert "missing-part" not in _kinds(path)
 

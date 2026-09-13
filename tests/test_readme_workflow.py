@@ -72,18 +72,11 @@ def test_the_readme_has_the_examples_this_file_checks():
     assert len(python_blocks(_readme())) == EXAMPLES_IN_THE_README
 
 
-def test_every_readme_example_runs(readme_workspace, monkeypatch):
-    """The examples still work against the library as it is today.
+def test_every_readme_example_does_what_it_says(readme_workspace, monkeypatch):
+    """The examples run, and have the effect the prose around them promises.
 
     Failure here means the README is wrong, not that the test is: the examples
     are the contract a new user is handed.
-    """
-    monkeypatch.chdir(readme_workspace)
-    _run(python_blocks(_readme()))
-
-
-def test_every_readme_example_does_what_it_says(readme_workspace, monkeypatch):
-    """The examples have the effect the prose around them promises.
 
     Running them and catching exceptions is a weaker gate than it looks. Python
     lets any attribute be assigned to anything, so a reader's typo - writing

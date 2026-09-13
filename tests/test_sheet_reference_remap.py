@@ -13,7 +13,7 @@ import xml.etree.ElementTree as ET
 
 from vsdx import VisioFile, namespace
 
-basedir = os.path.dirname(os.path.realpath(__file__))
+FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
 
 def _formula(shape, cell_name: str) -> str:
@@ -22,7 +22,7 @@ def _formula(shape, cell_name: str) -> str:
     return cell.attrib.get("F", "")
 
 
-POINT_GLUE_FIXTURE = os.path.join(basedir, "fixtures", "com_reference", "s05_swimlanes_cfflow.vsdx")
+POINT_GLUE_FIXTURE = os.path.join(FIXTURES, "fixtures", "com_reference", "s05_swimlanes_cfflow.vsdx")
 
 
 def test_update_ids_remaps_shape_glue_trigger_formulas(vsdx_copy):
@@ -76,7 +76,7 @@ def test_update_ids_matches_whole_ids_only(vsdx_copy):
     shapes = ET.fromstring(
         f'<Shapes xmlns="{namespace[1:-1]}"><Shape ID="12"><Cell N="Width" F="Sheet.1!Width+Sheet.12!Width"/></Shape></Shapes>'
     )
-    with VisioFile(os.path.join(basedir, "test1.vsdx")) as vis:
+    with VisioFile(os.path.join(FIXTURES, "test1.vsdx")) as vis:
         vis.update_ids(shapes, {"12": 700})
     cell = shapes.find(f"{namespace}Shape/{namespace}Cell")
     # the reference form is preserved; only the id changes
@@ -97,7 +97,7 @@ def test_update_ids_leaves_a_reference_to_another_pages_sheet_alone():
         f'<Shape ID="9"><Cell N="Width" F="Pages[Page-2]!Sheet.1!Width+Sheet.1!Height"/></Shape>'
         f"</Shapes>"
     )
-    with VisioFile(os.path.join(basedir, "test1.vsdx")) as vis:
+    with VisioFile(os.path.join(FIXTURES, "test1.vsdx")) as vis:
         vis.update_ids(shapes, {"1": 700})
     cell = shapes.find(f"{namespace}Shape/{namespace}Cell")
     assert cell.attrib["F"] == "Pages[Page-2]!Sheet.1!Width+Sheet.700!Height"
@@ -111,7 +111,7 @@ def test_update_ids_remaps_the_copied_shapes_own_cells(vsdx_copy):
         f'<Shapes><Shape ID="2"><Cell N="Height" F="Sheet.1!Height"/></Shape></Shapes>'
         f"</Shape></Shapes>"
     )
-    with VisioFile(os.path.join(basedir, "test1.vsdx")) as vis:
+    with VisioFile(os.path.join(FIXTURES, "test1.vsdx")) as vis:
         vis.update_ids(shapes, {"1": 800, "2": 801})
     group = shapes.find(f"{namespace}Shape")
     assert group.find(f'{namespace}Cell[@N="Width"]').attrib["F"] == "Sheet.801!Width"

@@ -14,7 +14,7 @@ from jinja2.exceptions import SecurityError
 
 from vsdx import VisioFile
 
-basedir = os.path.dirname(os.path.realpath(__file__))
+FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
 # Reaches os.popen through a builtin's globals on an unsandboxed environment.
 # The payload only echoes a marker: the point is whether it evaluates at all.
@@ -23,7 +23,7 @@ ESCAPE = "{{ cycler.__init__.__globals__.os.popen('echo reached').read() }}"
 
 def _copy(tmp_path, name="test1.vsdx"):
     destination = os.path.join(str(tmp_path), name)
-    shutil.copy(os.path.join(basedir, name), destination)
+    shutil.copy(os.path.join(FIXTURES, name), destination)
     return destination
 
 

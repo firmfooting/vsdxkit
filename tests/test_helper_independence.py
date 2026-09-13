@@ -11,15 +11,18 @@ way, and a helper that started to would be reaching for the library at the point
 where it matters most.
 """
 
+import ast
 import contextlib
 import importlib
 import os
+import pathlib
 import pkgutil
 import sys
 
 import pytest
 
-HELPERS = os.path.join(os.path.dirname(os.path.realpath(__file__)), "helpers")
+TESTS = os.path.dirname(os.path.realpath(__file__))
+HELPERS = os.path.join(TESTS, "helpers")
 
 
 def _helper_modules() -> list[str]:
@@ -87,3 +90,65 @@ def test_the_refusal_is_reachable():
     """Without this, a finder that never fired would make every case above vacuous."""
     with _refusing_vsdx("vsdx"), pytest.raises(AssertionError, match="oracle"):
         importlib.import_module("vsdx")
+
+
+def test_no_test_module_shadows_a_conftest_fixture():
+    """A module global named after a fixture wins, silently, for the whole file.
+
+    Eighteen modules defined `basedir = os.path.dirname(...)` next to the
+    session fixture of that name, whose docstring asks them not to. The values
+    agreed, so nothing broke - but a test in one of those files asking for
+    `basedir` got the global, and the fixture's guarantee stopped applying to it
+    with nothing said.
+
+    Module-level assignment only. A name bound by an import or a `for` target
+    shadows a fixture just as thoroughly, and is not looked for here, because
+    neither has ever been written in this suite and a check nobody can trip is
+    one nobody maintains.
+    """
+    fixtures = _conftest_fixture_names()
+    assert "basedir" in fixtures, "the fixture this was written for is gone; check the list is still right"
+
+    paths = sorted(pathlib.Path(TESTS).rglob("test_*.py"))
+    assert paths, "no test modules were found, so this checked nothing"
+
+    offenders = []
+    for path in paths:
+        for node in ast.parse(path.read_text(encoding="utf-8")).body:
+            if isinstance(node, ast.Assign):
+                targets = node.targets
+            elif isinstance(node, (ast.AnnAssign, ast.AugAssign)):
+                targets = [node.target]
+            else:
+                continue
+            for name in (t.id for t in _flattened(targets) if isinstance(t, ast.Name)):
+                if name in fixtures:
+                    offenders.append(f"{path.name}:{node.lineno} {name}")
+
+    assert offenders == [], (
+        "these module globals shadow a fixture defined in conftest.py, for every test in their "
+        "file: " + ", ".join(offenders) + ". Rename the global, or take the fixture."
+    )
+
+
+def _flattened(targets: list[ast.expr]) -> list[ast.expr]:
+    """Assignment targets, with `a, b = ...` broken into its parts."""
+    flat: list[ast.expr] = []
+    for target in targets:
+        flat.extend(target.elts if isinstance(target, (ast.Tuple, ast.List)) else [target])
+    return flat
+
+
+def _conftest_fixture_names() -> set[str]:
+    """The top-level functions in `tests/conftest.py` carrying a `fixture` decorator.
+
+    Matched on the decorator's source, because `pytest.fixture`,
+    `pytest.fixture(scope="session")` and a bare `fixture` are three different
+    node shapes for the same thing.
+    """
+    tree = ast.parse((pathlib.Path(TESTS) / "conftest.py").read_text(encoding="utf-8"))
+    return {
+        node.name
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and any("fixture" in ast.dump(decorator) for decorator in node.decorator_list)
+    }

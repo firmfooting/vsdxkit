@@ -13,7 +13,7 @@ import pytest
 
 from vsdx import VisioFile, namespace
 
-basedir = os.path.dirname(os.path.realpath(__file__))
+FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
 
 def _connect_records(page):

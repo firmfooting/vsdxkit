@@ -10,7 +10,7 @@ import pytest
 
 from vsdx import VisioFile
 
-basedir = os.path.dirname(os.path.realpath(__file__))
+FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
 
 def test_reanchor_with_invalid_route_keeps_connect_records(vsdx_copy, tmp_path):

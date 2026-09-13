@@ -5,7 +5,7 @@ import os
 from vsdx import Connect, VisioFile
 from vsdx.vsdxdiff import VisioFileDiff
 
-basedir = os.path.dirname(os.path.realpath(__file__))
+FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
 
 def test_connect_create_writes_connection_records(vsdx_copy, tmp_path):
