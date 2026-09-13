@@ -5,6 +5,19 @@ vsdxkit documentation
 Python. The distribution is called ``vsdxkit``; code imports it as ``vsdx``.
 Microsoft Visio is not required at runtime.
 
+.. warning::
+
+   **0.x API notice.** 0.7 is the last release of the inherited API. 1.0
+   renames ``VisioFile`` to ``Document`` and ``Container`` to
+   ``SwimlaneDiagram``, splits ``Connect`` into an internal
+   ``ConnectionRecord`` and a public ``Connector``, and drops the context
+   manager: opening closes the archive before it returns, and ``save()`` is
+   the only write. The `1.0 design
+   <https://github.com/firmfooting/vsdxkit/blob/main/.hermes/plans/2026-09-12_simplification-usability-refactor.md>`_
+   lists every change, and a migration guide lands at
+   ``docs/migration-1.0.rst`` with the first breaking release. Pin
+   ``vsdxkit<1`` to stay on the 0.x names.
+
 The library works on the XML parts inside an existing Visio package. It can
 query and edit shapes, create common flowchart shapes, create and re-anchor
 connectors, extend existing cross-functional flowcharts, copy pages and render
