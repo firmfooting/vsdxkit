@@ -8,6 +8,13 @@ history precedes 0.6.3 here, remains available at
 
 ### Added
 
+- CI runs the test suite on macOS as well as Linux and Windows, on the oldest
+  and newest supported interpreters, which catches path-separator and
+  case-sensitivity regressions before a release does.
+- CI measures coverage on one matrix cell, publishes the per-file report to the
+  job summary, uploads `coverage.xml` as an artifact, and fails the run below
+  the `fail_under` threshold in `pyproject.toml`. The threshold starts at the
+  suite's measured 90% and only ever rises.
 - Package expansion limits: `VisioFile` inspects archive metadata before reading
   members and enforces caps on member count, per-member and total uncompressed
   size and compression ratio, and rejects duplicate and path-unsafe member names,

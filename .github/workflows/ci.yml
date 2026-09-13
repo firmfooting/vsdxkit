@@ -20,6 +20,22 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
         python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
+        include:
+          # macOS runs the floor and ceiling interpreters only. What a third
+          # platform adds is filesystem behaviour (path separators, a
+          # case-insensitive default filesystem), which does not vary by
+          # interpreter minor version, so a full third column would spend five
+          # jobs a run testing the same thing five times.
+          - os: macos-latest
+            python-version: '3.10'
+          - os: macos-latest
+            python-version: '3.14'
+          # Coverage is measured on one cell, the interpreter the lint, docs
+          # and build jobs already use. Measuring it on all twelve would
+          # produce the same number twelve times.
+          - os: ubuntu-latest
+            python-version: '3.12'
+            coverage: true
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -34,9 +50,39 @@ jobs:
           enable-cache: false
           version: "0.12.7"
       - name: Install
+        if: ${{ !matrix.coverage }}
         run: uv sync --locked --no-default-groups --group test
       - name: Test
+        if: ${{ !matrix.coverage }}
         run: uv run --no-sync python -m pytest tests -q
+      - name: Install with coverage
+        if: ${{ matrix.coverage }}
+        run: uv sync --locked --no-default-groups --group test --group coverage
+      - name: Test with coverage
+        # fail_under lives in pyproject.toml; pytest-cov applies it here and
+        # fails the job when coverage drops below it.
+        id: coverage
+        if: ${{ matrix.coverage }}
+        run: uv run --no-sync python -m pytest tests --cov=vsdx --cov-report=xml --cov-report=term
+      # Both steps below run whether the step above passed or failed, so a run
+      # under the threshold still shows which files lost coverage. They are
+      # skipped when it was skipped, because then the install failed and there
+      # is no report to read. --fail-under=0 keeps the gate in one place rather
+      # than failing the job twice for one cause.
+      - name: Publish coverage summary
+        if: ${{ matrix.coverage && (steps.coverage.outcome == 'success' || steps.coverage.outcome == 'failure') }}
+        run: |
+          {
+            echo '## Coverage'
+            echo
+            uv run --no-sync coverage report --format=markdown --fail-under=0
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        if: ${{ matrix.coverage && (steps.coverage.outcome == 'success' || steps.coverage.outcome == 'failure') }}
+        with:
+          name: coverage
+          path: coverage.xml
+          if-no-files-found: error
 
   minimum-dependencies:
     name: lowest direct dependencies py${{ matrix.python-version }}
