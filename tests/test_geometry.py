@@ -591,7 +591,16 @@ def test_reprs_identify_the_element_they_describe():
 
 
 def test_geometry_is_exported_from_the_package_root():
-    assert (vsdx.Geometry, vsdx.GeometryRow, vsdx.GeometryCell) == (Geometry, GeometryRow, GeometryCell)
+    """The three names are public API: exported, and from the module that defines them.
+
+    Looked up as strings, because `from vsdx import Geometry` at the top of this
+    file binds the same object `vsdx.Geometry` resolves to. Comparing the two
+    compares a thing with itself.
+    """
+    for name in ("Geometry", "GeometryRow", "GeometryCell"):
+        assert name in vsdx.__all__, f"{name} is missing from vsdx.__all__"
+        assert getattr(vsdx, name, None) is not None, f"vsdx.{name} does not resolve"
+        assert getattr(vsdx, name).__module__ == "vsdx.geometry"
 
 
 # --- when the Geometry is built ---------------------------------------------

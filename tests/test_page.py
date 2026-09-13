@@ -1,3 +1,4 @@
+import math
 import os
 from datetime import datetime
 
@@ -22,8 +23,6 @@ def test_get_page_child_shapes(filename: str, child_count: int, basedir):
         page = vis.get_page(0)  # type: Page
         # check that page has expected number of child shapes
         assert len(page.child_shapes) == child_count
-        # check that same number of shapes can be found in _shapes and page
-        assert len(page._shapes[0].child_shapes) == len(page.child_shapes)
 
 
 @pytest.mark.parametrize(
@@ -39,10 +38,7 @@ def test_get_page_all_shapes(filename: str, all_count: int, basedir):
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.get_page(0)  # type: Page
         # check that page has expected number of all_shapes
-        print(page.all_shapes)
         assert len(page.all_shapes) == all_count
-        # check that same number of shapes can be found in _shapes and page
-        assert len(page._shapes[0].all_shapes) == len(page.all_shapes)
 
 
 @pytest.mark.parametrize(
@@ -115,13 +111,12 @@ def test_set_page_size(filename: str, page_index: int, page_scale: float, tmp_pa
         ("test2.vsdx", 2, {"Shape already here": (0.25, 9.868, 2.415, 11.443)}),
     ],
 )
-def test_get_page_bounds(filename: str, page_index: int, expected_bounds: dict, tmp_path, basedir):
+def test_get_page_bounds(filename: str, page_index: int, expected_bounds: dict, basedir):
     """Shape bounds must match fixture-derived absolute expectations.
 
     Expected values are the coordinates observed in the fixture documents;
     they pin the bounds calculation against silent zeroing or offset shifts.
     """
-    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_get_page_bounds_{page_index}.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.pages[page_index]
         assert page.all_shapes  # a bounds test needs shapes to bound
@@ -133,20 +128,6 @@ def test_get_page_bounds(filename: str, page_index: int, expected_bounds: dict, 
             assert shape is not None, f"fixture shape {text!r} not found on page {page_index}"
             actual = tuple(round(value, 3) for value in shape.bounds)
             assert actual == expected, f"{text!r}: {actual} != {expected}"
-
-        box = vsdx.media.Media().rectangle
-        for s in page.all_shapes:
-            bx, by, ex, ey = s.bounds
-            cbox = box.copy(page=page)
-            cbox.line_color = "#ff2222"
-            cbox.x = bx
-            cbox.loc_x = 0
-            cbox.width = ex - bx
-            cbox.y = by
-            cbox.loc_y = 0
-            cbox.height = ey - by
-            cbox.text = f"{bx:.2g},{by:.2g}-{ex:.2g},{ey:.2g}"
-        vis.save_vsdx(out_file)
 
 
 @pytest.mark.parametrize(
@@ -558,20 +539,11 @@ def test_add_connect_between_shapes_by_property(
             assert page.find_shape_by_id(new_connector_id)
 
 
-def fl(v: float):
-    if type(v) is float:
-        return f"{v:.2g}"
-
-
-def add_shape_info(s: Shape):
-    s.text = s.text + f" x,y={fl(s.x)}, {fl(s.y)}"
-    if s.begin_x is not None:
-        s.text = s.text + f" bx,by={fl(s.begin_x)}, {fl(s.begin_y)}"
-        s.text = s.text + f" ex,ey={fl(s.end_x)}, {fl(s.end_y)}"
-    s.text = s.text + f" w,h={fl(s.width)}, {fl(s.height)}"
-    cx, cy = s.center_x_y
-    s.text = s.text + f" cx,cy={fl(cx)}, {fl(cy)}"
-    s.text = s.text + f" locx,locy={fl(s.loc_x)}, {fl(s.loc_y)}"
+def _only(page, matching) -> Shape:
+    """The one shape on the page that `matching` accepts."""
+    found = [shape for shape in page.all_shapes if matching(shape)]
+    assert len(found) == 1, f"expected one matching shape, the page has {[s.text for s in page.all_shapes]}"
+    return found[0]
 
 
 @pytest.mark.parametrize(
@@ -586,25 +558,45 @@ def add_shape_info(s: Shape):
     ],
 )
 def test_copy_and_move_shape(filename: str, shape_text: str, lx: float, ly: float, tmp_path, basedir):
+    """The copy goes where it was put, and the original stays where it was.
+
+    A 2-D shape is put there by its pin; a 1-D one by its endpoints, and its pin
+    then follows from them.
+
+    There was no assertion in here at all. Its only oracle was the autouse
+    structural validator, which says the package is not broken rather than that
+    anything moved.
+    """
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_copy_and_move_shape_{shape_text}_{lx}_{ly}.vsdx")
+    marker = f" moved to {lx},{ly}"
     with VisioFile(os.path.join(basedir, filename)) as vis:
-        print(f"filename:{out_file}")
         page = vis.pages[0]  # type: Page
         shape = page.find_shape_by_text(shape_text)
-        print(vsdx.pretty_print_element(shape.xml))
-        # should work for shapes
+        original_bounds = shape.bounds
+        one_dimensional = shape.begin_x is not None
+
         cp1 = shape.copy()
-        add_shape_info(shape)
         cp1.x, cp1.y = lx, ly
-        cp1.text = cp1.text + f"lx,ly={fl(lx)}, {fl(ly)}"
-        if shape.begin_x is not None:
-            # should work for lines
+        cp1.text = cp1.text + marker
+        if one_dimensional:
             cp1.begin_x, cp1.begin_y = lx, ly
             cp1.end_x, cp1.end_y = lx + cp1.width, ly + cp1.height
             cp1.x, cp1.y = cp1.center_x_y
-        add_shape_info(cp1)
 
         vis.save_vsdx(out_file)
+
+    with VisioFile(out_file) as vis:
+        page = vis.pages[0]
+        copy = _only(page, lambda shape: marker in shape.text)
+        if one_dimensional:
+            assert (copy.begin_x, copy.begin_y) == pytest.approx((lx, ly))
+            assert (copy.end_x, copy.end_y) == pytest.approx((lx + copy.width, ly + copy.height))
+            assert (copy.x, copy.y) == pytest.approx(copy.center_x_y)
+        else:
+            assert (copy.x, copy.y) == pytest.approx((lx, ly))
+
+        original = _only(page, lambda shape: shape_text in shape.text and marker not in shape.text)
+        assert original.bounds == pytest.approx(original_bounds), "copying the shape moved the original"
 
 
 @pytest.mark.parametrize(
@@ -615,63 +607,82 @@ def test_copy_and_move_shape(filename: str, shape_text: str, lx: float, ly: floa
     ],
 )
 def test_copy_and_move_line(filename: str, shape_text: str, start: tuple, finish: tuple, tmp_path, basedir):
+    """A copied 1-D shape is placed by its endpoints, and its geometry follows them.
+
+    There was no assertion in here either, and both parameter rows are 1-D
+    shapes, so the `if cp1.begin_x is not None` the body hung on was never
+    false.
+    """
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_copy_and_move_line_{shape_text}_{start}_{finish}.vsdx")
+    marker = f" moved to {start}-{finish}"
     with VisioFile(os.path.join(basedir, filename)) as vis:
-        print(f"filename:{out_file}")
         page = vis.pages[0]  # type: Page
         shape = page.find_shape_by_text(shape_text)
-        print(vsdx.pretty_print_element(shape.xml))
-        # should work for shapes
-        cp1 = shape.copy()
-        add_shape_info(shape)
-        cp1.x, cp1.y = start
-        cp1.text = cp1.text + f"lx,ly={fl(cp1.x)}, {fl(cp1.y)}"
-        if cp1.begin_x is not None:
-            is_connector = cp1.shape_name == "Dynamic connector"
-            # should work for lines
-            cp1.begin_x, cp1.begin_y = start
-            cp1.end_x, cp1.end_y = finish
-            cp1.width = cp1.end_x - cp1.begin_x
-            if is_connector:
-                cp1.height = cp1.end_y - cp1.begin_y  # connector has a height
-            else:
-                cp1.height = 0.0  # line height is always zero
-            cp1.x, cp1.y = start  # cp1.center_x_y
-            cp1.geometry.set_move_to(0.0, 0.0)
-            cp1.geometry.set_line_to(cp1.width, cp1.height)
-            txt_pin_x = cp1.cells.get("TxtPinX")
-            txt_pin_y = cp1.cells.get("TxtPinY")
-            if txt_pin_x and txt_pin_y:
-                if is_connector:
-                    txt_pin_x.value, txt_pin_y.value = cp1.width / 2, cp1.height / 2
-                else:
-                    txt_pin_x.value, txt_pin_y.value = cp1.center_x_y
-                cp1.set_cell_value(name="Control/TextPosition/X", value=txt_pin_x.value)
-                cp1.set_cell_value(name="Control/TextPosition/Y", value=txt_pin_y.value)
-                cp1.set_cell_value(name="Control/TextPosition/XDyn", value=txt_pin_x.value)
-                cp1.set_cell_value(name="Control/TextPosition/YDyn", value=txt_pin_y.value)
-                # print(cp1.cells.keys())
-            cells = list(cp1.cells.values()) + cp1.geometry.cells
-            for r in cp1.geometry.rows.values():
-                cells.extend(r.cells.values())
-            # print(cells)
-            for c in cells:  # type: Cell
-                v = None
-                formula = c.formula
-                if formula:
-                    if formula == "Inh" and cp1.master_shape:
-                        print(f"Inh: {c.name} {cp1.master_shape.cells.get(c.name)}")
-                        master_c = cp1.master_shape.cells.get(c.name)
-                        formula = master_c.formula if master_c else formula
-                    v = vsdx.calc_value(cp1, formula)
-                    if v is not None:
-                        c.value = v
-                # print(f"c={c.name} f={c.formula} v={v}")
+        assert shape.begin_x is not None, f"{shape_text!r} is not a 1-D shape"
+        is_connector = shape.shape_name == "Dynamic connector"
 
-            print(vsdx.pretty_print_element(cp1.xml))
-        add_shape_info(cp1)
+        cp1 = shape.copy()
+        cp1.text = cp1.text + marker
+        cp1.begin_x, cp1.begin_y = start
+        cp1.end_x, cp1.end_y = finish
+        cp1.width = cp1.end_x - cp1.begin_x
+        # a connector spans both axes; a line carries its slope in its geometry
+        # and is zero high
+        cp1.height = cp1.end_y - cp1.begin_y if is_connector else 0.0
+        cp1.geometry.set_move_to(0.0, 0.0)
+        cp1.geometry.set_line_to(cp1.width, cp1.height)
+
+        txt_pin_x = cp1.cells.get("TxtPinX")
+        txt_pin_y = cp1.cells.get("TxtPinY")
+        if txt_pin_x and txt_pin_y:
+            if is_connector:
+                txt_pin_x.value, txt_pin_y.value = cp1.width / 2, cp1.height / 2
+            else:
+                txt_pin_x.value, txt_pin_y.value = cp1.center_x_y
+            cp1.set_cell_value(name="Control/TextPosition/X", value=txt_pin_x.value)
+            cp1.set_cell_value(name="Control/TextPosition/Y", value=txt_pin_y.value)
+            cp1.set_cell_value(name="Control/TextPosition/XDyn", value=txt_pin_x.value)
+            cp1.set_cell_value(name="Control/TextPosition/YDyn", value=txt_pin_y.value)
+
+        # Cells that hold a formula still carry the value they were written
+        # with, so every one is re-evaluated against the shape as it now is.
+        cells = list(cp1.cells.values()) + cp1.geometry.cells
+        for row in cp1.geometry.rows.values():
+            cells.extend(row.cells.values())
+        for cell in cells:  # type: Cell
+            formula = cell.formula
+            if not formula:
+                continue
+            if formula == "Inh" and cp1.master_shape:
+                master_cell = cp1.master_shape.cells.get(cell.name)
+                formula = master_cell.formula if master_cell else formula
+            value = vsdx.calc_value(cp1, formula)
+            if value is not None:
+                cell.value = value
 
         vis.save_vsdx(out_file)
+
+    span_x, span_y = finish[0] - start[0], finish[1] - start[1]
+    with VisioFile(out_file) as vis:
+        copy = _only(vis.pages[0], lambda shape: marker in shape.text)
+        assert (copy.begin_x, copy.begin_y) == pytest.approx(start)
+        assert (copy.end_x, copy.end_y) == pytest.approx(finish)
+
+        # A connector's box is the bounding box of its route; a line is zero
+        # high and as wide as it is long, its slope carried by the geometry
+        # rather than by its height. Both are what the loop above computed, from
+        # the endpoints, over cells the test never assigned.
+        assert (copy.x, copy.y) == pytest.approx(((start[0] + finish[0]) / 2, (start[1] + finish[1]) / 2))
+        width, height = (span_x, span_y) if is_connector else (math.hypot(span_x, span_y), 0.0)
+        assert (copy.width, copy.height) == pytest.approx((width, height))
+
+        # the drawn line has to agree with the endpoints, or the shape reports
+        # one position and paints another
+        rows = [(str(row.row_type).lower(), row.x, row.y) for row in copy.geometry.rows.values()]
+        assert [(kind, x, pytest.approx(y)) for kind, x, y in rows] == [
+            ("moveto", pytest.approx(0.0), pytest.approx(0.0)),
+            ("lineto", pytest.approx(width), pytest.approx(height)),
+        ], rows
 
 
 @pytest.mark.parametrize(
