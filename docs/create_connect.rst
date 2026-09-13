@@ -41,7 +41,7 @@ The bundled palette exposes these names:
 * ``PALETTE_PARALLELOGRAM``
 * ``PALETTE_DATABASE``
 
-An unknown name raises ``ValueError``.
+An unknown name raises ``vsdxkit.NotFoundError``.
 
 Connector glue and routing
 --------------------------

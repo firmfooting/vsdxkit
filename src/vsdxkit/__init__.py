@@ -38,14 +38,24 @@ __version__ = "0.8.0"  # x-release-please-version
 from . import shapes as _shapes_module  # noqa: E402
 from .connectors import Connect  # noqa: E402
 from .containers import Container  # noqa: E402
+from .errors import (  # noqa: E402
+    InvalidOperationError,
+    MalformedPackageError,
+    MissingPartError,
+    NotFoundError,
+    PackageError,
+    PackageLimitError,
+    VisioFileNotOpen,
+    VsdxError,
+)
 from .formulae import calc_value  # noqa: E402
 from .geometry import Geometry, GeometryCell, GeometryRow  # noqa: E402
 from .logging_support import attach_debug_stream_handler, get_logger  # noqa: E402
 from .media import Media  # noqa: E402
-from .package import PackageLimitError, PackageLimits  # noqa: E402
+from .package import PackageLimits  # noqa: E402
 from .pages import Page, PagePosition  # noqa: E402
 from .shapes import Cell, DataProperty, Shape  # noqa: E402
-from .vsdxfile import VisioFile, VisioFileNotOpen  # noqa: E402
+from .vsdxfile import VisioFile  # noqa: E402
 
 _shapes_module.Connect = Connect
 
@@ -57,7 +67,12 @@ __all__ = [
     "Geometry",
     "GeometryCell",
     "GeometryRow",
+    "InvalidOperationError",
+    "MalformedPackageError",
     "Media",
+    "MissingPartError",
+    "NotFoundError",
+    "PackageError",
     "PackageLimitError",
     "PackageLimits",
     "Page",
@@ -65,6 +80,7 @@ __all__ = [
     "Shape",
     "VisioFile",
     "VisioFileNotOpen",
+    "VsdxError",
     "attach_debug_stream_handler",
     "calc_value",
     "get_logger",

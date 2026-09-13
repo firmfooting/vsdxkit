@@ -11,6 +11,7 @@ import xml.etree.ElementTree as ET
 
 from jinja2.sandbox import SandboxedEnvironment
 
+from .errors import NotFoundError
 from .logging_support import get_logger
 from .pages import Page
 from .shapes import Shape
@@ -144,7 +145,7 @@ class JinjaTemplatingMixin:
                 # Chained, not suppressed: a property that raises AttributeError
                 # from inside its own getter arrives here too, and reporting
                 # that as "no such attribute" would bury the real fault.
-                raise ValueError(f"{statement} refers to self.{name}, which is not an attribute of a shape") from error
+                raise NotFoundError(f"{statement} refers to self.{name}, which is not an attribute of a shape") from error
 
         return JinjaTemplatingMixin._SELF_REFERENCE.sub(resolve, expression)
 

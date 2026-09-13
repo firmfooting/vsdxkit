@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, cast
 from vsdxkit import namespace, r_namespace
 
 from . import relationships
+from .errors import MissingPartError
 from .logging_support import get_logger
 from .pages import Page
 from .shapes import Shape
@@ -146,7 +147,7 @@ class MastersImportMixin:
         # reload would re-append every existing master to master_pages
         master_page_xml = file_to_xml(part_path, self.zip_file_contents)
         if master_page_xml is None:
-            raise ValueError(f"imported master part {part_path} missing from package")
+            raise MissingPartError(f"imported master part {part_path} missing from package")
         new_master_page = Page(
             master_page_xml,
             part_path,

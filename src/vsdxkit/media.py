@@ -3,8 +3,9 @@ from __future__ import annotations
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from .errors import NotFoundError, VisioFileNotOpen
 from .shapes import Shape
-from .vsdxfile import VisioFile, VisioFileNotOpen
+from .vsdxfile import VisioFile
 
 
 def _media_path(filename: str) -> str:
@@ -68,7 +69,7 @@ class Media:
         """
         shape = self.media.pages[0].find_shape_by_text(text)
         if shape is None:
-            raise ValueError(f"media document has no shape with sentinel text {text!r}")
+            raise NotFoundError(f"media document has no shape with sentinel text {text!r}")
         return shape
 
     @property

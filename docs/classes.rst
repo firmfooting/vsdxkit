@@ -74,6 +74,41 @@ Package limits
    :members:
    :undoc-members:
 
-.. autoclass:: vsdxkit.package.PackageLimitError
-   :members:
-   :undoc-members:
+Errors
+------
+
+Every error the library raises about a package, a document or an operation on
+one derives from ``VsdxError``, so one ``except`` clause covers the library and
+nothing else.
+Errors reporting a mistake in the arguments a caller passed stay plain
+builtins: a ``TypeError`` for a ``None`` where a number belongs, or a
+``ValueError`` for a page dimension that is not positive, says nothing about
+Visio, packages or documents.
+
+Most classes keep a builtin base as well, because the sites that raise them
+raised that builtin before the hierarchy existed::
+
+   VsdxError
+   +-- InvalidOperationError (ValueError)
+   |   +-- VisioFileNotOpen
+   +-- NotFoundError (ValueError)
+   |   +-- MissingPartError
+   +-- PackageError
+       +-- MalformedPackageError (ValueError)
+       +-- PackageLimitError (OSError)
+
+.. autoclass:: vsdxkit.errors.VsdxError
+
+.. autoclass:: vsdxkit.errors.InvalidOperationError
+
+.. autoclass:: vsdxkit.errors.VisioFileNotOpen
+
+.. autoclass:: vsdxkit.errors.NotFoundError
+
+.. autoclass:: vsdxkit.errors.MissingPartError
+
+.. autoclass:: vsdxkit.errors.PackageError
+
+.. autoclass:: vsdxkit.errors.MalformedPackageError
+
+.. autoclass:: vsdxkit.errors.PackageLimitError

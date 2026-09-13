@@ -10,6 +10,8 @@ import xml.etree.ElementTree as ET
 from collections.abc import Generator
 from contextlib import contextmanager
 
+from .errors import MalformedPackageError, MissingPartError
+
 # Prefixes Visio itself writes. ElementTree invents `ns0:`, `ns1:`, ... for any
 # namespace it has no prefix for, and consumers stricter than Visio -- libvisio
 # (LibreOffice Draw) and draw.io's importer -- reject parts that arrive that
@@ -238,7 +240,7 @@ def parse_part(data: bytes) -> ET.ElementTree[ET.Element]:
         elif root is None:
             root = payload
     if root is None:  # pragma: no cover - a part with no root element fails to parse first
-        raise ValueError("XML part has no root element")
+        raise MalformedPackageError("XML part has no root element")
     _declared_prefixes[root] = declared
     return ET.ElementTree(root)
 
@@ -300,7 +302,7 @@ def xml_value(value: object) -> str:
 def require_tree(tree: ET.ElementTree[ET.Element] | None, description: str) -> ET.ElementTree[ET.Element]:
     """A required in-memory ElementTree (already parsed from the package)."""
     if tree is None:
-        raise ValueError(f"expected document part not found: {description}")
+        raise MissingPartError(f"expected document part not found: {description}")
     return tree
 
 
@@ -308,7 +310,7 @@ def require_xml_tree(filename: str, zip_file_contents: dict[str, io.BytesIO], de
     """Parse a required XML part from the zip and return its ElementTree."""
     tree = file_to_xml(filename, zip_file_contents)
     if tree is None:
-        raise ValueError(f"expected XML part not found: {description} ({filename})")
+        raise MissingPartError(f"expected XML part not found: {description} ({filename})")
     return tree
 
 
@@ -325,5 +327,5 @@ def require_element(element: ET.Element | None, description: str) -> ET.Element:
     Fail loudly with the path instead of raising AttributeError on None.
     """
     if element is None:
-        raise ValueError(f"expected XML element not found: {description}")
+        raise MissingPartError(f"expected XML element not found: {description}")
     return element
