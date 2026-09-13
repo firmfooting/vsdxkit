@@ -1,17 +1,25 @@
 from __future__ import annotations
 
+import copy
 import html
 import re
+import sys
 import warnings
 import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING
 from xml.etree.ElementTree import Element
+
+if sys.version_info >= (3, 12):
+    from typing import override
+else:
+    from typing_extensions import override
 
 import deprecation
 
 import vsdx
 from vsdx import namespace
 
+from .inheritance import InheritedRow
 from .logging_support import get_logger
 from .xmlio import xml_value
 
@@ -110,8 +118,14 @@ class Cell:
         return f"Cell: name={self.name} val={self.value} func={self.func}"
 
 
-class DataProperty:
-    """Represents a single Data Property item associated with a Shape object"""
+class DataProperty(InheritedRow):
+    """Represents a single Data Property item associated with a Shape object
+
+    A property a shape inherits from its master is handed out marked
+    :attr:`~vsdx.inheritance.InheritedRow.inherited`. Setting :attr:`value` on
+    one materialises an override row on the instance instead of writing to the
+    master page's XML, which is what Visio does.
+    """
 
     shape: Shape
     xml: Element
@@ -163,6 +177,51 @@ class DataProperty:
                 self.prompt = master_prop.prompt
                 self.sort_key = master_prop.sort_key
 
+    def inherited_by(self, shape: Shape) -> DataProperty:
+        """This property as an instance of the master sees it, marked inherited.
+
+        The copy reads the master's Row element, so label, type and prompt are
+        already resolved; the first write to :attr:`value` calls
+        :meth:`make_local`, which gives ``shape`` a row of its own.
+        """
+        prop = copy.copy(self)
+        prop.shape = shape
+        prop.inherited = True
+        return prop
+
+    @override
+    def _materialise(self) -> None:
+        """Add an override row for this property to the instance's shape.
+
+        Visio matches an override to the master's row by the row's ``N``
+        attribute, and reads label, type and prompt from the master, so the
+        new row needs nothing but that name -- the caller is about to write the
+        ``Value`` cell. A master row with no name has nothing to match on, so
+        the label is carried down to keep the property addressable.
+        """
+        section = self.shape.xml.find(f'{namespace}Section[@N="Property"]')
+        if section is None:
+            section = ET.fromstring(f'<Section xmlns="{namespace[1:-1]}" N="Property"/>')
+            # Sections follow the shape's Cell and Trigger children and precede
+            # its Text and Shapes, so append to the run of them rather than to
+            # the shape (see Shape.get_or_create_cell)
+            insert_at = 0
+            for index, child in enumerate(list(self.shape.xml)):
+                if child.tag in (f"{namespace}Cell", f"{namespace}Trigger", f"{namespace}Section"):
+                    insert_at = index + 1
+            self.shape.xml.insert(insert_at, section)
+
+        row = ET.fromstring(f'<Row xmlns="{namespace[1:-1]}"/>')
+        if self.name is not None:
+            row.attrib["N"] = self.name
+        else:
+            label_cell = self.xml.find(f'{namespace}Cell[@N="Label"]')
+            if label_cell is not None:
+                row.append(copy.deepcopy(label_cell))
+        section.append(row)
+        self.xml = row
+        logger.debug("materialised inherited data property %r on shape %s", self.label, self.shape.ID)
+
     @property
     def value(self) -> str | None:
         """Get the value of the data property, or None when it has none.
@@ -189,7 +248,12 @@ class DataProperty:
         The cell's declared unit is left alone. Stamping ``STR`` over it would
         retype a date or numeric property as a string, and a cell created here
         declares no unit rather than guessing one from the value.
+
+        A property inherited from a master is given an override row on this
+        shape first, so the master's value -- and every other shape drawn from
+        it -- is left as it was.
         """
+        self.make_local()
         text = "" if value is None else str(value)
         value_cell = self.xml.find(f'{namespace}Cell[@N="Value"]')
         if not isinstance(value_cell, Element):
@@ -390,17 +454,17 @@ class Shape:
         adding, removing or replacing one is picked up on the next read. A row
         edited *in place* is not: the cache is keyed on row identity, so
         renaming a property's ``Label`` leaves the dictionary keyed under the
-        old label until some row is added or removed. Two further limitations
-        concern inherited properties:
+        old label until some row is added or removed. One limitation remains,
+        over inherited properties:
 
         - A property inherited from a master is resolved when this shape is
           first read. Editing the master afterwards is not reflected here,
           because the master is re-resolved as a new object on every access and
           folding it into the cache key would rebuild it on every call.
-        - An inherited ``DataProperty`` belongs to the master shape, so setting
-          its value writes to the master and changes every instance. Visio
-          creates a local override row on the instance instead; this library
-          does not yet.
+
+        Setting the value of an inherited property is safe: the
+        ``DataProperty`` is marked inherited, so writing to it creates an
+        override row on this shape and leaves the master alone.
 
         :return: Dict[str, DataProperty]
         """
@@ -413,10 +477,12 @@ class Shape:
         if self._data_properties is not None and self._data_properties_key == key:
             return self._data_properties
 
-        # a copy, so this shape's rows are never written into whatever dict the
-        # master hands back
+        # marked copies, so neither this shape's rows nor a write through an
+        # inherited property reaches what the master hands back
         master = self.master_shape
-        properties: dict[str, DataProperty] = dict(master.data_properties) if master is not None else {}
+        properties: dict[str, DataProperty] = (
+            {label: prop.inherited_by(self) for label, prop in master.data_properties.items()} if master is not None else {}
+        )
         for prop in property_rows:
             data_prop = DataProperty(xml=prop, shape=self)
             # add properties to dict to allow fast lookup by property.label
