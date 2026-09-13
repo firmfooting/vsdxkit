@@ -27,7 +27,6 @@ inherit the assumptions it is supposed to be checking.
 
 from __future__ import annotations
 
-import contextlib
 import os
 import posixpath
 import urllib.parse
@@ -67,10 +66,22 @@ def validate_package(path: str) -> tuple[Defect, ...]:
             defects: list[Defect] = list(_duplicate_member_defects(names))
             defects.extend(_content_type_defects(archive, members))
             defects.extend(_relationship_defects(archive, members))
-            defects.extend(_page_defects(archive, members))
+            defects.extend(_page_and_master_defects(archive, members))
             return tuple(defects)
-    except (zipfile.BadZipFile, OSError) as error:
-        return (Defect("unreadable-package", os.path.basename(path), f"the archive could not be read: {error}"),)
+    except Exception as error:
+        # Deliberately every exception, not a list of the ones seen so far. The
+        # list was `BadZipFile` and `OSError`, and `zipfile` also raises
+        # `NotImplementedError` for a compression method it does not have and
+        # `RuntimeError` for an encrypted member; the recursive walks below
+        # raise `RecursionError` on a deeply nested group. The type is named in
+        # the report so that a bug in this module still reads as one.
+        return (
+            Defect(
+                "unreadable-package",
+                os.path.basename(path),
+                f"the archive could not be read: {type(error).__name__}: {error}",
+            ),
+        )
 
 
 def _duplicate_member_defects(names: list[str]) -> list[Defect]:
@@ -95,48 +106,192 @@ def _parse(archive: zipfile.ZipFile, part: str) -> ET.Element | Defect:
         return ET.fromstring(archive.read(part))
     except ET.ParseError as error:
         return Defect("unreadable-part", part, f"the XML will not parse: {error}")
-    except (KeyError, zipfile.BadZipFile, OSError) as error:
-        return Defect("unreadable-part", part, f"the part could not be read: {error}")
+    except Exception as error:
+        return Defect("unreadable-part", part, f"the part could not be read: {type(error).__name__}: {error}")
 
 
 def describe_defects(defects: tuple[Defect, ...]) -> str:
     return "\n".join(f"  [{defect.kind}] {defect.where}: {defect.detail}" for defect in defects)
 
 
-# --- pages ------------------------------------------------------------------
+# --- pages and masters ------------------------------------------------------
+#
+# `pages.xml` and `masters.xml` are the same document twice over: a listing
+# whose entries each carry an id, a sheet of cells, and a `<Rel>` naming the
+# part that holds the contents. They are also produced by the same kind of
+# code - an allocator handing out ids, and a writer handing out relationship
+# ids - so they fail in the same ways, and the rules below are stated once over
+# a listing and applied to both. The parts they name are the same type as each
+# other too (`MasterContents` is `PageContents`), so those share their rules as
+# well.
+#
+# Kinds here are built from the listing's noun and so do not appear in this
+# file as literals: `unresolved-page` / `unresolved-master`,
+# `duplicate-page-id` / `duplicate-master-id`, `reused-page-part` /
+# `reused-master-part`.
 
 
-def _page_defects(archive: zipfile.ZipFile, members: set[str]) -> list[Defect]:
+@dataclass(frozen=True)
+class _ListingSpec:
+    """Where a listing lives, what its entries are called, and whether it is optional."""
+
+    listing: str
+    relationships: str
+    tag: str
+    noun: str
+    required: bool
+
+
+_PAGES = _ListingSpec(
+    listing="visio/pages/pages.xml",
+    relationships="visio/pages/_rels/pages.xml.rels",
+    tag="Page",
+    noun="page",
+    # a package with no pages is not a drawing; one with no masters is ordinary
+    required=True,
+)
+_MASTERS = _ListingSpec(
+    listing="visio/masters/masters.xml",
+    relationships="visio/masters/_rels/masters.xml.rels",
+    tag="Master",
+    noun="master",
+    required=False,
+)
+
+
+@dataclass(frozen=True)
+class _Entry:
+    """A listing entry whose `<Rel>` resolved to a part that is in the archive."""
+
+    spec: _ListingSpec
+    identifier: str | None
+    label: str
+    part: str
+    element: ET.Element
+
+
+@dataclass(frozen=True)
+class _Listing:
+    """One parsed listing: the entries that resolved, and every id it takes.
+
+    Ids come from every child element, not only from the entries that resolved
+    to a part. A master whose part is missing still owns its id, so a shape
+    naming it has not named a master nobody declared: that would be a second
+    finding for one broken thing, and the first one is already reported.
+
+    `read` is false when the listing is there but would not parse. Nothing is
+    known about what it declares then, so a rule that asks whether an id was
+    declared has to stand down rather than answer from an empty set.
+    """
+
+    read: bool = True
+    entries: tuple[_Entry, ...] = ()
+    declared_ids: frozenset[str] = frozenset()
+
+
+def _page_and_master_defects(archive: zipfile.ZipFile, members: set[str]) -> list[Defect]:
+    pages_defects, pages = _listing_defects(archive, members, _PAGES)
+    masters_defects, masters = _listing_defects(archive, members, _MASTERS)
+    defects = pages_defects + masters_defects
+
+    # Keyed by part rather than by entry, because two entries may name one part
+    # and the checks below are about the part. Reporting per entry would report
+    # everything in a shared part twice, on top of the `reused-*-part` that
+    # says what the actual problem is.
+    contents: dict[str, ET.Element] = {}
+    for entry in (*pages.entries, *masters.entries):
+        if entry.part in contents:
+            continue
+        parsed = _parse(archive, entry.part)
+        if isinstance(parsed, Defect):
+            defects.append(parsed)
+        else:
+            contents[entry.part] = parsed
+
+    for part, root in contents.items():
+        defects.extend(_contents_defects(root, part))
+    defects.extend(_master_reference_defects(contents, masters))
+    for entry in (*pages.entries, *masters.entries):
+        if entry.part in contents:
+            defects.extend(_max_id_defects(contents[entry.part], entry))
+    return defects
+
+
+def _listing_defects(archive: zipfile.ZipFile, members: set[str], spec: _ListingSpec) -> tuple[list[Defect], _Listing]:
+    """Every entry resolves to a part of its own, and no two entries share an id.
+
+    An entry whose `<Rel>` resolves to nothing, two entries resolving to one
+    part, two entries claiming one id. None stops the package opening, and the
+    last two lose a page or a master outright.
+    """
+    if spec.listing not in members:
+        if not spec.required:
+            return [], _Listing()
+        return [Defect("missing-part", spec.listing, "the package declares no pages at all")], _Listing()
+
+    parsed = _parse(archive, spec.listing)
+    if isinstance(parsed, Defect):
+        return [parsed], _Listing(read=False)
+
+    relationships = _relationships(archive, spec.relationships, members)
     defects: list[Defect] = []
-    pages_xml = "visio/pages/pages.xml"
-    if pages_xml not in members:
-        return [Defect("missing-part", pages_xml, "the package declares no pages at all")]
-
-    relationships = _relationships(archive, "visio/pages/_rels/pages.xml.rels", members)
-    listing = _parse(archive, pages_xml)
-    if isinstance(listing, Defect):
-        return [listing]
-    for page in listing:
-        name = page.attrib.get("Name") or page.attrib.get("NameU") or page.attrib.get("ID", "?")
-        rel = page.find(f"{_MAIN_NS}Rel")
+    entries: list[_Entry] = []
+    declared_ids: set[str] = set()
+    named_by: dict[str, str] = {}
+    for element in parsed:
+        identifier = element.attrib.get("ID")
+        key = _id_key(identifier)
+        if key is not None:
+            if key in declared_ids:
+                defects.append(
+                    Defect(
+                        f"duplicate-{spec.noun}-id",
+                        spec.listing,
+                        f"{spec.noun} id {identifier} is declared more than once. Ids are unique within "
+                        f"the listing, and anything naming this one reaches whichever entry the reader "
+                        f"happened to keep.",
+                    )
+                )
+            declared_ids.add(key)
+        if element.tag != f"{_MAIN_NS}{spec.tag}":
+            # `masters.xml` also carries `<MasterShortcut>`, which stands for a
+            # master held in another document: it takes an id in this package
+            # but has no part in it, so the rules about parts do not apply.
+            continue
+        label = element.attrib.get("Name") or element.attrib.get("NameU") or identifier or "?"
+        rel = element.find(f"{_MAIN_NS}Rel")
         target = None if rel is None else relationships.get(rel.attrib.get(f"{_DOC_REL_NS}id", ""))
         if target is None or target not in members:
             defects.append(
                 Defect(
-                    "unresolved-page",
-                    pages_xml,
-                    f"page {name!r} names a part that the relationships do not resolve to anything in the archive",
+                    f"unresolved-{spec.noun}",
+                    spec.listing,
+                    f"{spec.noun} {label!r} names a part that the relationships do not resolve to anything in the archive",
                 )
             )
             continue
-        defects.extend(_page_content_defects(archive, target, page))
-    return defects
+        if target in named_by:
+            defects.append(
+                Defect(
+                    f"reused-{spec.noun}-part",
+                    spec.listing,
+                    f"{spec.noun} {label!r} and {spec.noun} {named_by[target]!r} both resolve to "
+                    f"{target}. An entry owns its contents part, so an edit to either of these shows "
+                    f"up in both.",
+                )
+            )
+        else:
+            named_by[target] = label
+        entries.append(_Entry(spec, identifier, label, target, element))
+    return defects, _Listing(True, tuple(entries), frozenset(declared_ids))
 
 
-def _page_content_defects(archive: zipfile.ZipFile, part: str, page: ET.Element) -> list[Defect]:
-    contents = _parse(archive, part)
-    if isinstance(contents, Defect):
-        return [contents]
+def _contents_defects(contents: ET.Element, part: str) -> list[Defect]:
+    """Ids used twice, and glue with no endpoint, in one page or master part.
+
+    `MasterContents` and `PageContents` are the same type, carrying the same
+    `Shapes` and `Connects`, so a master goes wrong here the ways a page does.
+    """
     shapes = _shape_ids(contents.find(f"{_MAIN_NS}Shapes"))
     defects: list[Defect] = []
 
@@ -147,7 +302,7 @@ def _page_content_defects(archive: zipfile.ZipFile, part: str, page: ET.Element)
                 Defect(
                     "duplicate-shape-id",
                     part,
-                    f"shape {shape_id} is declared more than once. Ids are page-scoped and unique; "
+                    f"shape {shape_id} is declared more than once. Ids are unique within the part; "
                     "Visio keeps one and drops the rest without an error.",
                 )
             )
@@ -160,26 +315,106 @@ def _page_content_defects(archive: zipfile.ZipFile, part: str, page: ET.Element)
                     "dangling-glue",
                     part,
                     f"a Connect record names shape {shape_id} as its {role}, "
-                    "but no such shape is on this page. Visio rebinds glue like this silently.",
+                    "but no such shape is in this part. Visio rebinds glue like this silently.",
                 )
             )
+    return defects
 
-    declared = _declared_max_id(page)
-    if declared is not None and shapes and declared < max(shapes):
-        defects.append(
-            Defect(
-                "max-id-too-low",
-                # the cell is in pages.xml, not in the page part the shapes are in
-                "visio/pages/pages.xml",
-                f"the page sheet declares MaxID {declared} but carries shape {max(shapes)}. "
-                "The next id allocated from it would collide with a shape that already exists.",
-            )
+
+def _max_id_defects(contents: ET.Element, entry: _Entry) -> list[Defect]:
+    """A sheet whose MaxID is below an id the part already uses.
+
+    Reported against the listing rather than the part, because that is where
+    the cell is.
+    """
+    declared = _declared_max_id(entry.element)
+    shapes = _shape_ids(contents.find(f"{_MAIN_NS}Shapes"))
+    if declared is None or not shapes or declared >= max(shapes):
+        return []
+    return [
+        Defect(
+            "max-id-too-low",
+            entry.spec.listing,
+            f"the {entry.spec.noun} sheet declares MaxID {declared} but carries shape {max(shapes)}. "
+            "The next id allocated from it would collide with a shape that already exists.",
+        )
+    ]
+
+
+def _master_reference_defects(contents: dict[str, ET.Element], masters: _Listing) -> list[Defect]:
+    """Shapes naming a master, or a shape inside one, that the package has not got.
+
+    A listing that would not parse is not evidence that nothing was declared,
+    so the rule stands down: answering from an empty set would report every
+    instance in the package for one part nobody can read.
+    """
+    if not masters.read:
+        return []
+    shapes_by_master = {
+        _id_key(entry.identifier): frozenset(_shape_ids(contents[entry.part].find(f"{_MAIN_NS}Shapes")))
+        for entry in masters.entries
+        if entry.identifier is not None and entry.part in contents
+    }
+    defects: list[Defect] = []
+    for part, root in contents.items():
+        defects.extend(
+            _shape_reference_defects(root.find(f"{_MAIN_NS}Shapes"), None, part, masters.declared_ids, shapes_by_master)
         )
     return defects
 
 
-def _declared_max_id(page: ET.Element) -> int | None:
-    """Return the page sheet's MaxID, if it declares one.
+def _shape_reference_defects(
+    container: ET.Element | None,
+    inherited: str | None,
+    part: str,
+    declared: frozenset[str],
+    shapes_by_master: dict[str | None, frozenset[int]],
+) -> list[Defect]:
+    """Check `Master` and `MasterShape` on every shape below `container`.
+
+    `Master` names a master in this package. `MasterShape` names a shape inside
+    whichever master the instance came from, which is the nearest `Master` at or
+    above the shape - so it is carried down the tree rather than looked up.
+    """
+    if container is None:
+        return []
+    defects: list[Defect] = []
+    for shape in container.findall(f"{_MAIN_NS}Shape"):
+        named = shape.attrib.get("Master")
+        master = _id_key(named) if named is not None else inherited
+        if named is not None and master not in declared:
+            defects.append(
+                Defect(
+                    "undeclared-master",
+                    part,
+                    f"shape {shape.attrib.get('ID', '?')} is an instance of master {named}, which this "
+                    "package does not declare. Visio drops an instance like this on open without an "
+                    "error, so the file opens with the shape missing.",
+                )
+            )
+        member = _as_int(shape.attrib.get("MasterShape"))
+        # Resolvable only against a master that was read, and only where the
+        # shape does not carry `Master` itself: neither this corpus nor the
+        # schema settles which of the two a shape carrying both resolves
+        # against, and a rule that guesses fires on files nobody has a reason
+        # to think are wrong. A `MasterShape` with no master above it at all is
+        # skipped for the same reason.
+        resolvable = named is None and member is not None and master in shapes_by_master
+        if resolvable and member not in shapes_by_master[master]:
+            defects.append(
+                Defect(
+                    "undeclared-master-shape",
+                    part,
+                    f"shape {shape.attrib.get('ID', '?')} inherits from shape {member} of master "
+                    f"{master}, which has no shape with that id.",
+                )
+            )
+        defects.extend(_shape_reference_defects(shape.find(f"{_MAIN_NS}Shapes"), master, part, declared, shapes_by_master))
+    return defects
+
+
+def _declared_max_id(sheet_holder: ET.Element) -> int | None:
+    """Return the entry's MaxID, if its sheet declares one.
 
     Optional, and no fixture in this repository carries it - Visio writes it on
     some documents and not others, and this library tracks the high-water mark
@@ -187,7 +422,7 @@ def _declared_max_id(page: ET.Element) -> int | None:
     package that states the number wrongly is worse than one that stays quiet:
     the wrong number is the one an allocator would trust.
     """
-    sheet = page.find(f"{_MAIN_NS}PageSheet")
+    sheet = sheet_holder.find(f"{_MAIN_NS}PageSheet")
     if sheet is None:
         return None
     for cell in sheet.findall(f"{_MAIN_NS}Cell"):
@@ -199,10 +434,36 @@ def _declared_max_id(page: ET.Element) -> int | None:
     return None
 
 
-def _shape_ids(container: ET.Element | None) -> list[int]:
-    """Every shape id on the page, descending into groups.
+def _as_int(raw: str | None) -> int | None:
+    """Read an id attribute as a number, or None if it is not one.
 
-    Group members carry page-scoped ids like any other shape, so a member that
+    `int()`, not `str.isdigit()`: '²'.isdigit() is True and int('²')
+    raises. A non-numeric id is the schema's business, not any rule's here.
+    """
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+def _id_key(raw: str | None) -> str | None:
+    """Fold an id to the value it names, so that '06' and '6' are one master.
+
+    Ids are `xsd:unsignedInt`, whose lexical space admits leading zeros and a
+    leading plus, so two spellings can be one id. Visio does not write them
+    that way, but a package reported for a difference no reader would see is a
+    package whose report gets switched off.
+    """
+    value = _as_int(raw)
+    return raw if value is None else str(value)
+
+
+def _shape_ids(container: ET.Element | None) -> list[int]:
+    """Every shape id in the part, descending into groups.
+
+    Group members carry part-scoped ids like any other shape, so a member that
     collides with a top-level shape is the same defect as two siblings sharing
     one. Walking only the top level would miss exactly that.
     """
@@ -210,12 +471,9 @@ def _shape_ids(container: ET.Element | None) -> list[int]:
         return []
     found: list[int] = []
     for shape in container.findall(f"{_MAIN_NS}Shape"):
-        # int(), not isdigit(): '\u00b2'.isdigit() is True and int('\u00b2') raises.
-        raw = shape.attrib.get("ID")
-        if raw is not None:
-            # a non-numeric id is the schema's business, not this rule's
-            with contextlib.suppress(ValueError):
-                found.append(int(raw))
+        shape_id = _as_int(shape.attrib.get("ID"))
+        if shape_id is not None:
+            found.append(shape_id)
         found.extend(_shape_ids(shape.find(f"{_MAIN_NS}Shapes")))
     return found
 
@@ -228,10 +486,9 @@ def _glue_endpoints(contents: ET.Element) -> list[tuple[str, int]]:
     endpoints = []
     for connect in container.findall(f"{_MAIN_NS}Connect"):
         for attribute, role in (("FromSheet", "source"), ("ToSheet", "target")):
-            try:
-                endpoints.append((role, int(connect.attrib.get(attribute, ""))))
-            except ValueError:
-                continue
+            endpoint = _as_int(connect.attrib.get(attribute))
+            if endpoint is not None:
+                endpoints.append((role, endpoint))
     return endpoints
 
 
