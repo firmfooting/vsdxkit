@@ -15,6 +15,7 @@ copy-the-whole-masters-folder branch.
 """
 
 import os
+import re
 import xml.etree.ElementTree as ET
 import zipfile
 from dataclasses import dataclass
@@ -32,6 +33,7 @@ VT_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes}"
 
 MASTER_REL_TYPE = "http://schemas.microsoft.com/visio/2010/relationships/master"
 MASTER_CONTENT_TYPE = "application/vnd.ms-visio.master+xml"
+PAGE_PART = re.compile(r"visio/pages/page\d+\.xml")
 
 
 @dataclass(frozen=True)
@@ -112,11 +114,8 @@ def _titles_of_parts(path: str) -> list[str]:
 
 
 def _page_parts(path: str) -> list[str]:
-    return sorted(
-        name
-        for name in _zip_names(path)
-        if name.startswith("visio/pages/page") and name.endswith(".xml") and not name.endswith(".xml.rels")
-    )
+    """Return the ``visio/pages/pageN.xml`` members, excluding the ``pages.xml`` index."""
+    return sorted(name for name in _zip_names(path) if PAGE_PART.fullmatch(name))
 
 
 def _page_rels_member(page_part: str) -> str:
@@ -133,7 +132,8 @@ def imported_master(vsdx_copy, tmp_path) -> ImportedMaster:
     """Connect two shapes in a one-master document, then save it.
 
     ``Connect.create()`` is the only caller of ``_ensure_masters_for_shape``,
-    so this is the only route to the import path through the public API.
+    so creating a connector is the only way to reach the import path. The
+    documented public entry point, ``Page.connect_shapes()``, delegates here.
     """
     source = vsdx_copy("test3_house.vsdx")
     document = os.path.join(str(tmp_path), "imported_master.vsdx")
@@ -152,7 +152,10 @@ def imported_master(vsdx_copy, tmp_path) -> ImportedMaster:
 def test_import_adds_the_connector_master(imported_master: ImportedMaster):
     """Guard the fixture: the rest of this module asserts nothing if no master was imported."""
     names = [master.attrib.get("NameU") for master in _master_elements(imported_master.document)]
-    assert imported_master.master_name in names, f"connector master was not imported, masters.xml holds {names}"
+    assert imported_master.master_name in names, (
+        f"masters.xml holds {names}, with no {imported_master.master_name!r}: either the import "
+        f"path is broken or the bundled media renamed that master"
+    )
     assert len(_master_parts(imported_master.document)) == 2, "expected the shipped master plus the imported one"
 
 
@@ -213,7 +216,13 @@ def test_every_master_a_page_uses_is_related_from_that_page(imported_master: Imp
     """
     document = imported_master.document
     part_by_master_id = _part_by_master_id(document)
-    for page_part in _page_parts(document):
+    pages = _page_parts(document)
+    # without this the loop below skips every page and passes green if the
+    # Master attribute stops being serialised on the way into page1.xml
+    assert any(imported_master.master_id in _master_ids_used_on_page(document, page) for page in pages), (
+        f"no saved page references master {imported_master.master_id}"
+    )
+    for page_part in pages:
         used = _master_ids_used_on_page(document, page_part)
         if not used:
             continue
