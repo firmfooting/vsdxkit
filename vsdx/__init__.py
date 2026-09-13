@@ -25,7 +25,7 @@ def pretty_print_element(xml: Element | ET.ElementTree) -> str:
     return minidom.parseString(ET.tostring(xml)).toprettyxml()
 
 
-__version__ = "0.6.3"
+__version__ = "0.7.0"
 
 # Issue #250/#254 review: `Shape.connects` quotes `Connect` in its annotation,
 # and `typing.get_type_hints` evaluates quoted names against the function's
