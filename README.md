@@ -3,6 +3,7 @@
 [![CI](https://github.com/firmfooting/vsdxkit/actions/workflows/ci.yml/badge.svg)](https://github.com/firmfooting/vsdxkit/actions/workflows/ci.yml)
 [![Python 3.10–3.14](https://img.shields.io/badge/python-3.10%E2%80%933.14-blue.svg)](https://www.python.org/)
 [![BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-green.svg)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-firmfooting.github.io-blue.svg)](https://firmfooting.github.io/vsdxkit/)
 
 Create, edit and analyse Microsoft Visio `.vsdx` files with Python. Visio is not required at runtime.
 

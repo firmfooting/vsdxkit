@@ -1,0 +1,74 @@
+# Documentation site, published to GitHub Pages at
+# https://firmfooting.github.io/vsdxkit/
+#
+# Unlike dbml-sharepoint's docs workflow, which is manual because its API pages
+# are generated and committed, this one runs on every push to main that touches
+# the docs or the package. Sphinx autodoc reads the source directly, so the
+# published pages go stale the moment the API changes; a manual trigger would
+# mean the site is only as current as someone's memory.
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'vsdx/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+permissions: {}
+
+# One deployment at a time, and never cancel one part-way: a half-published
+# site is worse than a slightly stale one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build the Sphinx site
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      UV_PYTHON: '3.12'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4  # v10.1.0
+        with:
+          enable-cache: false
+          version: "0.12.7"
+      - name: Install the documentation toolchain
+        run: uv sync --locked --no-default-groups --group docs
+      - name: Build
+        # -W --keep-going: the same gate CI applies, so a warning cannot reach
+        # the published site by going out through a different door
+        run: uv run --no-sync sphinx-build -W --keep-going -b html docs docs/_build/html
+      # No actions/configure-pages step, unlike dbml-sharepoint's docs workflow.
+      # It exists to hand a site generator the base URL it should build against,
+      # which Docusaurus needs and Sphinx does not -- html_baseurl is set in
+      # docs/conf.py. It also calls the Pages REST API, so keeping it would mean
+      # granting this job the `pages` permission to run a step whose outputs
+      # nothing reads.
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9  # v5.0.0
+        with:
+          path: docs/_build/html
+
+  deploy:
+    name: deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write      # publish the built site
+      id-token: write   # OIDC for the Pages deployment; no token stored
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128  # v5.0.0

@@ -8,6 +8,13 @@ history precedes 0.6.3 here, remains available at
 
 ### Added
 
+- The documentation is published to GitHub Pages at
+  <https://firmfooting.github.io/vsdxkit/>, rebuilt on every push to `main` that
+  touches the docs or the package. Sphinx autodoc reads the source, so the site
+  would go stale the moment the API changed if publishing were manual. The build
+  uses the same `-W --keep-going` gate as CI, so a warning cannot reach the
+  published site by another route. The unused Read the Docs configuration is
+  removed.
 - A 0.x API notice at the top of the README and the documentation landing page:
   0.7 is the last release of the inherited API, and 1.0 renames `VisioFile` and
   `Container`, splits `Connect`, and removes the context manager.
