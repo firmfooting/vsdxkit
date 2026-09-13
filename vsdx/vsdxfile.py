@@ -264,6 +264,9 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         self.master_pages: list[Page] = []  # populated by open_vsdx_file()
         self.file_open = False
         self.zip_file_contents: dict[str, io.BytesIO] = {}  # file contents by file_path
+        # the bundled donor packages are expensive to parse, so one Media is
+        # shared by every create/connect call on this document (issue #65)
+        self._media: vsdx.Media | None = None
         self.open_vsdx_file()
 
     def __enter__(self) -> VisioFile:
@@ -1183,6 +1186,18 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
     def get_shape_id(shape: Element) -> str:
         return shape.attrib["ID"]
 
+    def _shared_media(self) -> vsdx.Media:
+        """The bundled media/palette documents for this VisioFile.
+
+        Created on first use and reused for every subsequent create/connect
+        call, so a loop of N shapes parses the donor packages once rather than
+        N times. Ownership stays here: `close_vsdx` closes and drops it, and a
+        later call builds a fresh one rather than handing back a closed object.
+        """
+        if self._media is None:
+            self._media = vsdx.Media()
+        return self._media
+
     def create_shape(
         self,
         page: Page,
@@ -1208,14 +1223,11 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         :param text: label text; the palette sentinel name is cleared when None
         :return: the new Shape
         """
-        media = vsdx.Media()
-        try:
-            source = media.palette.pages[0].find_shape_by_text(palette_name)
-            if source is None:
-                raise ValueError(f"palette has no shape named {palette_name}")
-            new_shape_xml = self.copy_shape(source.xml, page)
-        finally:
-            media.close()
+        media = self._shared_media()
+        source = media.palette.pages[0].find_shape_by_text(palette_name)
+        if source is None:
+            raise ValueError(f"palette has no shape named {palette_name}")
+        new_shape_xml = self.copy_shape(source.xml, page)
         new_shape = page.find_shape_by_id(new_shape_xml.attrib["ID"])
         if new_shape is None:
             raise ValueError("newly created shape not found on page")
@@ -1323,6 +1335,9 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
 
     def close_vsdx(self) -> None:
         self.file_open = False
+        media, self._media = self._media, None
+        if media is not None:
+            media.close()
 
     def _main_part_content_type(self) -> str:
         """The declared content type of `/visio/document.xml`."""
