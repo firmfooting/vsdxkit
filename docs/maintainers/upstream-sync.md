@@ -100,7 +100,8 @@ ourselves against our code. The upstream commit is then a reference, and belongs
 in the commit message as a link rather than as a parent.
 
 Either way the change lands through a normal PR: a regression test, a
-`CHANGELOG.md` entry under `## Unreleased`, and CI green. Credit upstream in the
+a conventional-commit PR title, which is what release-please turns into the
+changelog entry -- see "Releases" in CONTRIBUTING.md.
 changelog entry (`dave-howard/vsdx#<n>`, or the commit sha) so the provenance
 survives the squash merge.
 

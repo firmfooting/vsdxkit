@@ -97,61 +97,62 @@ The connector and swimlane ground truth the engine was built against lives in
 [that directory's README](tests/fixtures/com_reference/README.md) before
 changing a fixture or adding a scenario.
 
-#### Cutting a release
-Releases are published to PyPI by `.github/workflows/publish.yml`, which is
-triggered by pushing a `v*` tag. No API tokens exist anywhere: PyPI authenticates
-the workflow through Trusted Publishing, matching the repository, the workflow
-**filename** and the `pypi` environment. Renaming that workflow file breaks
+#### Releases
+Releases are cut by [release-please](https://github.com/googleapis/release-please),
+not by hand. You do not bump a version, write a changelog entry, or push a tag.
+
+**What you do:** give your pull request a
+[conventional commit](https://www.conventionalcommits.org/) title. That is
+enforced by the `PR title` check, because this repository squash-merges and the
+title becomes the commit subject on `main` — which is what release-please reads.
+
+```
+fix: remap every Sheet reference in a formula when copying shapes
+feat(pages): add Page.background
+docs: document the COM reference corpus
+feat!: rename VisioFile to Document          # `!` marks a breaking change
+```
+
+`fix:` bumps the patch version, `feat:` the minor, and `!` or a
+`BREAKING CHANGE:` footer the major — though while the project is pre-1.0 a
+breaking change bumps the minor instead.
+
+Only `feat:`, `fix:` and `perf:` reach the release notes. **`build:`, `chore:`,
+`ci:`, `docs:`, `refactor:`, `style:` and `test:` are silent** — a change titled
+`refactor:` that users can actually observe disappears from the notes entirely.
+So pick the type from what the change does to someone using the library, not
+from which directory it touches: a rework that changes behaviour is a `fix:`.
+
+**What happens then:** release-please keeps a release PR open, updating the
+version and `CHANGELOG.md` as commits land. Merging that PR creates the tag and
+the GitHub release, and the same workflow run builds the distribution, re-runs
+the tests and lint gates, smoke-tests the wheel in a clean environment, and
+publishes to PyPI with [PEP 740](https://peps.python.org/pep-0740/)
+attestations. No API tokens exist anywhere; PyPI authenticates the workflow
+through Trusted Publishing, matched on the repository, the workflow **filename**
+and the `pypi` environment. Renaming `.github/workflows/publish.yml` breaks
 publishing, and the failure reads like a permissions error rather than a naming
 one.
 
-Changelog entries follow [Keep a Changelog](https://keepachangelog.com):
-everything lands under `## Unreleased` in an `### Added`, `### Fixed` or
-`### Changed` subsection as it is merged, and the release moves that block into a
-dated `## <version> - <YYYY-MM-DD>` section. The GitHub Release body is generated
-from that same section, so there is only one place to write it.
+**If the release run fails after the release PR is merged**, do not use "Re-run
+all jobs": release-please finds the release already made, reports no new
+release, and the run goes green having published nothing. Fix forward and use a
+manual run of the Publish workflow, which republishes the tagged version through
+the same gates. A manual run only works from `main` and only for a version that
+already has a tag.
 
-To cut a release:
+**Before merging a release PR**, read the generated changelog. Release notes
+built from commit subjects are terser than what a reader usually wants; you can
+edit the PR's `CHANGELOG.md` to add detail, and release-please will respect it.
 
-1. Bump `__version__` in `vsdx/__init__.py`.
-2. Rename `## Unreleased` in `CHANGELOG.md` to `## <version> - <YYYY-MM-DD>` and
-   open a fresh empty `## Unreleased` above it.
-3. Check both locally before tagging:
+The version lives in one place, `vsdx/__init__.py`, marked with an
+`x-release-please-version` annotation. `pyproject.toml` reads it through
+`tool.setuptools.dynamic`; a static `[project].version` would go stale in
+`uv.lock` on every bump and fail the `uv sync --locked` gate.
 
-   ```bash
-   uv run --no-sync python tools/check_version_tag.py "v<version>"
-   uv run --no-sync python tools/release_check.py "<version>" --print
-   ```
-
-   The first fails if the tag and `vsdx.__version__` disagree; the second fails
-   if the changelog has no section for the version, and `--print` shows exactly
-   what the GitHub Release will say. Both run again in the workflow before
-   anything is built or published.
-4. Open the release PR, let CI go green, and merge it.
-5. Tag the merge commit on `main` and push the tag:
-
-   ```bash
-   git tag -a "v<version>" -m "v<version>"
-   git push origin "v<version>"
-   ```
-
-6. Watch the **Publish** workflow. It verifies the tag and the changelog, runs
-   the test suite and the lint and type gates again — the CI workflow starts in
-   parallel on a tag push, so its result is not available to the publish job and
-   publishing is irreversible — then builds the sdist and wheel with `uv build`,
-   smoke-tests the wheel in a clean environment, publishes to PyPI with PEP 740
-   attestations, and creates the GitHub Release with the changelog section as its
-   body and the artefacts attached.
-7. Verify <https://pypi.org/project/vsdxkit/>: the new version is listed, the
-   files carry provenance attestations, and `pip install vsdxkit==<version>` into
-   a clean virtual environment imports and runs.
-
-A pre-release tag (`v0.8.0rc1`) is handled the same way and is marked as a
-pre-release on GitHub automatically. To rehearse without touching PyPI, run the
-workflow manually from the Actions tab: a manual run always goes to TestPyPI and
-never to PyPI, so the tag and changelog checks can never be skipped on the path
-that produces a real, uncorrectable release. Rehearsing needs its own pending
-publisher on TestPyPI and a `testpypi` environment on the repository.
+**First release only:** the manifest already records `0.7.0`, so release-please
+manages releases *after* it. `v0.7.0` is tagged by hand and published with a
+manual run of the Publish workflow.
 
 #### The project this one descends from
 vsdxkit began as a fork of [dave-howard/vsdx](https://github.com/dave-howard/vsdx)
