@@ -301,20 +301,47 @@ class TestPlacementCells:
 
         assert compare(package, visio) == ()
 
-    def test_the_same_expression_spelled_differently_is_not_a_difference(self):
-        """Visio re-renders a formula from its parse tree, not from our bytes."""
-        package = Observation(
-            label="package", pages=(_page(shapes=(_shape(1, cells=(_cell_formula("LocPinX", "Width * 0.5"),)),)),)
+    # Every pair below is one Visio 16.0 produced, against the formula the
+    # package stores for the same cell, on the fixture named. Nothing is invented.
+    @pytest.mark.parametrize(
+        ("stored", "rendered", "fixture"),
+        [
+            ("GUARD(0DA)", "GUARD(0 deg)", "test4_connectors"),
+            ("GUARD(0.19685039370079DL)", "GUARD(5.0000000000001 mm)", "test4_connectors"),
+            ("Width*0.499973064698594", "Width*0.49997306469859", "test5_master"),
+            ("Height*0.0", "Height*0", "test5_master"),
+            ("Sheet.5!Width*0.5", "Sheet.7!Width*0.5", "test3_house"),
+            ("GUARD(Sheet.5!Width)", "GUARD(Sheet.1!Width)", "test_master_multiple_child_shapes"),
+        ],
+    )
+    def test_visios_rendering_of_a_stored_formula_is_not_a_difference(self, stored, rendered, fixture):
+        """`FormulaU` is Visio's rendering of a formula, not the text the file holds.
+
+        Measured against Visio 16.0: the same formula comes back with its units
+        respelled, its literals reprinted to fourteen digits, `0.0` as `0`, and -
+        the one that settles it - cross-sheet references rebound from the ids
+        inside the master to the ids of the instance on the page. `Sheet.5!Width`
+        and `Sheet.7!Width` are two different sentences that mean the same thing.
+
+        Matching that text would mean reimplementing Visio's formula printer from
+        examples: unbounded, and every rule guessed at is somewhere a real
+        difference can hide.
+        """
+        package = Observation(label="package", pages=(_page(shapes=(_shape(1, cells=(_cell_formula("PinX", stored),)),)),))
+        visio = Observation(
+            label="visio", pages=(_page(shapes=(_shape(1, cells=(_cell_formula("PinX", rendered, result=1.0),)),)),)
         )
-        visio = Observation(label="visio", pages=(_page(shapes=(_shape(1, cells=(_cell_formula("LocPinX", "WIDTH*0.5"),)),)),))
 
-        assert compare(package, visio) == ()
+        assert compare(package, visio) == (), fixture
 
-    def test_a_rewritten_expression_is_a_difference_and_says_where_it_lands(self):
-        """The result is not compared, but it is the half a reader can act on.
+    def test_an_expression_that_genuinely_changed_is_not_reported_either(self):
+        """The cost of the test above, stated rather than buried.
 
-        Two formulas on a line do not say whether the shape moved by a hair or
-        off the page, and only Visio can answer that.
+        Nothing distinguishes this pair from those without knowing what Visio's
+        printer does, so a writer that rewrote an expression is not caught here.
+        The cell is still checked for presence and for still being an expression,
+        and both formulas are recorded and printed; what is gone is any claim
+        that the text agreed.
         """
         package = Observation(
             label="package", pages=(_page(shapes=(_shape(1, cells=(_cell_formula("LocPinX", "Width*0.5"),)),)),)
@@ -324,11 +351,7 @@ class TestPlacementCells:
             pages=(_page(shapes=(_shape(1, cells=(_cell_formula("LocPinX", "Width*0.25", result=0.25),)),)),),
         )
 
-        differences = compare(package, visio)
-
-        assert [d.kind for d in differences] == ["cell-formula"]
-        assert "Width*0.5" in differences[0].detail and "Width*0.25" in differences[0].detail
-        assert "result 0.25" in differences[0].detail
+        assert compare(package, visio) == ()
 
     def test_a_literal_against_an_expression_is_a_difference(self):
         """The two are different facts about the cell, whatever they evaluate to.

@@ -74,7 +74,7 @@ no COM and cannot do this.
 
 ```console
 $ python tools/visio_verify.py check out/generated.vsdx
-AGREE  generated.vsdx: 1 page(s), 3 shape(s), 27 placement cell(s) - Visio sees the same document
+AGREE  generated.vsdx: 1 page(s), 3 shape(s), 27 placement cell(s) (19 as numbers) - Visio sees the same document
 ```
 
 A disagreement names the page, the shape, the cell where there is one, and the
@@ -91,10 +91,12 @@ DIFFER broken.vsdx: 3 difference(s)
 Shape ids, grouping and glue are all identical when a shape moves and nothing
 else about it changes, so the placement cells — `PinX`, `PinY`, `Width`, `Height`, `Angle`, `LocPinX`,
 `LocPinY`, `FlipX`, `FlipY`, and on a 1-D shape `BeginX`, `BeginY`, `EndX`,
-`EndY` — are compared too. Only their formulas are: the package has no
-evaluator, so Visio's `ResultIU` is recorded for the failure message rather than
-compared. A glued connector states all of its placement as formulas, so for that
-one kind of shape this says nothing about where it ended up. See
+`EndY` — are compared too. What is compared is that both sides have the cell,
+that both hold the same kind of formula, and, where that is a plain number, its
+value. The *text* of an expression is not compared: `FormulaU` is Visio's
+rendering of a formula rather than the text the file holds, and the two differ on
+correct files. A glued connector states all of its placement as expressions, so
+for that one kind of shape this says nothing about where it ended up. See
 [the recordings' README](tests/fixtures/visio_observations/README.md) for why,
 and for the tolerance.
 

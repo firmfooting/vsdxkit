@@ -276,10 +276,14 @@ def _verdict(record: dict, package: Observation, visio: Observation) -> tuple[bo
     if differences:
         return False, f"DIFFER {name}: {len(differences)} difference(s)\n" + _indent(format_differences(differences))
     shapes = sum(len(page.shapes) for page in package.pages)
-    cells = sum(len(shape.cells) for page in package.pages for shape in page.shapes)
+    cells = [cell for page in package.pages for shape in page.shapes for cell in shape.cells]
+    # The second count is the honest size of the gate: the rest are expressions,
+    # checked for presence and kind but not compared as text. See
+    # tests/fixtures/visio_observations/README.md.
+    numeric = sum(1 for cell in cells if cell.constant is not None)
     return True, (
-        f"AGREE  {name}: {len(package.pages)} page(s), {shapes} shape(s), {cells} placement cell(s) "
-        "- Visio sees the same document"
+        f"AGREE  {name}: {len(package.pages)} page(s), {shapes} shape(s), "
+        f"{len(cells)} placement cell(s) ({numeric} as numbers) - Visio sees the same document"
     )
 
 

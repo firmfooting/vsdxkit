@@ -414,16 +414,39 @@ def _compare_cells(
 ) -> None:
     """Compare the cells that place a shape.
 
-    Formulas are compared; results are not. The record holds both, so the choice
-    has to be stated here rather than left to whichever field each side happened
-    to fill in - see "Formula and result" in
-    tests/fixtures/visio_observations/README.md for why. A literal formula is
-    compared as a number rather than as text, to `PLACEMENT_TOLERANCE`.
+    Three things are compared and one is not, and the one that is not is the
+    point of this docstring.
 
-    Presence is compared in both directions. Both sides state a cell exactly
-    when the shape has one - Visio through `CellExistsU`, the package through
-    its XML and its masters - so a cell on one side only means the writer
-    dropped it or invented it, and either moves the shape.
+    Presence, in both directions. Both sides state a cell exactly when the shape
+    has one - Visio through `CellExistsU`, the package through its XML and its
+    masters - so a cell on one side only means the writer dropped it or invented
+    it, and either moves the shape. Measured across the recorded corpus: 1371
+    cell pairs, no presence mismatch.
+
+    Whether the cell holds a literal or an expression. Visio's renderer never
+    turns one into the other, so this is a real comparison, and it catches the
+    failure the issue behind these cells named: a formula replaced by the number
+    it happened to evaluate to has stopped tracking what it referred to, and the
+    shape moves the next time that changes. Measured across the corpus: no kind
+    mismatch either.
+
+    A literal's value, as a number in internal units, to `PLACEMENT_TOLERANCE`.
+    This is where a shape that moved gets caught. 803 of the 1371 pairs.
+
+    Not the text of an expression. `Cell.FormulaU` is Visio's rendering of a
+    formula, not the text the file holds, and the two differ on correct files:
+    measured against Visio 16.0, `GUARD(0DA)` comes back as `GUARD(0 deg)`,
+    `Height*0.0` as `Height*0`, a 15-digit coefficient reprinted to 14, and a
+    master's `Sheet.5!Width` rebound to the page instance's `Sheet.7!Width`.
+    Comparing those as strings is not comparing the same pair, and normalising
+    until they match would mean reimplementing Visio's formula printer from
+    examples - unbounded, and every rule guessed at is a place a real difference
+    could hide. So the 568 expression pairs are recorded and printed, and no
+    claim is made that they agreed. See "Formula and result" in
+    tests/fixtures/visio_observations/README.md.
+
+    Results are not compared either, for a different reason: only Visio can
+    produce one. See the same section.
     """
     mine = expected.cells_by_name
     theirs = actual.cells_by_name
@@ -456,42 +479,27 @@ def _compare_cells(
                 )
             )
             continue
-        if in_expected.constant is not None and in_actual.constant is not None:
-            if not math.isclose(
-                in_expected.constant,
-                in_actual.constant,
-                rel_tol=PLACEMENT_TOLERANCE,
-                abs_tol=PLACEMENT_TOLERANCE,
-            ):
-                out.append(
-                    Difference(
-                        kind="cell-value",
-                        locus=locus,
-                        detail=(
-                            f"{expected_label} {_cell_text(in_expected)}, {actual_label} {_cell_text(in_actual)} "
-                            f"(internal units, tolerance {PLACEMENT_TOLERANCE:g})"
-                        ),
-                    )
-                )
+        if in_expected.constant is None:
+            # Both sides hold an expression. Recorded, printed above wherever
+            # this cell turns up in another difference, and deliberately not
+            # compared - see the docstring.
             continue
-        if _canonical_formula(in_expected.formula) != _canonical_formula(in_actual.formula):
+        if not math.isclose(
+            in_expected.constant,
+            in_actual.constant,
+            rel_tol=PLACEMENT_TOLERANCE,
+            abs_tol=PLACEMENT_TOLERANCE,
+        ):
             out.append(
                 Difference(
-                    kind="cell-formula",
+                    kind="cell-value",
                     locus=locus,
-                    detail=f"{expected_label} {_cell_text(in_expected)}, {actual_label} {_cell_text(in_actual)}",
+                    detail=(
+                        f"{expected_label} {_cell_text(in_expected)}, {actual_label} {_cell_text(in_actual)} "
+                        f"(internal units, tolerance {PLACEMENT_TOLERANCE:g})"
+                    ),
                 )
             )
-
-
-def _canonical_formula(formula: str) -> str:
-    """A formula's text with spacing and letter case taken out.
-
-    Visio re-renders a formula from its parse tree rather than echoing the
-    file's bytes, so both come back however Visio spells them. Nothing else is
-    touched: every number, name and operator survives normalisation.
-    """
-    return re.sub(r"\s+", "", formula).casefold()
 
 
 def _cell_text(cell: CellObservation) -> str:

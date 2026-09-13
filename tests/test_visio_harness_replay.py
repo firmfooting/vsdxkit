@@ -174,15 +174,18 @@ def test_a_shape_that_moved_a_millimetre_fails_and_names_the_shape_and_the_cell(
     Ids, grouping and glue are all identical when a rectangle slides a millimetre
     to the left, so every other check in this file passes on a file whose content
     has visibly moved.
+
+    This one starts from a real recording rather than a synthesised one, so the
+    number being perturbed is a `ResultIU` Visio actually returned and the
+    comparison runs on the same path a regression would.
     """
-    fixture = os.path.join(basedir, "test4_connectors.vsdx")
-    recording = _agreeing_recording(fixture)
+    recording = json.loads(pathlib.Path(RECORDINGS, "test4_connectors.json").read_text(encoding="utf-8"))
     shape = recording["pages"][0]["shapes"][0]
     pin_x = next(cell for cell in shape["cells"] if cell["name"] == "PinX")
     # one millimetre in internal units, which are inches
     pin_x["result"] += 1 / 25.4
     pin_x["formula"] = repr(pin_x["result"])
-    doctored = tmp_path / "moved.json"
+    doctored = tmp_path / "test4_connectors.json"
     doctored.write_text(json.dumps(recording), encoding="utf-8")
 
     exit_code = verify.command_replay([str(doctored)], corpus=basedir)
@@ -191,6 +194,19 @@ def test_a_shape_that_moved_a_millimetre_fails_and_names_the_shape_and_the_cell(
     assert exit_code == 1
     assert "DIFFER" in output
     assert f"shape {shape['id']} cell PinX" in output
+
+
+def test_a_recorded_expression_that_visio_respelled_is_not_a_difference(verify, basedir, capsys):
+    """The corpus is the evidence for not comparing expression text.
+
+    Six of these fixtures hold formulas Visio renders differently from the way
+    the file stores them, and every one of the 568 expression pairs across the
+    corpus is a correct file. If expression text were compared, this suite would
+    be red on output nobody had changed.
+    """
+    exit_code = verify.command_replay([os.path.join(RECORDINGS, "test3_house.json")], corpus=basedir)
+
+    assert exit_code == 0, capsys.readouterr().out
 
 
 def test_the_drivers_exit_codes_match_the_observers(verify):
