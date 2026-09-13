@@ -62,6 +62,38 @@ def test_insert_shape_accepts_equivalent_mixed_separator_path(vsdx_copy):
     assert len(shapes) == 1
 
 
+def test_insert_shape_allocates_an_id_the_page_is_not_using(vsdx_copy, tmp_path):
+    """A shape inserted into a loaded page must not reuse an ID already on it.
+
+    Nothing tells the caller to prime the page's high-water mark, so an
+    allocator that trusts it hands out 1 on a page that already has a shape 1.
+    Duplicate IDs make Connect records ambiguous and Visio offers to repair the
+    file on open.
+    """
+    filename = vsdx_copy("test1.vsdx")
+    out_file = os.path.join(str(tmp_path), "test1_insert_shape.vsdx")
+    shape = ET.fromstring(f'<Shape xmlns="{namespace[1:-1]}" ID="1" Type="Shape" />')
+
+    with VisioFile(filename) as vis:
+        page = vis.pages[0]
+        shapes = page.xml.getroot().find(f"{namespace}Shapes")
+        ids_before = [s.ID for s in page.all_shapes]
+
+        vis.insert_shape(shape, shapes, page, page.filename)
+
+        new_id = shape.attrib["ID"]
+        assert new_id not in ids_before
+        ids_after = [s.ID for s in page.all_shapes]
+        assert sorted(ids_after) == sorted([*ids_before, new_id])
+        vis.save_vsdx(out_file)
+
+    with VisioFile(out_file) as vis:
+        page = vis.pages[0]
+        ids = [s.ID for s in page.all_shapes]
+        assert new_id in ids
+        assert len(ids) == len(set(ids))
+
+
 def test_invalid_file_type():
     """Test that opening an invalid file name results in a TypeError"""
     filename = __file__
@@ -546,10 +578,9 @@ def test_vis_copy_shape(filename: str, shape_name: str, tmp_path, basedir):
         s = page.find_shape_by_text(shape_name)  # type: Shape
         assert s  # check shape found
         print(f"Found shape id:{s.ID}")
-        max_id = page.max_id
+        max_id = max(int(existing.ID) for existing in page.all_shapes)
 
         # note = this does add the shape, but prefer Shape.copy() as per next test which wraps this and returns Shape
-        page.set_max_ids()
         new_shape = vis.copy_shape(shape=s.xml, page=page)
 
         assert isinstance(new_shape, Element)  # check copy_shape returns xml

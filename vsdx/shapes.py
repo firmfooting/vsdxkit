@@ -41,6 +41,21 @@ def __getattr__(name: str):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
+def find_or_create_shapes_tag(parent: Element) -> Element:
+    """Return the ``<Shapes>`` container inside ``parent``, creating it if absent.
+
+    A ``<Shape>`` is never a legal child of a ``<Shape>``: a group holds its
+    children in a ``<Shapes>`` container, and a group that is currently empty
+    has no such container until something is put into it. The same is true of a
+    page, whose contents hang off one ``<Shapes>`` tag under ``<PageContents>``.
+    """
+    shapes_tag = parent.find(f"{namespace}Shapes")
+    if shapes_tag is None:
+        shapes_tag = Element(f"{namespace}Shapes")
+        parent.append(shapes_tag)
+    return shapes_tag
+
+
 shape_type_names = {  # a map from English language shape to a list of know names for that Shape type
     # note that Shape names may be appended with a number e.g. 'Dynamischer Verbinder.2'
     "Dynamic Connector": ["dynamic connector", "dynamischer verbinder"]
@@ -1158,10 +1173,49 @@ class Shape:
         self.page.delete_shape(self)
 
     def append_shape(self, append_shape: Shape) -> None:
-        # insert shape into shapes tag, and return updated shapes tag
+        """Place another shape inside this one, with IDs the page is not using.
+
+        A group holds its children in a ``<Shapes>`` container, created here
+        when the group has none. Appending to the group's own ``<Shape>``
+        element instead made the new shape a sibling of that container, which
+        the schema does not allow and which this library's own traversal cannot
+        see, neither through ``child_shapes`` nor through ``Page.all_shapes``.
+
+        A ``Shape`` may also wrap a ``<Shapes>`` element rather than a
+        ``<Shape>`` (``Page._shapes`` yields those); such a container takes the
+        child directly.
+
+        This places a shape, it does not move one. An element already in a page
+        gains a second parent rather than changing parent, because
+        ElementTree's elements have no parent to change; the page would then
+        hold the same shape twice, under one ID and at one position. Copy the
+        shape and append the copy instead.
+        """
+        wraps_shapes_tag = self.tag == f"{namespace}Shapes"
+        if not wraps_shapes_tag and self.shape_type != "Group":
+            raise ValueError(
+                f"shape ID={self.ID} has type {self.shape_type!r} and cannot contain shapes; "
+                "only a group shape holds sub-shapes"
+            )
+        if append_shape.page is not self.page:
+            raise ValueError(
+                f"shape ID={append_shape.ID} belongs to page {append_shape.page.name!r}, not {self.page.name!r}; "
+                "use Shape.copy(page) to place a shape on another page"
+            )
+        page_root = self.page.xml.getroot()
+        if any(element is append_shape.xml for element in page_root.iter()):
+            raise ValueError(
+                f"shape ID={append_shape.ID} is already on page {self.page.name!r}; "
+                "append_shape places a shape rather than moving one, so append a copy of it instead"
+            )
         id_map = self.page.vis.increment_shape_ids(append_shape.xml, self.page)
         self.page.vis.update_ids(append_shape.xml, id_map)
-        self.xml.append(append_shape.xml)
+        container = self.xml if wraps_shapes_tag else find_or_create_shapes_tag(self.xml)
+        container.append(append_shape.xml)
+        # The Shape object cached its ID and its parent at construction; both
+        # have just changed underneath it.
+        append_shape.ID = append_shape.xml.attrib.get("ID")
+        append_shape.parent = self
 
     @property
     def connects(self) -> list[Connect]:

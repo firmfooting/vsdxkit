@@ -83,7 +83,7 @@ class Page:
         self.rels_xml_filename: str | None = None
         self.rels_xml: ET.ElementTree[ET.Element] | None = None
         self.vis = vis
-        self.max_id = 0
+        self._max_id = 0  # ID high-water mark, maintained by VisioFile's ID allocator
         # todo: add page id - from pages_xml - PageSheet[ID]
 
     def __repr__(self):
@@ -265,15 +265,25 @@ class Page:
             return shapes[0].child_shapes
         return []  # empty list if no top shapes object
 
-    def set_max_ids(self) -> int:
-        # get maximum shape id from xml in page
+    def _set_max_ids(self) -> None:
+        """Raise this page's ID high-water mark to cover every shape now on it.
+
+        Private plumbing for ``VisioFile.increment_shape_ids()``, which calls it
+        at the start of each allocation run. It was public, and every caller
+        that inserted a shape was expected to remember to call it first; the
+        ones that forgot handed out IDs the page was already using. Monotonic
+        and idempotent, so calling it again costs a scan and nothing else.
+        """
         for shapes in self._shapes:
             for shape in shapes.child_shapes:
                 id = shape.get_max_id()
-                if id > self.max_id:
-                    self.max_id = id
+                if id > self._max_id:
+                    self._max_id = id
 
-        return self.max_id
+    def _next_shape_id(self) -> int:
+        """Hand out the next shape ID. ``_set_max_ids()`` syncs the mark first."""
+        self._max_id += 1
+        return self._max_id
 
     @property
     def index_num(self) -> int | None:

@@ -71,7 +71,6 @@ class JinjaTemplatingMixin:
                 page.xml = ET.ElementTree(ET.fromstring(output))  # create ElementTree from Element created from output
 
                 # update loop shape IDs which have been duplicated by Jinja template
-                page.set_max_ids()
                 for shape_id in loop_shape_ids:
                     shapes_by_id = page._find_shapes_by_id(shape_id)  # type: list[Shape]
                     if shapes_by_id and len(shapes_by_id) > 1:
