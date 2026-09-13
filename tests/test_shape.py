@@ -603,16 +603,47 @@ def test_shape_bounds(filename, page_index, shape_text, expected_bounds, basedir
         ("test1.vsdx", 0),
         ("test1.vsdx", 2),
         ("test2.vsdx", 0),
+        # 1-D shapes, whose boxes are degenerate on purpose: a horizontal line
+        # is zero high, and a right-to-left one has its end left of its begin
+        ("test4_connectors.vsdx", 0),
+        ("test5_master.vsdx", 0),
+        ("test7_with_connector.vsdx", 0),
     ],
 )
 def test_all_shape_bounds(filename, page_index, basedir):
+    """Every shape on the page has a box, and knows where its group put it.
+
+    `assert shape.bounds` and `assert shape.relative_bounds` were the whole of
+    this test, and a 4-tuple is always truthy: hard-coding `Shape.bounds` to
+    `0.0, 0.0, 0.0, 0.0` left all three parameter cases passing.
+    `test_shape_bounds` pins exact coordinates for three named shapes; this one
+    is for the shapes nobody named, so it asserts what holds of all of them.
+
+    Not that the box is non-empty. `bounds` comes from the endpoints on a 1-D
+    shape, and a horizontal line is zero high while a right-to-left one ends
+    left of where it begins - 8 of the 146 shapes in this corpus are one or the
+    other. An assertion those fail is one that fails a correct library, which is
+    how it ends up deleted.
+    """
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.pages[page_index]
-        for s in page.all_shapes:
-            # checl all shapes have bounds and relative bounds
-            print(s.ID, s.bounds, s.relative_bounds)
-            assert s.bounds
-            assert s.relative_bounds
+        shapes = page.all_shapes
+        assert shapes, "a bounds test needs shapes to bound"
+        for shape in shapes:
+            bx, by, ex, ey = shape.bounds
+            assert shape.bounds != (0.0, 0.0, 0.0, 0.0), f"shape {shape.ID} has no box at all"
+
+            # relative_bounds is the box with the enclosing group's origin added
+            # on, so the offset between the two is the parent's, and it is zero
+            # for a shape sitting on the page. (The names are the wrong way
+            # round - #76 - but the relation between them is what is checked.)
+            parent = shape.parent
+            offset_x, offset_y = (0.0, 0.0)
+            if isinstance(parent, Shape) and parent.shape_type == "Group":
+                offset_x, offset_y = parent.bounds[0], parent.bounds[1]
+            assert shape.relative_bounds == pytest.approx((bx + offset_x, by + offset_y, ex + offset_x, ey + offset_y)), (
+                f"shape {shape.ID}: {shape.relative_bounds} is not {shape.bounds} offset by {(offset_x, offset_y)}"
+            )
 
 
 @pytest.mark.parametrize(
@@ -728,6 +759,17 @@ def test_find_shapes_by_regex(filename: str, regex: str, expected_shape_ids: lis
         assert [shp.ID for shp in fil_shapes] == expected_shape_ids
 
 
+# Which property each `color_param` row names. A chain of `if`/`elif` asserts
+# nothing for a row matching none of its branches, so a typo in the table below
+# would add a test that passed having checked nothing.
+_COLOUR_ATTRIBUTES = {"line": "line_color", "text": "text_color", "fill": "fill_color"}
+
+
+def _colour_of(shape, color_param: str) -> str:
+    assert color_param in _COLOUR_ATTRIBUTES, f"unknown colour {color_param!r}; expected one of {list(_COLOUR_ATTRIBUTES)}"
+    return getattr(shape, _COLOUR_ATTRIBUTES[color_param])
+
+
 @pytest.mark.parametrize(
     ("filename", "page_index", "shape_text", "color_param", "expected_colour"),
     [
@@ -745,13 +787,7 @@ def test_get_shape_line_color(
     """Test that we can get a shapes line, text, or fill color"""
     with VisioFile(os.path.join(basedir, filename)) as vis:
         shape = vis.pages[page_index].find_shape_by_text(shape_text)
-        print(f"LineColor={shape.line_color} FillColor={shape.fill_color} TextColor={shape.text_color}")
-        if color_param == "line":
-            assert shape.line_color == expected_colour
-        elif color_param == "text":
-            assert shape.text_color == expected_colour
-        elif color_param == "fill":
-            assert shape.fill_color == expected_colour
+        assert _colour_of(shape, color_param) == expected_colour
 
 
 @pytest.mark.parametrize(
@@ -772,24 +808,12 @@ def test_set_shape_line_color(
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_{page_index}_set_shape_{color_param}_color.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         shape = vis.pages[page_index].find_shape_by_text(shape_text)
-        print(f"LineColor={shape.line_color} FillColor={shape.fill_color} TextColor={shape.text_color}")
-        if color_param == "line":
-            shape.line_color = expected_colour
-        elif color_param == "text":
-            shape.text_color = expected_colour
-        elif color_param == "fill":
-            shape.fill_color = expected_colour
+        setattr(shape, _COLOUR_ATTRIBUTES[color_param], expected_colour)
         vis.save_vsdx(out_file)
 
     with VisioFile(out_file) as vis:
         shape = vis.pages[page_index].find_shape_by_text(shape_text)
-        print(f"LineColor={shape.line_color} FillColor={shape.fill_color} TextColor={shape.text_color}")
-        if color_param == "line":
-            assert shape.line_color == expected_colour
-        elif color_param == "text":
-            assert shape.text_color == expected_colour
-        elif color_param == "fill":
-            assert shape.fill_color == expected_colour
+        assert _colour_of(shape, color_param) == expected_colour
 
 
 def _loose_shape(page, shape_id: str = "1"):

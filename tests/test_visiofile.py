@@ -169,15 +169,13 @@ def test_open_abs_path_save_rel_path(tmp_path, monkeypatch):
 
 
 def test_open_abs_path_save_abs_path(tmp_path):
-    # test opening media file (not in tests directory)with absolute path
-    media_file_path = _media_filename()
-    filename = os.path.abspath(media_file_path)
+    # test opening media file (not in tests directory) with absolute path
+    filename = os.path.abspath(_media_filename())
 
-    assert os.path.exists(filename)
     output_file = os.path.abspath(os.path.join(str(tmp_path), "abs_to_abs_out.vsdx"))
-    print("output_file", output_file)
     with VisioFile(filename) as vis:
         vis.save_vsdx(output_file)
+    assert os.path.exists(output_file)
 
 
 # Helpers
@@ -431,9 +429,13 @@ def test_add_page_at(filename: str, index: int, page_name: str, tmp_path, basedi
         ("test1.vsdx", "new_page", 0),
         ("test1.vsdx", "new_page", 1),
         ("test2.vsdx", "new_page", 0),
+        # `None` means append, through `add_page` rather than `add_page_at`.
+        # No row reached that branch before.
+        ("test1.vsdx", "new_page", None),
+        ("test2.vsdx", "new_page", None),
     ],
 )
-def test_app_xml_page_names_after_add_page(filename: str, new_page_name: str, location: int, basedir):
+def test_app_xml_page_names_after_add_page(filename: str, new_page_name: str, location: int | None, basedir):
     # test that page names in app.xml matches page names loaded
     with VisioFile(os.path.join(basedir, filename)) as vis:
         if location is None:
