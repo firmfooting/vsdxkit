@@ -3,7 +3,7 @@
 These files are ground truth. Real Microsoft Visio built each one through its
 own COM automation, so the XML inside is what Visio writes rather than what we
 think Visio writes. `manifest.json` records the connector cell formulas Visio
-computed at the same moment, which is how the engine in `vsdx/connectors.py`
+computed at the same moment, which is how the engine in `src/vsdxkit/connectors.py`
 knows that dynamic glue means `_WALKGLUE(BegTrigger,EndTrigger,WalkPreference)`
 with `GlueType=2`.
 
@@ -30,7 +30,7 @@ too: it is how we know which Visio APIs do not do what their names suggest.
 | `s02_glue_pin.vsdx` | Connector from the connector tool, `BeginX.GlueTo(A!PinX)` and `EndX.GlueTo(B!PinX)` | Succeeded. Gluing to `PinX` produces the same dynamic shape glue as AutoConnect. |
 | `s03_route_variants.vsdx` | Three connectors between the same pair, `ShapeRouteStyle` set to 1, 16 and 17 (plus `ConLineRouteExt=2`) | All three took. Right-angle = 1, straight = 16, curved = 17 with `ConLineRouteExt=2` come from here. |
 | `s04_point_glue.vsdx` | Glue to connection points on plain `DrawRectangle` shapes | **Failed**: `Referenced cell Sheet.1!Connections.X1 does not exist.` Rectangles from `DrawRectangle` have no `Connections` section, so there is nothing to glue to. Kept as the negative case. |
-| `s05_swimlanes_cfflow.vsdx` | Open `CFF_HORIZONTAL_M.VSTX`, drop a `Process` master, add it to the lane, insert a lane | Saved with a real CFF container (`CFF Container`, `ContainerStyle=1`, `LockMembership=True`) and 21 shapes. Both membership calls failed: `ContainerProperties.AddMember` rejected a one-argument call, and that object has no `InsertRow`. That failure is why `vsdx/containers.py` treats CFF lane membership as geometric. |
+| `s05_swimlanes_cfflow.vsdx` | Open `CFF_HORIZONTAL_M.VSTX`, drop a `Process` master, add it to the lane, insert a lane | Saved with a real CFF container (`CFF Container`, `ContainerStyle=1`, `LockMembership=True`) and 21 shapes. Both membership calls failed: `ContainerProperties.AddMember` rejected a one-argument call, and that object has no `InsertRow`. That failure is why `src/vsdxkit/containers.py` treats CFF lane membership as geometric. |
 | `s06_basflow_stencils.vsdx` | Open `BASFLO_M.vstx` and save it untouched | An empty page, `top shapes=0`. The bare basic-flowchart template, useful only as a package-shape reference. |
 | `s07_point_glue_masters.vsdx` | **Purpose not recorded.** | Not built by `tools/com_reference.ps1` and not listed in `manifest.json`. It arrived with the connector-engine commit `1a564ee`. Its page holds two mastered shapes and a connector glued point to point, with `Connect` records naming `Connections.X1`/`Connections.X2` at `ToPart` 100 and 101, the case s04 could not produce. Use it as the point-glue reference, but nothing records which Visio build or which steps made it. |
 
