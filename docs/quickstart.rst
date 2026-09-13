@@ -4,11 +4,19 @@ Quick start
 Installation
 ------------
 
-``vsdxkit`` is not yet published on PyPI. Install the current GitHub version:
+**As of 2026-09-13 there is no release on PyPI.** The first release was
+withdrawn after a security defect and cannot be republished, so
+``pip install vsdxkit`` finds no versions until the next one lands. The `PyPI
+project page <https://pypi.org/project/vsdxkit/>`_ shows the current state.
+
+Install from GitHub in the meantime:
 
 .. code-block:: console
 
    python -m pip install "vsdxkit @ git+https://github.com/firmfooting/vsdxkit.git"
+
+That tracks ``main``, so pin a commit if you need a reproducible install. Once
+there is a release on the index, install it with ``pip install vsdxkit``.
 
 The distribution name and import name differ deliberately:
 
@@ -71,8 +79,8 @@ Development install
    cd vsdxkit
    uv sync --locked --group docs
    uv run --no-sync python -m pytest tests -q
-   uv run --no-sync ruff check vsdx tests/test_imports.py tests/test_shape_coordinates.py
-   uv run --no-sync ruff format --check vsdx tests/test_imports.py tests/test_shape_coordinates.py
+   uv run --no-sync ruff check vsdx tests tools
+   uv run --no-sync ruff format --check vsdx tests tools
    uv run --no-sync pyrefly check vsdx --min-severity warn --output-format min-text
    uv run --no-sync sphinx-build -W --keep-going -b html docs docs/_build/html
 

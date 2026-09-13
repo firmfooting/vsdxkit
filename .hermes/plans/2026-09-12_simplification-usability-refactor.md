@@ -1,10 +1,16 @@
 # Vsdxkit 1.0 simplification and usability refactor
 
-**Status:** Reviewed design v2 — ready for phased implementation after PR #3 merges
+**Status:** Reviewed design v2, in phased implementation
 **Date:** 2026-09-12
-**Depends on:** PR #3 merged to `main`
+**Tracked in:** [v1.0.0-alpha](https://github.com/firmfooting/vsdxkit/milestone/2) and the milestones after it
 **Target release:** 1.0.0
 **Compatibility position:** Python API breakage is accepted. File-format behaviour is not.
+
+> **Corrected 2026-09-13.** This header used to gate the work on "PR #3". That
+> number is from before the project moved repositories and resolves to nothing
+> here; issue #3 today is an unrelated defect. The phases below are tracked as
+> milestones and issues, and those are authoritative for what is done. The
+> design itself is unchanged.
 
 ## Decision
 
@@ -18,7 +24,7 @@ The refactor may rename or remove classes, methods, arguments and imports. It mu
 - deterministic round trips;
 - files opening in Microsoft Visio without repair.
 
-The package is not yet published on PyPI. This is the point to remove accidental boundaries rather than make them permanent.
+No release of the package is installable from PyPI: the name is registered, and 0.7.0 was withdrawn after a security defect. There is nothing published for downstream code to pin, so this is the point to remove accidental boundaries rather than make them permanent.
 
 ## Current evidence
 
@@ -342,7 +348,7 @@ COM assertions consume generated files, not Python objects. They pin page/shape 
 
 ## Delivery strategy
 
-Start only after PR #3 merges. Work serially from fresh branches off current `origin/main`. Each PR leaves `main` executable. Breaking changes begin before the rename cut, so `docs/migration-1.0.rst` starts with the first breaking PR and is updated in every later one.
+Work serially from fresh branches off current `origin/main`. Each PR leaves `main` executable. Breaking changes begin before the rename cut, so `docs/migration-1.0.rst` starts with the first breaking PR and is updated in every later one.
 
 Package-store and characterisation work are serial. Later work may be developed in parallel only where files and ownership are disjoint, but lands serially after rebase and full verification.
 
@@ -514,8 +520,7 @@ Do not split a class to meet a line-count target. File size is evidence, not the
 - execute the README workflow from the installed wheel;
 - run package manifests and every COM oracle;
 - publish the complete migration guide;
-- publish `vsdxkit` to PyPI;
-- tag and create the GitHub release only after tag and package versions match.
+- release through release-please: merging the release PR tags the version, publishes to PyPI with attestations and creates the GitHub release in one run (see "Releases" in `CONTRIBUTING.md`).
 
 ## PR sequence
 
@@ -536,8 +541,8 @@ Each PR starts from current `origin/main`, lands serially, and is independently 
 
 ```bash
 python -m pytest tests -q
-ruff check vsdx
-ruff format --check vsdx
+ruff check vsdx tests tools
+ruff format --check vsdx tests tools
 pyrefly check vsdx --min-severity warn --output-format min-text
 sphinx-build -W --keep-going -b html docs docs/_build/html
 actionlint .github/workflows/*.yml

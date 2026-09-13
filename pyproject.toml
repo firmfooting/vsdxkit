@@ -8,10 +8,7 @@ description = "vsdxkit - create, edit and analyse Microsoft Visio .vsdx files, h
 readme = "README.md"
 license = "BSD-3-Clause"
 license-files = ["LICENSE"]
-authors = [
-    { name = "Dave Howard", email = "dave@codypy.com" },
-    { name = "Shaun Eccles" },
-]
+authors = [{ name = "Firm Footing" }]
 requires-python = ">=3.10"
 dependencies = [
     "Jinja2>=3.1.6",

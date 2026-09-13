@@ -91,8 +91,9 @@ git switch -c fix/<short-name> origin/main
 git cherry-pick -x <sha>
 ```
 
-`-x` appends the source sha to the commit message, which is what tells the next
-reader where the change came from.
+`-x` appends the source sha to the commit message, which keeps the origin
+visible while you work on the branch. It does not reach `main`; see the PR step
+below for where the credit has to go.
 
 Expect conflicts inside those files: contents have diverged heavily even where
 paths have not. When a cherry-pick fights back, abort it and write the fix
@@ -100,10 +101,14 @@ ourselves against our code. The upstream commit is then a reference, and belongs
 in the commit message as a link rather than as a parent.
 
 Either way the change lands through a normal PR: a regression test, a
-a conventional-commit PR title, which is what release-please turns into the
-changelog entry -- see "Releases" in CONTRIBUTING.md.
-changelog entry (`dave-howard/vsdx#<n>`, or the commit sha) so the provenance
-survives the squash merge.
+conventional-commit title, and CI green. There is no changelog entry to write by
+hand; release-please builds one from that title, as "Releases" in
+CONTRIBUTING.md explains.
+
+Put the upstream credit in the PR description (`dave-howard/vsdx#<n>`, or the
+commit sha). This repository squash-merges with the PR title and body as the
+commit message, so the branch's own commits never reach `main` and the `-x` line
+goes with them.
 
 ### 4. Record the new point
 
