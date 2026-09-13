@@ -55,5 +55,12 @@ Templates can assign selected geometry values on the current shape, including
 
    {% set self.x = 1.5 + loop.index0 * 2.0 %}
 
-Keep calculations inside trusted templates. Jinja expressions execute against
-the context supplied by the caller.
+Rendering runs in Jinja's sandboxed environment, because the templates come out
+of the document rather than from the caller. Loops, conditionals, filters and
+arithmetic all work; reaching through an object's attributes into the
+interpreter does not, and raises ``jinja2.exceptions.SecurityError``.
+
+The sandbox is a bound on what a malicious document can do, not a licence to
+render anything. A template can still consume memory and time, and it sees
+whatever you put in the context — so do not pass secrets to
+``jinja_render_vsdx()`` alongside a document you do not trust.

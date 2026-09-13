@@ -8,6 +8,22 @@ From 0.7.1 onward this file is maintained by release-please, which writes a
 section per release from the conventional-commit subjects on `main`. Edit the
 release pull request rather than this file directly.
 
+## Unreleased
+
+### Security
+
+- Jinja templates are rendered in a sandboxed environment. `jinja_render_vsdx()`
+  compiles text taken from the document being rendered — shape text, shape names
+  and cell formulas — and Jinja's default environment executes that text, so a
+  crafted `.vsdx` could reach `os` through a builtin's `__globals__` and run
+  shell commands in the calling process. Rendering a document from an untrusted
+  source was equivalent to running it. Ordinary templating is unaffected: loops,
+  conditionals, filters and arithmetic behave as before, while an attempt to
+  reach through attributes now raises `jinja2.exceptions.SecurityError`.
+
+  The same defect is present in `vsdx` upstream, from which this project
+  descends, and has been reported to its maintainer.
+
 ## 0.7.0 - 2026-09-13
 
 ### Added
