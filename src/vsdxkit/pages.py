@@ -132,10 +132,13 @@ class Page:
     @name.setter
     def name(self, value: str) -> None:
         self.vis._require_open("Setting Page.name")
+        previous = self.name
         page = self._page_xml()
         page.attrib["Name"] = value
         page.attrib["NameU"] = value
         self._name = value
+        # app.xml lists the page names too, and would keep the old one
+        self.vis._rename_page_in_app_xml(previous, value)
 
     def _index(self) -> int:
         """Zero-based index of this page in its VisioFile (required)."""
