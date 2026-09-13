@@ -53,14 +53,22 @@ def _read_xml(path: str, member: str) -> ET.Element:
         return ET.fromstring(archive.read(member))
 
 
-def _master_relationships(path: str, member: str) -> dict[str, str]:
-    """Return rel-id -> target for the master relationships in a ``.rels`` part."""
+def _relationships(path: str, member: str, rel_type: str | None = None) -> dict[str, str]:
+    """Return rel-id -> target for a ``.rels`` part, skipping targets outside the package.
+
+    ``rel_type`` narrows the result to one relationship type; omit it for all of them.
+    """
     root = _read_xml(path, member)
     return {
         rel.attrib["Id"]: rel.attrib["Target"]
         for rel in root.iter(f"{RELS_NS}Relationship")
-        if rel.attrib.get("Type") == MASTER_REL_TYPE
+        if rel.attrib.get("TargetMode") != "External" and (rel_type is None or rel.attrib.get("Type") == rel_type)
     }
+
+
+def _master_relationships(path: str, member: str) -> dict[str, str]:
+    """Return rel-id -> target for the master relationships in a ``.rels`` part."""
+    return _relationships(path, member, MASTER_REL_TYPE)
 
 
 def _content_type_overrides(path: str) -> dict[str, str]:
@@ -186,12 +194,13 @@ def test_every_master_part_is_reachable_from_masters_xml(imported_master: Import
 
 
 def test_every_page_relationship_targets_a_part_that_exists(imported_master: ImportedMaster):
+    """Every relationship a page declares, master or not, must resolve to an archive member."""
     names = _zip_names(imported_master.document)
     for page_part in _page_parts(imported_master.document):
         rels_member = _page_rels_member(page_part)
         if rels_member not in names:
             continue
-        for rel_id, target in _master_relationships(imported_master.document, rels_member).items():
+        for rel_id, target in _relationships(imported_master.document, rels_member).items():
             resolved = os.path.normpath(os.path.join(os.path.dirname(page_part), target)).replace(os.sep, "/")
             assert resolved in names, f"{rels_member} {rel_id} targets missing part {target}"
 
