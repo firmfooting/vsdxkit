@@ -66,26 +66,29 @@ class VisioFileDiff:
         return x.split("\n")
 
     def common_members(self) -> list[str]:
-        # return a sorted list of members (file paths)
-        common_members = list(set(self.contents_a.keys()).union(set(self.contents_b.keys())))
-        common_members.sort()
-        return common_members
+        """Return the sorted member names both files have.
+
+        This returned the union until now, so a caller asking which members the
+        two files share was handed every member either of them had. The ones
+        that are not shared are what ``added_members`` and ``removed_members``
+        report.
+
+        ``get_file_diffs`` produces the same diffs either way, because it
+        already skipped any member it could not read from both sides.
+        """
+        return sorted(set(self.contents_a.keys()) & set(self.contents_b.keys()))
 
     def compare_members(self) -> bool:
         # return True if same, False if different
         return self.contents_a.keys() == self.contents_b.keys()
 
     def added_members(self) -> set[str]:
-        # list members in file b that are not in file a
-        members_a = set(self.contents_a.keys())
-        members_b = set(self.contents_b.keys())
-        return members_b.difference(members_a)
+        """Return the members file b has and file a has not."""
+        return set(self.contents_b.keys()) - set(self.contents_a.keys())
 
     def removed_members(self) -> set[str]:
-        # list members in file b that are not in file a
-        members_a = set(self.contents_a.keys())
-        members_b = set(self.contents_b.keys())
-        return members_a - members_b
+        """Return the members file a has and file b has not."""
+        return set(self.contents_a.keys()) - set(self.contents_b.keys())
 
     # Diff-time safety caps (issue #8 review): a diff must not inflate a
     # compression bomb into memory. Text members are decoded incrementally

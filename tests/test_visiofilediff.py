@@ -60,7 +60,23 @@ def test_visiodiff_detects_added_connector(vsdx_copy, tmp_path):
     # part, so members are added but none are removed
     assert file_diff.removed_members() == set()
     added = file_diff.added_members()
+    # non-empty first: `all()` over an empty set is True, so the shape check
+    # below asserted nothing while `added_members` returned nothing
+    assert added, "adding a connector added no package member"
     assert all("master" in member or "page" in member for member in added), added
+
+    # the same two files the other way round, so `removed_members` is pinned on
+    # a non-empty answer as well
+    reversed_diff = VisioFileDiff(filepath_b, filepath_a)
+    assert reversed_diff.removed_members() == added
+    assert reversed_diff.added_members() == set()
+
+    # the shared members exclude the ones only b has, which is what separates
+    # the intersection from the union
+    common = file_diff.common_members()
+    assert set(common).isdisjoint(added), f"a member only file b has is not shared: {sorted(set(common) & added)}"
+    assert "visio/pages/page1.xml" in common, common
+
     # the page part must have gained actual Connect records: inspect only the
     # added diff lines (unchanged lines carry 'ConnectorSchemeIndex' noise),
     # so an empty diff or a no-op Connect.create() cannot satisfy this
