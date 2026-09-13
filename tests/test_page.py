@@ -26,22 +26,6 @@ def test_get_page_child_shapes(filename: str, child_count: int, basedir):
 
 
 @pytest.mark.parametrize(
-    "filename, all_count",
-    [
-        ("test1.vsdx", 4),
-        ("test2.vsdx", 14),
-        ("test10_nested_shapes.vsdx", 8),
-    ],
-)
-def test_get_page_all_shapes(filename: str, all_count: int, basedir):
-    # Check that page has expected number of total shapes (all_shapes searches recursively)
-    with VisioFile(os.path.join(basedir, filename)) as vis:
-        page = vis.get_page(0)  # type: Page
-        # check that page has expected number of all_shapes
-        assert len(page.all_shapes) == all_count
-
-
-@pytest.mark.parametrize(
     "filename, page_index, height_width",
     [
         ("test1.vsdx", 0, (8.26771653543307, 11.69291338582677)),
@@ -166,15 +150,6 @@ def test_set_page_name(filename: str, page_index: int, page_name: str, tmp_path,
     with VisioFile(out_file) as vis:
         page = vis.pages[page_index]
         assert page.name == page_name
-
-
-@pytest.mark.parametrize("filename, count", [("test1.vsdx", 4), ("test2.vsdx", 6)])
-def test_get_page_sub_shapes(filename: str, count: int, basedir):
-    with VisioFile(os.path.join(basedir, filename)) as vis:
-        page = vis.get_page(0)  # type: Page
-        shapes = page.child_shapes
-        print(f"shape count={len(shapes)}")
-        assert len(shapes) == count
 
 
 @pytest.mark.parametrize("filename, shape_id", [("test1.vsdx", "6"), ("test2.vsdx", "6")])
@@ -346,7 +321,11 @@ def test_find_shape_by_data_property_label_value(
     ],
 )
 def test_find_shapes_by_regex(filename: str, page_index, regex: str, expected_shape_ids: list, basedir):
-    """Test function Shape.find_shapes_by_regex(regex: str)
+    """Test function Page.find_shapes_by_regex(regex: str)
+
+    Delegates to the top shape's, so this covers `Shape.find_shapes_by_regex`
+    as well.
+
         test1.vsdx contains Shapes with text fields
             [(shp.ID,shp.text) for shp in shapes.all_shapes]:
             ('1', 'Shape Text\n')
@@ -694,6 +673,8 @@ def test_copy_and_move_line(filename: str, shape_text: str, start: tuple, finish
         ("test2.vsdx", 0, ["6", "9", "1", "7", "8", "11", "2", "10", "14", "5", "12", "13", "16", "17"]),
         ("test2.vsdx", 1, []),  # empty page
         ("test2.vsdx", 2, ["1", "2", "3", "4"]),
+        # a group two deep, so the recursion is pinned by ids and not just by a count
+        ("test10_nested_shapes.vsdx", 0, ["7", "3", "1", "2", "4", "5", "6", "8"]),
     ],
 )
 def test_page_all_shapes(filename, page_index, expected_ids, basedir):

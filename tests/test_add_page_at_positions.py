@@ -8,7 +8,7 @@ import pytest
 
 from vsdx import PagePosition, VisioFile
 
-basedir = os.path.dirname(os.path.realpath(__file__))
+FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
 
 def _pages_rels_root(visio_file):
@@ -21,7 +21,7 @@ def _pages_rels_root(visio_file):
 
 @pytest.mark.parametrize("position", [PagePosition.BEFORE, PagePosition.AFTER])
 def test_add_page_at_rejects_relative_position_without_reference_page(vsdx_copy, tmp_path, position):
-    path = os.path.join(basedir, "test1.vsdx")
+    path = os.path.join(FIXTURES, "test1.vsdx")
     copy_path = vsdx_copy("test1.vsdx")
     output = os.path.join(str(tmp_path), "out.vsdx")
     with VisioFile(path) as reference:

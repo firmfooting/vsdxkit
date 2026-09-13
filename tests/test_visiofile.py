@@ -208,12 +208,20 @@ def test_xml_findall_group_shapes(filename: str, group_shape_elements: int, base
 # working with Pages
 
 
-@pytest.mark.parametrize("filename, page_name", [("test1.vsdx", "Page-1"), ("test2.vsdx", "Page-1")])
-def test_get_page(filename: str, page_name: str, basedir):
-    with VisioFile(os.path.join(basedir, filename)) as vis:
-        page = vis.get_page(0)  # type: Page
-        # confirm page name as expected
-        assert page.name == page_name
+def _app_xml_page_count(vis) -> int:
+    heading_pairs = vis.app_xml.getroot().find(f"{ext_prop_namespace}HeadingPairs")
+    return int(heading_pairs.find(f".//{vt_namespace}i4").text)
+
+
+def _app_xml_page_names(vis) -> list[str]:
+    """The page names `docProps/app.xml` declares, in the order it lists them.
+
+    `app.xml` is document metadata written alongside `pages.xml`, and the two
+    going out of step is invisible from either one alone.
+    """
+    titles = vis.app_xml.getroot().find(f"{ext_prop_namespace}TitlesOfParts")
+    vector = titles.find(f"{vt_namespace}vector")
+    return [lpstr.text for lpstr in vector.findall(f"{vt_namespace}lpstr")]
 
 
 @pytest.mark.parametrize(
@@ -225,20 +233,8 @@ def test_get_page(filename: str, page_name: str, basedir):
 def test_app_xml_page_names(filename: str, basedir):
     # test that page names in app.xml matches page names loaded
     with VisioFile(os.path.join(basedir, filename)) as vis:
-        HeadingPairs = vis.app_xml.getroot().find(f"{ext_prop_namespace}HeadingPairs")
-        i4 = HeadingPairs.find(f".//{vt_namespace}i4")
-        num_pages = int(i4.text)
-        assert num_pages == len(vis.pages)
-
-        # check page names from pages is same as page names from app.xml
-        page_names = [p.name for p in vis.pages]
-        TitlesOfParts = vis.app_xml.getroot().find(f"{ext_prop_namespace}TitlesOfParts")
-        vector = TitlesOfParts.find(f"{vt_namespace}vector")
-        app_xml_page_names = []
-        for lpstr in vector.findall(f"{vt_namespace}lpstr"):
-            page_name = lpstr.text
-            app_xml_page_names.append(page_name)
-        assert page_names == app_xml_page_names
+        assert _app_xml_page_count(vis) == len(vis.pages)
+        assert _app_xml_page_names(vis) == [p.name for p in vis.pages]
 
 
 @pytest.mark.parametrize(
@@ -340,20 +336,8 @@ def test_app_xml_page_names_after_remove_page(filename: str, remove_index: int, 
     with VisioFile(os.path.join(basedir, filename)) as vis:
         vis.remove_page_by_index(remove_index)
 
-        HeadingPairs = vis.app_xml.getroot().find(f"{ext_prop_namespace}HeadingPairs")
-        i4 = HeadingPairs.find(f".//{vt_namespace}i4")
-        num_pages = int(i4.text)
-        assert num_pages == len(vis.pages)
-
-        # check page names from pages is same as page names from app.xml
-        page_names = [p.name for p in vis.pages]
-        TitlesOfParts = vis.app_xml.getroot().find(f"{ext_prop_namespace}TitlesOfParts")
-        vector = TitlesOfParts.find(f"{vt_namespace}vector")
-        app_xml_page_names = []
-        for lpstr in vector.findall(f"{vt_namespace}lpstr"):
-            page_name = lpstr.text
-            app_xml_page_names.append(page_name)
-        assert page_names == app_xml_page_names
+        assert _app_xml_page_count(vis) == len(vis.pages)
+        assert _app_xml_page_names(vis) == [p.name for p in vis.pages]
 
 
 @pytest.mark.parametrize(("filename"), [("test1.vsdx")])
@@ -443,23 +427,12 @@ def test_app_xml_page_names_after_add_page(filename: str, new_page_name: str, lo
         else:
             vis.add_page_at(location, new_page_name)
 
-        HeadingPairs = vis.app_xml.getroot().find(f"{ext_prop_namespace}HeadingPairs")
-        i4 = HeadingPairs.find(f".//{vt_namespace}i4")
-        num_pages = int(i4.text)
-        assert num_pages == len(vis.pages)
+        assert _app_xml_page_count(vis) == len(vis.pages)
 
-        # check page names from pages is same as page names from app.xml;
         # TitlesOfParts is document metadata and does not track pages.xml
         # order, so the comparison is order-insensitive now that insertion
         # positions are actually honoured
-        page_names = sorted(p.name for p in vis.pages)
-        TitlesOfParts = vis.app_xml.getroot().find(f"{ext_prop_namespace}TitlesOfParts")
-        vector = TitlesOfParts.find(f"{vt_namespace}vector")
-        app_xml_page_names = []
-        for lpstr in vector.findall(f"{vt_namespace}lpstr"):
-            page_name = lpstr.text
-            app_xml_page_names.append(page_name)
-        assert sorted(app_xml_page_names) == page_names
+        assert sorted(_app_xml_page_names(vis)) == sorted(p.name for p in vis.pages)
 
 
 def test_copy_page_clones_relationship_part(vsdx_copy, tmp_path):

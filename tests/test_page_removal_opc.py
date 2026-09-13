@@ -6,7 +6,7 @@ import zipfile
 
 from vsdx import VisioFile
 
-basedir = os.path.dirname(os.path.realpath(__file__))
+FIXTURES = os.path.dirname(os.path.realpath(__file__))
 RELS_NS = "{http://schemas.openxmlformats.org/package/2006/relationships}"
 R_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 
@@ -33,7 +33,7 @@ def _content_type_part_names(path: str) -> set[str]:
 
 def _save_copy(tmp_path, name: str = "doc.vsdx") -> str:
     document = str(tmp_path / name)
-    with VisioFile(os.path.join(basedir, "test1.vsdx")) as vis:
+    with VisioFile(os.path.join(FIXTURES, "test1.vsdx")) as vis:
         vis.save_vsdx(document)
     return document
 

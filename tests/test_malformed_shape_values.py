@@ -6,7 +6,7 @@ import pytest
 
 import vsdx
 
-basedir = os.path.dirname(os.path.realpath(__file__))
+FIXTURES = os.path.dirname(os.path.realpath(__file__))
 namespace = "{http://schemas.microsoft.com/office/visio/2012/main}"
 
 

@@ -19,7 +19,7 @@ import pytest
 
 import vsdx
 
-basedir = os.path.dirname(os.path.realpath(__file__))
+FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
 soffice = shutil.which("soffice") or shutil.which("libreoffice")
 
@@ -54,7 +54,7 @@ def _assert_converts_to_pdf(document: str, tmp_path) -> None:
 @pytest.mark.parametrize("filename", ["test1.vsdx", "test4_connectors.vsdx", "test3_house.vsdx"])
 def test_edited_package_converts_in_libreoffice(filename, tmp_path):
     out = os.path.join(str(tmp_path), filename)
-    with vsdx.VisioFile(os.path.join(basedir, filename)) as vis:
+    with vsdx.VisioFile(os.path.join(FIXTURES, filename)) as vis:
         page = vis.pages[0]
         shape = page.child_shapes[0]
         shape.text = "converted by libreoffice"
@@ -74,7 +74,7 @@ def test_created_connector_package_converts_in_libreoffice(tmp_path):
     than copied wholesale with the masters folder.
     """
     out = os.path.join(str(tmp_path), "created_connector.vsdx")
-    with vsdx.VisioFile(os.path.join(basedir, "test3_house.vsdx")) as vis:
+    with vsdx.VisioFile(os.path.join(FIXTURES, "test3_house.vsdx")) as vis:
         page = vis.pages[0]
         connector = vsdx.Connect.create(
             page=page,

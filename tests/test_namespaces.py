@@ -17,17 +17,17 @@ import pytest
 import vsdx
 from vsdx import namespace, xmlio
 
-basedir = os.path.dirname(os.path.realpath(__file__))
+FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
 # ElementTree invents ns0:, ns1:, … for any namespace it has no prefix for.
 GENERATED_PREFIX_RE = re.compile(rb"[<\s]/?ns\d+:")
 
-ALL_PACKAGES = sorted(name for name in os.listdir(basedir) if name.endswith((".vsdx", ".vsdm")))
+ALL_PACKAGES = sorted(name for name in os.listdir(FIXTURES) if name.endswith((".vsdx", ".vsdm")))
 
 
 def _saved_copy(filename: str, tmp_path) -> str:
     out = os.path.join(str(tmp_path), "out" + os.path.splitext(filename)[1])
-    with vsdx.VisioFile(os.path.join(basedir, filename)) as vis:
+    with vsdx.VisioFile(os.path.join(FIXTURES, filename)) as vis:
         page = vis.pages[0]
         _ = page.child_shapes  # force the page part to be parsed and re-serialised
         vis.save_vsdx(out)
@@ -89,7 +89,7 @@ def test_setting_text_preserves_the_formatting_runs_as_elements(tmp_path):
     The runs used to be spliced back as serialised text matched by an `ns0:`
     regex, which broke the moment the Visio namespace stopped being prefixed.
     """
-    with vsdx.VisioFile(os.path.join(basedir, "test2.vsdx")) as vis:
+    with vsdx.VisioFile(os.path.join(FIXTURES, "test2.vsdx")) as vis:
         shape = vis.pages[0].find_shape_by_id("9")
         text_element = shape.xml.find(f"{namespace}Text")
         before = [(child.tag, dict(child.attrib)) for child in text_element]
@@ -264,7 +264,7 @@ def test_a_copied_page_keeps_the_prefixes_its_source_declared(tmp_path):
     loses what `file_to_xml` recorded about it.
     """
     out = os.path.join(str(tmp_path), "copied.vsdx")
-    with vsdx.VisioFile(os.path.join(basedir, "test5_master.vsdx")) as vis:
+    with vsdx.VisioFile(os.path.join(FIXTURES, "test5_master.vsdx")) as vis:
         vis.copy_page(vis.pages[0])
         vis.save_vsdx(out)
     assert f'xmlns:lc="{LUCIDCHART}"' in _page_part(out, "visio/pages/page2.xml")
@@ -278,7 +278,7 @@ def test_a_copied_page_keeps_the_prefixes_its_source_declared(tmp_path):
 def test_a_rendered_page_keeps_the_prefixes_it_declared(tmp_path):
     """Rendering a template replaces the page tree with one parsed from a string."""
     out = os.path.join(str(tmp_path), "rendered.vsdx")
-    with vsdx.VisioFile(os.path.join(basedir, "test5_master.vsdx")) as vis:
+    with vsdx.VisioFile(os.path.join(FIXTURES, "test5_master.vsdx")) as vis:
         vis.jinja_render_vsdx(context={})
         vis.save_vsdx(out)
     assert f'xmlns:lc="{LUCIDCHART}"' in _page_part(out)

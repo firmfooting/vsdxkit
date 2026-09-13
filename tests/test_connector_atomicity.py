@@ -12,7 +12,7 @@ import pytest
 
 from vsdx import Connect, VisioFile
 
-basedir = os.path.dirname(os.path.realpath(__file__))
+FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
 
 def _snapshot(page):

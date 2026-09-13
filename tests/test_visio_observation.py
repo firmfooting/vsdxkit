@@ -5,9 +5,9 @@ Python where it can be tested; this file is what makes that claim true.
 """
 
 import json
-import zipfile
 
 import pytest
+from helpers.broken_package import rewritten
 from helpers.visio_observation import (
     PLACEMENT_CELLS,
     SCHEMA_VERSION,
@@ -208,15 +208,12 @@ def test_a_page_declaring_one_id_twice_is_reported_even_when_the_sides_agree():
 @pytest.mark.allow_invalid_package  # the package is broken on purpose
 def test_reading_a_package_whose_group_member_collides_with_a_top_level_id(tmp_path, basedir):
     """The same collision, through the reader that has to sort real shapes."""
-    source = f"{basedir}/test10_nested_shapes.vsdx"
-    broken = str(tmp_path / "collide.vsdx")
-    with zipfile.ZipFile(source) as original, zipfile.ZipFile(broken, "w") as rewritten:
-        for entry in original.infolist():
-            data = original.read(entry.filename)
-            if entry.filename == "visio/pages/page1.xml":
-                # shape 7 is top level and shape 1 sits two groups deep
-                data = data.decode("utf-8").replace("<Shape ID='1'", "<Shape ID='7'", 1).encode("utf-8")
-            rewritten.writestr(entry, data)
+    # shape 7 is top level and shape 1 sits two groups deep
+    broken = rewritten(
+        f"{basedir}/test10_nested_shapes.vsdx",
+        str(tmp_path / "collide.vsdx"),
+        {"visio/pages/page1.xml": ("<Shape ID='1'", "<Shape ID='7'")},
+    )
 
     observation = observation_from_package(broken)
 
@@ -249,15 +246,12 @@ def test_a_page_whose_relationship_does_not_resolve_keeps_its_position(tmp_path,
     compared against page 2 and the result is a pile of shape differences
     pointing at the wrong page. The unreadable page is reported as itself.
     """
-    source = f"{basedir}/test4_connectors.vsdx"
-    broken = str(tmp_path / "badrel.vsdx")
-    with zipfile.ZipFile(source) as original, zipfile.ZipFile(broken, "w") as rewritten:
-        for entry in original.infolist():
-            data = original.read(entry.filename)
-            if entry.filename == "visio/pages/pages.xml":
-                # point page 1's relationship at an id that is not in the rels part
-                data = data.decode("utf-8").replace("r:id='rId1'", "r:id='rIdMissing'", 1).encode("utf-8")
-            rewritten.writestr(entry, data)
+    # point page 1's relationship at an id that is not in the rels part
+    broken = rewritten(
+        f"{basedir}/test4_connectors.vsdx",
+        str(tmp_path / "badrel.vsdx"),
+        {"visio/pages/pages.xml": ("r:id='rId1'", "r:id='rIdMissing'")},
+    )
 
     observation = observation_from_package(broken)
 
@@ -275,23 +269,16 @@ class TestResolvingARelationshipTarget:
     """
 
     def test_a_percent_encoded_target_resolves(self, tmp_path, basedir):
-        encoded = str(tmp_path / "encoded.vsdx")
-        with zipfile.ZipFile(f"{basedir}/test1.vsdx") as original, zipfile.ZipFile(encoded, "w") as rewritten:
-            for entry in original.infolist():
-                data = original.read(entry.filename)
-                name = entry.filename
-                if name == "visio/pages/_rels/pages.xml.rels":
-                    old, new = b'Target="page1.xml"', b'Target="page%201.xml"'
-                    assert old in data, "the relationship target is spelled differently now"
-                    data = data.replace(old, new, 1)
-                elif name == "[Content_Types].xml":
-                    # the member is renamed below, so its override has to follow
-                    old, new = b"/visio/pages/page1.xml", b"/visio/pages/page 1.xml"
-                    assert old in data, "the content type override is spelled differently now"
-                    data = data.replace(old, new, 1)
-                elif name == "visio/pages/page1.xml":
-                    name = "visio/pages/page 1.xml"
-                rewritten.writestr(name, data)
+        encoded = rewritten(
+            f"{basedir}/test1.vsdx",
+            str(tmp_path / "encoded.vsdx"),
+            {
+                "visio/pages/_rels/pages.xml.rels": (b'Target="page1.xml"', b'Target="page%201.xml"'),
+                # the page part is renamed below, so its content type override follows
+                "[Content_Types].xml": (b"/visio/pages/page1.xml", b"/visio/pages/page 1.xml"),
+            },
+            renamed={"visio/pages/page1.xml": "visio/pages/page 1.xml"},
+        )
 
         observation = observation_from_package(encoded)
 
@@ -302,15 +289,11 @@ class TestResolvingARelationshipTarget:
         """Joined on verbatim, `../pages/page1.xml` yields
         `visio/pages/../pages/page1.xml`, which no archive has a member called.
         """
-        walked = str(tmp_path / "walked.vsdx")
-        with zipfile.ZipFile(f"{basedir}/test1.vsdx") as original, zipfile.ZipFile(walked, "w") as rewritten:
-            for entry in original.infolist():
-                data = original.read(entry.filename)
-                if entry.filename == "visio/pages/_rels/pages.xml.rels":
-                    old, new = b'Target="page1.xml"', b'Target="../pages/page1.xml"'
-                    assert old in data, "the relationship target is spelled differently now"
-                    data = data.replace(old, new, 1)
-                rewritten.writestr(entry, data)
+        walked = rewritten(
+            f"{basedir}/test1.vsdx",
+            str(tmp_path / "walked.vsdx"),
+            {"visio/pages/_rels/pages.xml.rels": (b'Target="page1.xml"', b'Target="../pages/page1.xml"')},
+        )
 
         observation = observation_from_package(walked)
 
@@ -325,16 +308,11 @@ def test_a_shape_id_that_is_not_a_number_is_described_rather_than_raised_on(tmp_
     it, so the corpus already considers this a file that turns up. The package
     built here is otherwise sound, and `validate_package` reports nothing on it.
     """
-    odd = str(tmp_path / "oddid.vsdx")
-    with zipfile.ZipFile(f"{basedir}/test1.vsdx") as original, zipfile.ZipFile(odd, "w") as rewritten:
-        for entry in original.infolist():
-            data = original.read(entry.filename)
-            if entry.filename == "visio/pages/page1.xml":
-                old, new = "<Shape ID='1'", "<Shape ID='²'"
-                text = data.decode("utf-8")
-                assert old in text, "the fixture spells its shapes differently now"
-                data = text.replace(old, new, 1).encode("utf-8")
-            rewritten.writestr(entry, data)
+    odd = rewritten(
+        f"{basedir}/test1.vsdx",
+        str(tmp_path / "oddid.vsdx"),
+        {"visio/pages/page1.xml": ("<Shape ID='1'", "<Shape ID='²'")},
+    )
 
     observation = observation_from_package(odd)
 
@@ -356,16 +334,11 @@ def test_a_group_with_an_unreadable_id_still_reports_its_members(tmp_path, based
     which leaves one `shape-parent` difference pointing at the group.
     """
     # in this fixture shape 3 is a group inside group 7, holding shapes 1 and 2
-    odd = str(tmp_path / "oddgroup.vsdx")
-    with zipfile.ZipFile(f"{basedir}/test10_nested_shapes.vsdx") as original, zipfile.ZipFile(odd, "w") as rewritten:
-        for entry in original.infolist():
-            data = original.read(entry.filename)
-            if entry.filename == "visio/pages/page1.xml":
-                old, new = "<Shape ID='3'", "<Shape ID='\u00b2'"
-                text = data.decode("utf-8")
-                assert old in text, "the fixture spells its shapes differently now"
-                data = text.replace(old, new, 1).encode("utf-8")
-            rewritten.writestr(entry, data)
+    odd = rewritten(
+        f"{basedir}/test10_nested_shapes.vsdx",
+        str(tmp_path / "oddgroup.vsdx"),
+        {"visio/pages/page1.xml": ("<Shape ID='3'", "<Shape ID='²'")},
+    )
 
     shapes = observation_from_package(odd).pages[0].shapes_by_id
 

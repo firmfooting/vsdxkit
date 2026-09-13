@@ -14,9 +14,9 @@ import pytest
 
 from vsdx import VisioFile, namespace
 
-basedir = os.path.dirname(os.path.realpath(__file__))
+FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
-PACKAGES = sorted(name for name in os.listdir(basedir) if name.endswith(".vsdx"))
+PACKAGES = sorted(name for name in os.listdir(FIXTURES) if name.endswith(".vsdx"))
 
 
 def _members(path: str) -> dict[str, bytes]:
@@ -27,11 +27,11 @@ def _members(path: str) -> dict[str, bytes]:
 @pytest.mark.parametrize("filename", PACKAGES)
 def test_reading_every_data_property_does_not_change_the_saved_package(filename, tmp_path):
     untouched = os.path.join(str(tmp_path), "untouched.vsdx")
-    with VisioFile(os.path.join(basedir, filename)) as vis:
+    with VisioFile(os.path.join(FIXTURES, filename)) as vis:
         vis.save_vsdx(untouched)
 
     after_reading = os.path.join(str(tmp_path), "after_reading.vsdx")
-    with VisioFile(os.path.join(basedir, filename)) as vis:
+    with VisioFile(os.path.join(FIXTURES, filename)) as vis:
         for page in vis.pages:
             for shape in page.all_shapes:
                 for prop in shape.data_properties.values():

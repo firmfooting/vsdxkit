@@ -5,6 +5,7 @@ import struct
 import zipfile
 
 import pytest
+from helpers.broken_package import make_package
 
 import vsdx
 from vsdx import PackageLimitError, VisioFile
@@ -16,18 +17,11 @@ from vsdx.vsdxdiff import VisioFileDiff
 # under test accepts.
 pytestmark = pytest.mark.allow_invalid_package
 
-basedir = os.path.dirname(os.path.realpath(__file__))
-
-
-def _make_vsdx(path: str, members: dict[str, bytes]) -> None:
-    """Build a minimal archive; VisioFileDiff treats any zip as readable."""
-    with zipfile.ZipFile(path, "w") as archive:
-        for name, payload in members.items():
-            archive.writestr(name, payload)
+FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
 
 def _copy(name: str, tmp_path) -> str:
-    source = os.path.join(basedir, name)
+    source = os.path.join(FIXTURES, name)
     destination = os.path.join(str(tmp_path), name)
     with open(source, "rb") as reader, open(destination, "wb") as writer:
         writer.write(reader.read())
@@ -211,8 +205,8 @@ def test_diff_chunk_boundary_crlf_is_one_newline(tmp_path):
     padding = b" " * (VisioFileDiff._CHUNK - len(b"<xml>") - 1)
     payload = b"<xml>" + padding + b"\r\n</xml>"
     assert payload[VisioFileDiff._CHUNK - 1 : VisioFileDiff._CHUNK + 1] == b"\r\n"
-    _make_vsdx(document, {"visio/document.xml": payload})
-    _make_vsdx(other, {"visio/document.xml": b"<xml>" + padding + b"\n</xml>"})
+    make_package(document, {"visio/document.xml": payload})
+    make_package(other, {"visio/document.xml": b"<xml>" + padding + b"\n</xml>"})
 
     file_diff = VisioFileDiff(document, other)
     assert file_diff.diffs == {}
@@ -226,8 +220,8 @@ def test_diff_incomplete_utf8_at_eof_is_binary(tmp_path):
     other = str(tmp_path / "truncated2.vsdx")
     # valid UTF-8 until a trailing lead byte with no continuation, which only
     # the final=True flush rejects
-    _make_vsdx(document, {"custom/binary.dat": b"ok\xc3"})
-    _make_vsdx(other, {"custom/binary.dat": b"ok\xc4"})
+    make_package(document, {"custom/binary.dat": b"ok\xc3"})
+    make_package(other, {"custom/binary.dat": b"ok\xc4"})
 
     file_diff = VisioFileDiff(document, other)
     assert "custom/binary.dat" in file_diff.diffs
