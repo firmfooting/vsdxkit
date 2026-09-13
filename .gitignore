@@ -9,3 +9,5 @@
 __pycache__/
 settings.json
 /.claude/worktrees/
+/.coverage
+/coverage.xml

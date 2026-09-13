@@ -1141,6 +1141,9 @@ dependencies = [
 build = [
     { name = "build" },
 ]
+coverage = [
+    { name = "pytest-cov" },
+]
 dev = [
     { name = "build" },
     { name = "mypy" },
@@ -1173,6 +1176,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 build = [{ name = "build", specifier = "==1.6.1" }]
+coverage = [{ name = "pytest-cov", specifier = ">=6.2.1" }]
 dev = [
     { name = "build", specifier = "==1.6.1" },
     { name = "mypy", specifier = ">=2.3.1" },

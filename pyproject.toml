@@ -57,11 +57,14 @@ lint = [
 build = [
     "build==1.6.1",
 ]
+coverage = [
+    "pytest-cov>=6.2.1",
+]
 dev = [
     { include-group = "test" },
     { include-group = "lint" },
     { include-group = "build" },
-    "pytest-cov>=6.2.1",
+    { include-group = "coverage" },
 ]
 
 [tool.uv.dependency-groups]
@@ -109,3 +112,15 @@ ignore = ["E501"]
 project-includes = ["vsdx"]
 # strict preset: the package type-checks clean at this level, so keep it there
 preset = "strict"
+
+[tool.coverage.report]
+# fail_under compares the rounded total, so two decimal places: at the default
+# precision of 0, a threshold of 90 would really mean 89.5.
+precision = 2
+# Ratchet: this number only goes up. It is the coverage the whole suite already
+# has, so a full run below it means a change arrived untested. Raise it when
+# coverage improves; never edit it down to make a red build green. Measured
+# 2026-09-13 on CPython 3.12: 2884 statements, 283 missed (90.19%), floored to
+# a whole percent. It applies to every local `--cov` run as well, so a
+# single-file run trips it; pass `--cov-fail-under=0` there.
+fail_under = 90
