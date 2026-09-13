@@ -388,15 +388,6 @@ UNUSED_NAMESPACE_DECLARATIONS = {
     "visio/pages/page[0-9]*.xml": ("namespaces",),
 }
 
-# The one part in the corpus whose canonical form also moves. It carries
-# Lucidchart's `lc:Property` elements, and `lc` is not a prefix the library
-# knows, so `vsdx.xmlio` invents one from the namespace URI. Recorded against
-# the single fixture rather than waived everywhere: no other part may start
-# doing this without the test noticing.
-PREFIX_REWRITES = {
-    "test5_master.vsdx": {"visio/pages/page1.xml": ("canonical",)},
-}
-
 # The parts `save_vsdx` writes back, and so the only ones that may differ at
 # all. Everything else -- the theme, the thumbnail, `windows.xml`,
 # `masters.xml`, the images, `vbaProject.bin` -- is copied out of the source
@@ -450,17 +441,12 @@ def test_a_round_trip_stays_within_the_known_drift(package_path, round_trip):
 
     "The same" is defined by `tests/fixtures/package_manifests/KNOWN_DRIFT.md`,
     which lists what does move today and why. Anything else -- a part added,
-    removed or reordered, a canonical form changed, a namespace prefix rewritten
-    where it was not already -- fails here, which is the point: the package
-    rewrites in v1.0.0-alpha have to leave the bytes where they are.
+    removed or reordered, a canonical form changed at all -- fails here, which
+    is the point: the package rewrites in v1.0.0-alpha have to leave the bytes
+    where they are.
     """
     before, after = round_trip(package_path)
     allowed: dict[str, tuple[str, ...]] = {"*": RESERIALISATION_DRIFT, **UNUSED_NAMESPACE_DECLARATIONS}
-    # merged, not assigned: a fixture-specific entry on a pattern that is
-    # already in the table has to add to that pattern's kinds rather than
-    # replace them, or it would quietly withdraw a waiver from everything else
-    for pattern, kinds in PREFIX_REWRITES.get(package_path, {}).items():
-        allowed[pattern] = (*allowed.get(pattern, ()), *kinds)
     assert_manifest_equal(before, after, allowed_changes=allowed)
 
 

@@ -14,6 +14,7 @@ from jinja2.sandbox import SandboxedEnvironment
 from .logging_support import get_logger
 from .pages import Page
 from .shapes import Shape
+from .xmlio import adopt_prefixes
 
 logger = get_logger(__name__)
 
@@ -68,7 +69,11 @@ class JinjaTemplatingMixin:
                 source = JinjaTemplatingMixin.unescape_jinja_statements(source)  # unescape chars like < and > inside {%...%}
                 template = _template(source)
                 output = template.render(context)
-                page.xml = ET.ElementTree(ET.fromstring(output))  # create ElementTree from Element created from output
+                rendered = ET.fromstring(output)
+                # the round trip through a string drops the prefixes the
+                # page declared, and a rendered page is still that page
+                adopt_prefixes(rendered, page_root)
+                page.xml = ET.ElementTree(rendered)
 
                 # update loop shape IDs which have been duplicated by Jinja template
                 for shape_id in loop_shape_ids:
