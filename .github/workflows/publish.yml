@@ -142,7 +142,19 @@ jobs:
           # that entry stops matching, the tag and the package disagree
           # silently. PyPI takes a version once, so check rather than trust.
           uv run --no-project python tools/check_version_tag.py "$tag"
-          uv run --no-project python tools/release_check.py "$version"
+          # --since: release-please writes the changelog section and has been
+          # observed to drop a commit. Two `fix!` subjects went missing from the
+          # 0.8.0 section, both breaking public API changes, and only a manual
+          # reconciliation caught them. Compare the section against the history
+          # it claims to describe.
+          git fetch --tags --quiet --unshallow 2>/dev/null || git fetch --tags --quiet
+          previous="$(git tag --list 'v*' --sort=-version:refname | grep -Fxv "$tag" | head -1)"
+          if [ -n "$previous" ]; then
+            uv run --no-project python tools/release_check.py "$version" --since "$previous"
+          else
+            echo "no earlier v* tag; checking the section exists but not its completeness"
+            uv run --no-project python tools/release_check.py "$version"
+          fi
 
       # main is not branch-protected, so a green CI run on the release PR is a
       # convention rather than a gate. Publishing is irreversible; re-run the

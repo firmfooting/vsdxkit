@@ -8,6 +8,47 @@ From 0.7.1 onward this file is maintained by release-please, which writes a
 section per release from the conventional-commit subjects on `main`. Edit the
 release pull request rather than this file directly.
 
+## [0.8.0](https://github.com/firmfooting/vsdxkit/compare/v0.7.1...v0.8.0) (2026-09-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* read a shape's identity off its element, not a copy of it ([#333](https://github.com/firmfooting/vsdxkit/issues/333))
+* guard the operation, not the call site, when the document is closed ([#336](https://github.com/firmfooting/vsdxkit/issues/336))
+* one implementation of substituting into shape text ([#318](https://github.com/firmfooting/vsdxkit/issues/318))
+* refuse mutations on a closed document ([#304](https://github.com/firmfooting/vsdxkit/issues/304))
+* allocate shape ids through one path that owns set_max_ids ([#270](https://github.com/firmfooting/vsdxkit/issues/270))
+* make a text colour and a lane label land, or say they did not ([#307](https://github.com/firmfooting/vsdxkit/issues/307))
+* common_members returns the members the two files have in common ([#339](https://github.com/firmfooting/vsdxkit/issues/339))
+
+### Features
+
+* one implementation of the relationship and content-type operations ([#344](https://github.com/firmfooting/vsdxkit/issues/344)) ([c300c4f](https://github.com/firmfooting/vsdxkit/commit/c300c4f58666fd340ea9d1b30a68a91641311bbb))
+
+
+### Bug Fixes
+
+* allocate ids for every descendant when copying a group ([#275](https://github.com/firmfooting/vsdxkit/issues/275)) ([f180d20](https://github.com/firmfooting/vsdxkit/commit/f180d203ce784a80c4ee48af8e7c06212f3eedbe))
+* allocate shape ids through one path that owns set_max_ids ([#270](https://github.com/firmfooting/vsdxkit/issues/270)) ([615212f](https://github.com/firmfooting/vsdxkit/commit/615212f2f9d1a112d0838158d0a4f58cc6341eae))
+* build a swimlane before putting it on the page ([#340](https://github.com/firmfooting/vsdxkit/issues/340)) ([ebeff71](https://github.com/firmfooting/vsdxkit/commit/ebeff71d11bc7df4913e67c31866ec3f10d2da19))
+* common_members returns the members the two files have in common ([#339](https://github.com/firmfooting/vsdxkit/issues/339)) ([cfba91e](https://github.com/firmfooting/vsdxkit/commit/cfba91ebb536572d8e3a936158d34f30fd53aa36))
+* copy an inherited row onto the instance before writing to it ([#272](https://github.com/firmfooting/vsdxkit/issues/272)) ([2f582a4](https://github.com/firmfooting/vsdxkit/commit/2f582a46bc4957ac14731e71da1e57bff33cd513))
+* give atan2 the rise before the run in formulae.angle ([#332](https://github.com/firmfooting/vsdxkit/issues/332)) ([8302be7](https://github.com/firmfooting/vsdxkit/commit/8302be7e229e5a6ff9bf02dffdb89f07acb4b637))
+* guard the operation, not the call site, when the document is closed ([#336](https://github.com/firmfooting/vsdxkit/issues/336)) ([69af217](https://github.com/firmfooting/vsdxkit/commit/69af2179d575e8e8d15bed7a3a903c180fbeca50))
+* keep the namespace prefixes a document chose ([#306](https://github.com/firmfooting/vsdxkit/issues/306)) ([12fe207](https://github.com/firmfooting/vsdxkit/commit/12fe207d3447cc948e88480f32d3390df9e277ac))
+* make a text colour and a lane label land, or say they did not ([#307](https://github.com/firmfooting/vsdxkit/issues/307)) ([9f6c2fb](https://github.com/firmfooting/vsdxkit/commit/9f6c2fbe032804f340f5e913699a031aa39e1ebc))
+* one implementation of substituting into shape text ([#318](https://github.com/firmfooting/vsdxkit/issues/318)) ([1b06826](https://github.com/firmfooting/vsdxkit/commit/1b068267842fd56159f05ae8bbf9dbccae613f15))
+* read a shape's identity off its element, not a copy of it ([#333](https://github.com/firmfooting/vsdxkit/issues/333)) ([44749cf](https://github.com/firmfooting/vsdxkit/commit/44749cf3cfbed6f9a91c701fb46d0cb131f0e5ad))
+* refuse mutations on a closed document ([#304](https://github.com/firmfooting/vsdxkit/issues/304)) ([f4cf31b](https://github.com/firmfooting/vsdxkit/commit/f4cf31b86fd0981f1e4315c9e56dbf15eaa642bf))
+* renumber a shape and its Connect records as one operation ([#312](https://github.com/firmfooting/vsdxkit/issues/312)) ([2de4d60](https://github.com/firmfooting/vsdxkit/commit/2de4d602e6fe13fd118232a50efdf5905ed18a9b))
+* renumbering sweeps the whole page, formulas as well as records ([#341](https://github.com/firmfooting/vsdxkit/issues/341)) ([3931e51](https://github.com/firmfooting/vsdxkit/commit/3931e511d57231f589bfc83115d1c74480cf4354))
+* repoint the stale-sheet-reference rule at the moved namespace constant ([#343](https://github.com/firmfooting/vsdxkit/issues/343)) ([238d4cb](https://github.com/firmfooting/vsdxkit/commit/238d4cb6eb8056a5dab453b341f65ce700697ae5))
+
+
+### Performance Improvements
+
+* resolve the master once and build geometry on demand ([#277](https://github.com/firmfooting/vsdxkit/issues/277)) ([ee3a9e6](https://github.com/firmfooting/vsdxkit/commit/ee3a9e63284ec8e04261b5691606499ef2ba27e4))
+
 ## [0.7.1](https://github.com/firmfooting/vsdxkit/compare/v0.7.0...v0.7.1) (2026-09-13)
 
 **This release fixes a critical security defect. 0.7.0 was withdrawn from PyPI
