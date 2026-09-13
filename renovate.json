@@ -1,7 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["github>firmfooting/renovate-config"],
-  "forkProcessing": "enabled",
   "timezone": "Australia/Melbourne",
   "schedule": ["before 6am on monday"],
   "prHourlyLimit": 0,

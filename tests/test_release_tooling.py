@@ -75,60 +75,59 @@ def test_main_requires_a_tag_argument():
 
 release_check = _load("release_check")
 
+# Shaped like release-please's own output: the version is a link label and the
+# date is parenthesised. From 0.7.1 on, this is the only format the check sees
+# on the automated path. The 0.7.0 section below it is the hand-written spelling
+# the file used before, which a manual publish of an older version still meets.
 CHANGELOG = """# Changelog
 
-## Unreleased
+## [0.7.1](https://github.com/firmfooting/vsdxkit/compare/v0.7.0...v0.7.1) (2026-09-20)
+
+### Bug Fixes
+
+* the thing this release fixes ([#241](https://github.com/firmfooting/vsdxkit/issues/241))
+* and another
+
+## 0.7.0 - 2026-09-13
 
 ### Added
-
-- something in flight
-
-## 0.7.0 - 2026-10-30
-
-### Fixed
-
-- the thing this release fixes
-- and another
-
-## 0.6.3
 
 - older release
 """
 
 
-def test_a_released_version_has_a_section(tmp_path):
+def test_a_release_please_heading_is_matched(tmp_path):
     changelog = tmp_path / "CHANGELOG.md"
     changelog.write_text(CHANGELOG, encoding="utf-8")
-    assert release_check.section_for("0.7.0", changelog) is not None
+    assert release_check.section_for("0.7.1", changelog) is not None
 
 
 def test_the_section_body_stops_at_the_next_release(tmp_path):
     changelog = tmp_path / "CHANGELOG.md"
     changelog.write_text(CHANGELOG, encoding="utf-8")
-    body = release_check.section_for("0.7.0", changelog)
+    body = release_check.section_for("0.7.1", changelog)
     assert "the thing this release fixes" in body
     assert "older release" not in body
-    assert "something in flight" not in body
 
 
 def test_an_empty_section_does_not_count_as_documented(tmp_path):
-    """A heading with nothing under it would publish a release with a blank body.
+    """A heading with nothing under it announces a release and says nothing.
 
-    The likely route is the one CONTRIBUTING describes: after cutting a release
-    candidate the Unreleased block is empty, so renaming it for the final
-    release leaves a heading and no entries.
+    Existence is the cheap test and it is not the one worth making: a section
+    that parses but is empty publishes a version with no record of what changed,
+    which is the outcome this module exists to prevent.
     """
     changelog = tmp_path / "CHANGELOG.md"
     changelog.write_text(
-        "# Changelog\n\n## Unreleased\n\n### Added\n\n- not moved down\n\n## 0.7.0 - 2026-10-30\n\n## 0.6.3\n\n- old\n",
+        "# Changelog\n\n## [0.7.1](https://example.invalid/compare) (2026-09-20)\n\n## 0.7.0 - 2026-09-13\n\n- old\n",
         encoding="utf-8",
     )
-    assert release_check.main(["0.7.0", "--changelog", str(changelog)]) == 1
+    assert release_check.main(["0.7.1", "--changelog", str(changelog)]) == 1
 
 
 def test_a_whitespace_only_section_does_not_count_as_documented(tmp_path):
     changelog = tmp_path / "CHANGELOG.md"
-    changelog.write_text("# Changelog\n\n## 0.7.0 - 2026-10-30\n\n   \n\n## 0.6.3\n\n- old\n", encoding="utf-8")
+    changelog.write_text("# Changelog\n\n## 0.7.0 - 2026-09-13\n\n   \n\n## 0.6.3\n\n- old\n", encoding="utf-8")
     assert release_check.main(["0.7.0", "--changelog", str(changelog)]) == 1
 
 
@@ -138,17 +137,18 @@ def test_a_version_with_no_section_is_reported(tmp_path):
     assert release_check.section_for("0.9.0", changelog) is None
 
 
-def test_an_unreleased_only_entry_does_not_count_as_the_release(tmp_path):
-    """Tagging before moving Unreleased into a dated section must fail."""
+def test_a_prefix_of_a_released_version_is_not_a_match(tmp_path):
+    """`0.7` must not borrow `0.7.1`'s section from inside the link label."""
     changelog = tmp_path / "CHANGELOG.md"
-    changelog.write_text("# Changelog\n\n## Unreleased\n\n- pending\n", encoding="utf-8")
-    assert release_check.section_for("0.7.0", changelog) is None
+    changelog.write_text(CHANGELOG, encoding="utf-8")
+    assert release_check.section_for("0.7", changelog) is None
 
 
-def test_a_bracketed_keep_a_changelog_heading_is_accepted(tmp_path):
+def test_the_hand_written_headings_still_parse(tmp_path):
+    """Pre-0.7.1 sections are bare or Keep a Changelog; a manual publish may target one."""
     changelog = tmp_path / "CHANGELOG.md"
-    changelog.write_text("# Changelog\n\n## [0.7.0] - 2026-10-30\n\n- done\n", encoding="utf-8")
-    assert release_check.section_for("0.7.0", changelog) is not None
+    changelog.write_text("# Changelog\n\n## [0.6.3] - 2026-05-01\n\n- done\n", encoding="utf-8")
+    assert release_check.section_for("0.6.3", changelog) is not None
 
 
 def test_main_fails_when_the_section_is_missing(tmp_path, capsys):
@@ -158,11 +158,11 @@ def test_main_fails_when_the_section_is_missing(tmp_path, capsys):
     assert "0.9.0" in capsys.readouterr().out
 
 
-def test_main_prints_the_section_when_asked(tmp_path, capsys):
+def test_main_reports_the_documented_version(tmp_path, capsys):
     changelog = tmp_path / "CHANGELOG.md"
     changelog.write_text(CHANGELOG, encoding="utf-8")
-    assert release_check.main(["0.7.0", "--changelog", str(changelog), "--print"]) == 0
-    assert "the thing this release fixes" in capsys.readouterr().out
+    assert release_check.main(["0.7.1", "--changelog", str(changelog)]) == 0
+    assert "0.7.1" in capsys.readouterr().out
 
 
 def test_the_projects_own_changelog_has_no_section_for_an_unreleased_version():

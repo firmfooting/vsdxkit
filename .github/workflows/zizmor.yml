@@ -8,6 +8,13 @@ on:
 
 permissions: {}
 
+# Same shape as ci.yml: a push that supersedes an in-flight audit of the same
+# ref makes the older run's verdict stale, and this workflow gates nothing that
+# a cancellation could leave half-done.
+concurrency:
+  group: zizmor-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   audit:
     name: audit GitHub Actions
@@ -21,6 +28,7 @@ jobs:
       - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4  # v10.1.0
         with:
           enable-cache: false
+          version: "0.12.7"
       - name: Install lint tools
         run: uv sync --locked --no-default-groups --group lint
       - name: Run zizmor
