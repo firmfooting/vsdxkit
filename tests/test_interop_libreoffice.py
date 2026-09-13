@@ -26,15 +26,8 @@ soffice = shutil.which("soffice") or shutil.which("libreoffice")
 pytestmark = pytest.mark.skipif(soffice is None, reason="LibreOffice (soffice) is not on PATH")
 
 
-@pytest.mark.parametrize("filename", ["test1.vsdx", "test4_connectors.vsdx", "test3_house.vsdx"])
-def test_edited_package_converts_in_libreoffice(filename, tmp_path):
-    out = os.path.join(str(tmp_path), filename)
-    with vsdx.VisioFile(os.path.join(basedir, filename)) as vis:
-        page = vis.pages[0]
-        shape = page.child_shapes[0]
-        shape.text = "converted by libreoffice"
-        vis.save_vsdx(out)
-
+def _assert_converts_to_pdf(document: str, tmp_path) -> None:
+    """Convert a saved package to PDF headlessly and require a non-empty result."""
     profile = os.path.join(str(tmp_path), "profile")
     result = subprocess.run(
         [
@@ -45,14 +38,50 @@ def test_edited_package_converts_in_libreoffice(filename, tmp_path):
             "pdf",
             "--outdir",
             str(tmp_path),
-            out,
+            document,
         ],
         capture_output=True,
         text=True,
         timeout=180,
         check=False,
     )
-    pdf = os.path.join(str(tmp_path), os.path.splitext(filename)[0] + ".pdf")
+    pdf = os.path.join(str(tmp_path), os.path.splitext(os.path.basename(document))[0] + ".pdf")
     assert result.returncode == 0, result.stderr
     assert os.path.exists(pdf), f"no PDF produced: {result.stdout}\n{result.stderr}"
     assert os.path.getsize(pdf) > 0
+
+
+@pytest.mark.parametrize("filename", ["test1.vsdx", "test4_connectors.vsdx", "test3_house.vsdx"])
+def test_edited_package_converts_in_libreoffice(filename, tmp_path):
+    out = os.path.join(str(tmp_path), filename)
+    with vsdx.VisioFile(os.path.join(basedir, filename)) as vis:
+        page = vis.pages[0]
+        shape = page.child_shapes[0]
+        shape.text = "converted by libreoffice"
+        vis.save_vsdx(out)
+
+    _assert_converts_to_pdf(out, tmp_path)
+
+
+def test_created_connector_package_converts_in_libreoffice(tmp_path):
+    """Cover the path that writes package wiring, not just the one that edits text.
+
+    ``Connect.create()`` imports the connector master, which adds a master part,
+    a content-type override, a masters.xml.rels entry and a per-page
+    relationship. tests/test_master_import_opc.py asserts that graph directly;
+    this asks a second implementation whether it can still open the result.
+    ``test3_house.vsdx`` ships one master, so the connector is imported rather
+    than copied wholesale with the masters folder.
+    """
+    out = os.path.join(str(tmp_path), "created_connector.vsdx")
+    with vsdx.VisioFile(os.path.join(basedir, "test3_house.vsdx")) as vis:
+        page = vis.pages[0]
+        connector = vsdx.Connect.create(
+            page=page,
+            from_shape=page.find_shape_by_text("Shape to copy"),
+            to_shape=page.find_shape_by_text("Shape to remove"),
+        )
+        connector.text = "created by vsdx"
+        vis.save_vsdx(out)
+
+    _assert_converts_to_pdf(out, tmp_path)
