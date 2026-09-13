@@ -8,7 +8,44 @@ From 0.7.1 onward this file is maintained by release-please, which writes a
 section per release from the conventional-commit subjects on `main`. Edit the
 release pull request rather than this file directly.
 
+## [0.7.1](https://github.com/firmfooting/vsdxkit/compare/v0.7.0...v0.7.1) (2026-09-13)
+
+**This release fixes a critical security defect. 0.7.0 was withdrawn from PyPI
+because of it and cannot be reinstalled; upgrade to 0.7.1.**
+
+### Security
+
+* Jinja templates are rendered in a sandboxed environment
+  ([#259](https://github.com/firmfooting/vsdxkit/pull/259))
+  ([d5b735c](https://github.com/firmfooting/vsdxkit/commit/d5b735c95385032f72129e057a34484dab321d71)).
+
+  `jinja_render_vsdx()` compiled text taken from the document being rendered —
+  shape text, shape names, cell formulas — on Jinja's default environment, where
+  that text is executable. A crafted `.vsdx` could reach the `os` module through
+  a builtin's `__globals__` and run shell commands in the calling process, so
+  rendering a document from an untrusted source was equivalent to running it.
+  The context dictionary was readable by the document as well, exposing anything
+  passed alongside it.
+
+  All three compile sites now use `jinja2.sandbox.SandboxedEnvironment`. Ordinary
+  templating is unchanged — loops, conditionals, filters and arithmetic behave
+  exactly as before — while reaching through attributes raises
+  `jinja2.exceptions.SecurityError`.
+
+  The same defect exists in `vsdx`, the project this one descends from, in every
+  released version up to and including 0.6.1. It has been reported privately to
+  its maintainer as GHSA-2gwv-3c82-73r5. If you use that package, watch for its
+  fix.
+
+### Documentation
+
+* correct attribution and release-day drift ([#265](https://github.com/firmfooting/vsdxkit/issues/265)) ([659b47b](https://github.com/firmfooting/vsdxkit/commit/659b47b5059cc186674c2d244e4e7e75f5b46035))
+
 ## 0.7.0 - 2026-09-13
+
+**Withdrawn.** 0.7.0 was published and removed from PyPI the same day, over the
+security defect fixed in 0.7.1. Everything below shipped in 0.7.1 instead. PyPI
+does not permit a version number to be reused, so 0.7.0 will not return.
 
 ### Added
 
