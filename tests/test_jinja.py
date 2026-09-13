@@ -19,9 +19,9 @@ basedir = os.path.dirname(os.path.relpath(__file__))
         ("test_jinja.vsdx", {"date": datetime.now(), "scenario": "Scenario Three", "x": 2, "y": 2}),
     ],
 )
-def test_basic_jinja(filename: str, context: dict):
+def test_basic_jinja(filename: str, context: dict, tmp_path):
 
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_basic_jinja.vsdx")
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_basic_jinja.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.pages[0]
 
@@ -50,9 +50,9 @@ def test_basic_jinja(filename: str, context: dict):
         ("test_jinja.vsdx", {"date": datetime.now(), "scenario": "Three", "x": 20, "y": 2}, 3),
     ],
 )
-def test_jinja_if(filename: str, context: dict, shape_count: int):
+def test_jinja_if(filename: str, context: dict, shape_count: int, tmp_path):
 
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_jinja_if_{context['scenario']}.vsdx")
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_jinja_if_{context['scenario']}.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         vis.jinja_render_vsdx(context=context)
         vis.save_vsdx(out_file)
@@ -73,8 +73,8 @@ def test_jinja_if(filename: str, context: dict, shape_count: int):
         ("test_jinja.vsdx", {"x": 12, "y": 9}),
     ],
 )
-def test_jinja_calc(filename: str, context: dict):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_jinja_calc.vsdx")
+def test_jinja_calc(filename: str, context: dict, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_jinja_calc.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         vis.jinja_render_vsdx(context=context)
         vis.save_vsdx(out_file)
@@ -95,8 +95,8 @@ def test_jinja_calc(filename: str, context: dict):
         ("test_jinja_loop.vsdx", {"date": datetime.now(), "scenario": "Scenario Three", "test_list": [1, 2, 3, 4, 5, 6]}),
     ],
 )
-def test_basic_jinja_loop(filename: str, context: dict):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_{context['scenario']}_test_basic_jinja_loop.vsdx")
+def test_basic_jinja_loop(filename: str, context: dict, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_{context['scenario']}_test_basic_jinja_loop.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.pages[0]
 
@@ -128,8 +128,8 @@ def test_basic_jinja_loop(filename: str, context: dict):
         ("test_jinja_inner_loop.vsdx", {"test_list": ["One", "Two", "Three"]}),
     ],
 )
-def test_jinja_inner_loop(filename: str, context: dict):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_jinja_inner_loop.vsdx")
+def test_jinja_inner_loop(filename: str, context: dict, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_jinja_inner_loop.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         vis.jinja_render_vsdx(context=context)
         vis.save_vsdx(out_file)
@@ -152,8 +152,8 @@ def test_jinja_inner_loop(filename: str, context: dict):
         ("test_jinja_loop_showif.vsdx", "3456", {"test_list": [3, 4, 5, 6]}),
     ],
 )
-def test_jinja_loop_showif(filename: str, out_name: str, context: dict):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}{out_name}.vsdx")
+def test_jinja_loop_showif(filename: str, out_name: str, context: dict, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}{out_name}.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         vis.jinja_render_vsdx(context=context)
         vis.save_vsdx(out_file)
@@ -179,8 +179,8 @@ def test_jinja_loop_showif(filename: str, out_name: str, context: dict):
         ("test_jinja_self_refs.vsdx", {"n": 0}, "3", 2.0, "This shape sets x to 1 if n else 2"),
     ],
 )
-def test_jinja_self_refs(filename: str, context: dict, shape_id, expected_x, expected_text):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_jinja_self_refs.vsdx")
+def test_jinja_self_refs(filename: str, context: dict, shape_id, expected_x, expected_text, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_jinja_self_refs.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.pages[0]  # type: Page
         # there should be one shape on page 0
@@ -208,8 +208,8 @@ def test_jinja_self_refs(filename: str, context: dict, shape_id, expected_x, exp
         ("test_jinja_self_refs.vsdx", {"n": 2}, "5", 7.726049539918966, "This shape should move down by n"),
     ],
 )
-def test_jinja_self_ref_calculations(filename: str, context: dict, shape_id, expected_y, expected_text):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_jinja_self_ref_calcs.vsdx")
+def test_jinja_self_ref_calculations(filename: str, context: dict, shape_id, expected_y, expected_text, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_jinja_self_ref_calcs.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.pages[0]  # type: Page
         # there should be one shape on page 0
@@ -242,8 +242,8 @@ def test_jinja_self_ref_calculations(filename: str, context: dict, shape_id, exp
         ("test_jinja_page_showif.vsdx", {"show": {}}, 2, ["Normal Page", "Page3"]),
     ],
 )
-def test_jinja_page_showif(filename: str, context: dict, expected_page_count, expected_page_names):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_show_{context['show']}.vsdx")
+def test_jinja_page_showif(filename: str, context: dict, expected_page_count, expected_page_names, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_show_{context['show']}.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         print(f"len(vis.pages)={len(vis.pages)} context={context}")
         print("BEFORE", [(p.index_num, p.name) for p in vis.pages])

@@ -6,7 +6,6 @@
 /vsdx.egg-info/
 /vsdxkit.egg-info/
 /docs/_build/
-/tests/out/
 __pycache__/
 settings.json
 /.claude/worktrees/
