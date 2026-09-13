@@ -37,6 +37,21 @@ PUBLIC_ERRORS = (
 # --------------------------------------------------------------------------
 
 
+def test_the_lists_above_name_every_class_in_the_module():
+    """A hand-written list is a list someone forgets to add to.
+
+    The parametrised tests below only check the classes named in
+    ``PUBLIC_ERRORS``, so a class added to ``vsdxkit.errors`` and left out of it
+    would go untested and unexported while every test here stayed green.
+    """
+    defined = {
+        name
+        for name, value in vars(vsdxkit.errors).items()
+        if isinstance(value, type) and issubclass(value, BaseException) and value.__module__ == "vsdxkit.errors"
+    }
+    assert defined == {error_type.__name__ for error_type in PUBLIC_ERRORS} | {"VsdxError"}
+
+
 @pytest.mark.parametrize("error_type", PUBLIC_ERRORS, ids=lambda t: t.__name__)
 def test_every_public_error_is_a_vsdx_error(error_type):
     """`except VsdxError` has to be the one catch-all, or it is not worth having."""
