@@ -13,6 +13,7 @@ import xml.dom.minidom as minidom  # minidom used for prettyprint
 import xml.etree.ElementTree as ET
 import zipfile
 from types import TracebackType
+from typing import NamedTuple
 from xml.etree.ElementTree import Element
 
 if sys.version_info >= (3, 12):
@@ -24,8 +25,13 @@ import vsdxkit
 
 from . import relationships
 from .logging_support import attach_debug_stream_handler, get_logger
-from .package import PackageLimits, read_archive_members
+from .package import PackageLimitError, PackageLimits, read_archive_members  # noqa: F401
 
+# TODO(#362): `PackageLimitError` is imported here only to keep
+# `vsdxkit.vsdxfile.PackageLimitError` working -- it moved to `vsdxkit.package`
+# and `docs/classes.rst` had named the old path. The `noqa` on that import is the
+# ugly part; it wants a deprecation shim, or removal once the old path is no
+# longer published. Tested by tests/test_package_limit_error_import.py.
 logger = get_logger(__name__)
 
 from . import (  # noqa: E402
@@ -571,6 +577,25 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         root = self._part_root(self.app_xml, "docProps/app.xml")
         return require_element(root.find(f"{ext_prop_namespace}TitlesOfParts"), "app.xml TitlesOfParts")
 
+    class _Section(NamedTuple):
+        """One section of TitlesOfParts, named two ways because one is not enough.
+
+        `label` is what Visio writes in English and what we write when the
+        section has to be created. It cannot be the only handle: HeadingPairs
+        names are display strings chosen by the producer and Office localises
+        them, so a German file says `Seiten` and matching "Pages" finds nothing.
+
+        `ordinal` is the position among the sections, which survives
+        translation. It cannot be the only handle either -- nothing guarantees
+        an order -- so the label is tried first and this answers when it misses.
+        """
+
+        label: str
+        ordinal: int
+
+    PAGES = _Section("Pages", 0)
+    MASTERS = _Section("Masters", 1)
+
     def _heading_pairs_list(self) -> list[tuple[str, Element]]:
         """Each section HeadingPairs names, as (name, the element holding its count).
 
@@ -595,7 +620,21 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
                 pairs.append((name.text or "", count))
         return pairs
 
-    def _titles_of_parts_section(self, section: str) -> tuple[Element, int, int]:
+    def _resolve_section(self, section: _Section) -> int | None:
+        """Which HeadingPairs entry is `section`, or None if the file has no such entry.
+
+        By name first, so a document that writes its sections in an unusual
+        order is still read correctly. By position when no name matches, which
+        is what a localised file needs: the names are translated but the
+        sections are still pages then masters.
+        """
+        pairs = self._heading_pairs_list()
+        for index, (name, _) in enumerate(pairs):
+            if name == section.label:
+                return index
+        return section.ordinal if section.ordinal < len(pairs) else None
+
+    def _titles_of_parts_section(self, section: _Section) -> tuple[Element, int, int]:
         """The TitlesOfParts vector, and the ``[start, stop)`` slice of it `section` owns.
 
         A section HeadingPairs does not mention owns the empty slice at the end
@@ -609,15 +648,18 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         """
         vector = require_element(self._titles_of_parts().find(f"{vt_namespace}vector"), "TitlesOfParts vector")
         total = len(vector)
+        wanted = self._resolve_section(section)
+        if wanted is None:
+            return vector, total, total
         start = 0
-        for name, count in self._heading_pairs_list():
+        for index, (_, count) in enumerate(self._heading_pairs_list()):
             titles_here = int(count.text or 0)
-            if name == section:
+            if index == wanted:
                 return vector, min(start, total), min(start + titles_here, total)
             start += titles_here
         return vector, total, total
 
-    def _section_count(self, section: str, change: int) -> None:
+    def _section_count(self, section: _Section, change: int) -> None:
         """Add `change` to `section`'s count in HeadingPairs, creating the pair if needed.
 
         The stored count is what moves, not the length of the slice it turned
@@ -625,9 +667,14 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         still knows how many parts it has, and re-deriving the number from
         where the titles ended up would throw that away.
         """
-        self._set_app_xml_value(section, str(int(self._get_app_xml_value(section) or 0) + change))
+        index = self._resolve_section(section)
+        if index is None:
+            self._set_app_xml_value(section.label, str(change))
+            return
+        count = self._heading_pairs_list()[index][1]
+        count.text = str(int(count.text or 0) + change)
 
-    def _titles_of_parts_insert(self, title: str, section: str) -> None:
+    def _titles_of_parts_insert(self, title: str, section: _Section) -> None:
         """Name a part in TitlesOfParts under `section`, and count it there.
 
         The title goes at the end of its own section rather than the end of the
@@ -649,7 +696,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         vector.attrib["size"] = str(len(vector))
         self._section_count(section, 1)
 
-    def _titles_of_parts_remove(self, title: str, section: str) -> None:
+    def _titles_of_parts_remove(self, title: str, section: _Section) -> None:
         """Drop `section`'s entry for `title`, and stop counting it.
 
         The count moves only when an entry does, and only this section's
@@ -664,7 +711,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
                 self._section_count(section, -1)
                 return
 
-    def _titles_of_parts_rename(self, old_title: str, new_title: str, section: str) -> None:
+    def _titles_of_parts_rename(self, old_title: str, new_title: str, section: _Section) -> None:
         """Rewrite `section`'s entry for `old_title` in place.
 
         In place rather than a removal and an insertion: nothing joins or
@@ -707,12 +754,12 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         vector.attrib["size"] = str(int(vector.attrib.get("size", 0)) + 2)
 
     def _add_page_to_app_xml(self, new_page_name: str) -> None:
-        self._titles_of_parts_insert(new_page_name, "Pages")
+        self._titles_of_parts_insert(new_page_name, VisioFile.PAGES)
 
     def _remove_page_from_app_xml(self, page_name: str) -> None:
         if self.app_xml is not None:
             logger.debug("_remove_page_from_app_xml()")
-            self._titles_of_parts_remove(page_name, "Pages")
+            self._titles_of_parts_remove(page_name, VisioFile.PAGES)
 
     def _rename_page_in_app_xml(self, old_page_name: str, new_page_name: str) -> None:
         """Keep app.xml's list of page names in step with a page that was renamed.
@@ -729,7 +776,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             return
         if root.find(f"{ext_prop_namespace}TitlesOfParts") is None:
             return
-        self._titles_of_parts_rename(old_page_name, new_page_name, "Pages")
+        self._titles_of_parts_rename(old_page_name, new_page_name, VisioFile.PAGES)
 
     def _create_page(
         self,

@@ -1,0 +1,91 @@
+"""Section lookup in app.xml, for a package whose producer did not write English.
+
+`HeadingPairs` names are display strings chosen by whatever wrote the file, and
+Office localises them -- a German Excel writes `Arbeitsblätter` where an English
+one writes `Worksheets`. A German Visio writes `Seiten` and `Master`.
+
+Matching those names against the literals "Pages" and "Masters" therefore finds
+nothing on such a file, and the caller is told the section does not exist. What
+follows from that is worse than not finding it: adding a page appends a *second*
+section called "Pages", so the document ends up claiming two page sections and
+the titles are partitioned by counts that no longer describe them.
+"""
+
+import os
+import zipfile
+from xml.etree import ElementTree as ET
+
+import pytest
+
+import vsdxkit
+
+EXT = "{http://schemas.openxmlformats.org/officeDocument/2006/extended-properties}"
+VT = "{http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes}"
+
+
+def _localise(source: str, destination: str, renames: dict[str, str]) -> None:
+    """Rewrite the HeadingPairs section names, leaving everything else alone."""
+    with zipfile.ZipFile(source) as archive:
+        order = archive.namelist()
+        members = {name: archive.read(name) for name in order}
+    root = ET.fromstring(members["docProps/app.xml"])
+    replaced = 0
+    for entry in root.find(f"{EXT}HeadingPairs").iter(f"{VT}lpstr"):
+        if entry.text in renames:
+            entry.text = renames[entry.text]
+            replaced += 1
+    assert replaced == len(renames), f"expected to rename {len(renames)}, renamed {replaced}"
+    members["docProps/app.xml"] = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+    with zipfile.ZipFile(destination, "w") as archive:
+        for name in order:
+            archive.writestr(name, members[name])
+
+
+def _app_xml(path: str) -> tuple[list[str], list[str]]:
+    with zipfile.ZipFile(path) as archive:
+        root = ET.fromstring(archive.read("docProps/app.xml"))
+    headings = [e.text or "" for e in root.find(f"{EXT}HeadingPairs").iter() if (e.text or "").strip()]
+    titles = [e.text or "" for e in root.find(f"{EXT}TitlesOfParts").iter(f"{VT}lpstr")]
+    return headings, titles
+
+
+@pytest.fixture
+def german(tmp_path, basedir) -> str:
+    localised = str(tmp_path / "german.vsdx")
+    _localise(os.path.join(basedir, "test4_connectors.vsdx"), localised, {"Pages": "Seiten", "Masters": "Master"})
+    return localised
+
+
+def test_adding_a_page_counts_it_in_the_section_that_is_already_there(german, tmp_path):
+    """No second section, whatever the first one is called.
+
+    Fails if section lookup goes back to matching the English literal and
+    nothing else: `_set_app_xml_value` then creates the pair it could not find.
+    """
+    out = str(tmp_path / "out.vsdx")
+    with vsdxkit.VisioFile(german) as vis:
+        vis.add_page("NewPage")
+        vis.save_vsdx(out)
+    headings, titles = _app_xml(out)
+    assert headings == ["Seiten", "4", "Master", "3"]
+    assert titles[:4] == ["Page-1", "Page-2", "Page-3", "NewPage"]
+
+
+def test_removing_a_page_counts_it_in_the_section_that_is_already_there(german, tmp_path):
+    out = str(tmp_path / "out.vsdx")
+    with vsdxkit.VisioFile(german) as vis:
+        vis.remove_page_by_index(1)
+        vis.save_vsdx(out)
+    headings, titles = _app_xml(out)
+    assert headings == ["Seiten", "2", "Master", "3"]
+    assert titles == ["Page-1", "Page-3", "Dynamic connector", "Switch", "Router"]
+
+
+def test_renaming_a_page_renames_its_title(german, tmp_path):
+    out = str(tmp_path / "out.vsdx")
+    with vsdxkit.VisioFile(german) as vis:
+        vis.pages[1].name = "Umbenannt"
+        vis.save_vsdx(out)
+    headings, titles = _app_xml(out)
+    assert headings == ["Seiten", "3", "Master", "3"]
+    assert titles[:3] == ["Page-1", "Umbenannt", "Page-3"]
