@@ -74,8 +74,8 @@ def test_get_page_size(filename: str, page_index: int, height_width: tuple):
         ("test2.vsdx", 1, 0.5),
     ],
 )
-def test_set_page_size(filename: str, page_index: int, page_scale: float):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_set_page_size_{page_index}.vsdx")
+def test_set_page_size(filename: str, page_index: int, page_scale: float, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_set_page_size_{page_index}.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.pages[page_index]
         # print(VisioFile.pretty_print_element(page._pagesheet_xml))
@@ -118,13 +118,13 @@ def test_set_page_size(filename: str, page_index: int, page_scale: float):
         ("test2.vsdx", 2, {"Shape already here": (0.25, 9.868, 2.415, 11.443)}),
     ],
 )
-def test_get_page_bounds(filename: str, page_index: int, expected_bounds: dict):
+def test_get_page_bounds(filename: str, page_index: int, expected_bounds: dict, tmp_path):
     """Shape bounds must match fixture-derived absolute expectations.
 
     Expected values are the coordinates observed in the fixture documents;
     they pin the bounds calculation against silent zeroing or offset shifts.
     """
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_get_page_bounds_{page_index}.vsdx")
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_get_page_bounds_{page_index}.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.pages[page_index]
         assert page.all_shapes  # a bounds test needs shapes to bound
@@ -177,8 +177,8 @@ def test_get_page_name(filename: str, page_index: int, page_name: str):
         ("test2.vsdx", 1, "Page2"),
     ],
 )
-def test_set_page_name(filename: str, page_index: int, page_name: str):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_set_page_name_{page_name}.vsdx")
+def test_set_page_name(filename: str, page_index: int, page_name: str, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_set_page_name_{page_name}.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.pages[page_index]
         print(VisioFile.pretty_print_element(page._pagesheet_xml))
@@ -208,10 +208,10 @@ def test_get_shape_with_text(filename: str, shape_id: str):
 
 
 @pytest.mark.parametrize("filename", ["test1.vsdx", "test2.vsdx", "test3_house.vsdx"])
-def test_apply_context(filename: str):
+def test_apply_context(filename: str, tmp_path):
     date_str = str(datetime.today().date())
     context = {"scenario": "test", "date": date_str}
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_VISfilter_applied.vsdx")
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_VISfilter_applied.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.get_page(0)  # type: Page
         original_shape = page.find_shape_by_text("{{date}}")  # type: Shape
@@ -227,10 +227,10 @@ def test_apply_context(filename: str):
 
 
 @pytest.mark.parametrize("filename", ["test1.vsdx", "test2.vsdx", "test3_house.vsdx"])
-def test_find_replace(filename: str):
+def test_find_replace(filename: str, tmp_path):
     old = "Shape"
     new = "Figure"
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_VISfind_replace_applied.vsdx")
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_VISfind_replace_applied.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.get_page(0)  # type: Page
         original_shapes = page.find_shapes_by_text(old)  # type: List[Shape]
@@ -442,9 +442,9 @@ def test_find_connectors_between_shapes(filename: str, shape_a_text: str, shape_
         ("test4_connectors.vsdx", 0, "Shape C", "Shape B"),
     ],
 )
-def test_add_connect_between_shapes(filename: str, page_index: int, shape_a_text: str, shape_b_text: str):
+def test_add_connect_between_shapes(filename: str, page_index: int, shape_a_text: str, shape_b_text: str, tmp_path):
     out_file = os.path.join(
-        basedir, "out", f"{filename[:-5]}_test_add_connect_between_" + shape_a_text + "_" + shape_b_text + ".vsdx"
+        str(tmp_path), f"{filename[:-5]}_test_add_connect_between_" + shape_a_text + "_" + shape_b_text + ".vsdx"
     )
     with VisioFile(os.path.join(basedir, filename)) as vis:
         print(f"filename:{out_file}")
@@ -470,8 +470,8 @@ def test_add_connect_between_shapes(filename: str, page_index: int, shape_a_text
 
 
 @pytest.mark.parametrize("filename", ["test8_simple_connector.vsdx", "test4_connectors.vsdx"])
-def test_add_multiple_connectors(filename: str):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_new_test_1.vsdx")
+def test_add_multiple_connectors(filename: str, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_new_test_1.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         src_page = vis.pages[0]
         block_shape = src_page.child_shapes[0]
@@ -519,10 +519,16 @@ def test_add_multiple_connectors(filename: str):
     ],
 )
 def test_add_connect_between_shapes_by_property(
-    filename: str, page_index: int, shape_a_label: str, shape_a_value, shape_b_label: str, shape_b_value: str
+    filename: str,
+    page_index: int,
+    shape_a_label: str,
+    shape_a_value,
+    shape_b_label: str,
+    shape_b_value: str,
+    tmp_path,
 ):
     out_file = os.path.join(
-        basedir, "out", f"{filename[:-5]}_test_add_connect_between_labels_" + shape_a_value + "_" + shape_b_value + ".vsdx"
+        str(tmp_path), f"{filename[:-5]}_test_add_connect_between_labels_" + shape_a_value + "_" + shape_b_value + ".vsdx"
     )
     with VisioFile(os.path.join(basedir, filename)) as vis:
         print(f"filename:{out_file}")
@@ -575,8 +581,8 @@ def add_shape_info(s: Shape):
         ("test9_rect_and_line.vsdx", "Conn A", 2.0, 5.0),
     ],
 )
-def test_copy_and_move_shape(filename: str, shape_text: str, lx: float, ly: float):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_copy_and_move_shape_{shape_text}_{lx}_{ly}.vsdx")
+def test_copy_and_move_shape(filename: str, shape_text: str, lx: float, ly: float, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_copy_and_move_shape_{shape_text}_{lx}_{ly}.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         print(f"filename:{out_file}")
         page = vis.pages[0]  # type: Page
@@ -604,8 +610,8 @@ def test_copy_and_move_shape(filename: str, shape_text: str, lx: float, ly: floa
         ("test9_rect_and_line.vsdx", "Conn A", (2.0, 7.0), (3.0, 8.0)),
     ],
 )
-def test_copy_and_move_line(filename: str, shape_text: str, start: tuple, finish: tuple):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_copy_and_move_line_{shape_text}_{start}_{finish}.vsdx")
+def test_copy_and_move_line(filename: str, shape_text: str, start: tuple, finish: tuple, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_copy_and_move_line_{shape_text}_{start}_{finish}.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         print(f"filename:{out_file}")
         page = vis.pages[0]  # type: Page

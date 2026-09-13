@@ -146,8 +146,8 @@ def test_shape_center(filename: str, shape_id: str, expected_center: str):
 
 
 @pytest.mark.parametrize("filename", ["test2.vsdx", "test3_house.vsdx"])
-def test_remove_shape(filename: str):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_shape_removed.vsdx")
+def test_remove_shape(filename: str, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_shape_removed.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         # get shape to remove
         shape = vis.pages[0].find_shape_by_text("Shape to remove")  # type: Shape
@@ -162,8 +162,8 @@ def test_remove_shape(filename: str):
 
 
 @pytest.mark.parametrize(("filename", "shape_names", "shape_locations"), [("test1.vsdx", {"Shape to remove"}, {(1.0, 1.0)})])
-def test_set_shape_location(filename: str, shape_names: set, shape_locations: set):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_set_shape_location.vsdx")
+def test_set_shape_location(filename: str, shape_names: set, shape_locations: set, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_set_shape_location.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         # move shapes in list
         for shape_name, x_y in zip(shape_names, shape_locations, strict=True):
@@ -194,8 +194,8 @@ def test_set_shape_location(filename: str, shape_names: set, shape_locations: se
         ("test4_connectors.vsdx", 1, {"B to C"}, {(1.0, 1.0)}),
     ],
 )
-def test_move_shape(filename: str, page_index: int, shape_names: set, shape_x_y_deltas: set):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_move_shape.vsdx")
+def test_move_shape(filename: str, page_index: int, shape_names: set, shape_x_y_deltas: set, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_move_shape.vsdx")
     expected_shape_locations = {}
 
     with VisioFile(os.path.join(basedir, filename)) as vis:
@@ -222,8 +222,8 @@ def test_move_shape(filename: str, page_index: int, shape_names: set, shape_x_y_
 
 
 @pytest.mark.parametrize(("filename", "shape_name"), [("test1.vsdx", "Shape to copy"), ("test4_connectors.vsdx", "Shape B")])
-def test_shape_copy(filename: str, shape_name: str):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_shape_copy.vsdx")
+def test_shape_copy(filename: str, shape_name: str, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_shape_copy.vsdx")
 
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.pages[0]  # type: Page
@@ -256,8 +256,8 @@ def test_shape_copy(filename: str, shape_name: str):
 
 
 @pytest.mark.parametrize(("filename", "shape_name"), [("test1.vsdx", "Shape to copy"), ("test2.vsdx", "Shape to copy")])
-def test_shape_copy_other_page(filename: str, shape_name: str):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_shape_copy_other_page.vsdx")
+def test_shape_copy_other_page(filename: str, shape_name: str, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_shape_copy_other_page.vsdx")
 
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.pages[0]  # type: Page
@@ -357,9 +357,9 @@ def test_get_shape_data_properties(filename: str, page_index: int, shape_name: s
         # ("test_shape_with_field.vsdx", 0, "Here is field", {"field_label": 'updated field value'}),
     ],
 )
-def test_set_shape_data_properties(filename: str, page_index: int, shape_name: str, property_dict: dict):
+def test_set_shape_data_properties(filename: str, page_index: int, shape_name: str, property_dict: dict, tmp_path):
     """Check that we can set a prop value, and this change persists through save and load"""
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_set_shape_data_properties.vsdx")
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_set_shape_data_properties.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         shape = vis.pages[page_index].find_shape_by_text(shape_name)
 
@@ -635,8 +635,8 @@ def test_shape_relative_bounds(filename, page_index, shape_text, expected_bounds
         ("test2.vsdx", 0, "Scenario:", False),  # no end arrow
     ],
 )
-def test_shape_end_arrow(filename, page_index, shape_text, arrow):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_shape_end_arrow_{arrow}.vsdx")
+def test_shape_end_arrow(filename, page_index, shape_text, arrow, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_shape_end_arrow_{arrow}.vsdx")
 
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.pages[page_index]
@@ -760,9 +760,11 @@ def test_get_shape_line_color(filename: str, page_index: int, shape_text: str, c
         ("test12_colors.vsdx", 1, "Fill Color", "fill", "#0000ff"),
     ],
 )
-def test_set_shape_line_color(filename: str, page_index: int, shape_text: str, color_param: str, expected_colour: str):
+def test_set_shape_line_color(
+    filename: str, page_index: int, shape_text: str, color_param: str, expected_colour: str, tmp_path
+):
     """Test that we can set a shapes line, text, or fill color"""
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_{page_index}_set_shape_{color_param}_color.vsdx")
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_{page_index}_set_shape_{color_param}_color.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         shape = vis.pages[page_index].find_shape_by_text(shape_text)
         print(f"LineColor={shape.line_color} FillColor={shape.fill_color} TextColor={shape.text_color}")

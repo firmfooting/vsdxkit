@@ -123,24 +123,27 @@ def test_close_does_not_delete_same_stem_directory(vsdx_copy):
     assert marker.read_text() == "keep"
 
 
-def test_open_abs_path_save_rel_path():
+def test_open_abs_path_save_rel_path(tmp_path, monkeypatch):
     # test opening media file (not in tests directory)with absolute path
     media_file_path = _media_filename()
     filename = os.path.abspath(media_file_path)
 
     assert os.path.exists(filename)
-    output_file = os.path.join(basedir, "out", "abs_to_rel_out.vsdx")
+    # the destination must stay relative, so run from tmp_path rather than naming it
+    monkeypatch.chdir(tmp_path)
+    output_file = "abs_to_rel_out.vsdx"
     with VisioFile(filename) as vis:
         vis.save_vsdx(output_file)
+    assert (tmp_path / output_file).exists()
 
 
-def test_open_abs_path_save_abs_path():
+def test_open_abs_path_save_abs_path(tmp_path):
     # test opening media file (not in tests directory)with absolute path
     media_file_path = _media_filename()
     filename = os.path.abspath(media_file_path)
 
     assert os.path.exists(filename)
-    output_file = os.path.abspath(os.path.join(basedir, "out", "abs_to_abs_out.vsdx"))
+    output_file = os.path.abspath(os.path.join(str(tmp_path), "abs_to_abs_out.vsdx"))
     print("output_file", output_file)
     with VisioFile(filename) as vis:
         vis.save_vsdx(output_file)
@@ -216,8 +219,8 @@ def test_app_xml_page_names(filename: str):
         ("test5_master.vsdx", 0),
     ],
 )
-def test_remove_page_by_index(filename: str, page_index: int):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_remove_page.vsdx")
+def test_remove_page_by_index(filename: str, page_index: int, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_remove_page.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page_count = len(vis.pages)
         vis.remove_page_by_index(page_index)
@@ -241,8 +244,8 @@ def test_remove_page_by_index(filename: str, page_index: int):
         ("test8_simple_connector.vsdx", "none"),
     ],
 )
-def test_remove_page_by_page_index(filename: str, page_name: str):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_remove_page_by_page_index.vsdx")
+def test_remove_page_by_page_index(filename: str, page_name: str, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_remove_page_by_page_index.vsdx")
     expected_page_names = []
     with VisioFile(os.path.join(basedir, filename)) as vis:
         print(f"Found {len(vis.pages)} pages, {sorted([p.name for p in vis.pages])}")
@@ -276,8 +279,8 @@ def test_remove_page_by_page_index(filename: str, page_name: str):
         ("test8_simple_connector.vsdx", "none"),  # no match
     ],
 )
-def test_remove_page_by_name(filename: str, page_name: str):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_remove_page_by_name.vsdx")
+def test_remove_page_by_name(filename: str, page_name: str, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_remove_page_by_name.vsdx")
     expected_page_names = []
     with VisioFile(os.path.join(basedir, filename)) as vis:
         print(f"Found {len(vis.pages)} pages, {sorted([p.name for p in vis.pages])}")
@@ -325,8 +328,8 @@ def test_app_xml_page_names_after_remove_page(filename: str, remove_index: int):
 
 
 @pytest.mark.parametrize(("filename"), [("test1.vsdx")])
-def test_add_page(filename: str):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_add_page.vsdx")
+def test_add_page(filename: str, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_add_page.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         number_pages = len(vis.pages)
 
@@ -349,8 +352,8 @@ def test_add_page(filename: str):
         ("test1.vsdx", "Page-1"),
     ],
 )
-def test_add_page_name(filename: str, page_name: str):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_add_page_name_{page_name}.vsdx")
+def test_add_page_name(filename: str, page_name: str, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_add_page_name_{page_name}.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         number_pages = len(vis.pages)
 
@@ -374,8 +377,8 @@ def test_add_page_name(filename: str, page_name: str):
         ("test1.vsdx", 1, "Page-1"),
     ],
 )
-def test_add_page_at(filename: str, index: int, page_name: str):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_add_page_at_{page_name}.vsdx")
+def test_add_page_at(filename: str, index: int, page_name: str, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_add_page_at_{page_name}.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         number_pages = len(vis.pages)
 
@@ -458,8 +461,8 @@ def test_copy_page_clones_relationship_part(vsdx_copy, tmp_path):
         ("test4_connectors.vsdx", 0, "Page-1"),
     ],
 )
-def test_copy_page(filename: str, index: int, page_name: str):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_copy_page_{page_name}.vsdx")
+def test_copy_page(filename: str, index: int, page_name: str, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_copy_page_{page_name}.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         number_pages = len(vis.pages)
 
@@ -487,8 +490,8 @@ def test_copy_page(filename: str, index: int, page_name: str):
         ("test1.vsdx", 1, "Page-1", "Page-1-1"),
     ],
 )
-def test_copy_page_naming(filename: str, page_index_to_copy: int, in_page_name: str, out_page_name: str):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_copy_page_naming.vsdx")
+def test_copy_page_naming(filename: str, page_index_to_copy: int, in_page_name: str, out_page_name: str, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_copy_page_naming.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.pages[page_index_to_copy]  # type: Page
         new_page = vis.copy_page(page, name=in_page_name)
@@ -512,8 +515,10 @@ def test_copy_page_naming(filename: str, page_index_to_copy: int, in_page_name: 
         ("test1.vsdx", 1, PagePosition.AFTER, 2),
     ],
 )
-def test_copy_page_positions(filename: str, page_index_to_copy: int, page_position: PagePosition, out_page_index: int):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_copy_page_position.vsdx")
+def test_copy_page_positions(
+    filename: str, page_index_to_copy: int, page_position: PagePosition, out_page_index: int, tmp_path
+):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_copy_page_position.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.pages[page_index_to_copy]  # type: Page
         new_page = vis.copy_page(page, index=page_position)
@@ -535,8 +540,8 @@ def test_copy_page_positions(filename: str, page_index_to_copy: int, page_positi
 
 
 @pytest.mark.parametrize(("filename", "shape_name"), [("test1.vsdx", "Shape to copy"), ("test4_connectors.vsdx", "Shape B")])
-def test_vis_copy_shape(filename: str, shape_name: str):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_vis_copy_shape.vsdx")
+def test_vis_copy_shape(filename: str, shape_name: str, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_vis_copy_shape.vsdx")
 
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.pages[0]  # type: Page
@@ -567,8 +572,8 @@ def test_vis_copy_shape(filename: str, shape_name: str):
 
 
 @pytest.mark.parametrize(("filename", "shape_name"), [("test1.vsdx", "Shape to copy"), ("test2.vsdx", "Shape to copy")])
-def test_copy_shape_other_page(filename: str, shape_name: str):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_copy_shape_other_page.vsdx")
+def test_copy_shape_other_page(filename: str, shape_name: str, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_copy_shape_other_page.vsdx")
 
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.pages[0]  # type: Page

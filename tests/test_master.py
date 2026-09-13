@@ -80,8 +80,8 @@ def test_master_inheritance(filename: str):
 
 
 @pytest.mark.parametrize(("filename"), [("test5_master.vsdx")])
-def test_set_master_child_property(filename: str):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_set_master_child_property.vsdx")
+def test_set_master_child_property(filename: str, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_set_master_child_property.vsdx")
 
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.get_page(0)
@@ -101,8 +101,8 @@ def test_set_master_child_property(filename: str):
 
 
 @pytest.mark.parametrize(("filename, weight"), [("test5_master.vsdx", 0.5)])
-def test_master_property_change_is_inherited(filename: str, weight):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_master_property_change_is_inherited.vsdx")
+def test_master_property_change_is_inherited(filename: str, weight, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_master_property_change_is_inherited.vsdx")
 
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.get_page(0)
@@ -125,8 +125,8 @@ def test_master_property_change_is_inherited(filename: str, weight):
 
 
 @pytest.mark.parametrize(("filename, weight"), [("test5_master.vsdx", 0.1)])
-def test_child_property_change_is_not_inherited(filename: str, weight):
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_child_property_change_is_not_inherited.vsdx")
+def test_child_property_change_is_not_inherited(filename: str, weight, tmp_path):
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_child_property_change_is_not_inherited.vsdx")
 
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.get_page(0)
@@ -244,10 +244,14 @@ def test_find_shapes_by_master_id(filename: str, master_shape_text: str, number_
     ],
 )
 def test_master_inheritance_master_shape_set_text(
-    filename: str, master_shape_search_text: str, shape_search_text: str, expect_inherit: bool
+    filename: str,
+    master_shape_search_text: str,
+    shape_search_text: str,
+    expect_inherit: bool,
+    tmp_path,
 ):
     # test that when a master shape text is updated, only shapes that inherit that master shapes text are affected
-    out_file = os.path.join(basedir, "out", f"{filename[:-5]}_test_master_inheritance_master_shape_set_text.vsdx")
+    out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_master_inheritance_master_shape_set_text.vsdx")
     master_text = "Updated Master Shape Text"
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.get_page(0)

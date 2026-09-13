@@ -139,6 +139,14 @@ history precedes 0.6.3 here, remains available at
 
 ### Changed
 
+- Tests write their output to pytest's `tmp_path` instead of `tests/out`, so a
+  run no longer leaves 120 files in the checkout. `/tests/out/` is gone from
+  `.gitignore`; delete any `tests/out` an earlier run left behind. A
+  session-scoped fixture snapshots `git status --porcelain --untracked-files=all`
+  at session start and fails the run if new entries appear afterwards, naming
+  them. Diffing against the snapshot rather than demanding a clean tree keeps
+  the check usable in a checkout that already has unrelated edits. Paths git
+  ignores stay invisible to it, and it is skipped where git cannot report.
 - The bundled media and palette documents are now parsed once per `VisioFile`
   rather than once per `create_shape` and `connect_shapes` call. A loop building
   N shapes and N connectors re-opened and re-parsed `media.vsdx` and
