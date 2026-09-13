@@ -617,16 +617,17 @@ class Page:
 
         Shape ids live in two places: the ``Sheet.N!`` references inside cell
         formulas, which ``VisioFile.update_ids`` rewrites, and the ``FromSheet``
-        and ``ToSheet`` attributes here. Only the formulas were maintained, so a
-        renumbered shape left its glue naming an id that was no longer on the
-        page, and Visio rebinds glue like that silently.
+        and ``ToSheet`` attributes here. Records left behind when a shape is
+        renumbered name an id that is no longer on the page, and Visio rebinds
+        glue like that silently.
 
-        Private plumbing for ``VisioFile.renumber_shape_ids()``, which decides
-        what belongs in the map: only the ids that renumbering vacated. An id
-        still in use, or one that was never on this page, names a record that
-        means what it says, and remapping it would hand a copy the original's
-        glue or let an arriving shape inherit glue from a record some other
-        writer left behind.
+        Private plumbing for ``VisioFile.renumber_shape_ids()``, which runs this
+        and the formula sweep over the same page with the same map, and decides
+        what belongs in that map: only the ids renumbering vacated. An id still
+        in use, or one that was never on this page, names a record that means
+        what it says, and remapping it would hand a copy the original's glue or
+        let an arriving shape inherit glue from a record some other writer left
+        behind.
         """
         connects_el = self.xml.find(f".//{namespace}Connects")
         if connects_el is None:

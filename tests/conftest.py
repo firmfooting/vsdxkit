@@ -155,24 +155,29 @@ def _packages_written_are_structurally_sound(request, tmp_path):
     So the exceptions are declared, not inferred:
 
         @pytest.mark.allow_invalid_package
+        @pytest.mark.allow_invalid_package("stale-sheet-reference")
 
     Tests that deliberately write a broken or synthetic archive say so, and the
     marker is enforced by `--strict-markers`, so a typo is an error rather than
-    a silent no-op.
+    a silent no-op. Naming kinds excuses only those, which is what a test that
+    reaches one known shortfall wants: a bare marker on such a test switches off
+    every other rule for it too, and the next defect it writes goes unreported.
     """
     # `tmp_path` is taken as an argument rather than looked up on demand: pytest
     # finalises fixtures in reverse dependency order, and a fixture that merely
     # asks for it at teardown finds it already gone.
     yield
-    if request.node.get_closest_marker("allow_invalid_package"):
+    marker = request.node.get_closest_marker("allow_invalid_package")
+    if marker is not None and not marker.args:
         return
+    excused_kinds = frozenset(marker.args) if marker is not None else frozenset()
     for directory, _, filenames in os.walk(str(tmp_path)):
         for filename in sorted(filenames):
             if not _is_package_file(filename):
                 continue
             path = os.path.join(directory, filename)
             inherited = _inherited_by(filename, request)
-            defects = tuple(d for d in validate_package(path) if d not in inherited)
+            defects = tuple(d for d in validate_package(path) if d not in inherited and d.kind not in excused_kinds)
             if defects:
                 raise AssertionError(
                     f"{filename} was written with {len(defects)} structural defect(s):\n"

@@ -116,7 +116,7 @@ preset = "strict"
 # add the marker they believe they already added.
 addopts = "--strict-markers"
 markers = [
-    "allow_invalid_package: this test deliberately writes a structurally invalid .vsdx",
+    "allow_invalid_package(*kinds): this test deliberately writes a structurally invalid .vsdx; naming defect kinds excuses only those",
 ]
 
 [tool.coverage.report]
