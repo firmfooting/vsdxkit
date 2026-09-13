@@ -21,6 +21,11 @@ logger = get_logger(__name__)
 namespace = "{http://schemas.microsoft.com/office/visio/2012/main}"  # visio file name space
 
 
+def _row_index_sort_key(index: str) -> tuple[int, int, str]:
+    """Order row indexes as numbers, with anything unparseable left at the end."""
+    return (0, int(index), "") if index.isdigit() else (1, 0, index)
+
+
 class Geometry:
     """The geometry of a shape: a Geometry section's cells and rows.
 
@@ -40,7 +45,10 @@ class Geometry:
     The merge copies the master's :attr:`cells` list and :attr:`rows` dict
     rather than taking them by reference, so an instance applying a ``Del``
     row, or gaining a row of its own, does not change what the master
-    Geometry sees. That holds however long the master object lives.
+    Geometry sees. That holds however long the master object lives. The
+    copies are shallow -- an inherited :class:`GeometryCell` is still the
+    master's until a setter replaces it -- so writing a cell's value without
+    going through the row still edits the master.
     """
 
     def __init__(self, xml: Element, shape: vsdx.Shape):
@@ -201,11 +209,11 @@ class GeometryRow(InheritedRow):
     def create_row_xml(self, T: str, IX: str) -> Element:
         """Add a Row element for this row to the parent Geometry section.
 
-        Placement is unreliable in two ways. The position is worked out over
-        the section's Row elements alone but applied to all of its children,
-        so a new row can land between the section's Cell elements, which the
-        Visio schema does not allow. Indexes are also sorted as text, so IX 10
-        lands ahead of IX 2, and row order is the order the path is drawn in.
+        The row is placed in index order among the section's existing rows,
+        after the Cell and Trigger children the Visio schema requires them all
+        to follow. Row order is the order the path is drawn in, so the indexes
+        are compared as numbers: sorted as text, IX 10 would land ahead of
+        IX 2 and redraw the path in a different order.
 
         Both arguments have already been stringified by the caller, so
         ``IX=None`` arrives as the literal ``"None"`` and passes the
@@ -215,14 +223,17 @@ class GeometryRow(InheritedRow):
             raise ValueError(f"cannot create a geometry row without T and IX (got T={T!r}, IX={IX!r})")
         # Create new row xml
         row = ET.fromstring(f'<Row xmlns="{namespace[1:-1]}" T="{T}" IX="{IX}" />')
-        # get all indexes
-        indexes = [x.attrib.get("IX") for x in self.geometry.xml.findall(f"{namespace}Row") if x.attrib.get("IX")]
+        children = list(self.geometry.xml)
+        indexes = [x.attrib["IX"] for x in children if x.tag == f"{namespace}Row" and x.attrib.get("IX")]
         if IX in indexes:
             # todo: replace existing row with new one
             raise ValueError(f"geometry row IX={IX} already exists")
         indexes.append(IX)
-        indexes.sort()
-        self.geometry.xml.insert(indexes.index(IX), row)
+        indexes.sort(key=_row_index_sort_key)
+        # count positions from the section's first Row, so the Cells ahead of
+        # it are not counted as places a Row could go
+        first_row = next((i for i, child in enumerate(children) if child.tag == f"{namespace}Row"), len(children))
+        self.geometry.xml.insert(first_row + indexes.index(IX), row)
 
         self.geometry.rows[IX] = self
         return row

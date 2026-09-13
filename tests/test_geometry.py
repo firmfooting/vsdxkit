@@ -280,6 +280,23 @@ def test_move_copies_an_inherited_row_onto_the_instance():
         assert (connector.geometry.rows["1"].x, connector.geometry.rows["1"].y) == (1.0, 2.0)
 
 
+def test_a_row_copied_down_by_move_lands_after_the_sections_cells():
+    """`Conn A` overrides a section cell, which rows have to follow.
+
+    A Section is `Cell*, Trigger*, Row*`, so a row wedged among the cells is a
+    file Visio offers to repair.
+    """
+    with VisioFile(TEST9) as vis:
+        connector = vis.pages[0].find_shape_by_text("Conn A")
+        geometry_xml(connector).insert(0, ET.fromstring(f'<Cell xmlns="{namespace[1:-1]}" N="NoShow" V="1"/>'))
+        connector = reparse(connector)
+
+        connector.move(1.0, 2.0)
+
+        assert [child.tag.rpartition("}")[2] for child in geometry_xml(connector)] == ["Cell", "Row", "Row", "Row"]
+        assert row_indexes(connector) == ["1", "2", "3"]
+
+
 # --- set_move_to / set_line_to ----------------------------------------------
 
 
@@ -419,30 +436,40 @@ def test_creating_a_row_with_no_index_yields_the_string_none():
         assert geometry.rows["None"] is row
 
 
-def test_a_new_row_is_misplaced_in_the_section():
-    """Two placement faults, both visible in a tenth row.
+def test_a_new_row_is_placed_after_the_sections_cells_and_in_index_order():
+    """Both placement faults a tenth row used to show.
 
-    The insert position is worked out over the section's Row elements but
-    applied to all of its children, so the new row lands among the Cell
-    elements, which the Visio schema forbids. Indexes also sort as text, so
-    IX 10 goes ahead of IX 1, reordering the path that gets drawn.
+    The row goes after the Cell children the Visio schema requires rows to
+    follow, and IX 10 sorts after IX 2 rather than as the text "10" would, so
+    the path is still drawn in index order.
     """
     with VisioFile(TEST9) as vis:
         line = vis.pages[0].find_shape_by_text("Line A")
 
         GeometryRow(geometry=line.geometry, xml=None, master_geometry_row=None, T="LineTo", IX=10)
 
-        assert row_indexes(line) == ["10", "1", "2"]
+        assert row_indexes(line) == ["1", "2", "10"]
         assert [child.tag.rpartition("}")[2] for child in geometry_xml(line)] == [
             "Cell",
-            "Row",  # wedged between the section's cells
             "Cell",
             "Cell",
             "Cell",
             "Cell",
+            "Row",
             "Row",
             "Row",
         ]
+
+
+def test_a_row_index_that_is_not_a_number_sorts_last():
+    """`IX="None"` is unorderable against real indexes, so it goes at the end."""
+    with VisioFile(TEST9) as vis:
+        line = vis.pages[0].find_shape_by_text("Line A")
+
+        GeometryRow(geometry=line.geometry, xml=None, master_geometry_row=None, T="LineTo", IX=None)
+        GeometryRow(geometry=line.geometry, xml=None, master_geometry_row=None, T="LineTo", IX=3)
+
+        assert row_indexes(line) == ["1", "2", "3", "None"]
 
 
 def test_coordinate_setters_create_the_cells_they_need():

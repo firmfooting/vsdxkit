@@ -462,9 +462,12 @@ class Shape:
           because the master is re-resolved as a new object on every access and
           folding it into the cache key would rebuild it on every call.
 
-        Setting the value of an inherited property is safe: the
-        ``DataProperty`` is marked inherited, so writing to it creates an
-        override row on this shape and leaves the master alone.
+        Setting :attr:`DataProperty.value` on an inherited property is safe:
+        the property is marked inherited, so writing to it creates an override
+        row on this shape and leaves the master alone.
+        :meth:`DataProperty.set_attribute` and
+        :meth:`DataProperty.remove_attribute` do not yet do this, and still
+        write an inherited property's cells in the master.
 
         :return: Dict[str, DataProperty]
         """
