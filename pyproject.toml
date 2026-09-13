@@ -111,6 +111,10 @@ project-includes = ["vsdx"]
 preset = "strict"
 
 [tool.pytest.ini_options]
+# A mistyped marker must be an error: the one place `allow_invalid_package` gets
+# used is a test that would otherwise fail with a message telling its author to
+# add the marker they believe they already added.
+addopts = "--strict-markers"
 markers = [
     "allow_invalid_package: this test deliberately writes a structurally invalid .vsdx",
 ]

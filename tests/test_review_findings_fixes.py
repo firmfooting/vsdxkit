@@ -10,6 +10,12 @@ import vsdx
 from vsdx import PackageLimitError, VisioFile
 from vsdx.vsdxdiff import VisioFileDiff
 
+# Most packages here are synthetic archives built to exercise the zip reader:
+# declared entry counts that lie, directories that disagree with their bounds,
+# members past the size cap. They are named .vsdx because that is what the code
+# under test accepts.
+pytestmark = pytest.mark.allow_invalid_package
+
 basedir = os.path.dirname(os.path.realpath(__file__))
 
 

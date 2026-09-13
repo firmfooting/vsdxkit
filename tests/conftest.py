@@ -4,7 +4,6 @@ import functools
 import os
 import shutil
 import subprocess
-import zipfile
 
 import pytest
 from helpers.package_validator import describe_defects, validate_package
@@ -87,32 +86,56 @@ def _hermetic_working_tree():
         )
 
 
+def _is_package_file(filename: str) -> bool:
+    return filename.lower().endswith((".vsdx", ".vsdm"))
+
+
 @functools.cache
-def _inherited_defects() -> frozenset:
-    """Defects an input already had, which the test that saved it did not cause.
+def _defects_by_fixture() -> tuple[tuple[str, frozenset], ...]:
+    """Each fixture's own defects, longest name first, for provenance matching."""
+    found = []
+    for name in os.listdir(BASEDIR):
+        if not _is_package_file(name):
+            continue
+        defects = frozenset(validate_package(os.path.join(BASEDIR, name)))
+        if defects:
+            found.append((os.path.splitext(name)[0], defects))
+    return tuple(sorted(found, key=lambda entry: -len(entry[0])))
 
-    `tests/test5_master.vsdx` arrived from upstream declaring relationships and
-    content type overrides for four `docProps` parts it does not contain (see
-    issue #298). A test that opens it and saves reproduces them, which is the
-    library behaving correctly: a writer whose contract is fidelity should not
-    quietly repair its input.
 
-    Excusing them by filename would be wrong, since an output is usually but not
-    always named after its input, so the match is on the defects themselves.
-    That is broader than it sounds: a defect from any other fixture whose text
-    happens to coincide with one of these seven is excused too. Acceptable while
-    this is the only non-conformant input in the corpus; revisit if a second
-    appears.
+def _inherited_by(filename: str, request) -> frozenset:
+    """Defects the input already had, for an output derived from that input.
+
+    A test that opens a non-conformant fixture and saves reproduces its defects,
+    which is the library behaving correctly - a writer whose contract is
+    fidelity should not quietly repair its input. Blaming the test that saved it
+    would make the check unusable.
+
+    Provenance is established two ways, because neither alone is enough. Most
+    outputs are named after their input, which `vsdx_copy` and the save helpers
+    both do; but a test that writes to a fixed name like `out.vsdx` keeps no
+    trace of where it came from, and there the fixture name is usually the test
+    parameter instead.
+
+    Both are narrow on purpose. An earlier version subtracted one fixture's
+    defects from every output whatever its provenance, and because every fixture
+    came off the same Visio generator the relationship ids coincide exactly - so
+    a package that had silently lost all four of its `docProps` parts came back
+    clean, in every test. An exemption that cannot say which input it is
+    excusing excuses everything.
     """
-    return frozenset(validate_package(os.path.join(BASEDIR, "test5_master.vsdx")))
+    stem = os.path.splitext(filename)[0]
+    named = {stem}
+    callspec = getattr(request.node, "callspec", None)
+    for value in () if callspec is None else callspec.params.values():
+        if isinstance(value, str) and _is_package_file(value):
+            named.add(os.path.splitext(value)[0])
 
-
-def _is_visio_package(path: str) -> bool:
-    try:
-        with zipfile.ZipFile(path) as archive:
-            return "visio/pages/pages.xml" in archive.namelist()
-    except (OSError, zipfile.BadZipFile):
-        return False
+    inherited: frozenset = frozenset()
+    for fixture_stem, defects in _defects_by_fixture():
+        if fixture_stem in named or stem.startswith(fixture_stem):
+            inherited |= defects
+    return inherited
 
 
 @pytest.fixture(autouse=True)
@@ -125,9 +148,17 @@ def _packages_written_are_structurally_sound(request, tmp_path):
     exist. It is free to the test author by design, because the defects it finds
     are the ones nobody thinks to check for.
 
-    A test that means to produce a broken package says so:
+    Every `.vsdx` and `.vsdm` is checked, with no sniffing for "is this really a
+    Visio package". A sniff has to read some part, and every part it could read
+    is one whose absence is itself a defect - gating on `visio/pages/pages.xml`
+    means a package that lost it switches the check off instead of failing it.
+    So the exceptions are declared, not inferred:
 
         @pytest.mark.allow_invalid_package
+
+    Tests that deliberately write a broken or synthetic archive say so, and the
+    marker is enforced by `--strict-markers`, so a typo is an error rather than
+    a silent no-op.
     """
     # `tmp_path` is taken as an argument rather than looked up on demand: pytest
     # finalises fixtures in reverse dependency order, and a fixture that merely
@@ -137,17 +168,10 @@ def _packages_written_are_structurally_sound(request, tmp_path):
         return
     for directory, _, filenames in os.walk(str(tmp_path)):
         for filename in sorted(filenames):
-            if not filename.endswith((".vsdx", ".vsdm")):
+            if not _is_package_file(filename):
                 continue
             path = os.path.join(directory, filename)
-            if not _is_visio_package(path):
-                # Several suites build deliberately hostile or synthetic archives
-                # to exercise the zip reader - declared entry counts that lie,
-                # members with absolute paths, two-file fixtures for the differ.
-                # They are named .vsdx because that is what the code under test
-                # accepts, but there is no document in them to have defects.
-                continue
-            inherited = _inherited_defects()
+            inherited = _inherited_by(filename, request)
             defects = tuple(d for d in validate_package(path) if d not in inherited)
             if defects:
                 raise AssertionError(

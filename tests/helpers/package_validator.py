@@ -1,8 +1,14 @@
 """Structural defects a .vsdx has on its own terms, found without opening Visio.
 
-Every rule here is fixed by the file format, so none of it needs an oracle, a
+Every rule here is decided by the file itself, so none of it needs an oracle, a
 recording, or an expectation about a particular document. That is what makes the
 rules worth applying everywhere: they hold for a file nobody has looked at.
+
+They are not all equally normative. Duplicate ids, glue with no endpoint and an
+unreachable page are unambiguous. A relationship or content type override naming
+a part that is absent is not forbidden in as many words by OPC, and a real file
+in this corpus ships that way and opens - but consumers do fail on it, and the
+failures are obscure, so it is reported and excused by name where it is known.
 
 The motivating case is a package that declares the same shape id twice. Visio
 opens it, keeps one of the two, discards the other, reports no error and saves
@@ -21,7 +27,10 @@ inherit the assumptions it is supposed to be checking.
 
 from __future__ import annotations
 
+import contextlib
+import os
 import posixpath
+import urllib.parse
 import xml.etree.ElementTree as ET
 import zipfile
 from dataclasses import dataclass
@@ -43,18 +52,55 @@ class Defect:
 
 
 def validate_package(path: str) -> tuple[Defect, ...]:
-    """Return every structural defect in the package at `path`, in no set order."""
-    with zipfile.ZipFile(path) as archive:
-        members = set(archive.namelist())
-        defects: list[Defect] = []
-        defects.extend(_content_type_defects(archive, members))
-        defects.extend(_relationship_defects(archive, members))
-        defects.extend(_page_defects(archive, members))
-        return tuple(defects)
+    """Return every structural defect in the package at `path`, in no set order.
+
+    An archive that cannot be read, or a part that will not parse, is reported
+    as a defect rather than raised. This runs at test teardown, where an
+    exception surfaces as a traceback pointing into conftest with no mention of
+    the marker that would have silenced it - and a package whose XML is
+    malformed is exactly what the report is for.
+    """
+    try:
+        with zipfile.ZipFile(path) as archive:
+            names = archive.namelist()
+            members = set(names)
+            defects: list[Defect] = list(_duplicate_member_defects(names))
+            defects.extend(_content_type_defects(archive, members))
+            defects.extend(_relationship_defects(archive, members))
+            defects.extend(_page_defects(archive, members))
+            return tuple(defects)
+    except (zipfile.BadZipFile, OSError) as error:
+        return (Defect("unreadable-package", os.path.basename(path), f"the archive could not be read: {error}"),)
+
+
+def _duplicate_member_defects(names: list[str]) -> list[Defect]:
+    """A part named twice in one archive.
+
+    `zipfile` reads the last entry and silently ignores the first, and
+    `ZipFile.writestr` will emit a duplicate name with only a warning - so a
+    writer can produce this, and every reader disagrees about which copy counts.
+    A set of member names would hide it, which is why the raw list is walked.
+    """
+    seen: set[str] = set()
+    repeated: list[str] = []
+    for name in names:
+        if name in seen and name not in repeated:
+            repeated.append(name)
+        seen.add(name)
+    return [Defect("duplicate-member", name, "the archive contains this part more than once") for name in repeated]
+
+
+def _parse(archive: zipfile.ZipFile, part: str) -> ET.Element | Defect:
+    try:
+        return ET.fromstring(archive.read(part))
+    except ET.ParseError as error:
+        return Defect("unreadable-part", part, f"the XML will not parse: {error}")
+    except (KeyError, zipfile.BadZipFile, OSError) as error:
+        return Defect("unreadable-part", part, f"the part could not be read: {error}")
 
 
 def describe_defects(defects: tuple[Defect, ...]) -> str:
-    return "\n".join(f"  {defect.where}: {defect.detail}" for defect in defects)
+    return "\n".join(f"  [{defect.kind}] {defect.where}: {defect.detail}" for defect in defects)
 
 
 # --- pages ------------------------------------------------------------------
@@ -67,7 +113,10 @@ def _page_defects(archive: zipfile.ZipFile, members: set[str]) -> list[Defect]:
         return [Defect("missing-part", pages_xml, "the package declares no pages at all")]
 
     relationships = _relationships(archive, "visio/pages/_rels/pages.xml.rels", members)
-    for page in ET.fromstring(archive.read(pages_xml)):
+    listing = _parse(archive, pages_xml)
+    if isinstance(listing, Defect):
+        return [listing]
+    for page in listing:
         name = page.attrib.get("Name") or page.attrib.get("NameU") or page.attrib.get("ID", "?")
         rel = page.find(f"{_MAIN_NS}Rel")
         target = None if rel is None else relationships.get(rel.attrib.get(f"{_DOC_REL_NS}id", ""))
@@ -85,7 +134,9 @@ def _page_defects(archive: zipfile.ZipFile, members: set[str]) -> list[Defect]:
 
 
 def _page_content_defects(archive: zipfile.ZipFile, part: str, page: ET.Element) -> list[Defect]:
-    contents = ET.fromstring(archive.read(part))
+    contents = _parse(archive, part)
+    if isinstance(contents, Defect):
+        return [contents]
     shapes = _shape_ids(contents.find(f"{_MAIN_NS}Shapes"))
     defects: list[Defect] = []
 
@@ -118,7 +169,8 @@ def _page_content_defects(archive: zipfile.ZipFile, part: str, page: ET.Element)
         defects.append(
             Defect(
                 "max-id-too-low",
-                part,
+                # the cell is in pages.xml, not in the page part the shapes are in
+                "visio/pages/pages.xml",
                 f"the page sheet declares MaxID {declared} but carries shape {max(shapes)}. "
                 "The next id allocated from it would collide with a shape that already exists.",
             )
@@ -158,9 +210,12 @@ def _shape_ids(container: ET.Element | None) -> list[int]:
         return []
     found: list[int] = []
     for shape in container.findall(f"{_MAIN_NS}Shape"):
+        # int(), not isdigit(): '\u00b2'.isdigit() is True and int('\u00b2') raises.
         raw = shape.attrib.get("ID")
-        if raw is not None and raw.isdigit():
-            found.append(int(raw))
+        if raw is not None:
+            # a non-numeric id is the schema's business, not this rule's
+            with contextlib.suppress(ValueError):
+                found.append(int(raw))
         found.extend(_shape_ids(shape.find(f"{_MAIN_NS}Shapes")))
     return found
 
@@ -173,9 +228,10 @@ def _glue_endpoints(contents: ET.Element) -> list[tuple[str, int]]:
     endpoints = []
     for connect in container.findall(f"{_MAIN_NS}Connect"):
         for attribute, role in (("FromSheet", "source"), ("ToSheet", "target")):
-            raw = connect.attrib.get(attribute, "")
-            if raw.lstrip("-").isdigit():
-                endpoints.append((role, int(raw)))
+            try:
+                endpoints.append((role, int(connect.attrib.get(attribute, ""))))
+            except ValueError:
+                continue
     return endpoints
 
 
@@ -186,6 +242,10 @@ def _relationship_defects(archive: zipfile.ZipFile, members: set[str]) -> list[D
     defects: list[Defect] = []
     for member in sorted(members):
         if not member.endswith(".rels"):
+            continue
+        parsed = _parse(archive, member)
+        if isinstance(parsed, Defect):
+            defects.append(parsed)
             continue
         for identifier, target, external in _relationship_entries(archive, member):
             if external:
@@ -204,7 +264,10 @@ def _relationship_defects(archive: zipfile.ZipFile, members: set[str]) -> list[D
 def _relationship_entries(archive: zipfile.ZipFile, rels_part: str) -> list[tuple[str, str, bool]]:
     base = rels_part.rsplit("/_rels/", 1)[0] if "/_rels/" in rels_part else ""
     entries = []
-    for relationship in ET.fromstring(archive.read(rels_part)):
+    parsed = _parse(archive, rels_part)
+    if isinstance(parsed, Defect):
+        return []  # reported once, by the caller that walks every .rels part
+    for relationship in parsed:
         target = relationship.attrib.get("Target", "")
         identifier = relationship.attrib.get("Id", "")
         if not target or not identifier:
@@ -223,13 +286,24 @@ def _relationships(archive: zipfile.ZipFile, rels_part: str, members: set[str]) 
 def _resolve(base: str, target: str) -> str:
     """Resolve a relationship target to a package-absolute member name.
 
+    A `Target` is a URI reference and a zip member name is not, so a part whose
+    name holds a space or a non-ASCII character arrives percent-encoded here and
+    has to be decoded before it will match anything. Embedded images and OLE
+    parts are where this usually shows up. Any fragment is not part of the name.
+
     Targets are relative to the part's own directory and may walk upwards with
     `../`, which `posixpath.normpath` handles; a leading `/` is already absolute
-    and only needs its slash removing, since zip members carry no leading slash.
+    and only needs its slash removing.
     """
+    target = urllib.parse.unquote(target.split("#", 1)[0])
     if target.startswith("/"):
         return target[1:]
     return posixpath.normpath(posixpath.join(base, target)) if base else posixpath.normpath(target)
+
+
+def _normalise_part(part: str) -> str:
+    """Fold a part name for comparison: no leading slash, ASCII case-insensitive."""
+    return part.lstrip("/").lower()
 
 
 def _extension(member: str) -> str:
@@ -246,20 +320,26 @@ def _content_type_defects(archive: zipfile.ZipFile, members: set[str]) -> list[D
     if _CONTENT_TYPES not in members:
         return [Defect("missing-part", _CONTENT_TYPES, "the package has no content types part")]
 
+    parsed = _parse(archive, _CONTENT_TYPES)
+    if isinstance(parsed, Defect):
+        return [parsed]
     defaults: set[str] = set()
-    overrides: set[str] = set()
-    for entry in ET.fromstring(archive.read(_CONTENT_TYPES)):
+    overrides: dict[str, str] = {}
+    for entry in parsed:
         if entry.tag.endswith("Default"):
             defaults.add(entry.attrib.get("Extension", "").lower())
         elif entry.tag.endswith("Override"):
-            overrides.add(entry.attrib.get("PartName", "").lstrip("/"))
+            # OPC compares part names case-insensitively (ECMA-376 Part 2), so a
+            # package whose Override says /visio/Pages/Page1.xml for a member
+            # written visio/pages/page1.xml is valid and must not be reported.
+            overrides[_normalise_part(entry.attrib.get("PartName", ""))] = entry.attrib.get("PartName", "")
 
     defects: list[Defect] = []
     for member in sorted(members):
         if member == _CONTENT_TYPES or member.endswith("/"):
             continue
         extension = _extension(member)
-        if member in overrides or extension in defaults:
+        if _normalise_part(member) in overrides or extension in defaults:
             continue
         defects.append(
             Defect(
@@ -269,7 +349,10 @@ def _content_type_defects(archive: zipfile.ZipFile, members: set[str]) -> list[D
                 f"{'.' + extension if extension else 'a part with no extension'}",
             )
         )
-    for part in sorted(overrides):
-        if part not in members:
-            defects.append(Defect("missing-part", _CONTENT_TYPES, f"an Override declares {part}, which is not in the package"))
+    normalised_members = {_normalise_part(member) for member in members}
+    for normalised, declared in sorted(overrides.items()):
+        if normalised not in normalised_members:
+            defects.append(
+                Defect("missing-part", _CONTENT_TYPES, f"an Override declares {declared}, which is not in the package")
+            )
     return defects

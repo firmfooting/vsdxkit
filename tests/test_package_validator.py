@@ -178,3 +178,85 @@ def test_the_opc_extension_of_a_dotfile_part_is_read_from_its_final_period():
     assert _extension("_rels/.rels") == "rels"
     assert _extension("visio/document.xml") == "xml"
     assert _extension("visio/pages/noextension") == ""
+
+
+@pytest.mark.allow_invalid_package
+class TestPackagesThatCannotBeRead:
+    """An unreadable package is a defect to report, not an exception to raise.
+
+    These run at test teardown, where an exception surfaces as a traceback into
+    conftest that names neither the test nor the marker that would have silenced
+    it. A package whose XML is malformed is exactly what the report is for.
+    """
+
+    def test_a_part_that_will_not_parse_is_a_defect(self, broken):
+        path = broken("test1.vsdx", {PAGE1: ("<PageContents", "<not well formed")})
+
+        assert "unreadable-part" in _kinds(path)
+
+    def test_content_types_that_will_not_parse_is_a_defect(self, broken):
+        path = broken("test1.vsdx", {CONTENT_TYPES: ("<Types ", "<nope <<")})
+
+        assert "unreadable-part" in _kinds(path)
+
+    def test_an_archive_that_is_not_a_zip_is_a_defect(self, tmp_path):
+        path = tmp_path / "notazip.vsdx"
+        path.write_bytes(b"this is not a zip file")
+
+        assert _kinds(str(path)) == ["unreadable-package"]
+
+
+@pytest.mark.allow_invalid_package
+class TestArchiveShape:
+    def test_a_part_named_twice_is_a_defect(self, tmp_path, basedir):
+        """`zipfile` reads the last entry and ignores the first, silently.
+
+        `ZipFile.writestr` emits a duplicate name with only a warning, so a
+        writer can produce this, and readers disagree about which copy counts.
+        A set of member names would hide it.
+        """
+        path = str(tmp_path / "dupe.vsdx")
+        with zipfile.ZipFile(f"{basedir}/test1.vsdx") as original, zipfile.ZipFile(path, "w") as rewritten:
+            for entry in original.infolist():
+                rewritten.writestr(entry, original.read(entry.filename))
+            with pytest.warns(UserWarning, match="Duplicate name"):
+                rewritten.writestr(PAGE1, b"<PageContents/>")
+
+        assert "duplicate-member" in _kinds(path)
+
+
+class TestNamesThatLookWrongButAreNot:
+    """Valid packages the obvious implementation reports as broken."""
+
+    def test_an_override_naming_a_part_in_another_case_is_accepted(self, broken):
+        """OPC compares part names case-insensitively (ECMA-376 Part 2)."""
+        path = broken(
+            "test1.vsdx",
+            {CONTENT_TYPES: ("/visio/pages/page1.xml", "/visio/Pages/Page1.xml")},
+        )
+
+        assert _kinds(path) == []
+
+    def test_a_percent_encoded_relationship_target_resolves(self, tmp_path, basedir):
+        """A Target is a URI reference; a zip member name is not.
+
+        A part whose name holds a space arrives percent-encoded in the
+        relationship and has to be decoded before it matches anything. Embedded
+        images are where this usually turns up.
+        """
+        path = str(tmp_path / "encoded.vsdx")
+        with zipfile.ZipFile(f"{basedir}/test1.vsdx") as original, zipfile.ZipFile(path, "w") as rewritten:
+            for entry in original.infolist():
+                data = original.read(entry.filename)
+                if entry.filename == "visio/_rels/document.xml.rels":
+                    data = data.replace(
+                        b'<Relationship Id="rId1"',
+                        b'<Relationship Id="rIdImage" Type="http://x" Target="media/image%201.png"/><Relationship Id="rId1"',
+                        1,
+                    )
+                elif entry.filename == CONTENT_TYPES:
+                    data = data.replace(b"<Default", b'<Default Extension="png" ContentType="image/png"/><Default', 1)
+                rewritten.writestr(entry, data)
+            rewritten.writestr("visio/media/image 1.png", b"\x89PNG")
+
+        assert "missing-part" not in _kinds(path)

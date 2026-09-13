@@ -3,7 +3,13 @@
 import os
 import zipfile
 
+import pytest
+
 from vsdx.vsdxdiff import VisioFileDiff
+
+# Every package here is a two-member archive built to exercise the differ's
+# byte comparison. There is no document in them to have structural defects.
+pytestmark = pytest.mark.allow_invalid_package
 
 basedir = os.path.dirname(os.path.realpath(__file__))
 
