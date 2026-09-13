@@ -1,7 +1,6 @@
 # Contributions are welcome!
 
-This repository is the `vsdxkit` fork of
-[dave-howard/vsdx](https://github.com/dave-howard/vsdx). The distribution
+This repository is `vsdxkit`. The distribution
 installs as `vsdxkit` and imports as `vsdx`. Python 3.10 or later is required.
 
 #### Development environment
@@ -102,11 +101,11 @@ never to PyPI, so the tag and changelog checks can never be skipped on the path
 that produces a real, uncorrectable release. Rehearsing needs its own pending
 publisher on TestPyPI and a `testpypi` environment on the repository.
 
-#### Upstream
-This repository is a fork and its history is periodically reconciled with
-upstream. If your change would also benefit the original project, consider
-opening it at <https://github.com/dave-howard/vsdx> first — but issues and
-pull requests here are just as welcome.
+#### The project this one descends from
+vsdxkit began as a fork of [dave-howard/vsdx](https://github.com/dave-howard/vsdx)
+and is now developed independently — it does not track that project. If a change
+you are making is a plain bug fix that would help users of the original too,
+offering it there as well is a kindness, but nothing here depends on it.
 
 #### Security
 Please report vulnerabilities privately — see [SECURITY.md](SECURITY.md).

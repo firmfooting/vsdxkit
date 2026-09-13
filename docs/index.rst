@@ -46,8 +46,8 @@ into a ``.vsdx`` is not supported.
 Project
 -------
 
-Source and issues: https://github.com/shauneccles/vsdx
+Source and issues: https://github.com/firmfooting/vsdxkit
 
-Upstream project: https://github.com/dave-howard/vsdx
+Descended from: https://github.com/dave-howard/vsdx
 
 * :ref:`genindex`

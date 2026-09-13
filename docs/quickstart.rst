@@ -8,7 +8,7 @@ Installation
 
 .. code-block:: console
 
-   python -m pip install "vsdxkit @ git+https://github.com/shauneccles/vsdx.git"
+   python -m pip install "vsdxkit @ git+https://github.com/firmfooting/vsdxkit.git"
 
 The distribution name and import name differ deliberately:
 
@@ -67,8 +67,8 @@ Development install
 
 .. code-block:: console
 
-   git clone https://github.com/shauneccles/vsdx.git
-   cd vsdx
+   git clone https://github.com/firmfooting/vsdxkit.git
+   cd vsdxkit
    uv sync --locked --group docs
    uv run --no-sync python -m pytest tests -q
    uv run --no-sync ruff check vsdx tests/test_imports.py tests/test_shape_coordinates.py

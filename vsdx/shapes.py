@@ -386,8 +386,11 @@ class Shape:
         returns a dictionary of DataProperty objects indexed by property label
 
         The result is cached against this shape's own ``Property`` rows, so
-        adding, removing or replacing one is picked up on the next read. Two
-        limitations remain, both about inherited properties:
+        adding, removing or replacing one is picked up on the next read. A row
+        edited *in place* is not: the cache is keyed on row identity, so
+        renaming a property's ``Label`` leaves the dictionary keyed under the
+        old label until some row is added or removed. Two further limitations
+        concern inherited properties:
 
         - A property inherited from a master is resolved when this shape is
           first read. Editing the master afterwards is not reflected here,

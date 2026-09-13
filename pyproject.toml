@@ -35,10 +35,10 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/shauneccles/vsdx"
-Documentation = "https://github.com/shauneccles/vsdx/tree/main/docs"
-Issues = "https://github.com/shauneccles/vsdx/issues"
-Upstream = "https://github.com/dave-howard/vsdx"
+Homepage = "https://github.com/firmfooting/vsdxkit"
+Documentation = "https://github.com/firmfooting/vsdxkit/tree/main/docs"
+Issues = "https://github.com/firmfooting/vsdxkit/issues"
+"Original project" = "https://github.com/dave-howard/vsdx"
 
 [dependency-groups]
 docs = [

@@ -1,14 +1,14 @@
 # vsdxkit
 
-[![CI](https://github.com/shauneccles/vsdx/actions/workflows/ci.yml/badge.svg)](https://github.com/shauneccles/vsdx/actions/workflows/ci.yml)
+[![CI](https://github.com/firmfooting/vsdxkit/actions/workflows/ci.yml/badge.svg)](https://github.com/firmfooting/vsdxkit/actions/workflows/ci.yml)
 [![Python 3.10–3.14](https://img.shields.io/badge/python-3.10%E2%80%933.14-blue.svg)](https://www.python.org/)
 [![BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-green.svg)](LICENSE)
 
 Create, edit and analyse Microsoft Visio `.vsdx` files with Python. Visio is not required at runtime.
 
-The distribution is named **`vsdxkit`**. The import remains **`vsdx`** for compatibility with the upstream library.
+The distribution is named **`vsdxkit`**. The import remains **`vsdx`**, so existing code keeps working.
 
-This fork extends [`dave-howard/vsdx`](https://github.com/dave-howard/vsdx) with shape creation, Visio-faithful connectors, connector re-anchoring, cross-functional flowchart swimlanes, stricter package handling, current Python tooling and typed public APIs.
+vsdxkit adds shape creation, Visio-faithful connectors, connector re-anchoring, cross-functional flowchart swimlanes, stricter package handling, current Python tooling and typed public APIs. It began as a fork of [`dave-howard/vsdx`](https://github.com/dave-howard/vsdx) and is now developed as its own project; see [Provenance and licence](#provenance-and-licence).
 
 ## What it does
 
@@ -29,14 +29,14 @@ The implementation edits the XML parts inside the Open Packaging Convention arch
 `vsdxkit` is not yet published on PyPI. Install it from GitHub:
 
 ```bash
-python -m pip install "vsdxkit @ git+https://github.com/shauneccles/vsdx.git"
+python -m pip install "vsdxkit @ git+https://github.com/firmfooting/vsdxkit.git"
 ```
 
 For development:
 
 ```bash
-git clone https://github.com/shauneccles/vsdx.git
-cd vsdx
+git clone https://github.com/firmfooting/vsdxkit.git
+cd vsdxkit
 uv sync --locked
 ```
 
@@ -201,4 +201,6 @@ interpreter.
 
 ## Provenance and licence
 
-`vsdxkit` is a fork of [`dave-howard/vsdx`](https://github.com/dave-howard/vsdx), originally written by Dave Howard. The fork keeps the `vsdx` import namespace and BSD-3-Clause licence. See [`LICENSE`](LICENSE).
+vsdxkit descends from [`dave-howard/vsdx`](https://github.com/dave-howard/vsdx), originally written by Dave Howard and released under the BSD 3-Clause licence. That work is the foundation this library is built on, and its copyright notice is retained in [`LICENSE`](LICENSE) alongside our own.
+
+vsdxkit is now developed independently: it is not a downstream of that project and does not track it. The `vsdx` import namespace is kept so existing code continues to work, and the licence remains BSD 3-Clause.
