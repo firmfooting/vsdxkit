@@ -431,12 +431,6 @@ class Shape(DocumentPart):
 
     xml: Element
     parent: vsdx.Page | Shape
-    tag: str
-    ID: str | None
-    master_shape_ID: str | None
-    master_page_ID: str | None
-    shape_type: str | None
-    shape_name: str | None
     page: vsdx.Page
     cells: dict[str, Cell]
     _geometry: vsdx.Geometry | None
@@ -450,14 +444,6 @@ class Shape(DocumentPart):
     def __init__(self, xml: Element, parent: vsdx.Page | Shape, page: vsdx.Page):
         self.xml = xml
         self.parent = parent
-        self.tag = xml.tag
-        self.ID = xml.attrib.get("ID", None)
-        self.master_shape_ID = xml.attrib.get("MasterShape", None)
-        self.master_page_ID = xml.attrib.get("Master", None)  # i.e. '2', note: the master_page.name not list index
-        if self.master_page_ID is None and isinstance(parent, Shape):  # in case of a sub_shape
-            self.master_page_ID = parent.master_page_ID
-        self.shape_type = xml.attrib.get("Type", None)
-        self.shape_name = xml.attrib.get("NameU") or xml.get("Name")
         self.page = page
 
         # get Cells in Shape
@@ -511,6 +497,76 @@ class Shape(DocumentPart):
 
     def __hash__(self):
         return hash((self.ID, self.page.name, self.page.vis.filename))
+
+    # A Shape is a view onto its element, not a snapshot of it. Everything below
+    # is read from `self.xml` on each access rather than copied in __init__,
+    # because a copy is a second store of the same fact and every writer of the
+    # element then has to remember to update it. `renumber_shape_ids` did not,
+    # which left a live Shape naming an id that was no longer on the page: glue
+    # written from it dangled, and deleting it missed the connectors glued to
+    # it. See #320, and #278 for the same pattern in the Connect records.
+
+    @property
+    def tag(self) -> str:
+        """The element's tag: ``<Shape>``, or ``<Shapes>`` for a group's container."""
+        return self.xml.tag
+
+    @property
+    def ID(self) -> str | None:
+        """This shape's page-scoped id, as its element declares it.
+
+        Read-only. An id is not the shape's alone to change: the element
+        attribute, the page's ``Connect`` records and the ``Sheet.N!``
+        references in other shapes' formulas all name it, and only
+        :meth:`VisioFile.renumber_shape_ids` moves the three together.
+        """
+        return self.xml.attrib.get("ID")
+
+    @property
+    def master_page_ID(self) -> str | None:
+        """The id of the master this shape instances, or its group's.
+
+        A sub-shape of a group usually carries no ``Master`` of its own and
+        instances whatever its group does, so it falls back to the parent's.
+        Note this is the master page's id, not its index in
+        :attr:`VisioFile.master_pages`.
+        """
+        own = self.xml.attrib.get("Master")
+        if own is None and isinstance(self.parent, Shape):
+            return self.parent.master_page_ID
+        return own
+
+    @master_page_ID.setter
+    def master_page_ID(self, value: str | None) -> None:
+        """Repoint the shape at another master, or at none.
+
+        Writing ``None`` drops the attribute, which puts a sub-shape back to
+        inheriting its group's master.
+        """
+        if value is None:
+            self.xml.attrib.pop("Master", None)
+        else:
+            self.xml.attrib["Master"] = value
+
+    @property
+    def master_shape_ID(self) -> str | None:
+        """The id of the shape inside the master that this shape instances.
+
+        Read-only, unlike :attr:`master_page_ID`: which member of a master an
+        instance derives from is settled when the instance is created, and
+        nothing in this library repoints it afterwards.
+        """
+        return self.xml.attrib.get("MasterShape")
+
+    @property
+    def shape_type(self) -> str | None:
+        """The element's ``Type``: ``'Shape'``, ``'Group'``, ``'Foreign'`` and so on."""
+        return self.xml.attrib.get("Type")
+
+    @property
+    def shape_name(self) -> str | None:
+        """The shape's universal name, falling back to its localised one."""
+        return self.xml.attrib.get("NameU") or self.xml.attrib.get("Name")
 
     @property
     @override
@@ -1499,6 +1555,16 @@ class Shape(DocumentPart):
         # call, and the one the old error message recommended -- would raise.
         # Detaching first is also what stops the element gaining a second
         # parent, which is the problem the rejection existed to prevent.
+        if any(element is self.xml for element in append_shape.xml.iter()):
+            # Appending a shape into itself, or into something already inside
+            # it, makes the element its own descendant: the page loses both
+            # shapes (they are detached from the page and re-parented into each
+            # other) and every walk of the subtree recurses forever. `a.append_
+            # shape(b); b.append_shape(a)` is the way in.
+            raise ValueError(
+                f"shape ID={append_shape.ID} cannot be placed inside shape ID={self.ID}, "
+                "which is the shape itself or one of the shapes inside it"
+            )
         current_parent = parent_of(self.page.xml.getroot(), append_shape.xml)
         if current_parent is None:
             # New to the page, so it needs ids; a move keeps the ones it has,
@@ -1511,9 +1577,8 @@ class Shape(DocumentPart):
         # the allocation refused the call
         container = self.xml if wraps_shapes_tag else find_or_create_shapes_tag(self.xml)
         container.append(append_shape.xml)
-        # The Shape object cached its ID and its parent at construction; both
-        # have just changed underneath it.
-        append_shape.ID = append_shape.xml.attrib.get("ID")
+        # The ID follows the element on its own; the parent is the Shape
+        # object's own state and nothing else updates it.
         append_shape.parent = self
 
     @property
