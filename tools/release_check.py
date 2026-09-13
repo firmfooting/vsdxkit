@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import subprocess
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -54,10 +55,59 @@ def section_for(version: str, changelog: Path | None = None) -> str | None:
     return "\n".join(lines[start:]).strip("\n")
 
 
+
+def _conventional_subjects(since_tag: str) -> list[str] | None:
+    """Subjects of every commit since `since_tag` that should reach the changelog.
+
+    None if git cannot answer - a shallow checkout has no history to compare
+    against, and refusing a release on that basis would block the workflow
+    rather than catch anything.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "log", "--format=%s", f"{since_tag}..HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    wanted = ("feat", "fix", "perf")
+    subjects = []
+    for line in result.stdout.splitlines():
+        type_, separator, rest = line.partition(":")
+        if not separator or type_.rstrip("!").split("(")[0] not in wanted:
+            continue
+        subjects.append(rest.strip().removesuffix(")").rpartition(" (#")[0] or rest.strip())
+    return subjects
+
+
+def missing_from_changelog(body: str, since_tag: str) -> list[str]:
+    """Commits that should be in this release's section and are not.
+
+    release-please writes the section, and has been observed to drop a commit
+    silently - two `fix!` subjects went missing from the 0.8.0 section, both
+    breaking public API changes. A release whose changelog omits a breaking
+    change is worse than a late one, and PyPI will not let the version be
+    reused, so this is checked before the publish rather than after.
+    """
+    subjects = _conventional_subjects(since_tag)
+    if subjects is None:
+        return []
+    return [subject for subject in subjects if subject not in body]
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("version", help="the version being released, e.g. 0.7.0")
     parser.add_argument("--changelog", type=Path, default=None, help="changelog path (defaults to the repo's)")
+    parser.add_argument(
+        "--since",
+        default=None,
+        help="previous release tag; when given, every feat/fix/perf commit after it must appear in the section",
+    )
     args = parser.parse_args(argv)
 
     body = section_for(args.version, args.changelog)
@@ -76,6 +126,22 @@ def main(argv: list[str]) -> int:
             f"A release cannot be published with no record of what changed."
         )
         return 1
+    if args.since:
+        missing = missing_from_changelog(body, args.since)
+        if missing:
+            print(
+                f"FAIL: the CHANGELOG.md section for {args.version} is missing "
+                f"{len(missing)} commit(s) since {args.since}:"
+            )
+            for subject in missing:
+                print(f"  {subject}")
+            print(
+                "release-please writes this section and can drop a commit. Add the missing entries to the "
+                "release pull request before merging it; a published version number cannot be reused."
+            )
+            return 1
+        print(f"ok: every feat/fix/perf commit since {args.since} appears in the section")
+
     print(f"ok: CHANGELOG.md documents {args.version}")
     return 0
 
