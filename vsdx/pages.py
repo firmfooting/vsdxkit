@@ -508,23 +508,41 @@ class Page:
         :raises ValueError: if the shape is not on this page
         """
         shape_id = str(shape.ID)
-        if not any(str(s.ID) == shape_id for s in self.all_shapes):
-            # silently doing nothing would hide a double delete, or a shape
-            # taken from another page
-            raise ValueError(f"shape ID {shape.ID} is not on page {self.name!r}")
+        # Identity, not id: Visio shape ids are page-scoped and collide freely
+        # across pages, so matching on the number would accept a shape from a
+        # different page and then delete whichever shape here shared its id.
+        # Silently doing nothing would instead hide a double delete.
+        # all_shapes walks the page and builds a Shape per element, so gather
+        # both answers in one pass.
+        on_this_page: list[Shape] = []
+        id_is_taken_by_another_shape = False
+        for candidate in self.all_shapes:
+            if candidate.xml is shape.xml:
+                on_this_page.append(candidate)
+            elif str(candidate.ID) == shape_id:
+                id_is_taken_by_another_shape = True
+        if not on_this_page:
+            # naming only the id would send a caller looking for it, finding a
+            # different shape wearing the same number, and concluding the
+            # library is wrong
+            collision = (
+                f"; a different shape on this page has id {shape.ID}, because ids are page-scoped"
+                if id_is_taken_by_another_shape
+                else ""
+            )
+            raise ValueError(f"shape ID {shape.ID} is not on page {self.name!r}{collision}")
         # every id that is about to disappear: the shape and, for a group,
         # everything it contains
         doomed_ids = {shape_id} | {str(s.ID) for s in shape.all_shapes}
         # connectors are the FromSheet of Connect records whose ToSheet is one
         # of the doomed shapes, on a begin/end relationship
         connector_ids = {c.from_id for c in self.connects if c.to_id in doomed_ids and c.from_rel in ("BeginX", "EndX")}
-        doomed = set()
+        doomed = set(on_this_page)
         for s in self.all_shapes:
-            sid = str(s.ID)
             # cell_value, not `in s.cells`: a connector may inherit BeginX from
             # its master, and one missed here survives as a detached line whose
             # glue record has just been removed
-            if sid == shape_id or (sid in connector_ids and s.cell_value("BeginX") is not None):
+            if str(s.ID) in connector_ids and s.cell_value("BeginX") is not None:
                 doomed.add(s)
         for s in doomed:
             self._remove_shape_xml(s)

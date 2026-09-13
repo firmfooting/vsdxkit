@@ -111,6 +111,11 @@ history precedes 0.6.3 here, remains available at
 
 ### Fixed
 
+- `Page.delete_shape()` identifies the shape by element rather than by ID.
+  Visio shape IDs are page-scoped and collide, so handing a page a shape
+  belonging to a different page satisfied the guard and then deleted whichever
+  shape on *this* page happened to share the number. It now raises `ValueError`,
+  and says so when an ID collision is what made the call look plausible.
 - `Shape.remove()` is deprecated and now delegates to `Page.delete_shape()`, the
   single deletion path. It previously detached the element and nothing else,
   leaving orphan connectors and dangling `Connect` records that Visio repairs on

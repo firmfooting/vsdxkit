@@ -164,3 +164,23 @@ def test_an_inherited_begin_cell_still_marks_a_shape_as_a_connector(vsdx_copy):
         page.delete_shape(start)
 
         assert connector.ID not in {shape.ID for shape in page.all_shapes}
+
+
+def test_deleting_a_shape_belonging_to_another_page_is_refused(vsdx_copy):
+    """Shape IDs are page-scoped and collide, so the guard cannot match on ID.
+
+    `test1.vsdx` has a shape with ID 1 on both Page-1 and Page-3. Handing one
+    page a shape from the other used to satisfy the guard by ID and then delete
+    whichever shape on *this* page happened to share the number.
+    """
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        page1, page3 = vis.pages[0], vis.pages[2]
+        victim = page1.find_shape_by_id("1")
+        bystander_ids = [shape.ID for shape in page3.all_shapes]
+        assert victim is not None and "1" in bystander_ids, "fixture must have colliding ids"
+
+        with pytest.raises(ValueError, match="not on page"):
+            page3.delete_shape(victim)
+
+        assert [shape.ID for shape in page3.all_shapes] == bystander_ids
+        assert page1.find_shape_by_id("1") is not None
