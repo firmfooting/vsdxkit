@@ -811,45 +811,124 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         root = self._part_root(self.app_xml, "docProps/app.xml")
         return require_element(root.find(f"{ext_prop_namespace}TitlesOfParts"), "app.xml TitlesOfParts")
 
-    def _titles_of_parts_list(self) -> list[str]:
-        # return list of strings
-        vector = require_element(self._titles_of_parts().find(f".//{vt_namespace}vector"), "TitlesOfParts vector")
-        return [t.text or "" for t in vector]
+    def _heading_pairs_list(self) -> list[tuple[str, Element]]:
+        """Each section HeadingPairs names, as (name, the element holding its count).
 
-    def _add_titles_of_parts_item(self, title: str) -> None:
-        titles = self._titles_of_parts()
-        # new variant appended to vector Element
-        vector = require_element(titles.find(f".//{vt_namespace}vector"), "TitlesOfParts vector")
-        new_title = Element(f"{vt_namespace}lpstr", {})
-        new_title.text = title
-        vector.append(new_title)
-        # add one to vector size, as we have added two new variant elements
-        vector.attrib["size"] = str(int(vector.attrib.get("size", 0)) + 1)
+        HeadingPairs is a flat vector of variants holding a name and then a
+        count, and that order is what cuts TitlesOfParts into sections: where
+        one section's titles begin is the sum of every count written before it.
+
+        The count is taken from the variant after the name rather than from an
+        even/odd position in the vector, so one variant that is neither leaves
+        every section after it where it was. This is the only reading of
+        HeadingPairs in the package, and it yields the element rather than the
+        number so that writing a count does not need a second one. Two readings
+        is how a count came to be read from a section that was not there and
+        written to one that was.
+        """
+        variants = self._heading_pairs().findall(f".//{vt_namespace}variant")
+        pairs: list[tuple[str, Element]] = []
+        for position, variant in enumerate(variants[:-1]):
+            name = variant.find(f".//{vt_namespace}lpstr")
+            count = variants[position + 1].find(f".//{vt_namespace}i4")
+            if name is not None and count is not None:
+                pairs.append((name.text or "", count))
+        return pairs
+
+    def _titles_of_parts_section(self, section: str) -> tuple[Element, int, int]:
+        """The TitlesOfParts vector, and the ``[start, stop)`` slice of it `section` owns.
+
+        A section HeadingPairs does not mention owns the empty slice at the end
+        of the vector: it has no titles yet, and the first one it gets belongs
+        after every title already spoken for.
+
+        The slice stops at the end of the vector however large the counts are.
+        They come from whatever wrote the file, and a count read as a position
+        is a count that can point past the last title there is. Only the slice
+        is clipped: the count itself is the file's to keep.
+        """
+        vector = require_element(self._titles_of_parts().find(f"{vt_namespace}vector"), "TitlesOfParts vector")
+        total = len(vector)
+        start = 0
+        for name, count in self._heading_pairs_list():
+            titles_here = int(count.text or 0)
+            if name == section:
+                return vector, min(start, total), min(start + titles_here, total)
+            start += titles_here
+        return vector, total, total
+
+    def _section_count(self, section: str, change: int) -> None:
+        """Add `change` to `section`'s count in HeadingPairs, creating the pair if needed.
+
+        The stored count is what moves, not the length of the slice it turned
+        out to name: a section reporting more titles than the vector holds
+        still knows how many parts it has, and re-deriving the number from
+        where the titles ended up would throw that away.
+        """
+        self._set_app_xml_value(section, str(int(self._get_app_xml_value(section) or 0) + change))
+
+    def _titles_of_parts_insert(self, title: str, section: str) -> None:
+        """Name a part in TitlesOfParts under `section`, and count it there.
+
+        The title goes at the end of its own section rather than the end of the
+        vector. Appending a page title to a document that has masters puts it
+        past the Pages/Masters boundary, where it names the last master and
+        every master name after the boundary slides onto the wrong master.
+
+        A part the section already names is left alone. The one caller that
+        needs that made the check itself, against every title in the document
+        rather than this section's, so a page called the same thing as the
+        master being added stopped the master being listed at all.
+        """
+        vector, start, stop = self._titles_of_parts_section(section)
+        if any(vector[position].text == title for position in range(start, stop)):
+            return
+        entry = Element(f"{vt_namespace}lpstr")
+        entry.text = title
+        vector.insert(stop, entry)
+        vector.attrib["size"] = str(len(vector))
+        self._section_count(section, 1)
+
+    def _titles_of_parts_remove(self, title: str, section: str) -> None:
+        """Drop `section`'s entry for `title`, and stop counting it.
+
+        The count moves only when an entry does, and only this section's
+        entries are candidates: a page and a master can be called the same
+        thing, and the one being removed is the one in this section.
+        """
+        vector, start, stop = self._titles_of_parts_section(section)
+        for position in range(start, stop):
+            if vector[position].text == title:
+                del vector[position]
+                vector.attrib["size"] = str(len(vector))
+                self._section_count(section, -1)
+                return
+
+    def _titles_of_parts_rename(self, old_title: str, new_title: str, section: str) -> None:
+        """Rewrite `section`'s entry for `old_title` in place.
+
+        In place rather than a removal and an insertion: nothing joins or
+        leaves the section, so neither its count nor the order of its titles
+        has any business changing.
+        """
+        vector, start, stop = self._titles_of_parts_section(section)
+        for position in range(start, stop):
+            if vector[position].text == old_title:
+                vector[position].text = new_title
+                return
 
     def _get_app_xml_value(self, name: str) -> str | None:
-        variants = self._heading_pairs().findall(f".//{vt_namespace}variant")
-        # find Pages in headings
-        for index in range(len(variants)):
-            v = variants[index]
-            lpstr = v.find(f".//{vt_namespace}lpstr")
-            if type(lpstr) is Element and lpstr.text == name:
-                next_v = variants[index + 1] if index < (len(variants) - 1) else None  # next variant if there is one
-                i4 = next_v.find(f".//{vt_namespace}i4") if type(next_v) is Element else None
-                if type(i4) is Element:
-                    return i4.text or ""
+        """The count HeadingPairs gives `name`, or None if it names no such section."""
+        for section, count in self._heading_pairs_list():
+            if section == name:
+                return count.text or ""
+        return None
 
     def _set_app_xml_value(self, name: str, value: str) -> None:
-        variants = self._heading_pairs().findall(f".//{vt_namespace}variant")
-        # find Pages in headings
-        for index in range(len(variants)):
-            v = variants[index]
-            lpstr = v.find(f".//{vt_namespace}lpstr")
-            if type(lpstr) is Element and lpstr.text == name:
-                next_v = variants[index + 1] if index < (len(variants) - 1) else None  # next variant if there is one
-                i4 = next_v.find(f".//{vt_namespace}i4") if type(next_v) is Element else None
-                if type(i4) is Element:
-                    i4.text = value
-                    return
+        for section, count in self._heading_pairs_list():
+            if section == name:
+                count.text = value
+                return
         # no matching variant found - so create new item and populate it
         vector = require_element(
             self._heading_pairs().find(f".//{vt_namespace}vector"), "HeadingPairs vector"
@@ -868,37 +947,29 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         vector.attrib["size"] = str(int(vector.attrib.get("size", 0)) + 2)
 
     def _add_page_to_app_xml(self, new_page_name: str) -> None:
-        # todo: use _add_titles_of_parts_item()
-        heading_pairs = self._heading_pairs()
-        i4 = require_element(heading_pairs.find(f".//{vt_namespace}i4"), "HeadingPairs i4")
-        num_pages = int(i4.text or 0)
-        i4.text = str(num_pages + 1)  # increment as page added
+        self._titles_of_parts_insert(new_page_name, "Pages")
 
-        vector = require_element(self._titles_of_parts().find(f"{vt_namespace}vector"), "TitlesOfParts vector")
-
-        lpstr = Element(f"{vt_namespace}lpstr")
-        lpstr.text = new_page_name
-        vector.append(lpstr)  # add new lpstr element with new page name
-        vector_size = int(vector.attrib["size"])
-        vector.set("size", str(vector_size + 1))  # increment as page added
-
-    def _remove_page_from_app_xml(self, page_name: str):
+    def _remove_page_from_app_xml(self, page_name: str) -> None:
         if self.app_xml is not None:
             logger.debug("_remove_page_from_app_xml()")
-            heading_pairs = self._heading_pairs()
-            i4 = require_element(heading_pairs.find(f".//{vt_namespace}i4"), "HeadingPairs i4")
-            num_pages = int(i4.text or 0)
-            i4.text = str(num_pages - 1)  # decrement as page removed
+            self._titles_of_parts_remove(page_name, "Pages")
 
-            vector = require_element(self._titles_of_parts().find(f"{vt_namespace}vector"), "TitlesOfParts vector")
+    def _rename_page_in_app_xml(self, old_page_name: str, new_page_name: str) -> None:
+        """Keep app.xml's list of page names in step with a page that was renamed.
 
-            for lpstr in vector.findall(f"{vt_namespace}lpstr"):
-                if lpstr.text == page_name:
-                    vector.remove(lpstr)  # remove page from list of names
-                    break
-
-            vector_size = int(vector.attrib["size"])
-            vector.set("size", str(vector_size - 1))  # decrement as page removed
+        Adding or removing a page writes a part into the package, and app.xml
+        not being shaped like app.xml is then a broken document. A rename
+        writes nothing, so a document whose metadata never listed the parts is
+        left as it is rather than made to raise over a property assignment.
+        """
+        if self.app_xml is None:
+            return
+        root = self._part_root(self.app_xml, "docProps/app.xml")
+        if root.find(f"{ext_prop_namespace}HeadingPairs") is None:
+            return
+        if root.find(f"{ext_prop_namespace}TitlesOfParts") is None:
+            return
+        self._titles_of_parts_rename(old_page_name, new_page_name, "Pages")
 
     def _create_page(
         self,

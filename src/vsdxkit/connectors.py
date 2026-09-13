@@ -147,11 +147,11 @@ class Connect:
                 master_part = master_page.filename.replace(page.vis._masters_folder + "/", "")
                 page._ensure_page_master_rel(master_page.rel_id, master_part)
 
-            # TitlesOfParts entry for the master name (app.xml 'Masters' count
-            # is deliberately not written: real Visio packages omit it)
+            # app.xml lists master names too, and the document has just
+            # gained this one
             shape_name = connector_shape.shape_name
-            if shape_name and shape_name not in page.vis._titles_of_parts_list():
-                page.vis._add_titles_of_parts_item(shape_name)
+            if shape_name:
+                page.vis._titles_of_parts_insert(shape_name, "Masters")
 
             # copy style used by new connector shape
             master_shape = connector_shape.master_shape
