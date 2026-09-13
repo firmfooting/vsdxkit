@@ -4,6 +4,7 @@ from datetime import datetime
 import pytest
 
 from vsdxkit import (
+    Shape,
     VisioFile,
 )
 
@@ -256,3 +257,121 @@ def test_jinja_page_showif(filename: str, context: dict, expected_page_count, ex
             page_names.append(p.name)
         assert len(vis.pages) == expected_page_count
         assert page_names == expected_page_names
+
+
+# --------------------------------------------------------------------------
+# `{% set self.x = ... %}` reference resolution (#351)
+# --------------------------------------------------------------------------
+#
+# Every statement in `test_jinja_self_refs.vsdx` uses a one-character attribute
+# name, and for one character "the first character of the name" and "the name"
+# are the same string. That coincidence is what let the resolver read
+# `self_ref[0]` off a string for so long. These tests supply the statement
+# themselves rather than adding fixture shapes, so each fault is reached by the
+# shortest thing that reaches it.
+
+
+def _render_one_self_statement(path: str, shape_id: str, statement: str, context: dict) -> Shape:
+    """Put `statement` on a real shape, run the self-ref pass, return the shape."""
+    with VisioFile(path) as vis:
+        shape = vis.pages[0].find_shape_by_id(shape_id)
+        shape.text = statement
+        VisioFile.jinja_set_selfs(shape, context)
+        return shape
+
+
+def test_a_self_reference_to_a_multi_character_attribute_reads_the_whole_name(basedir):
+    """`self.width` must read `width`, not `w`.
+
+    Fails if the resolver goes back to indexing a `findall` result, which
+    returns strings rather than the tuples the old annotation claimed.
+    """
+    path = os.path.join(basedir, "test_jinja_self_refs.vsdx")
+    with VisioFile(path) as vis:
+        expected = vis.pages[0].find_shape_by_id("4").width
+    shape = _render_one_self_statement(path, "4", "{% set self.y=self.width %}", {})
+    assert shape.y == expected
+
+
+def test_every_self_reference_in_one_expression_is_resolved(basedir):
+    """`self.x+self.y` has two references, and the greedy `(.*)` only ever found one.
+
+    Fails if the name pattern stops being bounded to an identifier: an
+    unresolved `self.y` is left in the string as literal text, and Jinja then
+    resolves `self` to its own `TemplateReference`.
+    """
+    path = os.path.join(basedir, "test_jinja_self_refs.vsdx")
+    with VisioFile(path) as vis:
+        start = vis.pages[0].find_shape_by_id("4")
+        expected = start.x + start.y
+    shape = _render_one_self_statement(path, "4", "{% set self.x=self.x+self.y %}", {})
+    assert shape.x == pytest.approx(expected)
+
+
+def test_a_self_reference_to_an_unknown_attribute_names_the_statement(basedir):
+    """The failure has to say which statement is wrong, in the document's own terms.
+
+    A bare `AttributeError: 'Shape' object has no attribute 'nope'` escaping a
+    template render names something the document never mentioned and points at
+    no part of it.
+    """
+    path = os.path.join(basedir, "test_jinja_self_refs.vsdx")
+    with pytest.raises(ValueError) as failure:
+        _render_one_self_statement(path, "4", "{% set self.x=self.nope %}", {})
+    message = str(failure.value)
+    assert "self.nope" in message
+    assert "{% set self.x=self.nope %}" in message
+
+
+class _SelfRefShape:
+    """The smallest thing `jinja_set_selfs` needs: attributes, and text.
+
+    Stands in for a `Shape` only where the real one cannot express the case.
+    `Shape` today has no pair of *numeric* attributes where one name is a prefix
+    of the other, so the substitution hazard below is unreachable through it --
+    `loc_x`/`loc_x_f` are the closest pair and the second is a formula string.
+    The parser is what is under test, and it reaches the parser exactly.
+    """
+
+    def __init__(self, text: str, **attributes: float) -> None:
+        self.text = text
+        for name, value in attributes.items():
+            setattr(self, name, value)
+
+    @property
+    def x(self) -> float:
+        return self._x
+
+    @x.setter
+    def x(self, value: float | str) -> None:
+        # `Shape.x` parses what the render produced; a stand-in that stored the
+        # string would make these tests agree with a resolver that emitted
+        # anything at all.
+        self._x = float(value)
+
+
+def test_one_reference_is_not_substituted_into_a_longer_one():
+    """`self.ab` must not be rewritten inside `self.abc`.
+
+    `re.findall` yields names in the order they appear, so substituting them
+    one at a time turns `self.ab + self.abc` into `<value>` followed by the
+    orphan text `c`. Fails if the substitution goes back to a sequence of
+    `str.replace` calls instead of a single pass.
+    """
+    shape = _SelfRefShape("{% set self.x=self.ab+self.abc %}", ab=1.0, abc=20.0, x=0.0)
+    VisioFile.jinja_set_selfs(shape, {})
+    assert shape.x == pytest.approx(21.0)
+
+
+def test_spaces_around_the_equals_sign_do_not_drop_the_statement():
+    """`{% set self.x  =  2.0 %}` has to assign, not vanish.
+
+    The statement pattern allowed a single optional space either side, while the
+    pattern that strips the statement out of the text allowed any. So a second
+    space meant the assignment was skipped and the statement removed anyway --
+    a template that silently did nothing.
+    """
+    shape = _SelfRefShape("keep me {% set self.x  =  2.0 %}", x=0.0)
+    VisioFile.jinja_set_selfs(shape, {})
+    assert shape.x == pytest.approx(2.0)
+    assert shape.text == "keep me "
