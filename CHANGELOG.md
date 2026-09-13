@@ -24,7 +24,7 @@ history precedes 0.6.3 here, remains available at
   `RelMoveTo` one; `move()` and the coordinate setters write through an
   inherited row into the master, moving every other shape drawn from it; and a
   row added to a section is placed among the section's cells, ordered by index
-  as text. Issue #76 tracks the fixes.
+  as text. Issues #239, #240 and #241 track the fixes.
 - Package expansion limits: `VisioFile` inspects archive metadata before reading
   members and enforces caps on member count, per-member and total uncompressed
   size and compression ratio, and rejects duplicate and path-unsafe member names,
