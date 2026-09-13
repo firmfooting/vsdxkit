@@ -35,6 +35,7 @@ DOCUMENT_MUTATIONS: dict[str, Mutation] = {
     "insert_shape": lambda vis, page, a, b: vis.insert_shape(a.xml, page.xml.getroot(), page, page.filename),
     "increment_shape_ids": lambda vis, page, a, b: vis.increment_shape_ids(a.xml, page),
     "increment_sub_shape_ids": lambda vis, page, a, b: vis.increment_sub_shape_ids(a, page),
+    "renumber_shape_ids": lambda vis, page, a, b: vis.renumber_shape_ids(a.xml, page),
     "add_page": lambda vis, page, a, b: vis.add_page("new"),
     "add_page_at": lambda vis, page, a, b: vis.add_page_at(0, "new"),
     "copy_page": lambda vis, page, a, b: vis.copy_page(page),
