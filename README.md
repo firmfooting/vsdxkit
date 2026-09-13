@@ -129,11 +129,17 @@ Connector `route` combines glue and routing behaviour:
 Pass only the end that should move. A `None` endpoint keeps the current shape.
 
 ```python
-connector = page.find_shape_by_id("9")
-new_target = page.find_shape_by_text("Store")
+with VisioFile("flow.vsdx") as vis:
+    page = vis.pages[0]
+    store = vis.create_shape(
+        page, "PALETTE_DATABASE", 10.0, 2.0, text="Store"
+    )
 
-if connector is not None and new_target is not None:
-    page.reanchor_connector(connector, to_shape=new_target)
+    # a connector is the shape a Connect record points from
+    connector = page.find_shape_by_id(page.connects[0].from_id)
+    page.reanchor_connector(connector, to_shape=store)
+
+    vis.save_vsdx("reanchored.vsdx")
 ```
 
 Deleting a shape through `page.delete_shape(shape)` also removes incident connectors and their `Connect` records.
