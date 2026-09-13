@@ -42,12 +42,16 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import posixpath
 import re
+import urllib.parse
 import xml.etree.ElementTree as ET
 import zipfile
 from collections import Counter
 from dataclasses import dataclass
 from typing import Any
+
+from helpers.opc import DOC_REL_NS, MAIN_NS, MASTERS_PART, MASTERS_RELS_PART, PAGES_PART, PAGES_RELS_PART
 
 __all__ = [
     "PLACEMENT_CELLS",
@@ -133,9 +137,6 @@ _LITERAL = re.compile(
     """,
     re.IGNORECASE | re.VERBOSE,
 )
-
-_MAIN_NS = "{http://schemas.microsoft.com/office/visio/2012/main}"
-_DOC_REL_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 
 
 @dataclass(frozen=True)
@@ -246,7 +247,6 @@ class Observation:
     label: str
     pages: tuple[PageObservation, ...] = ()
     source_sha256: str = ""
-    viewer_version: str = ""
 
 
 @dataclass(frozen=True)
@@ -618,15 +618,15 @@ def _observation_from_archive(archive: zipfile.ZipFile, label: str, digest: str)
         contents = ET.fromstring(archive.read(part))
         shapes = tuple(
             sorted(
-                _shapes_in(contents.find(f"{_MAIN_NS}Shapes"), parent_id=None, masters=masters, master_id=None),
+                _shapes_in(contents.find(f"{MAIN_NS}Shapes"), parent_id=None, masters=masters, master_id=None),
                 key=_by_shape,
             )
         )
-        connects = tuple(sorted(_connects_in(contents.find(f"{_MAIN_NS}Connects"))))
+        connects = tuple(sorted(_connects_in(contents.find(f"{MAIN_NS}Connects"))))
         pages.append(PageObservation(index=index, name=name, shapes=shapes, connects=connects, background=background))
     if not pages:
         raise ValueError(
-            "this package declares no pages at all. Either visio/pages/pages.xml is missing or it is "
+            f"this package declares no pages at all. Either {PAGES_PART} is missing or it is "
             "empty; comparing it against anything would report agreement on a file with no content."
         )
     return Observation(label=label, pages=tuple(pages), source_sha256=digest)
@@ -647,33 +647,60 @@ def _page_parts(archive: zipfile.ZipFile) -> list[tuple[str, bool, str | None]]:
     actual defect - would surface as a heap of shape differences attributed to
     the wrong page.
     """
-    pages_xml = "visio/pages/pages.xml"
-    if pages_xml not in archive.namelist():
+    if PAGES_PART not in archive.namelist():
         return []
-    relationships = _relationships(archive, "visio/pages/_rels/pages.xml.rels")
+    relationships = _relationships(archive, PAGES_RELS_PART)
     parts: list[tuple[str, bool, str | None]] = []
-    for page in ET.fromstring(archive.read(pages_xml)):
+    for page in ET.fromstring(archive.read(PAGES_PART)):
         # Name is what Visio shows; NameU is the invariant name it falls back to
         name = page.attrib.get("Name") or page.attrib.get("NameU") or ""
-        rel = page.find(f"{_MAIN_NS}Rel")
-        target = None if rel is None else relationships.get(rel.attrib.get(f"{_DOC_REL_NS}id", ""))
+        rel = page.find(f"{MAIN_NS}Rel")
+        target = None if rel is None else relationships.get(rel.attrib.get(f"{DOC_REL_NS}id", ""))
         parts.append((name, page.attrib.get("Background") == "1", target))
     return parts
 
 
 def _relationships(archive: zipfile.ZipFile, rels_part: str) -> dict[str, str]:
-    """Map relationship id to the part it points at, as a package path."""
+    """Map relationship id to the part it points at, as a package path.
+
+    `TargetMode` is not consulted. A page and a master live in this package by
+    definition, so an external target resolves to no member and the page is
+    reported unresolved, which is the right answer either way. The validator
+    does read it, because it asks a different question of every relationship.
+    """
     if rels_part not in archive.namelist():
         return {}
-    base = rels_part.rsplit("/_rels/", 1)[0]
+    # `_rels/.rels` sits at the root and has no directory before `/_rels/`;
+    # without the guard it would become the base for everything it names
+    base = rels_part.rsplit("/_rels/", 1)[0] if "/_rels/" in rels_part else ""
     targets: dict[str, str] = {}
     for relationship in ET.fromstring(archive.read(rels_part)):
         target = relationship.attrib.get("Target", "")
         identifier = relationship.attrib.get("Id", "")
         if not target or not identifier:
             continue
-        targets[identifier] = target[1:] if target.startswith("/") else f"{base}/{target}"
+        targets[identifier] = _resolve(base, target)
     return targets
+
+
+def _resolve(base: str, target: str) -> str:
+    """Turn a relationship `Target` into the zip member name it refers to.
+
+    A `Target` is a URI reference and a zip member name is not. An embedded
+    image or an OLE part routinely has a space or a non-ASCII character in its
+    name, which arrives here percent-encoded and matches no member until it is
+    decoded; the page would then be reported unresolved on a sound package. A
+    fragment is not part of the name, and `../` has to be collapsed before the
+    name can be matched at all.
+
+    The validator resolves a target too, and separately. What the two share is
+    the rule, which the specification fixes; sharing the code would give them
+    one set of mistakes between them.
+    """
+    target = urllib.parse.unquote(target.split("#", 1)[0])
+    if target.startswith("/"):
+        return target[1:]
+    return posixpath.normpath(posixpath.join(base, target))
 
 
 _Master = tuple["ET.Element | None", dict[str, "ET.Element"]]
@@ -687,31 +714,30 @@ def _master_catalogue(archive: zipfile.ZipFile) -> dict[str, _Master]:
     what a group member's `MasterShape='n'` points at.
     """
     catalogue: dict[str, _Master] = {}
-    masters_xml = "visio/masters/masters.xml"
-    if masters_xml not in archive.namelist():
+    if MASTERS_PART not in archive.namelist():
         return catalogue
-    relationships = _relationships(archive, "visio/masters/_rels/masters.xml.rels")
-    for master in ET.fromstring(archive.read(masters_xml)):
+    relationships = _relationships(archive, MASTERS_RELS_PART)
+    for master in ET.fromstring(archive.read(MASTERS_PART)):
         identifier = master.attrib.get("ID")
-        rel = master.find(f"{_MAIN_NS}Rel")
-        target = None if rel is None else relationships.get(rel.attrib.get(f"{_DOC_REL_NS}id", ""))
+        rel = master.find(f"{MAIN_NS}Rel")
+        target = None if rel is None else relationships.get(rel.attrib.get(f"{DOC_REL_NS}id", ""))
         if identifier is None or target is None or target not in archive.namelist():
             continue
         contents = ET.fromstring(archive.read(target))
         by_id: dict[str, ET.Element] = {}
-        _index_shapes(contents.find(f"{_MAIN_NS}Shapes"), by_id)
-        catalogue[identifier] = (contents.find(f"{_MAIN_NS}Shapes/{_MAIN_NS}Shape"), by_id)
+        _index_shapes(contents.find(f"{MAIN_NS}Shapes"), by_id)
+        catalogue[identifier] = (contents.find(f"{MAIN_NS}Shapes/{MAIN_NS}Shape"), by_id)
     return catalogue
 
 
 def _index_shapes(container: ET.Element | None, into: dict[str, ET.Element]) -> None:
     if container is None:
         return
-    for shape in container.findall(f"{_MAIN_NS}Shape"):
+    for shape in container.findall(f"{MAIN_NS}Shape"):
         identifier = shape.attrib.get("ID")
         if identifier is not None:
             into[identifier] = shape
-        _index_shapes(shape.find(f"{_MAIN_NS}Shapes"), into)
+        _index_shapes(shape.find(f"{MAIN_NS}Shapes"), into)
 
 
 def _shapes_in(
@@ -733,23 +759,35 @@ def _shapes_in(
     if container is None:
         return []
     found: list[ShapeObservation] = []
-    for shape in container.findall(f"{_MAIN_NS}Shape"):
+    for shape in container.findall(f"{MAIN_NS}Shape"):
         if shape.attrib.get("Del") == "1":
             continue
-        raw_id = shape.attrib.get("ID")
-        if raw_id is None:
-            continue
-        shape_id = int(raw_id)
         inherited = shape.attrib.get("Master") or master_id
-        found.append(
-            ShapeObservation(
-                id=shape_id,
-                parent_id=parent_id,
-                name=shape.attrib.get("NameU", ""),
-                cells=_placement_cells_of(shape, masters, inherited),
+        # `ID` is what joins the two sides, so a shape without a usable one is
+        # left out rather than given an invented key. Its members are not: they
+        # are real shapes, and dropping a group of three because the group's own
+        # id is unreadable would report three shapes missing on a file both
+        # oracles otherwise call sound. They are reported against the nearest
+        # ancestor that does have an id, which shows up as one `shape-parent`
+        # difference pointing at the group - the thing that is actually wrong.
+        shape_id = _as_shape_id(shape.attrib.get("ID"))
+        if shape_id is not None:
+            found.append(
+                ShapeObservation(
+                    id=shape_id,
+                    parent_id=parent_id,
+                    name=shape.attrib.get("NameU", ""),
+                    cells=_placement_cells_of(shape, masters, inherited),
+                )
+            )
+        found.extend(
+            _shapes_in(
+                shape.find(f"{MAIN_NS}Shapes"),
+                parent_id=shape_id if shape_id is not None else parent_id,
+                masters=masters,
+                master_id=inherited,
             )
         )
-        found.extend(_shapes_in(shape.find(f"{_MAIN_NS}Shapes"), parent_id=shape_id, masters=masters, master_id=inherited))
     return found
 
 
@@ -805,7 +843,7 @@ def _resolve_cell(name: str, sources: list[ET.Element]) -> CellObservation | Non
     evaluated: str | None = None
     inheriting = False
     for source in sources:
-        cell = source.find(f"{_MAIN_NS}Cell[@N='{name}']")
+        cell = source.find(f"{MAIN_NS}Cell[@N='{name}']")
         if cell is None:
             continue
         if evaluated is None:
@@ -850,11 +888,26 @@ def _as_float(value: Any) -> float | None:
         return None
 
 
+def _as_shape_id(raw: str | None) -> int | None:
+    """A shape's `ID` as the number both sides join on, or None if it is not one.
+
+    `int()`, not `str.isdigit()`: `'²'.isdigit()` is True and `int('²')` raises.
+    `_shapes_in` called `int()` bare, so that ValueError came out of
+    `observation_from_package` and the harness described nothing at all.
+    """
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
 def _connects_in(container: ET.Element | None) -> list[ConnectObservation]:
     if container is None:
         return []
     found: list[ConnectObservation] = []
-    for connect in container.findall(f"{_MAIN_NS}Connect"):
+    for connect in container.findall(f"{MAIN_NS}Connect"):
         try:
             found.append(
                 ConnectObservation(
@@ -951,5 +1004,4 @@ def observation_from_com_json(payload: str | dict[str, Any], label: str = "visio
         label=label,
         pages=tuple(sorted(pages, key=lambda page: page.index)),
         source_sha256=data.get("source", {}).get("sha256", ""),
-        viewer_version=data.get("viewer", {}).get("version", ""),
     )

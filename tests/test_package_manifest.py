@@ -77,18 +77,21 @@ def manifest(*members: tuple[str, bytes], label: str = "") -> PackageManifest:
 # --------------------------------------------------------------------------
 
 
-def test_canonicalisation_options_are_pinned():
-    """These three options decide what the whole suite calls "the same part".
+def test_the_canonicalisation_options_are_exactly_these_three():
+    """Names only: each of the three values is pinned by a test below.
 
-    Read the comment above `CANONICALIZE_OPTIONS` before changing this. Each
-    option turns off a class of regression detection, so widening the set here
-    silently widens what every other test in the suite will accept.
+    `test_a_dropped_comment_is_a_difference` pins `with_comments`,
+    `test_whitespace_between_elements_is_a_difference` pins `strip_text` and
+    `test_a_generated_namespace_prefix_is_a_difference` pins `rewrite_prefixes`,
+    each by breaking what its option protects. Retyping the values here would
+    only add a second place to edit.
+
+    What none of them can see is a fourth option. `ET.canonicalize` also takes
+    `exclude_attrs` and `exclude_tags`, and either drops part of the document
+    from every comparison the suite makes, with no test to fail. Read the
+    comment above `CANONICALIZE_OPTIONS` before adding one.
     """
-    assert dict(CANONICALIZE_OPTIONS) == {
-        "with_comments": True,
-        "strip_text": False,
-        "rewrite_prefixes": False,
-    }
+    assert set(CANONICALIZE_OPTIONS) == {"with_comments", "strip_text", "rewrite_prefixes"}
 
 
 def test_a_dropped_comment_is_a_difference():
@@ -103,6 +106,21 @@ def test_whitespace_in_text_is_a_difference():
     spaced = manifest(("a.xml", b'<Doc xml:space="preserve"> text </Doc>'))
     tight = manifest(("a.xml", b'<Doc xml:space="preserve">text</Doc>'))
     assert manifest_differences(spaced, tight)["a.xml"] == ("canonical", "bytes")
+
+
+def test_whitespace_between_elements_is_a_difference():
+    """`strip_text=False`, in the parts that carry no `xml:space="preserve"`.
+
+    The test above cannot pin the option: `ET.canonicalize` honours
+    `xml:space="preserve"` whatever `strip_text` says, so those two fixtures
+    differ either way. The parts where `strip_text=True` really would erase a
+    change are the ones without the attribute - `[Content_Types].xml`, every
+    `.rels`, `docProps/*` - and one save reindenting those is exactly the drift
+    the manifest is here to see.
+    """
+    indented = manifest(("a.xml", b'<Doc>\n  <Child V="a"/>\n  <Child V="b"/>\n</Doc>'))
+    flat = manifest(("a.xml", b'<Doc><Child V="a"/><Child V="b"/></Doc>'))
+    assert manifest_differences(indented, flat)["a.xml"] == ("canonical", "bytes")
 
 
 def test_dropping_xml_space_preserve_is_a_difference():
