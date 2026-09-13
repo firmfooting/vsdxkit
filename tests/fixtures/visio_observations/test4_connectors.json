@@ -189,7 +189,8 @@
   "schema": 1,
   "source": {
     "name": "test4_connectors.vsdx",
-    "sha256": "6c0f92fe2ba10e2323609ee97391dd17f5e1fd3cefdcdfb726a5ef7d5ca6a566"
+    "sha256": "6c0f92fe2ba10e2323609ee97391dd17f5e1fd3cefdcdfb726a5ef7d5ca6a566",
+    "transform": "roundtrip"
   },
   "status": "opened",
   "viewer": {

@@ -53,7 +53,8 @@
   "schema": 1,
   "source": {
     "name": "test11_rotate.vsdx",
-    "sha256": "58b62cfa72ddcbefd7c78eccc8ae780e0b17bb0c9e4d6e3143e92a71430c6aa2"
+    "sha256": "58b62cfa72ddcbefd7c78eccc8ae780e0b17bb0c9e4d6e3143e92a71430c6aa2",
+    "transform": "roundtrip"
   },
   "status": "opened",
   "viewer": {

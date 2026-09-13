@@ -28,7 +28,8 @@
   "schema": 1,
   "source": {
     "name": "test9_rect_and_line.vsdx",
-    "sha256": "0b5a8b9732cc5d15b04d727c02684490196a995c99f1035033e3458fb7acdb3f"
+    "sha256": "0b5a8b9732cc5d15b04d727c02684490196a995c99f1035033e3458fb7acdb3f",
+    "transform": "roundtrip"
   },
   "status": "opened",
   "viewer": {

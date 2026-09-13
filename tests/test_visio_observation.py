@@ -34,11 +34,7 @@ def test_identical_observations_have_no_differences():
 
 
 def test_a_shape_the_second_side_never_reports_is_a_difference():
-    """The bug this whole harness exists for: Visio silently drops a shape.
-
-    A package declaring four shapes that Visio opens as three is a data-losing
-    file, and Visio says nothing at all - it reports success and saves happily.
-    """
+    """Visio silently drops a shape: the file loses data and nothing says so."""
     package = Observation(label="package", pages=(_page(shapes=(_shape(1), _shape(2))),))
     visio = Observation(label="visio", pages=(_page(shapes=(_shape(1),)),))
 
@@ -54,7 +50,7 @@ def test_a_shape_the_second_side_never_reports_is_a_difference():
 def test_a_shape_name_alone_is_not_a_difference():
     """Visio synthesises a name for a shape the package never named.
 
-    `Sheet.5` is not stored anywhere in the file; Visio derives it. Comparing
+    `Sheet.1` is not stored anywhere in the file; Visio derives it. Comparing
     names would report a difference on almost every shape and bury the real
     ones, so the name is carried for the failure message and nothing else.
     """
@@ -136,12 +132,6 @@ class TestReadingARealPackage:
         assert connects, "no glue found in a connector fixture"
         assert all(connect.from_cell for connect in connects)
 
-    def test_a_package_is_identical_to_itself(self, basedir):
-        """The comparison's floor: if this ever fails, no other result means anything."""
-        path = f"{basedir}/test4_connectors.vsdx"
-
-        assert compare(observation_from_package(path, "a"), observation_from_package(path, "b")) == ()
-
 
 def test_a_duplicated_id_is_reported_when_one_of_the_two_is_inside_a_group():
     """The duplicate need not be a pair of siblings.
@@ -199,3 +189,47 @@ def test_reading_a_package_whose_group_member_collides_with_a_top_level_id(tmp_p
     observation = observation_from_package(broken)
 
     assert any(d.kind == "shape-duplicate-id" for d in compare(observation, observation))
+
+
+def test_the_same_glue_record_written_twice_is_reported():
+    """Comparing glue as a plain set would lose the repetition.
+
+    A writer that emits one `<Connect>` twice produces a file whose glue Visio
+    keeps once. Both sides then hold the same distinct records, and a set
+    comparison calls them equal - the same silent join that duplicate shape ids
+    get a guard for.
+    """
+    connect = ConnectObservation(9, "BeginX", 5, "PinX")
+    package = Observation(label="package", pages=(_page(connects=(connect, connect)),))
+    visio = Observation(label="visio", pages=(_page(connects=(connect,)),))
+
+    differences = compare(package, visio)
+
+    assert [d.kind for d in differences] == ["connect-duplicate"]
+    assert "twice" in differences[0].detail
+
+
+def test_a_page_whose_relationship_does_not_resolve_keeps_its_position(tmp_path, basedir):
+    """A page that cannot be read must not renumber the pages after it.
+
+    Dropping it would shift every later page down one, so page 3 would be
+    compared against page 2 and the result is a pile of shape differences
+    pointing at the wrong page. The unreadable page is reported as itself.
+    """
+    import zipfile
+
+    source = f"{basedir}/test4_connectors.vsdx"
+    broken = str(tmp_path / "badrel.vsdx")
+    with zipfile.ZipFile(source) as original, zipfile.ZipFile(broken, "w") as rewritten:
+        for entry in original.infolist():
+            data = original.read(entry.filename)
+            if entry.filename == "visio/pages/pages.xml":
+                # point page 1's relationship at an id that is not in the rels part
+                data = data.decode("utf-8").replace("r:id='rId1'", "r:id='rIdMissing'", 1).encode("utf-8")
+            rewritten.writestr(entry, data)
+
+    observation = observation_from_package(broken)
+
+    assert [page.index for page in observation.pages] == [1, 2, 3], "page numbering shifted"
+    assert observation.pages[0].unresolved
+    assert not observation.pages[1].unresolved

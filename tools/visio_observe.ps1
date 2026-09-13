@@ -9,19 +9,13 @@
     tests/helpers/visio_observation.py reads that JSON, derives the same account
     from the package's own XML, and compares the two.
 
-    It deliberately does not report PASS or FAIL. The checker this replaces did,
-    and so it reported PASS on a package whose fourth shape Visio had silently
-    discarded: it counted what Visio showed it and never asked what the file had
-    promised. A verdict reached inside a Windows-only COM loop is a verdict that
-    cannot be tested. Everything here is extraction; all judgment is in Python,
-    under test, on any platform.
+    It deliberately reaches no verdict. A verdict reached inside a Windows-only
+    COM loop cannot be exercised by a test, so everything here is extraction and
+    all judgment is in Python.
 
-    Process lifecycle is the other half of its job. A crashed run leaves a Visio
-    process holding the file, and the next open fails with "open for
-    modifications in another instance" - which reads exactly like a corrupt
-    file. That misdiagnosis is easy to make and expensive to chase, so this
-    script refuses to start when an orphan is already running, and guarantees
-    that every instance it starts is gone before it exits.
+    Process lifecycle is the other half of its job: it refuses to start when an
+    orphan Visio is already running, and guarantees that every instance it
+    starts is gone before it exits. See Write-Refusal and the cleanup block.
 
 .PARAMETER Path
     One or more .vsdx files, or directories to scan for them.
@@ -99,6 +93,25 @@ function Get-VisioProcessIds {
     return @(Get-Process -Name VISIO -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
 }
 
+function Get-LeakedProcessIds {
+    <#
+      Visio processes this run is responsible for killing.
+
+      Not simply "any pid that was not in the snapshot": the developer may open
+      Visio while a run is in progress, and killing it would take their work
+      away in the middle of it - the opposite of what the cleanup promises. A
+      process that started before this script did is theirs whether or not it
+      was in the snapshot, so the start time is the deciding fact.
+    #>
+    param([int[]]$Preexisting, [datetime]$StartedAfter)
+
+    return @(
+        Get-Process -Name VISIO -ErrorAction SilentlyContinue |
+            Where-Object { $Preexisting -notcontains $_.Id -and $_.StartTime -ge $StartedAfter } |
+            ForEach-Object { $_.Id }
+    )
+}
+
 function Get-ShapeRecords {
     <#
       Walk a Shapes collection, descending into groups.
@@ -164,7 +177,7 @@ function Get-DocumentRecord {
         source = @{
             name   = (Split-Path -Path $File -Leaf)
             path   = $File
-            sha256 = (Get-FileHash -LiteralPath $File -Algorithm SHA256).Hash.ToLowerInvariant()
+            sha256 = ''
         }
         status = 'opened'
         error  = $null
@@ -173,6 +186,10 @@ function Get-DocumentRecord {
 
     $doc = $null
     try {
+        # Inside the try: a file that has gone away or been locked between
+        # staging and hashing should cost one document record, not the whole
+        # run and every document already collected with it.
+        $record.source.sha256 = (Get-FileHash -LiteralPath $File -Algorithm SHA256).Hash.ToLowerInvariant()
         $doc = $App.Documents.OpenEx($File, $OpenFlags)
         $pages = @()
         foreach ($page in $doc.Pages) {
@@ -190,9 +207,9 @@ function Get-DocumentRecord {
         $message = $_.Exception.Message
         $record.status = 'error'
         $record.error = $message
-        # Told apart here because they look identical from the outside and lead
-        # to opposite conclusions: one means the file is bad, the other means the
-        # machine is dirty and the file was never read at all.
+        # "Visio cannot open this file because something holds it" and "this
+        # file is broken" are the same error from the outside and lead to
+        # opposite conclusions, so they are told apart here.
         if ($message -match 'another instance|in use|being edited|modifications') {
             $record.status = 'locked'
         }
@@ -225,7 +242,9 @@ if ($preexisting.Count -gt 0 -and -not $AllowRunningVisio) {
 
 # --- run --------------------------------------------------------------------
 
+$startedAt = Get-Date
 $app = $null
+$viewer = @{ product = ''; version = '' }
 $documents = @()
 try {
     $app = New-Object -ComObject Visio.InvisibleApp
@@ -257,11 +276,10 @@ finally {
     # had open is never taken away from them.
     $deadline = (Get-Date).AddSeconds(15)
     while ((Get-Date) -lt $deadline) {
-        $leaked = @(Get-VisioProcessIds | Where-Object { $preexisting -notcontains $_ })
-        if ($leaked.Count -eq 0) { break }
+        if (@(Get-LeakedProcessIds -Preexisting $preexisting -StartedAfter $startedAt).Count -eq 0) { break }
         Start-Sleep -Milliseconds 250
     }
-    $leaked = @(Get-VisioProcessIds | Where-Object { $preexisting -notcontains $_ })
+    $leaked = @(Get-LeakedProcessIds -Preexisting $preexisting -StartedAfter $startedAt)
     foreach ($processId in $leaked) {
         Write-Warning "Visio process $processId outlived Quit(); killing it so the next run can open these files"
         try { Stop-Process -Id $processId -Force -ErrorAction Stop } catch { }

@@ -54,7 +54,8 @@
   "schema": 1,
   "source": {
     "name": "test_jinja_page_showif.vsdx",
-    "sha256": "50fc055197874332290c513091f718ffb45eb80299c8ec65f7bd369ebfab8f4f"
+    "sha256": "50fc055197874332290c513091f718ffb45eb80299c8ec65f7bd369ebfab8f4f",
+    "transform": "roundtrip"
   },
   "status": "opened",
   "viewer": {

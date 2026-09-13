@@ -89,7 +89,8 @@
   "schema": 1,
   "source": {
     "name": "test6_shape_properties.vsdx",
-    "sha256": "33fdd16e9cdfc3f80639fb4fbafc764fb0c8b19922e801eac87b70271fbdd5ab"
+    "sha256": "33fdd16e9cdfc3f80639fb4fbafc764fb0c8b19922e801eac87b70271fbdd5ab",
+    "transform": "roundtrip"
   },
   "status": "opened",
   "viewer": {

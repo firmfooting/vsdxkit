@@ -118,7 +118,8 @@
   "schema": 1,
   "source": {
     "name": "test2.vsdx",
-    "sha256": "ab55753a047e7bb4fb0fbbcce9d6a826432784c85dc50e97247b6f6e7bb09180"
+    "sha256": "ab55753a047e7bb4fb0fbbcce9d6a826432784c85dc50e97247b6f6e7bb09180",
+    "transform": "roundtrip"
   },
   "status": "opened",
   "viewer": {

@@ -3,8 +3,7 @@
 The library's own tests can only say that vsdxkit wrote what vsdxkit meant to
 write. Whether Visio agrees is a separate question, and the interesting answers
 are the quiet ones: a package declaring four shapes that Visio opens as three,
-reporting no error and saving without complaint. Nothing inside this repository
-can detect that, because the drop happens inside Visio.
+reporting no error and saving without complaint.
 
 So this module defines one shape of answer - an `Observation` - and two ways to
 obtain it:
@@ -20,23 +19,20 @@ only oracle available here that is stronger than our own opinion.
 
 Three properties of this file are deliberate and worth keeping.
 
-**Judgment lives here, not in PowerShell.** The COM side extracts and does not
-decide. An earlier checker printed PASS from inside its COM loop and so reported
-PASS on a package whose shape Visio had thrown away - it counted what Visio
-showed it and never asked what the package had promised. A comparison is only
-trustworthy if it can be run, in a test, against inputs that are known to
-differ, and PowerShell driving a Windows-only COM server is not that place.
+Judgment lives here, not in PowerShell. The COM side extracts and does not
+decide. A comparison is only trustworthy if it can be run, in a test, against
+inputs known to differ, and PowerShell driving a Windows-only COM server is not
+a place where that is possible.
 
-**An observation is a total description, not a spot check.** Every page, every
-shape id including group members, every connection - not counts. A count
-matches by coincidence; an id set does not. Fields that vary between two honest
-runs of the same file are excluded from the record entirely rather than
-normalised away later, because a normaliser is a place for a real difference to
-hide.
+An observation is a total description, not a spot check: every page, every shape
+id including group members, every connection - not counts. A count matches by
+coincidence; an id set does not. Fields that vary between two honest runs of the
+same file are excluded from the record entirely rather than normalised away
+later, because a normaliser is a place for a real difference to hide.
 
-**Both sides produce the same type.** A comparison whose two halves have
-different shapes grows special cases until it only reports what its author
-already suspected.
+Both sides produce the same type. A comparison whose two halves have different
+shapes grows special cases until it only reports what its author already
+suspected.
 
 Nothing here imports `vsdx`; see the package docstring.
 """
@@ -47,6 +43,7 @@ import hashlib
 import json
 import xml.etree.ElementTree as ET
 import zipfile
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
@@ -69,7 +66,6 @@ __all__ = [
 SCHEMA_VERSION = 1
 
 _MAIN_NS = "{http://schemas.microsoft.com/office/visio/2012/main}"
-_REL_NS = "{http://schemas.openxmlformats.org/package/2006/relationships}"
 _DOC_REL_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 
 
@@ -117,6 +113,11 @@ class PageObservation:
     name: str
     shapes: tuple[ShapeObservation, ...] = ()
     connects: tuple[ConnectObservation, ...] = ()
+    # The page is listed but its content could not be reached: no `<Rel>`, or an
+    # `r:id` that resolves to nothing. It keeps its position so the pages after
+    # it keep theirs.
+    unresolved: bool = False
+    background: bool = False
 
     @property
     def shapes_by_id(self) -> dict[int, ShapeObservation]:
@@ -187,6 +188,31 @@ def _compare_pages(expected: Observation, actual: Observation, out: list[Differe
                 )
             )
             continue
+        if mine.unresolved or theirs.unresolved:
+            side = expected.label if mine.unresolved else actual.label
+            out.append(
+                Difference(
+                    kind="page-unresolved",
+                    locus=f"page {index}",
+                    detail=(
+                        f"{side} lists page {index} ({page_name(mine, theirs)!r}) but cannot reach its "
+                        "content: the relationship naming the page part is missing or points at nothing. "
+                        "The package's own relationship graph is broken, so there is nothing to compare."
+                    ),
+                )
+            )
+            continue
+        if mine.background != theirs.background:
+            out.append(
+                Difference(
+                    kind="page-background",
+                    locus=f"page {index}",
+                    detail=(
+                        f"{expected.label} says background={mine.background}, "
+                        f"{actual.label} says background={theirs.background}"
+                    ),
+                )
+            )
         if mine.name != theirs.name:
             out.append(
                 Difference(
@@ -248,7 +274,9 @@ def _compare_shapes(
                 Difference(
                     kind="shape-missing",
                     locus=f"page {index} shape {shape_id}",
-                    detail=f"{present_label} reports shape {shape_id}; {absent_label} does not",
+                    detail=(
+                        f"{present_label} reports shape {shape_id}{_named(in_expected or in_actual)}; {absent_label} does not"
+                    ),
                 )
             )
             continue
@@ -265,12 +293,24 @@ def _compare_shapes(
             )
 
 
+def page_name(*candidates: PageObservation) -> str:
+    for page in candidates:
+        if page.name:
+            return page.name
+    return ""
+
+
 def _repeated_ids(page: PageObservation) -> list[int]:
     seen: set[int] = set()
     repeated: set[int] = set()
     for shape in page.shapes:
         (repeated if shape.id in seen else seen).add(shape.id)
     return sorted(repeated)
+
+
+def _named(shape: ShapeObservation | None) -> str:
+    """Render a shape's name for a message, when it has one worth printing."""
+    return f" ({shape.name})" if shape is not None and shape.name else ""
 
 
 def _parent_text(parent_id: int | None) -> str:
@@ -291,9 +331,26 @@ def _compare_connects(
     package's order is the order they were written, so ordering here would
     report a difference on every file that had ever been round-tripped.
     """
-    mine = set(expected.connects)
-    theirs = set(actual.connects)
-    for connect in sorted(mine ^ theirs):
+    # Counter, not set: a writer that emits one `<Connect>` twice leaves both
+    # sides holding the same distinct records, and a set comparison calls that
+    # equal. Multiplicity is part of what the file says.
+    mine = Counter(expected.connects)
+    theirs = Counter(actual.connects)
+    for label, counts in ((expected_label, mine), (actual_label, theirs)):
+        for connect, count in sorted(counts.items()):
+            if count > 1:
+                out.append(
+                    Difference(
+                        kind="connect-duplicate",
+                        locus=f"page {index} connect {connect.from_shape}.{connect.from_cell}",
+                        detail=(
+                            f"{label} glues shape {connect.from_shape} cell {connect.from_cell} to shape "
+                            f"{connect.to_shape} cell {connect.to_cell} {count} times. Visio keeps one; "
+                            "the file says it twice."
+                        ),
+                    )
+                )
+    for connect in sorted(set(mine) ^ set(theirs)):
         present_label = expected_label if connect in mine else actual_label
         absent_label = actual_label if connect in mine else expected_label
         out.append(
@@ -309,7 +366,7 @@ def _compare_connects(
 
 
 def format_differences(differences: tuple[Difference, ...], limit: int = 20) -> str:
-    """Render differences for a failure message, most specific locus first."""
+    """Render differences for a failure message, in the order they were found."""
     if not differences:
         return "no differences"
     lines = [f"{d.locus}: {d.detail}" for d in differences[:limit]]
@@ -331,37 +388,48 @@ def observation_from_package(path: str, label: str = "package") -> Observation:
 
 def _observation_from_archive(archive: zipfile.ZipFile, label: str, digest: str) -> Observation:
     pages: list[PageObservation] = []
-    for index, (name, part) in enumerate(_page_parts(archive), start=1):
+    for index, (name, background, part) in enumerate(_page_parts(archive), start=1):
+        if part is None or part not in archive.namelist():
+            pages.append(PageObservation(index=index, name=name, unresolved=True, background=background))
+            continue
         contents = ET.fromstring(archive.read(part))
         shapes = tuple(sorted(_shapes_in(contents.find(f"{_MAIN_NS}Shapes"), parent_id=None), key=_by_shape))
         connects = tuple(sorted(_connects_in(contents.find(f"{_MAIN_NS}Connects"))))
-        pages.append(PageObservation(index=index, name=name, shapes=shapes, connects=connects))
+        pages.append(PageObservation(index=index, name=name, shapes=shapes, connects=connects, background=background))
+    if not pages:
+        raise ValueError(
+            "this package declares no pages at all. Either visio/pages/pages.xml is missing or it is "
+            "empty; comparing it against anything would report agreement on a file with no content."
+        )
     return Observation(label=label, pages=tuple(pages), source_sha256=digest)
 
 
-def _page_parts(archive: zipfile.ZipFile) -> list[tuple[str, str]]:
-    """Return (page name, part path) in the order `pages.xml` lists them.
+def _page_parts(archive: zipfile.ZipFile) -> list[tuple[str, bool, str | None]]:
+    """Return (page name, is background, part path or None) as `pages.xml` lists them.
 
     That order is what Visio numbers its pages by, so it is the order the two
     sides have to be aligned in. Resolving each page through the relationship
     part rather than guessing `page1.xml`, `page2.xml`, ... matters because the
     numbering in those filenames is not required to match the page order, and a
     package that has had a page deleted routinely has a gap.
+
+    A page whose relationship is missing or points at nothing yields None rather
+    than being left out. Leaving it out would renumber every page after it, so
+    page 3 would be compared against page 2 and the broken relationship - the
+    actual defect - would surface as a heap of shape differences attributed to
+    the wrong page.
     """
     pages_xml = "visio/pages/pages.xml"
     if pages_xml not in archive.namelist():
         return []
     relationships = _relationships(archive, "visio/pages/_rels/pages.xml.rels")
-    parts: list[tuple[str, str]] = []
+    parts: list[tuple[str, bool, str | None]] = []
     for page in ET.fromstring(archive.read(pages_xml)):
         # Name is what Visio shows; NameU is the invariant name it falls back to
         name = page.attrib.get("Name") or page.attrib.get("NameU") or ""
         rel = page.find(f"{_MAIN_NS}Rel")
-        if rel is None:
-            continue
-        target = relationships.get(rel.attrib.get(f"{_DOC_REL_NS}id", ""))
-        if target is not None:
-            parts.append((name, target))
+        target = None if rel is None else relationships.get(rel.attrib.get(f"{_DOC_REL_NS}id", ""))
+        parts.append((name, page.attrib.get("Background") == "1", target))
     return parts
 
 
@@ -432,12 +500,7 @@ def _sha256_of(path: str) -> str:
 
 
 def observation_from_com_json(payload: str | dict[str, Any], label: str = "visio") -> Observation:
-    """Parse what the COM extractor reported.
-
-    The extractor emits data and makes no judgment, so everything that could be
-    wrong about the parsing is wrong here, in a module with tests, rather than
-    in PowerShell on a machine nobody can run the suite on.
-    """
+    """Parse what the COM extractor reported."""
     data = payload if isinstance(payload, dict) else json.loads(payload)
     version = data.get("schema")
     if version != SCHEMA_VERSION:
@@ -477,6 +540,7 @@ def observation_from_com_json(payload: str | dict[str, Any], label: str = "visio
                 name=page.get("name", ""),
                 shapes=shapes,
                 connects=connects,
+                background=bool(page.get("background", False)),
             )
         )
     return Observation(

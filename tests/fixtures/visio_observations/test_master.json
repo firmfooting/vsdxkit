@@ -33,7 +33,8 @@
   "schema": 1,
   "source": {
     "name": "test_master.vsdx",
-    "sha256": "f46ad06effe0af008f534ab400cbef461e9a26eee7947b2e47826511b10deef2"
+    "sha256": "f46ad06effe0af008f534ab400cbef461e9a26eee7947b2e47826511b10deef2",
+    "transform": "roundtrip"
   },
   "status": "opened",
   "viewer": {

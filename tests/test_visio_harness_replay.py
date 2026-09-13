@@ -1,19 +1,23 @@
 """Replay recorded Visio observations, on a machine with no Visio.
 
-Visio runs on one Windows desktop; this suite runs everywhere. `tools/visio_verify.py
-record` captures what Visio did with a fixture, and this file re-derives what the
-fixture claims *today* and compares the two. A change to what the library writes
+Visio runs on one Windows desktop; this suite runs everywhere. `record` captures
+what Visio made of a file vsdxkit wrote, and replay runs the writer again today
+and compares its output to that recording. A change to what the library writes
 is therefore caught in ordinary CI, and only a change in what Visio does with
 unchanged bytes needs the desktop again.
 
-The recordings are evidence with an expiry date. The tests below exist mostly to
-prove the expiry works: a harness that goes green on a comparison it did not make
-is worse than no harness at all, because it is believed.
+Recording the writer's *output* is what makes this a gate at all. A recording of
+a fixture as it sits in git would freeze the bytes, so the reader could only
+return what it returned at record time and the comparison would prove nothing
+about the library. The tests below check both that the gate fires and that a
+recording which can no longer be trusted fails instead of passing.
 """
 
 import importlib.util
 import json
 import os
+import pathlib
+import re
 import shutil
 
 import pytest
@@ -41,15 +45,16 @@ def _recordings() -> list[str]:
 
 
 def test_there_are_recordings_to_replay():
-    """Guards every test below, all of which pass trivially over an empty list."""
+    """Guards every test below: without this they would fail obscurely or vacuously."""
     assert _recordings(), f"no recorded Visio observations in {RECORDINGS}"
 
 
 def test_every_recorded_fixture_still_matches_what_visio_saw(verify, basedir, capsys):
     """The regression gate: what vsdxkit writes today still agrees with Visio.
 
-    Fails if a change alters the shapes, groups or glue in a fixture that a real
-    Visio has already been asked about.
+    Each recording replays by running the writer over its input fixture again,
+    so this fails when a change to the library alters the shapes, groups or glue
+    in output a real Visio has already vouched for.
     """
     exit_code = verify.command_replay(_recordings(), corpus=basedir)
 
@@ -74,7 +79,7 @@ def test_a_recording_whose_file_has_changed_is_refused_as_stale(verify, tmp_path
     assert exit_code == 1
     output = capsys.readouterr().out
     assert "STALE" in output
-    assert "record" in output, "the failure has to say how to fix it"
+    assert "tools/visio_verify.py record" in output, "the failure has to give the command that fixes it"
 
 
 def test_a_recording_whose_fixture_is_gone_is_refused(verify, tmp_path, capsys):
@@ -85,3 +90,44 @@ def test_a_recording_whose_fixture_is_gone_is_refused(verify, tmp_path, capsys):
 
     assert exit_code == 1
     assert "ORPHAN" in capsys.readouterr().out
+
+
+def test_a_recording_that_disagrees_with_the_package_fails_and_says_where(verify, basedir, tmp_path, capsys):
+    """The path that matters, and the only one that ever reports a real defect.
+
+    Everything else here checks that an untrustworthy recording is refused. This
+    checks the opposite: a recording that is perfectly valid, describing output
+    the writer no longer produces. Drop one shape from the recorded Visio view
+    and replay has to notice, fail, and name the shape.
+    """
+    recording = json.loads(pathlib.Path(_recordings()[0]).read_text(encoding="utf-8"))
+    dropped = recording["pages"][0]["shapes"].pop()
+    doctored = tmp_path / "doctored.json"
+    doctored.write_text(json.dumps(recording), encoding="utf-8")
+
+    exit_code = verify.command_replay([str(doctored)], corpus=basedir)
+
+    output = capsys.readouterr().out
+    assert exit_code == 1
+    assert "DIFFER" in output
+    assert f"shape {dropped['id']}" in output
+
+
+def test_the_drivers_exit_codes_match_the_observers(verify):
+    """The two halves agree on what each refusal code means.
+
+    `visio_observe.ps1` refuses with a numeric code and `visio_verify.py` turns
+    that number into a sentence. Nothing but this test links them, so a new
+    refusal added on one side shows up on the other as "the observer exited 4".
+    """
+    observer = pathlib.Path(TOOLS, "visio_observe.ps1").read_text(encoding="utf-8")
+    # The code is the last token of the call, whether the message is a single
+    # quoted string on one line or a parenthesised expression spanning several.
+    inline = re.findall(r"^\s*Write-Refusal\s+.*?\s(\d+)\s*$", observer, re.MULTILINE)
+    wrapped = re.findall(r"^\s*\)\s+(\d+)\s*$", observer, re.MULTILINE)
+    refused = {int(code) for code in inline + wrapped}
+
+    assert refused, "no Write-Refusal call sites found; has the observer been renamed?"
+    assert refused == set(verify._REFUSALS), (
+        f"the observer refuses with {sorted(refused)} but the driver explains {sorted(verify._REFUSALS)}"
+    )

@@ -4,20 +4,12 @@
     python tools/visio_verify.py record out/probe.vsdx [...]   # live Visio, save the observation
     python tools/visio_verify.py replay tests/fixtures/visio_observations/*.json
 
-Why three verbs rather than one
--------------------------------
-Visio is a slow, stateful, Windows-only oracle, and the machine that has it is
-not the machine CI runs on. An oracle that expensive is worth recording: `record`
-captures what Visio did, `replay` re-derives the package's claim from the file
-today and compares it to that recording. So a change that alters what the library
-writes is caught on Linux, in CI, with no Visio anywhere - what cannot be caught
-that way is a change in what *Visio* does with the same bytes, and nothing can
-catch that except running Visio again.
-
-A recording is therefore evidence with an expiry date, and `replay` says so out
-loud: an observation whose source file no longer hashes the same is reported as
-stale and needs re-recording. It is never quietly treated as a pass. A harness
-that goes green on a comparison it did not make is worse than no harness.
+Visio is a slow, stateful, Windows-only oracle and the machine that has it is not
+the machine CI runs on, so its answers are worth keeping. `record` saves what
+Visio made of a file vsdxkit wrote; `replay` runs the writer again today and
+compares its output to that recording, needing no Visio. A recording whose input
+has changed is reported stale and fails, rather than passing on a comparison it
+did not make.
 """
 
 from __future__ import annotations
@@ -126,13 +118,20 @@ def _staged(paths: list[str]):
     root = tempfile.mkdtemp(prefix="vsdxkit-visio-", dir=_windows_temp())
     try:
         staged: dict[str, str] = {}
+        # Keyed by stem, not by full name: a recording is written to
+        # `<stem>.json`, so `a.vsdx` and `a.vsdm` collide there even though
+        # their filenames differ. Catching it here means the second never
+        # silently overwrites the first.
+        by_stem: dict[str, str] = {}
         for path in paths:
             name = os.path.basename(path)
-            if name in staged:
+            stem = os.path.splitext(name)[0]
+            if stem in by_stem:
                 raise VisioUnavailable(
-                    f"two inputs are both named {name!r} ({staged[name]} and {path}). "
-                    "Observations are keyed by filename, so rename one of them."
+                    f"{by_stem[stem]} and {path} would both be recorded as {stem}.json. "
+                    "Recordings are keyed by filename stem, so rename one of them."
                 )
+            by_stem[stem] = path
             destination = os.path.join(root, name)
             shutil.copy2(path, destination)
             staged[name] = path
@@ -141,10 +140,33 @@ def _staged(paths: list[str]):
         shutil.rmtree(root, ignore_errors=True)
 
 
-# Exit codes the observer refuses with, kept in step with tools/visio_observe.ps1.
-# They exist so that "the machine is not in a state to be measured" never gets
-# mistaken for "the file is bad" - a confusion that costs an afternoon, because
-# a stranded Visio process reports as a corrupt file.
+# The subject of a recording. "roundtrip" is the default and the useful one:
+# Visio is asked about a file *vsdxkit wrote*, so replaying the recording later
+# re-runs today's writer and compares its output to what Visio vouched for.
+# Recording a fixture as it sits in git instead ("none") freezes the bytes, and
+# a frozen package can only yield the observation it yielded at record time - so
+# that kind of recording proves the XML reader still reads the file the same
+# way, and nothing whatever about what the library writes.
+TRANSFORMS = ("roundtrip", "none")
+
+
+def _apply_transform(transform: str, source: str, destination: str) -> str:
+    """Produce the file Visio should look at, and return its path."""
+    if transform == "none":
+        return source
+    if transform != "roundtrip":
+        raise VisioUnavailable(f"unknown transform {transform!r}; expected one of {', '.join(TRANSFORMS)}")
+    # imported here, not at module scope: `replay` is the only caller that runs
+    # in CI, and it should fail on a broken library rather than on an import.
+    import vsdx
+
+    with vsdx.VisioFile(source) as document:
+        document.save_vsdx(destination)
+    return destination
+
+
+# Exit codes the observer refuses with, kept in step with tools/visio_observe.ps1
+# by test_the_drivers_exit_codes_match_the_observers.
 _REFUSALS = {
     2: "no files to look at",
     3: "Visio is already running",
@@ -152,17 +174,57 @@ _REFUSALS = {
 
 
 def _refusal(code: int, stderr: str) -> str:
-    reason = _REFUSALS.get(code, f"the observer exited {code}")
+    # Exit 0 with nothing on stdout means the observer died before it printed:
+    # a terminating error unwinds past `exit $LASTEXITCODE`, which is then unset
+    # and reads as success. Saying "exited 0" there sends the reader looking in
+    # the wrong place entirely.
+    reason = _REFUSALS.get(code) or ("the observer crashed before it reported" if code == 0 else f"the observer exited {code}")
     return f"{reason}.\n{stderr}" if stderr else reason
 
 
-def observe(paths: list[str], *, timeout: int = 300, allow_running: bool = False) -> dict:
-    """Run Visio over copies of the given files and return the raw observation payload."""
+def observe(paths: list[str], *, timeout: int | None = None, allow_running: bool = False) -> dict:
+    """Run Visio over copies of the given files and return the raw observation payload.
+
+    The budget covers the whole batch, so it scales with the batch: one Visio
+    start plus a per-file allowance. A fixed figure fails the corpus and is
+    wastefully generous for one file.
+    """
+    budget = timeout if timeout is not None else 60 + 20 * len(paths)
     with _staged(paths) as (root, _):
-        return _observe_directory(root, timeout=timeout, allow_running=allow_running)
+        return _observe_directory(root, timeout=budget, allow_running=allow_running)
+
+
+def _visio_pids() -> set[int]:
+    result = subprocess.run(
+        [
+            _shell(),
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "Get-Process -Name VISIO -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    return {int(line) for line in result.stdout.split() if line.strip().isdigit()}
+
+
+def _reap_visio(before: set[int]) -> list[int]:
+    """Kill Visio processes that were not running before we started."""
+    leaked = sorted(_visio_pids() - before)
+    for pid in leaked:
+        subprocess.run(
+            [_shell(), "-NoProfile", "-NonInteractive", "-Command", f"Stop-Process -Id {pid} -Force"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    return leaked
 
 
 def _observe_directory(root: str, *, timeout: int, allow_running: bool) -> dict:
+    before = _visio_pids()
     # -Command rather than -File: with -File every argument arrives as a separate
     # literal string, so a `string[]` parameter only ever receives its first
     # element and the rest fail to bind. -Command hands PowerShell one expression
@@ -178,7 +240,21 @@ def _observe_directory(root: str, *, timeout: int, allow_running: bool) -> dict:
     switches = " -AllowRunningVisio" if allow_running else ""
     expression = f"& {_quote(_windows_path(OBSERVER))} -Path {_quote(_windows_path(root))}{switches}; exit $LASTEXITCODE"
     command = [_shell(), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", expression]
-    result = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as expired:
+        # Killing PowerShell does not kill Visio: `New-Object -ComObject` starts
+        # VISIO.EXE out of process, so the observer's own cleanup never runs and
+        # an invisible Visio is left holding the staged files. Every later run
+        # then refuses with "Visio is already running" - the exact misdiagnosis
+        # the lifecycle rules exist to prevent, self-inflicted. Reap it here.
+        killed = _reap_visio(before)
+        raise VisioUnavailable(
+            f"Visio did not answer within {timeout}s and was killed"
+            + (f" (stranded process {', '.join(map(str, killed))} also killed)" if killed else "")
+            + ". Raise --timeout if the corpus is large, or open one of the files by hand: a modal "
+            "dialog Visio raises outside its alert mechanism blocks until something dismisses it."
+        ) from expired
     payload = result.stdout.strip()
     if not payload:
         raise VisioUnavailable(_refusal(result.returncode, result.stderr.strip()))
@@ -217,7 +293,17 @@ def _report(record: dict, package_path: str) -> tuple[bool, str]:
         )
     if record["status"] != "opened":
         return False, f"ERROR  {name}: Visio refused the file.\n{_indent(record.get('error') or '')}"
-    return _verdict(record, observation_from_package(package_path), observation_from_com_json(record))
+    package = observation_from_package(package_path)
+    if package.source_sha256 != record["source"]["sha256"]:
+        # Visio was shown a staged copy; this is the file we just read. If the
+        # two are not the same bytes then the difference list below describes
+        # two different documents, and every entry in it is noise that reads
+        # like a finding.
+        return False, (
+            f"MISMATCH {name}: Visio was shown {record['source']['sha256'][:12]} but "
+            f"{package_path} hashes {package.source_sha256[:12]}. Refusing to compare them."
+        )
+    return _verdict(record, package, observation_from_com_json(record))
 
 
 def command_check(paths: list[str], *, allow_running: bool = False) -> int:
@@ -232,26 +318,42 @@ def command_check(paths: list[str], *, allow_running: bool = False) -> int:
     return 1 if failures else 0
 
 
-def command_record(paths: list[str], *, into: str = RECORDINGS, allow_running: bool = False) -> int:
-    payload = observe(paths, allow_running=allow_running)
-    os.makedirs(into, exist_ok=True)
-    written = 0
-    for record in _records(payload):
-        name = record["source"]["name"]
-        if record["status"] != "opened":
-            print(f"SKIP   {name}: {record['status']} - {record.get('error')}", file=sys.stderr)
-            continue
-        # the absolute path is the one field that is true only on the machine
-        # that recorded it, so it does not go into a file other machines read
-        record["source"].pop("path", None)
-        record["viewer"] = payload["viewer"]
-        destination = os.path.join(into, f"{os.path.splitext(name)[0]}.json")
-        with open(destination, "w", encoding="utf-8") as handle:
-            json.dump(record, handle, indent=2, sort_keys=True)
-            handle.write("\n")
-        print(f"RECORD {name} -> {os.path.relpath(destination, REPO)}")
-        written += 1
-    return 0 if written else 1
+def command_record(
+    paths: list[str], *, into: str = RECORDINGS, allow_running: bool = False, transform: str = "roundtrip"
+) -> int:
+    with tempfile.TemporaryDirectory(prefix="vsdxkit-transform-") as workspace:
+        subjects = {}
+        for path in paths:
+            name = os.path.basename(path)
+            subject = _apply_transform(transform, path, os.path.join(workspace, name))
+            subjects[name] = (path, subject)
+        payload = observe([subject for _, subject in subjects.values()], allow_running=allow_running)
+
+        os.makedirs(into, exist_ok=True)
+        written = 0
+        for record in _records(payload):
+            name = record["source"]["name"]
+            origin = subjects[name][0]
+            if record["status"] != "opened":
+                print(f"SKIP   {name}: {record['status']} - {record.get('error')}", file=sys.stderr)
+                continue
+            # What is stored is the hash of the *input*, not of the file Visio
+            # opened. The output changes whenever the writer changes, which is
+            # the whole point; the input is what has to stay put for the
+            # recording to still be about the same thing.
+            record["source"] = {
+                "name": name,
+                "sha256": observation_from_package(origin).source_sha256,
+                "transform": transform,
+            }
+            record["viewer"] = payload["viewer"]
+            destination = os.path.join(into, f"{os.path.splitext(name)[0]}.json")
+            with open(destination, "w", encoding="utf-8") as handle:
+                json.dump(record, handle, indent=2, sort_keys=True)
+                handle.write("\n")
+            print(f"RECORD {name} ({transform}) -> {os.path.relpath(destination, REPO)}")
+            written += 1
+        return 0 if written else 1
 
 
 def command_replay(recordings: list[str], *, corpus: str) -> int:
@@ -266,15 +368,20 @@ def command_replay(recordings: list[str], *, corpus: str) -> int:
             print(f"ORPHAN {name}: recorded, but {package_path} no longer exists")
             failures += 1
             continue
-        package = observation_from_package(package_path)
-        if package.source_sha256 != record["source"]["sha256"]:
+        if observation_from_package(package_path).source_sha256 != record["source"]["sha256"]:
             print(
-                f"STALE  {name}: the file has changed since Visio last saw it.\n"
+                f"STALE  {name}: the input has changed since Visio last saw it.\n"
                 f"    Re-record on a Windows machine: python tools/visio_verify.py record {package_path}"
             )
             failures += 1
             continue
-        agreed, text = _verdict(record, package, observation_from_com_json(record))
+        transform = record["source"].get("transform", "none")
+        with tempfile.TemporaryDirectory(prefix="vsdxkit-replay-") as workspace:
+            # Re-run the writer *now*. This is what makes replay a gate on the
+            # library rather than on its own reader: the bytes being described
+            # were produced by today's code, not read back out of git.
+            subject = _apply_transform(transform, package_path, os.path.join(workspace, name))
+            agreed, text = _verdict(record, observation_from_package(subject), observation_from_com_json(record))
         print(text)
         failures += 0 if agreed else 1
     return 1 if failures else 0
@@ -300,6 +407,12 @@ def main(argv: list[str] | None = None) -> int:
     record = subcommands.add_parser("record", help="open in Visio now and save what it reported")
     record.add_argument("paths", nargs="+")
     record.add_argument("--into", default=RECORDINGS)
+    record.add_argument(
+        "--transform",
+        default="roundtrip",
+        choices=TRANSFORMS,
+        help="what Visio is shown: the library's output for this file, or the file itself",
+    )
     record.add_argument("--allow-running-visio", **running)
 
     replay = subcommands.add_parser("replay", help="compare today's packages to saved observations, without Visio")
@@ -311,7 +424,12 @@ def main(argv: list[str] | None = None) -> int:
         if arguments.command == "check":
             return command_check(arguments.paths, allow_running=arguments.allow_running)
         if arguments.command == "record":
-            return command_record(arguments.paths, into=arguments.into, allow_running=arguments.allow_running)
+            return command_record(
+                arguments.paths,
+                into=arguments.into,
+                allow_running=arguments.allow_running,
+                transform=arguments.transform,
+            )
         return command_replay(arguments.recordings, corpus=arguments.corpus)
     except VisioUnavailable as error:
         print(f"Visio is not usable from here: {error}", file=sys.stderr)

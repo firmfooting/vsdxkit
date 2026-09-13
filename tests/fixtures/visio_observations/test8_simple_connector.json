@@ -23,7 +23,8 @@
   "schema": 1,
   "source": {
     "name": "test8_simple_connector.vsdx",
-    "sha256": "92e8ad6155c95a3e9f94e62215a3ba7c7b0739ac870deadb63cab5d6b2dd30bc"
+    "sha256": "92e8ad6155c95a3e9f94e62215a3ba7c7b0739ac870deadb63cab5d6b2dd30bc",
+    "transform": "roundtrip"
   },
   "status": "opened",
   "viewer": {

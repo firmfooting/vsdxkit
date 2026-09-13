@@ -25,7 +25,7 @@ vsdxkit adds shape creation, Visio-faithful connectors, connector re-anchoring, 
 - Renders data into Visio templates with Jinja.
 - Saves to a new file or safely replaces the source file in place.
 
-The implementation edits the XML parts inside the Open Packaging Convention archive. It does not drive the Visio user interface. Generated files are checked against Microsoft Visio through COM before such a change is considered done, and what Visio reported is recorded so CI can replay it without Visio. The COM check itself is manual; no workflow runs Visio. See [When a change needs Visio](CONTRIBUTING.md#when-a-change-needs-visio).
+The implementation edits the XML parts inside the Open Packaging Convention archive. It does not drive the Visio user interface. Generated files are checked against Microsoft Visio through COM before a change that Visio could silently repair is considered done, and what Visio reported is recorded so CI can replay it without Visio. The COM check itself is manual; no workflow runs Visio. See [When a change needs Visio](CONTRIBUTING.md#when-a-change-needs-visio).
 
 ## Installation
 

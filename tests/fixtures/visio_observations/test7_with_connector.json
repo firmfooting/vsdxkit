@@ -81,7 +81,8 @@
   "schema": 1,
   "source": {
     "name": "test7_with_connector.vsdx",
-    "sha256": "c78114794b3e344c489748b5debe4a85332685c9bcda7fe848f2ddc33f63a50f"
+    "sha256": "c78114794b3e344c489748b5debe4a85332685c9bcda7fe848f2ddc33f63a50f",
+    "transform": "roundtrip"
   },
   "status": "opened",
   "viewer": {

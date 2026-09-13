@@ -48,7 +48,8 @@
   "schema": 1,
   "source": {
     "name": "test_master_multiple_child_shapes.vsdx",
-    "sha256": "0475359308d251f5ee00eb2127d4f4104adf79f1ecc61ddc610ffce5ab019170"
+    "sha256": "0475359308d251f5ee00eb2127d4f4104adf79f1ecc61ddc610ffce5ab019170",
+    "transform": "roundtrip"
   },
   "status": "opened",
   "viewer": {

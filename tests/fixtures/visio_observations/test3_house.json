@@ -63,7 +63,8 @@
   "schema": 1,
   "source": {
     "name": "test3_house.vsdx",
-    "sha256": "e454217e49d1ec2aaa7c9b8f38b148ffc0d028ce44ba096fe3386e9894b1775f"
+    "sha256": "e454217e49d1ec2aaa7c9b8f38b148ffc0d028ce44ba096fe3386e9894b1775f",
+    "transform": "roundtrip"
   },
   "status": "opened",
   "viewer": {

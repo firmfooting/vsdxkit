@@ -77,16 +77,14 @@ $ python tools/visio_verify.py check out/generated.vsdx
 AGREE  generated.vsdx: 1 page(s), 3 shape(s) - Visio sees the same document
 ```
 
-A disagreement names the page, the shape and the side that is short:
+A disagreement names the page, the shape and the side that is short (one line
+per difference, wrapped here to fit):
 
 ```console
 $ python tools/visio_verify.py check out/broken.vsdx
 DIFFER broken.vsdx: 2 difference(s)
-    page 1 shape 2: package declares shape 2 more than once on this page. Ids are
-        page-scoped and unique; Visio keeps one and drops the rest without an
-        error, so the rest of this page cannot be compared.
-    page 1 connect 7.EndX: package glues shape 7 cell EndX to shape 5 cell PinX;
-        visio does not
+    page 1 shape 2: package declares shape 2 more than once on this page. Ids are page-scoped and unique; Visio keeps one and drops the rest without an error, so the shapes on this page cannot be matched up.
+    page 1 connect 7.EndX: package glues shape 7 cell EndX to shape 5 cell PinX; visio does not
 ```
 
 Unlike the checker it replaces, it exits non-zero on a disagreement, so it can
@@ -103,20 +101,20 @@ worth keeping:
 
 ```console
 $ python tools/visio_verify.py record tests/test4_connectors.vsdx
-RECORD test4_connectors.vsdx -> tests/fixtures/visio_observations/test4_connectors.json
+RECORD test4_connectors.vsdx (roundtrip) -> tests/fixtures/visio_observations/test4_connectors.json
 ```
 
-`tests/test_visio_harness_replay.py` then re-derives what each fixture claims
-*today* and compares it to that recording, on every run, with no Visio involved.
-A change that alters the shapes, groups or glue in a recorded fixture fails in
-ordinary CI. What that cannot catch is a change in what *Visio* does with
+What gets recorded is Visio's view of the file **vsdxkit wrote** from that
+fixture, not of the fixture itself. `tests/test_visio_harness_replay.py` then
+re-runs the writer on every run and compares its output to that recording, with
+no Visio involved — so a change to what we write that Visio would reject fails
+in ordinary CI. What this cannot catch is a change in what *Visio* does with
 unchanged bytes; only re-running `check` on Windows catches that.
 
-A recording describes one exact file and stores its hash. Edit the fixture and
-replay reports `STALE` and fails, rather than passing on a comparison it did not
-make — re-record it on a Windows machine. Delete the fixture and its recording
-is reported as an `ORPHAN`. Neither is allowed to go quietly green, because a
-harness that is believed and wrong is worse than no harness.
+A recording stores the hash of its input fixture. Edit that fixture and replay
+reports `STALE` and fails rather than passing on a comparison it did not make;
+re-record it on a Windows machine. Delete the fixture and its recording is
+reported as an `ORPHAN`. Neither is allowed to go quietly green.
 
 Add a recording whenever you add a fixture that a Visio run has vouched for. Do
 not hand-edit one: the schema is versioned and a recording written under another

@@ -33,7 +33,8 @@
   "schema": 1,
   "source": {
     "name": "test_jinja_loop.vsdx",
-    "sha256": "f38459a836bf24a445735e4549501d861cfd2e3ca282e274ca27b962cfdbd8ce"
+    "sha256": "f38459a836bf24a445735e4549501d861cfd2e3ca282e274ca27b962cfdbd8ce",
+    "transform": "roundtrip"
   },
   "status": "opened",
   "viewer": {

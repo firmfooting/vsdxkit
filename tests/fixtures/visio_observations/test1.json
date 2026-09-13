@@ -53,7 +53,8 @@
   "schema": 1,
   "source": {
     "name": "test1.vsdx",
-    "sha256": "902478114f815010798664b9a44a64e80ec0a7b1cf07e920951146e1be0d1ea0"
+    "sha256": "902478114f815010798664b9a44a64e80ec0a7b1cf07e920951146e1be0d1ea0",
+    "transform": "roundtrip"
   },
   "status": "opened",
   "viewer": {

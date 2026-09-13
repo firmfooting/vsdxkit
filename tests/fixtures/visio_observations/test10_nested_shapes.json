@@ -53,7 +53,8 @@
   "schema": 1,
   "source": {
     "name": "test10_nested_shapes.vsdx",
-    "sha256": "1490324d44fb384c450d2bb8f4e461d668b1a389c63362665cdbf7bd9fbf42c0"
+    "sha256": "1490324d44fb384c450d2bb8f4e461d668b1a389c63362665cdbf7bd9fbf42c0",
+    "transform": "roundtrip"
   },
   "status": "opened",
   "viewer": {

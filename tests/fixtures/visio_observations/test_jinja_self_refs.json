@@ -38,7 +38,8 @@
   "schema": 1,
   "source": {
     "name": "test_jinja_self_refs.vsdx",
-    "sha256": "658853814143c92e6a7bd6b95761a38cf7c888fc7633e55ccaa9f5d0f42531a5"
+    "sha256": "658853814143c92e6a7bd6b95761a38cf7c888fc7633e55ccaa9f5d0f42531a5",
+    "transform": "roundtrip"
   },
   "status": "opened",
   "viewer": {

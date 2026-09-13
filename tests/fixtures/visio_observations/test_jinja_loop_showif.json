@@ -28,7 +28,8 @@
   "schema": 1,
   "source": {
     "name": "test_jinja_loop_showif.vsdx",
-    "sha256": "52b5c0dd86330d04fcdbb1f02c24978117ab566e15c05e3bcde1541e2ab88810"
+    "sha256": "52b5c0dd86330d04fcdbb1f02c24978117ab566e15c05e3bcde1541e2ab88810",
+    "transform": "roundtrip"
   },
   "status": "opened",
   "viewer": {
