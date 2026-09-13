@@ -46,8 +46,12 @@ def packaged_version() -> str:
 
 
 def main(argv: list[str]) -> int:
+    if argv == ["--print-version"]:
+        # so a caller needing the version does not re-implement the lookup
+        print(packaged_version())
+        return 0
     if len(argv) != 1:
-        print("usage: check_version_tag.py <tag or refs/tags/... ref>")
+        print("usage: check_version_tag.py <tag or refs/tags/... ref> | --print-version")
         return 2
     version = packaged_version()
     problem = mismatch(argv[0], version)

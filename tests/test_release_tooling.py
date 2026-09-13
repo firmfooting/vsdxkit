@@ -63,6 +63,12 @@ def test_main_exits_zero_on_match(monkeypatch):
     assert check_version_tag.main(["v0.7.0"]) == 0
 
 
+def test_main_prints_the_packaged_version_on_request(capsys):
+    """The release workflow reads the version from here rather than re-parsing it."""
+    assert check_version_tag.main(["--print-version"]) == 0
+    assert capsys.readouterr().out.strip() == vsdx.__version__
+
+
 def test_main_requires_a_tag_argument():
     assert check_version_tag.main([]) == 2
 

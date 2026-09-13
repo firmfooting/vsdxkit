@@ -4,7 +4,9 @@ This changelog covers `vsdxkit`. The project it descends from, and whose
 history precedes 0.6.3 here, remains available at
 <https://github.com/dave-howard/vsdx>.
 
-## Unreleased
+From 0.7.1 onward this file is maintained by release-please, which writes a
+section per release from the conventional-commit subjects on `main`. Edit the
+release pull request rather than this file directly.
 
 ## 0.7.0 - 2026-09-13
 

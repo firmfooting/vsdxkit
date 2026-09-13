@@ -1,0 +1,72 @@
+# The PR title becomes the commit subject on `main`, because this repository
+# squash-merges and `squash_merge_commit_title` is set to PR_TITLE.
+# release-please builds the changelog by parsing those subjects, so a
+# non-conventional title is silently dropped from the release notes. The release
+# still happens and only the notes are wrong, which is the kind of failure that
+# is noticed a release too late.
+#
+# Enforcing the title is sufficient *only* under squash merging. If merge
+# commits are ever re-enabled the branch commits reach `main` instead and this
+# check stops covering anything, so enforce per-commit then.
+name: PR title
+
+on:
+  pull_request:
+    # `edited` matters: a title fixed after the fact must re-run the check.
+    types: [opened, edited, reopened, synchronize]
+
+permissions: {}
+
+# Editing a title several times in a row should leave one check running, not a
+# queue of them all answering about older titles.
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  conventional:
+    name: check the title is a conventional commit
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Check the title is a conventional commit
+        env:
+          # Passed as an environment variable, never interpolated into the
+          # script. `${{ }}` inside a run block is a template-injection sink: a
+          # PR title is attacker-controlled text, and zizmor fails on it.
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+
+          types='build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test'
+          pattern="^(${types})(\([a-z0-9._/-]+\))?!?: .+"
+
+          if printf '%s' "$TITLE" | grep -Eq "$pattern"; then
+            printf 'OK: %s\n' "$TITLE"
+            exit 0
+          fi
+
+          cat >&2 <<EOF
+          The pull request title is not a conventional commit.
+
+            title: $TITLE
+
+          This repository squash-merges, so the title becomes the commit subject on
+          main, and release-please builds the changelog by parsing it. A title that
+          does not match is dropped from the release notes silently.
+
+          Expected:  type(optional-scope)!: subject
+          Types:     ${types//|/, }
+
+          Examples:
+            fix: remap every Sheet reference in a formula when copying shapes
+            fix(geometry): copy an inherited row down before moving it
+            docs: document the COM reference corpus
+            feat!: rename VisioFile to Document
+
+          Only feat, fix and perf reach the release notes. build, chore, ci, docs,
+          refactor, style and test are silent, so pick the type from what the change
+          does to someone using the library, not from which directory it touches: a
+          rework that changes behaviour is a fix, not a refactor.
+          EOF
+          exit 1
