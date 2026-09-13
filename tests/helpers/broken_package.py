@@ -13,9 +13,12 @@ Nothing here imports `vsdx`; see the package docstring.
 from __future__ import annotations
 
 import copy
+import pathlib
+import struct
 import zipfile
+import zlib
 
-__all__ = ["Edit", "append_member", "make_package", "rewritten"]
+__all__ = ["Edit", "append_member", "make_package", "rewritten", "understated"]
 
 # What one member may have done to it. A `(old, new)` pair substitutes once and
 # fails if `old` is not there; `bytes` replaces the member outright, for a part
@@ -110,4 +113,47 @@ def make_package(path: str, members: dict[str, bytes]) -> str:
 def append_member(path: str, name: str, data: bytes) -> str:
     with zipfile.ZipFile(path, "a", zipfile.ZIP_DEFLATED) as archive:
         archive.writestr(name, data)
+    return path
+
+
+# Offsets of the CRC and the uncompressed-size field inside each of the two
+# headers that carry them. Patching by offset rather than by searching for the
+# value: under ZIP_STORED the compressed and uncompressed sizes are equal, so a
+# search finds the size four times and rewrites two fields nobody asked about.
+_LOCAL_CRC, _LOCAL_SIZE = 14, 22
+_CENTRAL_CRC, _CENTRAL_SIZE = 16, 24
+
+
+def understated(path: str, member: str, payload: bytes, declared: int, *, consistent_crc: bool = False) -> str:
+    """An archive of one member whose headers understate how much it holds.
+
+    The whole point of the package size caps is that they are applied to sizes
+    the central directory declares, and an archive is free to declare anything.
+    What stops that being a hole is that `ZipFile` will not deliver more of a
+    member than the member says it has: it truncates the output at `file_size`
+    and then fails the CRC. This builds the archive that says so.
+
+    `consistent_crc` also rewrites the CRC to match the truncated output, which
+    is the stronger case: nothing raises, and the reader still gets exactly
+    `declared` bytes.
+    """
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(member, payload)
+        local = archive.infolist()[0].header_offset
+
+    raw = bytearray(pathlib.Path(path).read_bytes())
+    central = raw.rfind(b"PK\x01\x02")
+    assert central != -1, "the archive has no central directory record"
+    assert raw[local : local + 4] == b"PK\x03\x04", "the local header is not where the index said it was"
+
+    for base, crc_at, size_at in ((local, _LOCAL_CRC, _LOCAL_SIZE), (central, _CENTRAL_CRC, _CENTRAL_SIZE)):
+        found = struct.unpack_from("<I", raw, base + size_at)[0]
+        assert found == len(payload), f"expected the size {len(payload)} at offset {base + size_at}, found {found}"
+        struct.pack_into("<I", raw, base + size_at, declared)
+        if consistent_crc:
+            found_crc = struct.unpack_from("<I", raw, base + crc_at)[0]
+            assert found_crc == zlib.crc32(payload), f"expected the payload's CRC at offset {base + crc_at}"
+            struct.pack_into("<I", raw, base + crc_at, zlib.crc32(payload[:declared]))
+
+    pathlib.Path(path).write_bytes(bytes(raw))
     return path

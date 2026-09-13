@@ -48,7 +48,7 @@ _XML_NAMESPACE = "http://www.w3.org/XML/1998/namespace"
 # namespace can hold the default (empty) prefix at a time: ET.register_namespace
 # drops any previous holder. Claim it for the Visio main namespace, which is the
 # one standalone ET.tostring() calls in this library serialise, and let
-# xml_to_file override the default per part while it writes.
+# serialise_part override the default per part while it writes.
 _GLOBAL_PREFIXES = {
     "http://schemas.microsoft.com/office/visio/2012/main": "",
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships": "r",
@@ -214,7 +214,7 @@ def make_cell_element(name: str, v: object | None = None, f: object | None = Non
     return cell
 
 
-def _parse_part(data: bytes) -> ET.ElementTree[ET.Element]:
+def parse_part(data: bytes) -> ET.ElementTree[ET.Element]:
     """Parse one package part, recording the namespace prefixes it declares.
 
     A parsed tree holds expanded names and nothing else: by the time `ET.parse`
@@ -247,7 +247,7 @@ def adopt_prefixes(root: ET.Element, source: ET.Element) -> None:
     """Give a tree rebuilt from another the prefixes that other one declared.
 
     Copying a page and rendering a template both serialise a part and parse the
-    string back, which loses the bindings `_parse_part` captured. Without this
+    string back, which loses the bindings `parse_part` captured. Without this
     the copy is written with an invented prefix while its source keeps `lc:`,
     and one package spells the same vocabulary two ways.
     """
@@ -259,12 +259,22 @@ def adopt_prefixes(root: ET.Element, source: ET.Element) -> None:
 def file_to_xml(filename: str, zip_file_contents: dict[str, io.BytesIO]) -> ET.ElementTree[ET.Element] | None:
     """Import a file as an ElementTree."""
     if filename in zip_file_contents:
-        return _parse_part(zip_file_contents[filename].getvalue())
+        return parse_part(zip_file_contents[filename].getvalue())
     return None
 
 
-def xml_to_file(xml: ET.ElementTree[ET.Element], filename: str, zip_file_contents: dict[str, io.BytesIO]) -> None:
-    """Save an ElementTree to zip_file_contents, prefixed the way Visio writes it."""
+def serialise_part(xml: ET.ElementTree[ET.Element]) -> bytes:
+    """One package part as bytes, prefixed the way Visio writes it.
+
+    Split out of `xml_to_file` so that a part written through `PackageStore`
+    and one written through `xml_to_file` cannot disagree about the
+    declaration, the encoding or the per-part prefix map.
+
+    Two parts are still written without coming through here: `masters.py` and
+    `pages.py` each build a tree and hand it straight to `ET.tostring`, which
+    resolves prefixes from whatever the global table happens to hold. Both are
+    on #91's list.
+    """
     root = xml.getroot()
     file: io.BytesIO = io.BytesIO()
     if root is None:
@@ -272,7 +282,12 @@ def xml_to_file(xml: ET.ElementTree[ET.Element], filename: str, zip_file_content
     else:
         with _serialising(root):
             xml.write(file, xml_declaration=True, method="xml", encoding="UTF-8")
-    zip_file_contents[filename] = io.BytesIO(file.getvalue())
+    return file.getvalue()
+
+
+def xml_to_file(xml: ET.ElementTree[ET.Element], filename: str, zip_file_contents: dict[str, io.BytesIO]) -> None:
+    """Save an ElementTree to zip_file_contents, prefixed the way Visio writes it."""
+    zip_file_contents[filename] = io.BytesIO(serialise_part(xml))
 
 
 def xml_value(value: object) -> str:

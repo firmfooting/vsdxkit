@@ -70,10 +70,10 @@ fields identify the source and target cells, such as ``BeginX``, ``EndX``,
 Package limits
 --------------
 
-.. autoclass:: vsdxkit.vsdxfile.PackageLimits
+.. autoclass:: vsdxkit.package.PackageLimits
    :members:
    :undoc-members:
 
-.. autoclass:: vsdxkit.vsdxfile.PackageLimitError
+.. autoclass:: vsdxkit.package.PackageLimitError
    :members:
    :undoc-members:
