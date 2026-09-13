@@ -52,50 +52,73 @@ existing type-checking and formatting gates green.
 
 #### When a change needs Visio
 
-The test suite never opens Microsoft Visio, so it cannot tell you whether Visio
-will silently repair a file we generate. Connector glue, routing, swimlanes,
-masters and anything touching the package's content types or relationships all
-have that failure mode. Changes in that territory get the `needs-visio` label,
-which means the change is not done until somebody has opened the generated
-files in real Visio.
+Nothing in this library can tell you what Visio will do with the file it wrote.
+Visio repairs some packages on open and silently discards parts of others: a
+page declaring four shapes can open as three, with no error, no repair prompt,
+and a clean save afterwards. Connector glue, routing, swimlanes, masters and
+anything touching content types or relationships all have that failure mode.
+Changes in that territory get the `needs-visio` label, which means the change is
+not done until a real Visio has been asked.
 
 You do not need Visio to contribute such a change. Open the PR, apply
-`needs-visio`, and say in the description which files a checker should generate
-and look at. A maintainer on Windows runs the check.
+`needs-visio`, and say which files a checker should generate. A maintainer on
+Windows runs the harness.
 
-If you have Windows and a licensed desktop Visio, run it yourself. Visio for the
-web has no COM and cannot do this.
+##### The harness
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/visio_check.ps1 -Paths out\generated.vsdx
+`tools/visio_verify.py` compares two accounts of the same document: what the
+package claims, read from its XML, and what Visio reports over COM. Where they
+disagree, at least one of them is wrong, and neither is our own opinion of our
+own output. It needs Windows and a licensed desktop Visio; Visio for the web has
+no COM and cannot do this.
+
+```console
+$ python tools/visio_verify.py check out/generated.vsdx
+AGREE  generated.vsdx: 1 page(s), 3 shape(s) - Visio sees the same document
 ```
 
-`-Paths` takes any number of files or directories; a directory contributes its
-`*.vsdx` files, non-recursively. The script opens each file in an invisible
-Visio instance and prints a `PASS` or `FAIL` line for it, then a line per
-connector and a line per page:
+A disagreement names the page, the shape and the side that is short (one line
+per difference, wrapped here to fit):
 
+```console
+$ python tools/visio_verify.py check out/broken.vsdx
+DIFFER broken.vsdx: 2 difference(s)
+    page 1 shape 2: package declares shape 2 more than once on this page. Ids are page-scoped and unique; Visio keeps one and drops the rest without an error, so the shapes on this page cannot be matched up.
+    page 1 connect 7.EndX: package glues shape 7 cell EndX to shape 5 cell PinX; visio does not
 ```
-PASS generated.vsdx: pages=1 connectors=1 walkglue=1
-  page=1 conn=Dynamic connector.5 BeginX=_WALKGLUE(BegTrigger,EndTrigger,WalkPreference)
-  page=1 name=Page-1 shapes=3 connectors=1 lanes=
+
+Unlike the checker it replaces, it exits non-zero on a disagreement, so it can
+fail a pipeline. It also refuses to start when Visio is already running: a
+stranded instance from an earlier crashed run holds the file, and the error that
+produces reads exactly like a corrupt file. Pass `--allow-running-visio` if you
+have Visio open and want to proceed anyway; the harness only ever shuts down
+instances it started itself.
+
+##### Recording, so that CI can check it too
+
+Visio exists on one Windows desktop and CI runs on Linux, so a Visio run is
+worth keeping:
+
+```console
+$ python tools/visio_verify.py record tests/test4_connectors.vsdx
+RECORD test4_connectors.vsdx (roundtrip) -> tests/fixtures/visio_observations/test4_connectors.json
 ```
 
-`FAIL <file>: <message>` means Visio refused to open the file or the automation
-errored. That is the loudest form of the bug, not the only one: the script reads
-counts and `BeginX` formulas, not Visio's repair log, so a package Visio quietly
-repairs on open still reports `PASS`. Open the file in the Visio UI too when the
-change touches content types or relationships.
+What gets recorded is Visio's view of the file **vsdxkit wrote** from that
+fixture, not of the fixture itself. `tests/test_visio_harness_replay.py` then
+re-runs the writer on every run and compares its output to that recording, with
+no Visio involved — so a change to what we write that Visio would reject fails
+in ordinary CI. What this cannot catch is a change in what *Visio* does with
+unchanged bytes; only re-running `check` on Windows catches that.
 
-`connectors` counts every top-level shape with a `BeginX` cell, so a plain drawn
-line counts as one and a connector nested in a group counts as none. `walkglue`
-counts how many of those carry a `_WALKGLUE` formula: for dynamically glued
-connectors the two should match, while point-glued connectors use
-`PAR(PNT(...))` and are expected to fall short. Lane labels appear per page for
-swimlane work.
+A recording stores the hash of its input fixture. Edit that fixture and replay
+reports `STALE` and fails rather than passing on a comparison it did not make;
+re-record it on a Windows machine. Delete the fixture and its recording is
+reported as an `ORPHAN`. Neither is allowed to go quietly green.
 
-Read the output rather than the exit code. A `FAIL` line does not set a
-non-zero status, so the script will not fail a shell pipeline on its own.
+Add a recording whenever you add a fixture that a Visio run has vouched for. Do
+not hand-edit one: the schema is versioned and a recording written under another
+version is refused, not guessed at.
 
 The connector and swimlane ground truth the engine was built against lives in
 `tests/fixtures/com_reference/`, generated by `tools/com_reference.ps1`. See

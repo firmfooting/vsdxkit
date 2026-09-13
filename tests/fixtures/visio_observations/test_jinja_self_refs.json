@@ -1,0 +1,49 @@
+{
+  "error": null,
+  "pages": [
+    {
+      "background": false,
+      "connects": [],
+      "index": 1,
+      "name": "self refs",
+      "shapes": [
+        {
+          "id": 1,
+          "name": "Sheet.1",
+          "parent_id": null
+        },
+        {
+          "id": 2,
+          "name": "Sheet.2",
+          "parent_id": null
+        },
+        {
+          "id": 3,
+          "name": "Sheet.3",
+          "parent_id": null
+        },
+        {
+          "id": 4,
+          "name": "Sheet.4",
+          "parent_id": null
+        },
+        {
+          "id": 5,
+          "name": "Sheet.5",
+          "parent_id": null
+        }
+      ]
+    }
+  ],
+  "schema": 1,
+  "source": {
+    "name": "test_jinja_self_refs.vsdx",
+    "sha256": "658853814143c92e6a7bd6b95761a38cf7c888fc7633e55ccaa9f5d0f42531a5",
+    "transform": "roundtrip"
+  },
+  "status": "opened",
+  "viewer": {
+    "product": "Visio",
+    "version": "16.0"
+  }
+}

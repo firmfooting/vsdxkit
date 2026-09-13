@@ -225,14 +225,7 @@ class DataProperty(InheritedRow):
         section = self.shape.xml.find(f'{namespace}Section[@N="Property"]')
         if section is None:
             section = ET.fromstring(f'<Section xmlns="{namespace[1:-1]}" N="Property"/>')
-            # Sections follow the shape's Cell and Trigger children and precede
-            # its Text and Shapes, so append to the run of them rather than to
-            # the shape (see Shape.get_or_create_cell)
-            insert_at = 0
-            for index, child in enumerate(list(self.shape.xml)):
-                if child.tag in (f"{namespace}Cell", f"{namespace}Trigger", f"{namespace}Section"):
-                    insert_at = index + 1
-            self.shape.xml.insert(insert_at, section)
+            self.shape._insert_section(section)
 
         row = ET.fromstring(f'<Row xmlns="{namespace[1:-1]}"/>')
         if self.name is not None:
@@ -724,21 +717,124 @@ class Shape:
     def fill_color(self, value: str) -> None:
         self.set_cell_value("FillForegnd", xml_value(value))
 
+    def _character_row_index(self) -> str:
+        """The Character row that formats the start of this shape's text.
+
+        A `cp` run names the row for the text that follows it, so text sitting
+        ahead of the first run - or a shape with no runs at all - takes row 0.
+        Writing into whichever row happens to come first in the section is how
+        a colour lands on a run nobody can see: `s05_swimlanes_cfflow.vsdx`
+        shape 37 has a single row IX=1, which formats only the empty tail after
+        its second run.
+        """
+        text = self.xml.find(f"{namespace}Text")
+        if text is None or text.text:
+            return "0"
+        run = text.find(f"{namespace}cp")
+        return run.attrib.get("IX", "0") if run is not None else "0"
+
+    def _character_color_cell(self) -> Element | None:
+        """The Color cell that formats this shape's text, or None."""
+        section = self.xml.find(f'{namespace}Section[@N="Character"]')
+        row = self._character_row(section) if section is not None else None
+        return row.find(f'{namespace}Cell[@N="Color"]') if row is not None else None
+
+    def _character_row(self, section: Element) -> Element | None:
+        index = self._character_row_index()
+        for row in section.findall(f"{namespace}Row"):
+            if row.attrib.get("IX", "0") == index:
+                return row
+        return None
+
+    def _create_character_color_cell(self) -> Element:
+        """Give the shape a Character row carrying a Color cell.
+
+        Text colour lives in a section rather than in a plain cell, which is
+        why it did not go through :meth:`_write_cell` and why it alone among
+        the colour setters used to write nothing at all on a shape that had no
+        such row -- fifteen of the seventeen shapes on page 1 of test1,
+        test12_colors and test3_house.
+
+        The row is only half of it. A Character row formats the run that names
+        it, so the row has to carry the index the text actually asks for, and
+        text with no run at all needs one writing.
+        """
+        section = self.xml.find(f'{namespace}Section[@N="Character"]')
+        if section is None:
+            section = Element(f"{namespace}Section", {"N": "Character"})
+            self._insert_section(section)
+        row = self._character_row(section)
+        if row is None:
+            row = Element(f"{namespace}Row", {"IX": self._character_row_index()})
+            self._insert_character_row(section, row)
+        cell = make_cell_element("Color")
+        row.append(cell)
+        self._name_character_row_in_text(row.attrib.get("IX", "0"))
+        return cell
+
+    @staticmethod
+    def _insert_character_row(section: Element, row: Element) -> None:
+        """Keep the section's rows in IX order, as Visio writes them."""
+        index = int(row.attrib["IX"])
+        for position, existing in enumerate(section):
+            if int(existing.attrib.get("IX", "0")) > index:
+                section.insert(position, row)
+                return
+        section.append(row)
+
+    def _insert_section(self, section: Element) -> None:
+        """Put a new section where Visio writes one.
+
+        A section belongs to the run of Cell, Trigger and Section children that
+        opens a shape, ahead of its Text and its Shapes. Geometry closes that
+        run: no section in this repository's fixtures is written after it,
+        while Text is (connectors in test5_master carry Geometry last), so
+        Geometry rather than Text is the marker to stop at. Appending to the
+        shape instead puts the section after a group's `Shapes` child, which
+        Visio never does.
+        """
+        insert_at = 0
+        for index, child in enumerate(self.xml):
+            if child.tag == f"{namespace}Section" and child.attrib.get("N") == "Geometry":
+                insert_at = index
+                break
+            if child.tag in (f"{namespace}Cell", f"{namespace}Trigger", f"{namespace}Section"):
+                insert_at = index + 1
+        self.xml.insert(insert_at, section)
+
+    def _name_character_row_in_text(self, row_index: str) -> None:
+        """Open the shape's text with a run that names a Character row.
+
+        Only when the text carries no runs at all, in which case the row is
+        index 0 and this is the run Visio would have written beside it. Text
+        that already has runs named the row this wrote into, by construction.
+        A shape with no Text element of its own has no run to write here; its
+        text comes from its master.
+        """
+        text = self.xml.find(f"{namespace}Text")
+        if text is None or text.find(f"{namespace}cp") is not None:
+            return
+        run = Element(f"{namespace}cp", {"IX": row_index})
+        run.tail = text.text
+        text.text = None
+        text.insert(0, run)
+
     @property
     def text_color(self) -> str | None:
-        """Get text color of shape - returns only first color attribute if there are many"""
-        char_section = self.xml.find(f'{namespace}Section[@N="Character"]')
-        color_cells = char_section.findall(f'{namespace}Row/{namespace}Cell[@N="Color"]') if char_section is not None else None
-        if color_cells:
-            return color_cells[0].attrib.get("V")
+        """Get text color of shape - the colour formatting the start of its text"""
+        cell = self._character_color_cell()
+        return cell.attrib.get("V") if cell is not None else None
 
     @text_color.setter
     def text_color(self, value: str | int) -> None:
-        """Set text color of shape - sets only first color attribute if there are many"""
-        char_section = self.xml.find(f'{namespace}Section[@N="Character"]')
-        color_cells = char_section.findall(f'{namespace}Row/{namespace}Cell[@N="Color"]') if char_section is not None else None
-        if color_cells:
-            color_cells[0].attrib["V"] = str(value)
+        """Set text color of shape - the colour formatting the start of its text"""
+        # coerced before anything is created: a rejected value used to leave a
+        # Character row and a text run behind and then raise
+        text = xml_value(value)
+        cell = self._character_color_cell()
+        if cell is None:
+            cell = self._create_character_color_cell()
+        cell.attrib["V"] = text
 
     @property
     def end_arrow(self) -> str | None:

@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from .shapes import Shape
-from .vsdxfile import VisioFile
+from .vsdxfile import VisioFile, VisioFileNotOpen
 
 
 def _media_path(filename: str) -> str:
@@ -19,26 +19,40 @@ class Media:
     circle_text = "CIRCLE"
 
     def __init__(self) -> None:
-        self._media_vsdx: VisioFile | None = VisioFile(_media_path("media.vsdx"))
+        self._closed = False
+        self._media_vsdx: VisioFile | None = None
         self._palette_vsdx: VisioFile | None = None
+
+    def _require_open(self) -> None:
+        """Refuse to reopen a donor once close() has run.
+
+        Reopening on demand was the same leak `VisioFile._shared_media` used to
+        have one layer up: the owner has already let go, so nothing is left
+        holding the replacement to close it (issue #242).
+        """
+        if self._closed:
+            raise VisioFileNotOpen("the bundled media documents have been closed")
 
     @property
     def media(self) -> VisioFile:
-        """The sentinel media document, re-opened if close() has been called."""
+        """The sentinel media document."""
+        self._require_open()
         if self._media_vsdx is None:
             self._media_vsdx = VisioFile(_media_path("media.vsdx"))
         return self._media_vsdx
 
     @property
     def palette(self) -> VisioFile:
-        """Lazy-loaded extended shape palette (sentinel-text shapes:
-        PALETTE_PROCESS, PALETTE_DECISION, PALETTE_START_END,
-        PALETTE_PARALLELOGRAM, PALETTE_DATABASE)."""
+        """The extended shape palette (sentinel-text shapes: PALETTE_PROCESS,
+        PALETTE_DECISION, PALETTE_START_END, PALETTE_PARALLELOGRAM,
+        PALETTE_DATABASE)."""
+        self._require_open()
         if self._palette_vsdx is None:
             self._palette_vsdx = VisioFile(_media_path("palette_extended.vsdx"))
         return self._palette_vsdx
 
     def close(self) -> None:
+        self._closed = True
         if self._media_vsdx is not None:
             self._media_vsdx.close_vsdx()
             self._media_vsdx = None

@@ -25,7 +25,7 @@ vsdxkit adds shape creation, Visio-faithful connectors, connector re-anchoring, 
 - Renders data into Visio templates with Jinja.
 - Saves to a new file or safely replaces the source file in place.
 
-The implementation edits the XML parts inside the Open Packaging Convention archive. It does not drive the Visio user interface. Generated connector and swimlane files are checked against Microsoft Visio through COM before a connector or swimlane change is considered done. That check is manual; no workflow runs Visio. See [When a change needs Visio](CONTRIBUTING.md#when-a-change-needs-visio).
+The implementation edits the XML parts inside the Open Packaging Convention archive. It does not drive the Visio user interface. Generated files are checked against Microsoft Visio through COM before a change that Visio could silently repair is considered done, and what Visio reported is recorded so CI can replay it without Visio. The COM check itself is manual; no workflow runs Visio. See [When a change needs Visio](CONTRIBUTING.md#when-a-change-needs-visio).
 
 ## Installation
 
@@ -195,7 +195,7 @@ uv run --no-sync sphinx-build -W --keep-going -b html docs docs/_build/html
 uv run --no-sync python -m build
 ```
 
-The package is held at pyrefly's `strict` preset. CI tests Python 3.10–3.14 on Linux and Windows, and 3.10 and 3.14 on macOS. Connector and swimlane changes also run through `tools/visio_check.ps1`, which opens generated files in an invisible Microsoft Visio instance and reports package repair or automation errors. That step is manual, on a maintainer's Windows machine; GitHub's runners have no Visio.
+The package is held at pyrefly's `strict` preset. CI tests Python 3.10–3.14 on Linux and Windows, and 3.10 and 3.14 on macOS. Changes that Visio could silently repair also run through `tools/visio_verify.py`, which opens the file in an invisible Microsoft Visio instance and diffs what Visio reports against what the package declares. That step is manual, on a maintainer's Windows machine; GitHub's runners have no Visio. What Visio said is recorded under `tests/fixtures/visio_observations/`, and CI replays those recordings against the fixtures on every run.
 
 ## Documentation
 

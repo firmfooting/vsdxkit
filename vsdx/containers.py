@@ -155,6 +155,12 @@ class Container:
         if not lanes:
             raise ValueError("page has no Swimlane lanes; not a CFF diagram")
         top_lane = lanes[0]
+        if label and get_user_row(top_lane, ROW_HEADING_TEXT) is None:
+            # checked before the clone: set_lane_label raises on a lane it
+            # cannot label, and it runs last, so leaving the check to it would
+            # abandon a new lane on the page with the list and container
+            # already grown around it
+            raise ValueError(f"lane {top_lane.ID} has no {ROW_HEADING_TEXT} row to copy; cannot label a clone of it")
 
         new_xml = vsdx.ET.fromstring(vsdx.ET.tostring(top_lane.xml))
         shapes_tag = self.page.xml.find(f"{vsdx.namespace}Shapes")
@@ -183,8 +189,19 @@ class Container:
         return new_lane
 
     def set_lane_label(self, lane: Shape, label: str) -> None:
-        """Set a lane's heading label (visHeadingText row + heading text)."""
-        set_user_row_value(lane, ROW_HEADING_TEXT, label)
+        """Set a lane's heading label (visHeadingText row + heading text).
+
+        Raises if the shape carries no ``visHeadingText`` row, rather than
+        writing the visible half of the label and dropping the other. The row
+        is not created here: it is one of several rows Visio's cross-functional
+        flowchart machinery writes together with the Swimlane List that owns
+        the lane, and a shape that has none of them is not a lane, so inventing
+        one would produce a heading the CFF engine does not know about.
+
+        :raises ValueError: if ``lane`` has no ``visHeadingText`` row.
+        """
+        if not set_user_row_value(lane, ROW_HEADING_TEXT, label):
+            raise ValueError(f"shape {lane.ID} has no writable {ROW_HEADING_TEXT} row, so it is not a swimlane lane")
         heading = self.lane_heading(lane)
         if heading is not None:
             heading.text = label

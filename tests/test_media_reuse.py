@@ -9,7 +9,9 @@ import os
 import zipfile
 from collections import Counter
 
-from vsdx import VisioFile
+import pytest
+
+from vsdx import Media, VisioFile, VisioFileNotOpen
 
 BASE = "test8_simple_connector.vsdx"
 
@@ -81,18 +83,34 @@ def test_close_vsdx_releases_the_shared_media(vsdx_copy):
     assert cached._palette_vsdx is None
 
 
-def test_shared_media_is_rebuilt_rather_than_handed_back_closed(vsdx_copy):
-    """The closed instance is never returned again, so no caller sees it broken."""
+def test_closed_document_refuses_to_rebuild_the_shared_media(vsdx_copy):
+    """Rebuilding on demand was itself the leak (issue #242).
+
+    This used to hand a closed document a fresh donor pair; `close_vsdx` had
+    already released the pair it owned, so nothing left could close the new one.
+    """
     vis = VisioFile(vsdx_copy(BASE))
     first = vis._shared_media()
     assert vis._shared_media() is first  # same instance while the file is open
 
     vis.close_vsdx()
 
-    second = vis._shared_media()
-    assert second is not first
-    assert second.palette.pages[0].find_shape_by_text("PALETTE_PROCESS") is not None
-    vis.close_vsdx()
+    with pytest.raises(VisioFileNotOpen):
+        vis._shared_media()
+    assert vis._media is None
+
+
+def test_a_closed_media_refuses_to_reopen_its_donors():
+    """Same leak one layer down: Media used to reopen a donor after close()."""
+    media = Media()
+    assert media.palette.file_open
+
+    media.close()
+
+    with pytest.raises(VisioFileNotOpen):
+        _ = media.media
+    with pytest.raises(VisioFileNotOpen):
+        _ = media.palette
 
 
 def test_close_vsdx_is_idempotent(vsdx_copy):
