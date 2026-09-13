@@ -43,7 +43,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from .errors import MalformedPackageError, MissingPartError, PackageLimitError
+from .errors import MissingPartError, PackageLimitError
 from .xmlio import parse_part, serialise_part
 
 __all__ = [
@@ -432,10 +432,9 @@ PartValue = BytesPart | XmlPart
 
 
 def _promoted(name: str, data: bytes) -> XmlPart:
-    try:
-        tree = parse_part(data)
-    except ET.ParseError as error:
-        raise MalformedPackageError(f"package part {name} is not well-formed XML: {error}") from error
+    # `parse_part` reports a part that will not parse, and names it from the
+    # argument below: one translation for both routes into the parser.
+    tree = parse_part(data, name)
     return XmlPart(tree=tree, original_bytes=data, original_canonical_hash=canonical_hash(tree))
 
 

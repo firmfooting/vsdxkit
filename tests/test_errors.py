@@ -7,6 +7,9 @@ and the one that matters more, is that the library actually raises these types.
 A hierarchy nobody raises documents a contract the code does not keep.
 """
 
+import xml.etree.ElementTree as ET
+import zipfile
+
 import pytest
 
 import vsdxkit
@@ -30,6 +33,20 @@ PUBLIC_ERRORS = (
     PackageLimitError,
     VisioFileNotOpen,
 )
+
+
+@pytest.fixture
+def broken_document_package(vsdx_copy, tmp_path) -> str:
+    """A real package whose `visio/document.xml` is truncated mid-tag."""
+    source = vsdx_copy("test1.vsdx")
+    destination = str(tmp_path / "broken.vsdx")
+    with zipfile.ZipFile(source) as original, zipfile.ZipFile(destination, "w") as broken:
+        for member in original.infolist():
+            data = original.read(member.filename)
+            if member.filename == "visio/document.xml":
+                data = b"<VisioDocument"
+            broken.writestr(member, data)
+    return destination
 
 
 # --------------------------------------------------------------------------
@@ -159,6 +176,25 @@ def test_promoting_a_part_that_is_not_xml_raises_malformed_package_error(tmp_pat
     store.write_bytes("/visio/document.xml", b"<not-xml")
     with pytest.raises(MalformedPackageError, match="not well-formed XML"):
         store.read_xml("/visio/document.xml")
+
+
+def test_opening_a_package_whose_xml_is_broken_raises_malformed_package_error(broken_document_package):
+    """The public open path parses through `parse_part`, which must translate too.
+
+    `PackageStore._promoted` was not the only way into the parser: `VisioFile`
+    opens a document through `file_to_xml` -> `parse_part`, where a malformed
+    part used to surface as a raw `ET.ParseError` and miss the hierarchy
+    entirely (#365 review).
+    """
+    with pytest.raises(MalformedPackageError, match="not well-formed XML"):
+        vsdxkit.VisioFile(broken_document_package)
+
+
+def test_the_parse_error_is_kept_as_the_cause(broken_document_package):
+    """Chained, not swallowed: `ET.ParseError.position` is how a caller finds the byte."""
+    with pytest.raises(MalformedPackageError) as caught:
+        vsdxkit.VisioFile(broken_document_package)
+    assert isinstance(caught.value.__cause__, ET.ParseError)
 
 
 def test_malformed_shapesheet_number_raises_malformed_package_error(vsdx_copy):

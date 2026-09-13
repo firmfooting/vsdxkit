@@ -216,31 +216,42 @@ def make_cell_element(name: str, v: object | None = None, f: object | None = Non
     return cell
 
 
-def parse_part(data: bytes) -> ET.ElementTree[ET.Element]:
+def parse_part(data: bytes, name: str = "") -> ET.ElementTree[ET.Element]:
     """Parse one package part, recording the namespace prefixes it declares.
 
     A parsed tree holds expanded names and nothing else: by the time `ET.parse`
     returns, which prefix stood for which namespace is gone, and the write side
     has to guess one. The bindings are visible only during the parse, so they
     are collected here and kept against the root element.
+
+    A part that will not parse is reported here rather than at each call site.
+    Both routes into the parser -- `file_to_xml`, which is how a document is
+    opened, and `PackageStore`'s promotion -- come through this function, so a
+    translation at one of them would leave the other raising `ET.ParseError`.
+    The `ET.ParseError` stays as the cause, because its `position` is how a
+    caller finds the byte that broke.
     """
+    subject = f"package part {name}" if name else "package part"
     root: ET.Element | None = None
     declared: dict[str, str] = {}
-    for event, payload in ET.iterparse(io.BytesIO(data), events=("start-ns", "start")):
-        if event == "start-ns":
-            prefix, uri = payload
-            # `ns0:` is ElementTree's invention, not a spelling any document
-            # chose: a part carrying one was written by a vsdx older than the
-            # per-part prefix fix, and keeping it would re-create #60
-            if _GENERATED_PREFIX_RE.fullmatch(prefix):
-                continue
-            # first binding wins: a part may bind the same namespace twice, and
-            # only one spelling of it can be written back
-            declared.setdefault(uri, prefix)
-        elif root is None:
-            root = payload
+    try:
+        for event, payload in ET.iterparse(io.BytesIO(data), events=("start-ns", "start")):
+            if event == "start-ns":
+                prefix, uri = payload
+                # `ns0:` is ElementTree's invention, not a spelling any document
+                # chose: a part carrying one was written by a vsdx older than the
+                # per-part prefix fix, and keeping it would re-create #60
+                if _GENERATED_PREFIX_RE.fullmatch(prefix):
+                    continue
+                # first binding wins: a part may bind the same namespace twice, and
+                # only one spelling of it can be written back
+                declared.setdefault(uri, prefix)
+            elif root is None:
+                root = payload
+    except ET.ParseError as error:
+        raise MalformedPackageError(f"{subject} is not well-formed XML: {error}") from error
     if root is None:  # pragma: no cover - a part with no root element fails to parse first
-        raise MalformedPackageError("XML part has no root element")
+        raise MalformedPackageError(f"{subject} has no root element")
     _declared_prefixes[root] = declared
     return ET.ElementTree(root)
 
@@ -261,7 +272,7 @@ def adopt_prefixes(root: ET.Element, source: ET.Element) -> None:
 def file_to_xml(filename: str, zip_file_contents: dict[str, io.BytesIO]) -> ET.ElementTree[ET.Element] | None:
     """Import a file as an ElementTree."""
     if filename in zip_file_contents:
-        return parse_part(zip_file_contents[filename].getvalue())
+        return parse_part(zip_file_contents[filename].getvalue(), filename)
     return None
 
 
