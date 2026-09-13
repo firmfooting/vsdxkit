@@ -142,7 +142,7 @@ def imported_master(vsdx_copy, tmp_path) -> ImportedMaster:
 
 
 def test_import_adds_the_connector_master(imported_master: ImportedMaster):
-    """Guard the fixture: every assertion below is vacuous if nothing was imported."""
+    """Guard the fixture: the rest of this module asserts nothing if no master was imported."""
     names = [master.attrib.get("NameU") for master in _master_elements(imported_master.document)]
     assert imported_master.master_name in names, f"connector master was not imported, masters.xml holds {names}"
     assert len(_master_parts(imported_master.document)) == 2, "expected the shipped master plus the imported one"
@@ -157,7 +157,7 @@ def test_master_ids_are_unique(imported_master: ImportedMaster):
 
 
 def test_every_master_part_has_a_content_type_override(imported_master: ImportedMaster):
-    """A part with no override has no content type at all: OPC declares no default for it."""
+    """OPC declares no default content type for master parts, so one without an override has none."""
     overrides = _content_type_overrides(imported_master.document)
     for part in sorted(_master_parts(imported_master.document)):
         assert f"/{part}" in overrides, f"{part} is in the archive with no content-type override"
@@ -218,7 +218,7 @@ def test_every_master_a_page_uses_is_related_from_that_page(imported_master: Imp
 
 
 def test_every_master_name_is_listed_in_titles_of_parts(imported_master: ImportedMaster):
-    """app.xml enumerates the document's masters by name; a gap desynchronises it."""
+    """app.xml enumerates the masters by name, so a missing one leaves it disagreeing with masters.xml."""
     titles = _titles_of_parts(imported_master.document)
     for master in _master_elements(imported_master.document):
         name = master.attrib.get("NameU") or master.attrib.get("Name")
@@ -227,7 +227,7 @@ def test_every_master_name_is_listed_in_titles_of_parts(imported_master: Importe
 
 
 def test_imported_master_survives_a_reopen(imported_master: ImportedMaster):
-    """The graph is only worth asserting if the library can read it back."""
+    """Reopening must find the imported master where the saved graph says it is."""
     with VisioFile(imported_master.document) as vis:
         master_page = vis.get_master_page_by_id(imported_master.master_id)
         assert master_page is not None, f"master {imported_master.master_id} did not survive the round trip"

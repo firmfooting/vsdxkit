@@ -64,12 +64,12 @@ def test_edited_package_converts_in_libreoffice(filename, tmp_path):
 
 
 def test_created_connector_package_converts_in_libreoffice(tmp_path):
-    """Cover the path that writes package wiring, not just the one that edits text.
+    """Cover the path that writes package wiring; the test above only edits shape text.
 
     ``Connect.create()`` imports the connector master, which adds a master part,
     a content-type override, a masters.xml.rels entry and a per-page
     relationship. tests/test_master_import_opc.py asserts that graph directly;
-    this asks a second implementation whether it can still open the result.
+    this checks that a second implementation can still open the result.
     ``test3_house.vsdx`` ships one master, so the connector is imported rather
     than copied wholesale with the masters folder.
     """
