@@ -324,15 +324,28 @@ def _member_bytes(archive: zipfile.ZipFile, info: zipfile.ZipInfo, limits: Packa
     """One member's bytes, or a MalformedPackageError saying it cannot be decoded.
 
     `ZipFile.open` reports an encrypted member as `RuntimeError` and a
-    compression method it does not implement as `NotImplementedError`, and a
-    deflate stream the decompressor rejects arrives from `zlib` itself. None of
-    them is a `BadZipFile`, and a package whose parts cannot be decoded is one
-    this library cannot read, whichever of them says so.
+    compression method it does not implement as `NotImplementedError`; a
+    deflate stream the decompressor rejects arrives from `zlib`; and `bz2` and
+    `lzma` report a stream they cannot decode as a bare `OSError`. None of them
+    is a `BadZipFile`, and a package whose parts cannot be decoded is one this
+    library cannot read, whichever of them says so.
+
+    An `OSError` is only taken as a codec failure when it carries no `errno`.
+    One that does came from the operating system - the disk the archive is on -
+    and saying the package is malformed would be a lie about a file that is
+    fine. `PackageLimitError` is an `OSError` too, and is re-raised first
+    because `_read_bounded` raises it from inside this very block.
     """
     try:
         with archive.open(info, "r") as member_reader:
             return _read_bounded(member_reader, info.file_size, info.filename, limits)
+    except PackageLimitError:
+        raise
     except (RuntimeError, NotImplementedError, zlib.error) as error:
+        raise MalformedPackageError(f"package member {info.filename!r} cannot be read: {error}") from error
+    except OSError as error:
+        if error.errno is not None:
+            raise
         raise MalformedPackageError(f"package member {info.filename!r} cannot be read: {error}") from error
 
 

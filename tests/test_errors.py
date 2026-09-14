@@ -364,6 +364,46 @@ def test_a_corrupt_compressed_stream_raises_malformed_package_error(vsdx_copy, t
         vsdxkit.VisioFile(str(destination))
 
 
+@pytest.mark.allow_invalid_package
+def test_a_corrupt_bzip2_member_raises_malformed_package_error(vsdx_copy, tmp_path):
+    """`bz2` reports a stream it cannot decode as a bare `OSError`, with no errno."""
+    source = vsdx_copy("test1.vsdx")
+    recompressed = tmp_path / "bzip2.vsdx"
+    with zipfile.ZipFile(source) as original, zipfile.ZipFile(str(recompressed), "w") as rewritten:
+        for name in original.namelist():
+            compression = zipfile.ZIP_BZIP2 if name == "visio/document.xml" else zipfile.ZIP_DEFLATED
+            rewritten.writestr(name, original.read(name), compress_type=compression)
+
+    with zipfile.ZipFile(str(recompressed)) as archive:
+        header_at = archive.getinfo("visio/document.xml").header_offset
+    raw = bytearray(recompressed.read_bytes())
+    (name_length,) = struct.unpack_from("<H", raw, header_at + 26)
+    (extra_length,) = struct.unpack_from("<H", raw, header_at + 28)
+    data_at = header_at + 30 + name_length + extra_length
+    raw[data_at + 10 : data_at + 40] = b"\xff" * 30
+    destination = tmp_path / "bzip2-corrupt.vsdx"
+    destination.write_bytes(bytes(raw))
+
+    with pytest.raises(MalformedPackageError, match="cannot be read"):
+        vsdxkit.VisioFile(str(destination))
+
+
+@pytest.mark.allow_invalid_package
+def test_a_package_limit_is_not_reported_as_a_malformed_member(tmp_path):
+    """`PackageLimitError` is an `OSError`, and the member handler must not swallow it.
+
+    The handler below it translates a codec's bare `OSError`; a limit refusal
+    raised from inside the same `try` has to come out as the limit it is.
+    """
+    package = tmp_path / "big.vsdx"
+    with zipfile.ZipFile(str(package), "w") as archive:
+        archive.writestr("visio/document.xml", b"x" * 4096)
+
+    with pytest.raises(PackageLimitError) as caught:
+        vsdxkit.package.read_archive_members(str(package), vsdxkit.PackageLimits(max_member_size=16))
+    assert caught.value.reason == "member_size"
+
+
 def test_require_attribute_returns_the_value_when_it_is_there():
     element = ET.fromstring('<Relationship Id="rId1"/>')
     assert vsdxkit.xmlio.require_attribute(element, "Id", "Relationship") == "rId1"
