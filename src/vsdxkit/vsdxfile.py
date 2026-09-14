@@ -13,6 +13,7 @@ import xml.dom.minidom as minidom  # minidom used for prettyprint
 import xml.etree.ElementTree as ET
 import zipfile
 from types import TracebackType
+from typing import NamedTuple
 from xml.etree.ElementTree import Element
 
 if sys.version_info >= (3, 12):
@@ -24,8 +25,13 @@ import vsdxkit
 
 from . import relationships
 from .logging_support import attach_debug_stream_handler, get_logger
-from .package import PackageLimits, read_archive_members
+from .package import PackageLimitError, PackageLimits, read_archive_members  # noqa: F401
 
+# TODO(#362): `PackageLimitError` is imported here only to keep
+# `vsdxkit.vsdxfile.PackageLimitError` working -- it moved to `vsdxkit.package`
+# and `docs/classes.rst` had named the old path. The `noqa` on that import is the
+# ugly part; it wants a deprecation shim, or removal once the old path is no
+# longer published. Tested by tests/test_package_limit_error_import.py.
 logger = get_logger(__name__)
 
 from . import (  # noqa: E402
@@ -571,6 +577,25 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         root = self._part_root(self.app_xml, "docProps/app.xml")
         return require_element(root.find(f"{ext_prop_namespace}TitlesOfParts"), "app.xml TitlesOfParts")
 
+    class _Section(NamedTuple):
+        """One section of TitlesOfParts.
+
+        `label` is what Visio writes in English, and what we write when the
+        section has to be created. It cannot be the only handle: HeadingPairs
+        names are display strings chosen by the producer and Office localises
+        them -- a German Excel writes `Arbeitsblätter` for `Worksheets` -- so a
+        German file says `Seiten` and matching "Pages" finds nothing.
+
+        `is_pages` says which section this is in terms the file cannot
+        translate, which is what `_resolve_section` falls back on.
+        """
+
+        label: str
+        is_pages: bool
+
+    PAGES = _Section("Pages", is_pages=True)
+    MASTERS = _Section("Masters", is_pages=False)
+
     def _heading_pairs_list(self) -> list[tuple[str, Element]]:
         """Each section HeadingPairs names, as (name, the element holding its count).
 
@@ -595,7 +620,71 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
                 pairs.append((name.text or "", count))
         return pairs
 
-    def _titles_of_parts_section(self, section: str) -> tuple[Element, int, int]:
+    def _resolve_section(self, section: _Section, page_titles: set[str]) -> int | None:
+        """Which HeadingPairs entry is `section`, or None if the file has no such entry.
+
+        By name first, so a document that writes its sections in an unusual
+        order is still read correctly.
+
+        When the name misses, position is not a safe answer. A document naming
+        only Masters has it at position 0, and a localised document names it
+        something we would not recognise either -- so "the first section" would
+        claim the masters and put page titles among them, which is worse than
+        reporting the section missing, since that at least gets one created.
+
+        What the producer cannot translate is the titles themselves. The pages
+        section is the one naming this document's pages, so it is found by
+        asking which section's titles those are. The masters section is then
+        whatever the other one is, where there are two.
+        """
+        pairs = self._heading_pairs_list()
+        for index, (name, _) in enumerate(pairs):
+            if name == section.label:
+                return index
+        pages_index = self._section_naming_the_pages(pairs, page_titles)
+        if section.is_pages:
+            return pages_index
+        if len(pairs) == 2 and pages_index is not None:
+            return 1 - pages_index
+        return None
+
+    def _page_titles(self) -> set[str]:
+        """The titles app.xml should be holding for this document's pages right now."""
+        return {page.name for page in self.pages}
+
+    def _section_naming_the_pages(self, pairs: list[tuple[str, Element]], page_titles: set[str]) -> int | None:
+        """Which section's titles are this document's page names, or None if none are.
+
+        Overlap rather than equality, because a caller is usually part-way
+        through changing one of them: an added page is not in app.xml yet, and a
+        renamed one is still there under its old title. A caller that knows
+        which title is in flight passes the titles app.xml should be holding,
+        rather than letting that difference count as a miss.
+
+        A tie is not an answer. A master may be called what a page is called, so
+        on a one-page document a masters section can score exactly what the
+        pages section scores, and taking the first is how a page title ends up
+        among the masters. Nothing here can tell those apart, so nothing here
+        pretends to: the section reports missing and the caller creates one,
+        which is recoverable in a way that writing into the wrong section is
+        not.
+        """
+        vector = self._titles_of_parts().find(f"{vt_namespace}vector")
+        if vector is None or not page_titles:
+            return None
+        scores: list[int] = []
+        start = 0
+        for _, count in pairs:
+            titles_here = int(count.text or 0)
+            stop = min(start + titles_here, len(vector))
+            scores.append(sum(1 for at in range(min(start, len(vector)), stop) if vector[at].text in page_titles))
+            start += titles_here
+        best = max(scores, default=0)
+        if best == 0 or scores.count(best) > 1:
+            return None
+        return scores.index(best)
+
+    def _titles_of_parts_section(self, section: _Section, page_titles: set[str]) -> tuple[Element, int, int]:
         """The TitlesOfParts vector, and the ``[start, stop)`` slice of it `section` owns.
 
         A section HeadingPairs does not mention owns the empty slice at the end
@@ -609,15 +698,18 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         """
         vector = require_element(self._titles_of_parts().find(f"{vt_namespace}vector"), "TitlesOfParts vector")
         total = len(vector)
+        wanted = self._resolve_section(section, page_titles)
+        if wanted is None:
+            return vector, total, total
         start = 0
-        for name, count in self._heading_pairs_list():
+        for index, (_, count) in enumerate(self._heading_pairs_list()):
             titles_here = int(count.text or 0)
-            if name == section:
+            if index == wanted:
                 return vector, min(start, total), min(start + titles_here, total)
             start += titles_here
         return vector, total, total
 
-    def _section_count(self, section: str, change: int) -> None:
+    def _section_count(self, section: _Section, change: int, page_titles: set[str]) -> None:
         """Add `change` to `section`'s count in HeadingPairs, creating the pair if needed.
 
         The stored count is what moves, not the length of the slice it turned
@@ -625,9 +717,14 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         still knows how many parts it has, and re-deriving the number from
         where the titles ended up would throw that away.
         """
-        self._set_app_xml_value(section, str(int(self._get_app_xml_value(section) or 0) + change))
+        index = self._resolve_section(section, page_titles)
+        if index is None:
+            self._set_app_xml_value(section.label, str(change))
+            return
+        count = self._heading_pairs_list()[index][1]
+        count.text = str(int(count.text or 0) + change)
 
-    def _titles_of_parts_insert(self, title: str, section: str) -> None:
+    def _titles_of_parts_insert(self, title: str, section: _Section, page_titles: set[str] | None = None) -> None:
         """Name a part in TitlesOfParts under `section`, and count it there.
 
         The title goes at the end of its own section rather than the end of the
@@ -640,38 +737,40 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         rather than this section's, so a page called the same thing as the
         master being added stopped the master being listed at all.
         """
-        vector, start, stop = self._titles_of_parts_section(section)
+        titles = self._page_titles() if page_titles is None else page_titles
+        vector, start, stop = self._titles_of_parts_section(section, titles)
         if any(vector[position].text == title for position in range(start, stop)):
             return
         entry = Element(f"{vt_namespace}lpstr")
         entry.text = title
         vector.insert(stop, entry)
         vector.attrib["size"] = str(len(vector))
-        self._section_count(section, 1)
+        self._section_count(section, 1, titles)
 
-    def _titles_of_parts_remove(self, title: str, section: str) -> None:
+    def _titles_of_parts_remove(self, title: str, section: _Section, page_titles: set[str] | None = None) -> None:
         """Drop `section`'s entry for `title`, and stop counting it.
 
         The count moves only when an entry does, and only this section's
         entries are candidates: a page and a master can be called the same
         thing, and the one being removed is the one in this section.
         """
-        vector, start, stop = self._titles_of_parts_section(section)
+        titles = self._page_titles() if page_titles is None else page_titles
+        vector, start, stop = self._titles_of_parts_section(section, titles)
         for position in range(start, stop):
             if vector[position].text == title:
                 del vector[position]
                 vector.attrib["size"] = str(len(vector))
-                self._section_count(section, -1)
+                self._section_count(section, -1, titles)
                 return
 
-    def _titles_of_parts_rename(self, old_title: str, new_title: str, section: str) -> None:
+    def _titles_of_parts_rename(self, old_title: str, new_title: str, section: _Section, page_titles: set[str]) -> None:
         """Rewrite `section`'s entry for `old_title` in place.
 
         In place rather than a removal and an insertion: nothing joins or
         leaves the section, so neither its count nor the order of its titles
         has any business changing.
         """
-        vector, start, stop = self._titles_of_parts_section(section)
+        vector, start, stop = self._titles_of_parts_section(section, page_titles)
         for position in range(start, stop):
             if vector[position].text == old_title:
                 vector[position].text = new_title
@@ -707,12 +806,12 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         vector.attrib["size"] = str(int(vector.attrib.get("size", 0)) + 2)
 
     def _add_page_to_app_xml(self, new_page_name: str) -> None:
-        self._titles_of_parts_insert(new_page_name, "Pages")
+        self._titles_of_parts_insert(new_page_name, VisioFile.PAGES)
 
     def _remove_page_from_app_xml(self, page_name: str) -> None:
         if self.app_xml is not None:
             logger.debug("_remove_page_from_app_xml()")
-            self._titles_of_parts_remove(page_name, "Pages")
+            self._titles_of_parts_remove(page_name, VisioFile.PAGES)
 
     def _rename_page_in_app_xml(self, old_page_name: str, new_page_name: str) -> None:
         """Keep app.xml's list of page names in step with a page that was renamed.
@@ -729,7 +828,11 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             return
         if root.find(f"{ext_prop_namespace}TitlesOfParts") is None:
             return
-        self._titles_of_parts_rename(old_page_name, new_page_name, "Pages")
+        # app.xml still lists the old title and the page already carries the new
+        # one, so the titles to look for are today's with that swap undone. On a
+        # one-page document nothing else identifies the section.
+        expected = (self._page_titles() - {new_page_name}) | {old_page_name}
+        self._titles_of_parts_rename(old_page_name, new_page_name, VisioFile.PAGES, expected)
 
     def _create_page(
         self,

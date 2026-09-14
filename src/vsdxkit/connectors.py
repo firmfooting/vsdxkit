@@ -151,7 +151,7 @@ class Connect:
             # gained this one
             shape_name = connector_shape.shape_name
             if shape_name:
-                page.vis._titles_of_parts_insert(shape_name, "Masters")
+                page.vis._titles_of_parts_insert(shape_name, page.vis.MASTERS)
 
             # copy style used by new connector shape
             master_shape = connector_shape.master_shape
