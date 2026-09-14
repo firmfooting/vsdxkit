@@ -8,6 +8,35 @@ From 0.7.1 onward this file is maintained by release-please, which writes a
 section per release from the conventional-commit subjects on `main`. Edit the
 release pull request rather than this file directly.
 
+## [0.9.0](https://github.com/firmfooting/vsdxkit/compare/v0.8.0...v0.9.0) (2026-09-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* move to a src layout and rename the import package to vsdxkit ([#350](https://github.com/firmfooting/vsdxkit/issues/350))
+
+### Features
+
+* hold the package as parts addressed by OPC part name ([#355](https://github.com/firmfooting/vsdxkit/issues/355)) ([4ac48f9](https://github.com/firmfooting/vsdxkit/commit/4ac48f96b0d9d2de479be1f5eb5d82e9fcd7454c))
+
+
+### Bug Fixes
+
+* find app.xml's page section on a file whose producer did not write English ([#363](https://github.com/firmfooting/vsdxkit/issues/363)) ([a9b6d77](https://github.com/firmfooting/vsdxkit/commit/a9b6d77da6fec6a101c365622b2ee7320faf32ab))
+* name a new page in app.xml's Pages section, not among the masters ([#356](https://github.com/firmfooting/vsdxkit/issues/356)) ([014352e](https://github.com/firmfooting/vsdxkit/commit/014352e991851fe7e331f9acac5c40c43284f51d))
+* read the whole attribute name in a {% set self.x %} reference ([#354](https://github.com/firmfooting/vsdxkit/issues/354)) ([2e82673](https://github.com/firmfooting/vsdxkit/commit/2e82673ceef5d229b4e164ea4c47947e99a75127))
+* serialise the page rels and masters parts through xmlio ([#364](https://github.com/firmfooting/vsdxkit/issues/364)) ([9b4b590](https://github.com/firmfooting/vsdxkit/commit/9b4b59088f9103a52dd58f569a0dbdde54dd2788))
+
+
+### Documentation
+
+* say what the 0.x line actually is ([#347](https://github.com/firmfooting/vsdxkit/issues/347)) ([280e8af](https://github.com/firmfooting/vsdxkit/commit/280e8af77284c655bb291b9e39d187e39252bd82))
+
+
+### Code Refactoring
+
+* move to a src layout and rename the import package to vsdxkit ([#350](https://github.com/firmfooting/vsdxkit/issues/350)) ([75e7e7c](https://github.com/firmfooting/vsdxkit/commit/75e7e7c1d8f397f2747587dd376c19d29ce219d4))
+
 ## [0.8.0](https://github.com/firmfooting/vsdxkit/compare/v0.7.1...v0.8.0) (2026-09-13)
 
 
