@@ -344,6 +344,26 @@ def test_an_encrypted_member_raises_malformed_package_error(vsdx_copy, tmp_path)
         vsdxkit.VisioFile(str(destination))
 
 
+@pytest.mark.allow_invalid_package
+def test_a_corrupt_compressed_stream_raises_malformed_package_error(vsdx_copy, tmp_path):
+    """A deflate stream the decompressor rejects arrives as `zlib.error`, not `BadZipFile`."""
+    source = vsdx_copy("test1.vsdx")
+    with zipfile.ZipFile(source) as archive:
+        header_at = archive.getinfo("visio/document.xml").header_offset
+    raw = bytearray(pathlib.Path(source).read_bytes())
+    # local file header: 30 fixed bytes, then the name and extra fields, then
+    # the compressed data. Smashing its first bytes gives an invalid block type.
+    (name_length,) = struct.unpack_from("<H", raw, header_at + 26)
+    (extra_length,) = struct.unpack_from("<H", raw, header_at + 28)
+    data_at = header_at + 30 + name_length + extra_length
+    raw[data_at : data_at + 8] = b"\xff" * 8
+    destination = tmp_path / "corrupt-stream.vsdx"
+    destination.write_bytes(bytes(raw))
+
+    with pytest.raises(MalformedPackageError, match="cannot be read"):
+        vsdxkit.VisioFile(str(destination))
+
+
 def test_require_attribute_returns_the_value_when_it_is_there():
     element = ET.fromstring('<Relationship Id="rId1"/>')
     assert vsdxkit.xmlio.require_attribute(element, "Id", "Relationship") == "rId1"

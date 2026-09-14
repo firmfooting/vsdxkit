@@ -39,6 +39,7 @@ import math
 import os
 import xml.etree.ElementTree as ET
 import zipfile
+import zlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -323,14 +324,15 @@ def _member_bytes(archive: zipfile.ZipFile, info: zipfile.ZipInfo, limits: Packa
     """One member's bytes, or a MalformedPackageError saying it cannot be decoded.
 
     `ZipFile.open` reports an encrypted member as `RuntimeError` and a
-    compression method it does not implement as `NotImplementedError`. Neither
-    is a `BadZipFile`, and a package whose parts cannot be decoded is one this
-    library cannot read, whichever of them says so.
+    compression method it does not implement as `NotImplementedError`, and a
+    deflate stream the decompressor rejects arrives from `zlib` itself. None of
+    them is a `BadZipFile`, and a package whose parts cannot be decoded is one
+    this library cannot read, whichever of them says so.
     """
     try:
         with archive.open(info, "r") as member_reader:
             return _read_bounded(member_reader, info.file_size, info.filename, limits)
-    except (RuntimeError, NotImplementedError) as error:
+    except (RuntimeError, NotImplementedError, zlib.error) as error:
         raise MalformedPackageError(f"package member {info.filename!r} cannot be read: {error}") from error
 
 
