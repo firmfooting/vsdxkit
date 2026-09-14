@@ -389,6 +389,61 @@ def test_a_corrupt_bzip2_member_raises_malformed_package_error(vsdx_copy, tmp_pa
 
 
 @pytest.mark.allow_invalid_package
+def test_a_corrupt_lzma_member_raises_malformed_package_error(vsdx_copy, tmp_path):
+    """`lzma` has an error type of its own, which is neither `OSError` nor `zlib.error`.
+
+    Enumerating codecs one at a time is what this is here to stop: the handler
+    translates whatever a member read raises, so a codec added to a future
+    CPython needs no change here.
+    """
+    source = vsdx_copy("test1.vsdx")
+    recompressed = tmp_path / "lzma.vsdx"
+    with zipfile.ZipFile(source) as original, zipfile.ZipFile(str(recompressed), "w") as rewritten:
+        for name in original.namelist():
+            compression = zipfile.ZIP_LZMA if name == "visio/document.xml" else zipfile.ZIP_DEFLATED
+            rewritten.writestr(name, original.read(name), compress_type=compression)
+
+    with zipfile.ZipFile(str(recompressed)) as archive:
+        header_at = archive.getinfo("visio/document.xml").header_offset
+    raw = bytearray(recompressed.read_bytes())
+    (name_length,) = struct.unpack_from("<H", raw, header_at + 26)
+    (extra_length,) = struct.unpack_from("<H", raw, header_at + 28)
+    data_at = header_at + 30 + name_length + extra_length
+    raw[data_at + 12 : data_at + 60] = b"\xff" * 48
+    destination = tmp_path / "lzma-corrupt.vsdx"
+    destination.write_bytes(bytes(raw))
+
+    with pytest.raises(MalformedPackageError, match="cannot be read"):
+        vsdxkit.VisioFile(str(destination))
+
+
+@pytest.mark.allow_invalid_package
+def test_a_member_name_that_is_not_utf_8_raises_malformed_package_error(vsdx_copy, tmp_path):
+    """`ZipFile` decodes the central directory before `infolist()` is ever called."""
+    source = vsdx_copy("test1.vsdx")
+    raw = bytearray(pathlib.Path(source).read_bytes())
+    target = b"visio/document.xml"
+    for signature, name_offset, flag_offset, length_offset in (
+        (b"PK\x03\x04", 30, 6, 26),
+        (b"PK\x01\x02", 46, 8, 28),
+    ):
+        at = raw.find(signature)
+        while at != -1:
+            (name_length,) = struct.unpack_from("<H", raw, at + length_offset)
+            name_at = at + name_offset
+            if raw[name_at : name_at + name_length] == target:
+                raw[name_at : name_at + name_length] = target[:-1] + b"\xff"
+                (flags,) = struct.unpack_from("<H", raw, at + flag_offset)
+                struct.pack_into("<H", raw, at + flag_offset, flags | 0x800)  # "the name is UTF-8"
+            at = raw.find(signature, at + 4)
+    destination = tmp_path / "bad-name.vsdx"
+    destination.write_bytes(bytes(raw))
+
+    with pytest.raises(MalformedPackageError, match="not a readable package"):
+        vsdxkit.VisioFile(str(destination))
+
+
+@pytest.mark.allow_invalid_package
 def test_a_package_limit_is_not_reported_as_a_malformed_member(tmp_path):
     """`PackageLimitError` is an `OSError`, and the member handler must not swallow it.
 

@@ -39,7 +39,6 @@ import math
 import os
 import xml.etree.ElementTree as ET
 import zipfile
-import zlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -275,10 +274,12 @@ def read_archive_members(path: str | os.PathLike[str], limits: PackageLimits) ->
     _preflight_eocd(source, limits)
     try:
         return _members_within(source, limits)
-    except zipfile.BadZipFile as error:
-        # A file that is not an archive, or one whose members do not read back
-        # as they were declared, is a malformed package rather than a zipfile
-        # problem the caller of this library asked for.
+    except (zipfile.BadZipFile, UnicodeDecodeError) as error:
+        # A file that is not an archive, one whose members do not read back as
+        # they were declared, or one whose central directory claims a member
+        # name is UTF-8 and then is not, is a malformed package rather than a
+        # zipfile problem the caller of this library asked for. The name is
+        # decoded by the `ZipFile` constructor, before `infolist()` runs.
         raise MalformedPackageError(f"{source} is not a readable package: {error}") from error
 
 
@@ -323,29 +324,32 @@ def _members_within(source: str, limits: PackageLimits) -> list[tuple[str, bytes
 def _member_bytes(archive: zipfile.ZipFile, info: zipfile.ZipInfo, limits: PackageLimits) -> bytes:
     """One member's bytes, or a MalformedPackageError saying it cannot be decoded.
 
-    `ZipFile.open` reports an encrypted member as `RuntimeError` and a
-    compression method it does not implement as `NotImplementedError`; a
-    deflate stream the decompressor rejects arrives from `zlib`; and `bz2` and
-    `lzma` report a stream they cannot decode as a bare `OSError`. None of them
-    is a `BadZipFile`, and a package whose parts cannot be decoded is one this
-    library cannot read, whichever of them says so.
+    Every codec reports a stream it cannot decode differently: `zlib.error`
+    from deflate, `lzma.LZMAError` from LZMA, a bare `OSError` from bz2, a
+    `RuntimeError` for an encrypted member, a `NotImplementedError` for a
+    method this build does not have, and whatever the next codec CPython gains
+    chooses. Enumerating them is a list that goes stale one release at a time,
+    so this translates whatever the read raises: inside this block there is
+    nothing but opening a member and reading it, and a member that cannot be
+    read is a malformed package however the codec says so.
 
-    An `OSError` is only taken as a codec failure when it carries no `errno`.
-    One that does came from the operating system - the disk the archive is on -
-    and saying the package is malformed would be a lie about a file that is
-    fine. `PackageLimitError` is an `OSError` too, and is re-raised first
-    because `_read_bounded` raises it from inside this very block.
+    Two exceptions are handed back rather than translated. `PackageLimitError`
+    is raised by `_read_bounded` from inside this very block, and is the
+    library's own answer already. And an `OSError` carrying an `errno` came
+    from the operating system - the disk the archive is on - where saying the
+    package is malformed would be a lie about a file that is fine; a codec's
+    `OSError` carries no `errno`.
     """
     try:
         with archive.open(info, "r") as member_reader:
             return _read_bounded(member_reader, info.file_size, info.filename, limits)
     except PackageLimitError:
         raise
-    except (RuntimeError, NotImplementedError, zlib.error) as error:
-        raise MalformedPackageError(f"package member {info.filename!r} cannot be read: {error}") from error
     except OSError as error:
         if error.errno is not None:
             raise
+        raise MalformedPackageError(f"package member {info.filename!r} cannot be read: {error}") from error
+    except Exception as error:
         raise MalformedPackageError(f"package member {info.filename!r} cannot be read: {error}") from error
 
 
