@@ -89,3 +89,9 @@ def test_a_missing_key_is_a_key_error(view):
         view[f"{DIRECTORY}/visio/missing.xml"]
     with pytest.raises(KeyError):
         view["/elsewhere/visio/document.xml"]
+
+
+def test_delitem_with_invalid_part_name_raises_key_error(view):
+    """Deleting a key with an invalid part name must raise KeyError, not ValueError."""
+    with pytest.raises(KeyError):
+        del view[f"{DIRECTORY}/visio/../escape.xml"]

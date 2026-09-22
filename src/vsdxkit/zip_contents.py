@@ -9,8 +9,13 @@ here would be a second writer, which is what #89 exists to remove.
 from __future__ import annotations
 
 import io
+import sys
 from collections.abc import Iterator, MutableMapping
-from typing import override
+
+if sys.version_info >= (3, 12):
+    from typing import override
+else:
+    from typing_extensions import override
 
 from .package import PackageStore
 
@@ -56,7 +61,11 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
         name = self._name(key)
         if name is None:
             raise KeyError(key)
-        self._store.remove(name)
+        try:
+            self._store.remove(name)
+        except ValueError as e:
+            # not a valid part name, so not a part
+            raise KeyError(key) from e
 
     @override
     def __contains__(self, key: object) -> bool:
