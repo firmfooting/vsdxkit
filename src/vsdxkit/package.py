@@ -529,3 +529,15 @@ class PackageStore:
         is telling the store the part changed.
         """
         self._parts[_checked(name)] = XmlPart(tree=tree, original_bytes=None, original_canonical_hash=None)
+
+    def remove(self, name: str) -> None:
+        """Take a part out of the package, or raise KeyError if it is not in it.
+
+        A KeyError rather than a quiet no-op: the callers are removing a page
+        or a relationship part they believe is there, and one that is not is a
+        package the caller has misread.
+        """
+        checked = _checked(name)
+        if checked not in self._parts:
+            raise KeyError(name)
+        del self._parts[checked]

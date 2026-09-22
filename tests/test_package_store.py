@@ -109,6 +109,7 @@ def test_a_name_that_is_not_an_opc_part_name_is_refused(store: PackageStore, nam
         lambda store, name: store.write_bytes(name, b"<Doc/>"),
         lambda store, name: store.write_xml(name, ET.ElementTree(ET.Element("Doc"))),
         lambda store, name: store.part(name),
+        lambda store, name: store.remove(name),
     ],
 )
 def test_every_way_into_the_store_checks_the_name(store: PackageStore, call):
@@ -157,6 +158,26 @@ def test_write_bytes_over_a_promoted_part_discards_the_tree(store: PackageStore)
     assert isinstance(store.part(PAGE_PART), BytesPart)
     reread = store.require_xml(PAGE_PART).getroot()
     assert reread is not None and MARKER not in reread.attrib
+
+
+def test_remove_takes_the_part_out_of_the_package(store: PackageStore):
+    """A removed page must not be written; the save writes what `names` lists."""
+    store.remove(PAGE_PART)
+    assert PAGE_PART not in store.names()
+    assert store.read_bytes(PAGE_PART) is None
+
+
+def test_a_part_written_after_removal_goes_on_the_end(store: PackageStore):
+    """Removal forgets the position too; only a write *over* a part keeps its place."""
+    store.remove(PAGE_PART)
+    store.write_bytes(PAGE_PART, b"<PageContents/>")
+    assert store.names()[-1] == PAGE_PART
+
+
+def test_removing_an_absent_part_is_a_key_error(store: PackageStore):
+    """KeyError, so a `MutableMapping` built on this gets `pop(key, default)` for free."""
+    with pytest.raises(KeyError):
+        store.remove("/visio/pages/page99.xml")
 
 
 # --------------------------------------------------------------------------
