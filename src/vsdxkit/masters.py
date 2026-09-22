@@ -10,15 +10,17 @@ from __future__ import annotations
 import copy as copy_module
 import io
 import xml.etree.ElementTree as ET
+from collections.abc import MutableMapping
 from typing import TYPE_CHECKING, cast
 
 from vsdxkit import namespace, r_namespace
 
 from . import relationships
 from .logging_support import get_logger
+from .package import PackageStore
 from .pages import Page
 from .shapes import Shape
-from .xmlio import file_to_xml, xml_to_file
+from .xmlio import xml_to_file
 
 if TYPE_CHECKING:
     from .vsdxfile import VisioFile
@@ -28,7 +30,8 @@ logger = get_logger(__name__)
 
 class MastersImportMixin:
     # attributes provided by the VisioFile host class
-    zip_file_contents: dict[str, io.BytesIO]
+    zip_file_contents: MutableMapping[str, io.BytesIO]
+    _package: PackageStore
     master_pages: list[Page]
     master_index: dict[str, Page]
     masters_xml: ET.Element | None
@@ -39,6 +42,7 @@ class MastersImportMixin:
     def _add_content_types_override(self, part_name_path: str, content_type: str) -> None: ...
     def _add_document_rel(self, rel_type: str, target: str) -> None: ...
     def load_master_pages(self) -> None: ...
+    def _read_part_xml(self, path: str) -> ET.ElementTree[ET.Element] | None: ...
     def _ensure_masters_for_shape(self, source_shape: Shape) -> str:
         """Ensure this document contains the master that source_shape uses.
 
@@ -88,7 +92,7 @@ class MastersImportMixin:
             if f.startswith(prefix) and f.endswith(".xml") and f[len(prefix) : -4].isdigit()
         ]
         master_rels_path = f"{self._masters_folder}/_rels/masters.xml.rels"
-        rels_tree = file_to_xml(master_rels_path, self.zip_file_contents)
+        rels_tree = self._read_part_xml(master_rels_path)
         rels_root = rels_tree.getroot() if rels_tree is not None else None
         if rels_root is None:
             rels_root = ET.fromstring('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
@@ -144,7 +148,7 @@ class MastersImportMixin:
 
         # 6. register the new master directly - a full load_master_pages()
         # reload would re-append every existing master to master_pages
-        master_page_xml = file_to_xml(part_path, self.zip_file_contents)
+        master_page_xml = self._read_part_xml(part_path)
         if master_page_xml is None:
             raise ValueError(f"imported master part {part_path} missing from package")
         new_master_page = Page(
