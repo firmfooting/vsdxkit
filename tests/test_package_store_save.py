@@ -51,6 +51,7 @@ def test_promoting_parts_without_changing_them_changes_nothing(source, tmp_path)
 
 
 def test_a_changed_part_is_the_only_member_that_changes(source, tmp_path):
+    """Fails if changed parts are not re-serialised or unchanged parts are modified."""
     store = PackageStore.open(source)
     root = store.require_xml(PAGE_PART).getroot()
     assert root is not None
@@ -80,6 +81,7 @@ def test_members_are_deflated(source, tmp_path):
 
 
 def test_save_with_no_target_writes_over_the_source(source):
+    """Fails if the default `save()` does not write back over the original source."""
     store = PackageStore.open(source)
     store.write_xml("/visio/extra.xml", ET.ElementTree(ET.Element("Extra")))
     assert store.save() == source.resolve()
@@ -100,6 +102,7 @@ def test_save_as_does_not_rebind_the_source(source, tmp_path):
 
 @pytest.mark.allow_invalid_package
 def test_a_removed_part_is_not_written(source, tmp_path):
+    """Fails if a removed part is still written to the archive."""
     store = PackageStore.open(source)
     store.remove(PAGE_PART)
     target = tmp_path / "out.vsdx"
@@ -108,12 +111,14 @@ def test_a_removed_part_is_not_written(source, tmp_path):
 
 
 def test_save_creates_missing_parent_directories(source, tmp_path):
+    """Fails if parent directories are not created before saving."""
     target = tmp_path / "a" / "b" / "out.vsdx"
     PackageStore.open(source).save(target)
     assert target.exists()
 
 
 def test_a_failed_write_leaves_the_target_and_no_temporary_file(source, monkeypatch):
+    """Fails if temporary files are not cleaned up when a write fails."""
     original = source.read_bytes()
     store = PackageStore.open(source)
 
@@ -129,6 +134,7 @@ def test_a_failed_write_leaves_the_target_and_no_temporary_file(source, monkeypa
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits are not meaningful on Windows")
 def test_a_new_target_takes_the_source_mode(source, tmp_path):
+    """Fails if file mode is not preserved from the source."""
     source.chmod(0o640)
     target = tmp_path / "out.vsdx"
     PackageStore.open(source).save(target)
