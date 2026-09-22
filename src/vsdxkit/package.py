@@ -42,6 +42,7 @@ import shutil
 import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
+import zlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -462,18 +463,26 @@ def _promoted(name: str, data: bytes) -> XmlPart:
 class PackageStore:
     """The parts of one package, in archive order, addressed by part name."""
 
-    def __init__(self, source: Path) -> None:
+    def __init__(self, source: Path, limits: PackageLimits | None = None) -> None:
         # The one copy of where this package came from. It is only knowable at
-        # open, and #89's `save(target=None)` writes back over it.
+        # open, and #89's `save(target=None)` writes back over it. Stored as
+        # an absolute path so that later `save()` calls are not affected by
+        # working directory changes.
         self.source = source
+        # The limits this package was opened with, used during save to ensure
+        # written members satisfy the compression ratio constraints.
+        self._limits = limits if limits is not None else PackageLimits()
         self._parts: dict[str, PartValue] = {}
 
     @classmethod
     def open(cls, source: str | os.PathLike[str], *, limits: PackageLimits | None = None) -> PackageStore:
         """Read a package off disk. Nothing is parsed as XML here."""
-        path = Path(source)
-        store = cls(path)
-        for member, data in read_archive_members(path, limits if limits is not None else PackageLimits()):
+        # Store the absolute path so that save() calls are not affected by
+        # working directory changes.
+        path = Path(os.path.abspath(source))
+        limits_obj = limits if limits is not None else PackageLimits()
+        store = cls(path, limits_obj)
+        for member, data in read_archive_members(path, limits_obj):
             store._parts[_part_name_for_member(member)] = BytesPart(data)
         return store
 
@@ -557,18 +566,42 @@ class PackageStore:
 
         Saving elsewhere does not make elsewhere the source. A later `save()`
         with no target still writes where the package was opened from.
+
+        Each member is written with ZIP_DEFLATED compression unless deflating it
+        would exceed the compression ratio limit, in which case it is stored
+        uncompressed. This ensures that the written package satisfies the same
+        limits that `open()` enforces on arrival, so the writer's output can be
+        read back without rejection.
         """
-        destination = Path(os.path.abspath(self.source if target is None else target))
+        # Use self.source directly (already absolute from open()) when target is None,
+        # avoiding working-directory-dependent behavior.
+        destination = Path(self.source if target is None else os.path.abspath(target))
         destination.parent.mkdir(parents=True, exist_ok=True)
         fd, temporary = tempfile.mkstemp(prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent)
-        os.close(fd)
         try:
-            with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-                for name in self.names():
-                    data = self.read_bytes(name)
-                    assert data is not None  # names() lists only parts that are present
-                    archive.writestr(name[1:], data)
-            mode_source = destination if destination.exists() else Path(os.path.abspath(self.source))
+            # Write through the descriptor to prevent symlink races: keep the fd open
+            # from creation through write, then prove the path still points to the file
+            # we wrote before replacing the destination.
+            with os.fdopen(fd, "wb") as handle:
+                with zipfile.ZipFile(handle, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                    for name in self.names():
+                        data = self.read_bytes(name)
+                        assert data is not None  # names() lists only parts that are present
+                        # Measure deflated size the way zipfile does: zlib with window=-15
+                        # to skip the zlib header/trailer. If the ratio would exceed the
+                        # limit, store the member uncompressed instead.
+                        compressor = zlib.compressobj(zlib.Z_DEFAULT_COMPRESSION, zlib.DEFLATED, -15)
+                        compressed = compressor.compress(data) + compressor.flush()
+                        ratio = len(data) / max(len(compressed), 1)
+                        if ratio > min(self._limits.max_ratio, PackageLimits().max_ratio):
+                            archive.writestr(name[1:], data, compress_type=zipfile.ZIP_STORED)
+                        else:
+                            archive.writestr(name[1:], data)
+                # Prove the path still points to the file we wrote, preventing race where
+                # someone swapped in a symlink while we were writing.
+                if not os.path.samestat(os.fstat(handle.fileno()), os.lstat(temporary)):
+                    raise OSError(f"{temporary} was replaced while the package was being written to it")
+            mode_source = destination if destination.exists() else self.source
             if mode_source.exists():
                 shutil.copymode(mode_source, temporary)
             os.replace(temporary, destination)

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
@@ -139,3 +140,92 @@ def test_a_new_target_takes_the_source_mode(source, tmp_path):
     target = tmp_path / "out.vsdx"
     PackageStore.open(source).save(target)
     assert target.stat().st_mode & 0o777 == 0o640
+
+
+def test_save_uses_absolute_source_path_to_avoid_cwd_changes(source, tmp_path, monkeypatch):
+    """Fails if save() computes source path at save time instead of open time.
+
+    A caller who opens with a relative path and then changes working directory
+    should still save back to the original location, not somewhere else.
+    """
+    monkeypatch.chdir(tmp_path)
+    # Open with a relative path
+    store = PackageStore.open("source.vsdx")
+    # Create a subdirectory and change into it
+    subdir = tmp_path / "subdir"
+    subdir.mkdir()
+    monkeypatch.chdir(subdir)
+    # Add a new part
+    store.write_xml("/visio/extra.xml", ET.ElementTree(ET.Element("Extra")))
+    # Save with no target should write to the original location
+    store.save()
+    # Assert the original source was updated
+    assert "visio/extra.xml" in dict(_members(tmp_path / "source.vsdx"))
+    # Assert no source.vsdx was created in the subdirectory
+    assert not (subdir / "source.vsdx").exists()
+
+
+@pytest.mark.allow_invalid_package
+def test_members_exceeding_compression_ratio_are_stored_uncompressed(source, tmp_path):
+    """Fails if members exceeding the compression ratio limit are not stored uncompressed.
+
+    Forcing ZIP_DEFLATED on all members can produce members whose compression
+    ratio exceeds the limit, causing the package to be rejected when reopened.
+    """
+    # Build a package with a highly compressible member that would exceed the ratio if deflated
+    store = PackageStore.open(source)
+    # Create a member that is highly compressible but would have a bad ratio if deflated
+    big_xml = b"<Big>" + b"<a/>" * 150_000 + b"</Big>"
+    store.write_bytes("/visio/big.xml", big_xml)
+    target = tmp_path / "out.vsdx"
+    store.save(target)
+    # Assert that the new package can be opened with default limits
+    reopened = PackageStore.open(target)
+    assert reopened is not None
+    # Assert that visio/big.xml is stored uncompressed (because it's highly compressible)
+    with zipfile.ZipFile(target) as archive:
+        big_info = next((info for info in archive.infolist() if info.filename == "visio/big.xml"), None)
+        assert big_info is not None
+        assert big_info.compress_type == zipfile.ZIP_STORED
+        # Assert all other members are deflated
+        for info in archive.infolist():
+            if info.filename != "visio/big.xml" and not info.is_dir():
+                assert info.compress_type == zipfile.ZIP_DEFLATED
+
+
+@pytest.mark.skipif(os.name == "nt", reason="symlink-based test is not meaningful on Windows")
+def test_save_detects_symlink_race_on_temp_file(source, tmp_path, monkeypatch):
+    """Fails if save() does not detect a symlink being swapped in on the temp file.
+
+    Closing the mkstemp descriptor and reopening the path allows a race where
+    someone with directory write access can swap in a symlink. The fix is to
+    write through the descriptor and check that the path still points to the
+    file we wrote.
+    """
+    import vsdxkit.package as package_module
+
+    original_mkstemp = tempfile.mkstemp
+    victim_file = tmp_path / "victim"
+    victim_file.write_bytes(b"original victim content")
+
+    def mkstemp_with_symlink_race(*args, **kwargs):
+        fd, path = original_mkstemp(*args, **kwargs)
+        # Unlink the temp file and replace it with a symlink to the victim
+        os.unlink(path)
+        os.symlink(victim_file, path)
+        return fd, path
+
+    monkeypatch.setattr(package_module, "tempfile", type("Module", (), {"mkstemp": staticmethod(mkstemp_with_symlink_race)})())
+
+    store = PackageStore.open(source)
+    store.write_xml("/visio/extra.xml", ET.ElementTree(ET.Element("Extra")))
+    target = tmp_path / "out.vsdx"
+
+    # save() should detect the race and raise OSError
+    with pytest.raises(OSError, match="was replaced while the package was being written"):
+        store.save(target)
+
+    # Victim should still have original content
+    assert victim_file.read_bytes() == b"original victim content"
+    # Target should not exist (because save failed before replace)
+    assert not target.exists()
