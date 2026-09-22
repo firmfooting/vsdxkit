@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from vsdxkit.package import PackageStore
+from vsdxkit.package import PackageLimitError, PackageLimits, PackageStore
 
 BASEDIR = os.path.dirname(os.path.realpath(__file__))
 PAGE_PART = "/visio/pages/page1.xml"
@@ -229,3 +229,114 @@ def test_save_detects_symlink_race_on_temp_file(source, tmp_path, monkeypatch):
     assert victim_file.read_bytes() == b"original victim content"
     # Target should not exist (because save failed before replace)
     assert not target.exists()
+
+
+def test_save_rejects_package_exceeding_member_count_limit(source, tmp_path):
+    """Fails if save() allows packages to exceed the member count limit.
+
+    A caller can add parts after opening, and save() should reject the package
+    if it would exceed the limits the store was opened with.
+    """
+    store = PackageStore.open(source)
+    current_count = len(store.names())
+    # Open with a limit that allows the current package but not one more part
+    store_limited = PackageStore.open(source, limits=PackageLimits(max_members=current_count))
+    # Add a part to exceed the limit
+    store_limited.write_xml("/visio/extra.xml", ET.ElementTree(ET.Element("Extra")))
+    target = tmp_path / "out.vsdx"
+    # save() should reject this and raise PackageLimitError
+    with pytest.raises(PackageLimitError) as exc_info:
+        store_limited.save(target)
+    assert exc_info.value.reason == "member_count"
+    # Target should not have been created
+    assert not target.exists()
+
+
+def test_save_rejects_package_exceeding_member_size_limit(source, tmp_path):
+    """Fails if save() allows packages to exceed the member size limit.
+
+    A caller can grow a part after opening, and save() should reject the
+    package if any member exceeds the limits the store was opened with.
+    """
+    store = PackageStore.open(source)
+    # Find the maximum size of any existing part
+    max_existing = max(len(store.read_bytes(name)) for name in store.names())
+    # Open with a limit that allows the current package
+    member_limit = max_existing + 1000
+    store_limited = PackageStore.open(source, limits=PackageLimits(max_member_size=member_limit))
+    # Write a part that exceeds this limit
+    store_limited.write_bytes("/visio/big.xml", b"x" * (member_limit + 1))
+    target = tmp_path / "out.vsdx"
+    # save() should reject this and raise PackageLimitError
+    with pytest.raises(PackageLimitError) as exc_info:
+        store_limited.save(target)
+    assert exc_info.value.reason == "member_size"
+    # Target should not have been created
+    assert not target.exists()
+
+
+def test_save_rejects_package_exceeding_total_size_limit(source, tmp_path):
+    """Fails if save() allows packages to exceed the total uncompressed size limit.
+
+    A caller can add large parts after opening, and save() should reject the
+    package if the total uncompressed size exceeds the limits the store was opened with.
+    """
+    store = PackageStore.open(source)
+    total = sum(len(store.read_bytes(name)) for name in store.names())
+    # Open with a small limit that only allows the current package
+    small_limit = total + 1
+    store_limited = PackageStore.open(source, limits=PackageLimits(max_total_uncompressed=small_limit))
+    # Add a part that makes the total exceed the limit
+    store_limited.write_bytes("/visio/extra.xml", b"x" * 1000)
+    target = tmp_path / "out.vsdx"
+    # save() should reject this and raise PackageLimitError
+    with pytest.raises(PackageLimitError) as exc_info:
+        store_limited.save(target)
+    assert exc_info.value.reason == "total_size"
+    # Target should not have been created
+    assert not target.exists()
+
+
+def test_save_mode_uses_fchmod_when_available(source, tmp_path, monkeypatch):
+    """Fails if mode copying is not done via fchmod on platforms that support it.
+
+    When the descriptor is still open, mode changes via fchmod are atomic with
+    respect to the file. Using the path-based copymode after closing exposes a
+    race where a symlink can be swapped in and get the file's permissions.
+    """
+    if not hasattr(os, "fchmod"):
+        pytest.skip("This platform does not have os.fchmod")
+
+    # Track whether copymode was called on the path (it shouldn't be if fchmod exists)
+    copymode_called = []
+    original_copymode = shutil.copymode
+
+    def copymode_wrapper(*args, **kwargs):
+        copymode_called.append(args)
+        return original_copymode(*args, **kwargs)
+
+    monkeypatch.setattr(shutil, "copymode", copymode_wrapper)
+
+    source.chmod(0o640)
+    store = PackageStore.open(source)
+    store.write_xml("/visio/extra.xml", ET.ElementTree(ET.Element("Extra")))
+    target = tmp_path / "out.vsdx"
+    store.save(target)
+
+    # On platforms with fchmod, copymode should not have been called
+    assert len(copymode_called) == 0, f"copymode was called {len(copymode_called)} times when fchmod is available"
+    # The mode should still have been preserved
+    assert target.stat().st_mode & 0o777 == 0o640
+
+
+def test_save_rejects_nul_in_part_name(source):
+    """Fails if save() allows NUL characters in part names at write time.
+
+    NUL characters are rejected at _checked time, which is when any part name
+    is validated. This test verifies the rejection happens when writing bytes
+    (not just when writing XML).
+    """
+    store = PackageStore.open(source)
+    # Attempt to write a part with NUL in the name
+    with pytest.raises(ValueError, match="cannot contain"):
+        store.write_bytes("/visio/bad\x00.xml", b"data")

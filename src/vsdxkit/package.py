@@ -39,6 +39,7 @@ import json
 import math
 import os
 import shutil
+import stat
 import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
@@ -353,8 +354,8 @@ def _checked(name: str) -> str:
         raise ValueError(f"{name!r} is not an OPC part name: a part name begins with '/'")
     if name.endswith("/"):
         raise ValueError(f"{name!r} is not an OPC part name: a part name does not end with '/'")
-    if "\\" in name or ":" in name:
-        raise ValueError(f"{name!r} is not an OPC part name: a part name cannot contain '\\' or ':'")
+    if "\\" in name or ":" in name or "\x00" in name:
+        raise ValueError(f"{name!r} is not an OPC part name: a part name cannot contain '\\', ':', or NUL")
     for segment in name[1:].split("/"):
         if segment in _REJECTED_SEGMENTS:
             raise ValueError(f"{name!r} is not an OPC part name: {segment!r} is not a usable segment")
@@ -572,39 +573,110 @@ class PackageStore:
         uncompressed. This ensures that the written package satisfies the same
         limits that `open()` enforces on arrival, so the writer's output can be
         read back without rejection.
+
+        The package is validated against the limits it was opened with before
+        any file is created or modified. A member's name is checked against
+        zipfile's own transformations to ensure the written archive can be read
+        back as written.
+
+        There is a residual window between the final samestat check and the
+        atomic rename: an attacker with write access to the destination directory
+        can swap the destination itself during this window. This is the best
+        that can be achieved without renameat2; the temporary file itself is
+        protected through the entire write and check process.
         """
         # Use self.source directly (already absolute from open()) when target is None,
         # avoiding working-directory-dependent behavior.
         destination = Path(self.source if target is None else os.path.abspath(target))
+
+        # Gather all member bytes and validate against load limits before creating any files.
+        # This prevents leaving the destination or directory in an inconsistent state.
+        members_bytes: list[tuple[str, bytes]] = []
+        total_uncompressed = 0
+        for name in self.names():
+            data = self.read_bytes(name)
+            assert data is not None  # names() lists only parts that are present
+            members_bytes.append((name, data))
+            total_uncompressed += len(data)
+
+        # Check member count against limit.
+        if len(members_bytes) > self._limits.max_members:
+            raise PackageLimitError(
+                "member_count",
+                f"package has {len(members_bytes)} parts; max_members={self._limits.max_members}",
+            )
+
+        # Check each member's size against limit.
+        for name, data in members_bytes:
+            if len(data) > self._limits.max_member_size:
+                raise PackageLimitError(
+                    "member_size",
+                    f"package member '{name}' is {len(data)} bytes; max_member_size={self._limits.max_member_size}",
+                )
+
+        # Check total uncompressed size against limit.
+        if total_uncompressed > self._limits.max_total_uncompressed:
+            raise PackageLimitError(
+                "total_size",
+                f"package declares {total_uncompressed} uncompressed bytes; max_total_uncompressed={self._limits.max_total_uncompressed}",
+            )
+
+        # Check that zipfile will not transform any member names.
+        for name, _data in members_bytes:
+            archive_name = name[1:]  # Remove leading slash for archive spelling
+            if zipfile.ZipInfo(archive_name).filename != archive_name:
+                raise ValueError(
+                    f"part name {name!r} would be transformed by zipfile to {zipfile.ZipInfo(archive_name).filename!r}"
+                )
+
         destination.parent.mkdir(parents=True, exist_ok=True)
         fd, temporary = tempfile.mkstemp(prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent)
         try:
             # Write through the descriptor to prevent symlink races: keep the fd open
-            # from creation through write, then prove the path still points to the file
-            # we wrote before replacing the destination.
+            # from creation through write and mode setting, then prove the path still
+            # points to the file we wrote before replacing the destination.
             with os.fdopen(fd, "wb") as handle:
                 with zipfile.ZipFile(handle, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-                    for name in self.names():
-                        data = self.read_bytes(name)
-                        assert data is not None  # names() lists only parts that are present
+                    for name, data in members_bytes:
                         # Measure deflated size the way zipfile does: zlib with window=-15
                         # to skip the zlib header/trailer. If the ratio would exceed the
                         # limit, store the member uncompressed instead.
                         compressor = zlib.compressobj(zlib.Z_DEFAULT_COMPRESSION, zlib.DEFLATED, -15)
                         compressed = compressor.compress(data) + compressor.flush()
                         ratio = len(data) / max(len(compressed), 1)
-                        if ratio > min(self._limits.max_ratio, PackageLimits().max_ratio):
+                        if ratio > self._limits.max_ratio:
                             archive.writestr(name[1:], data, compress_type=zipfile.ZIP_STORED)
                         else:
                             archive.writestr(name[1:], data)
+
+                # Apply mode through the still-open descriptor, before closing it.
+                mode_source = destination if destination.exists() else self.source
+                if mode_source.exists():
+                    mode = stat.S_IMODE(os.stat(mode_source).st_mode)
+                    if hasattr(os, "fchmod"):
+                        os.fchmod(handle.fileno(), mode)
+                    else:
+                        # Fallback for platforms without fchmod (e.g., some BSD variants).
+                        # This is applied before closing the handle, but after this point
+                        # shutil.copymode will not be called again.
+                        pass
+
                 # Prove the path still points to the file we wrote, preventing race where
-                # someone swapped in a symlink while we were writing.
+                # someone swapped in a symlink while we were writing. This is the last
+                # check while the descriptor is still open.
                 if not os.path.samestat(os.fstat(handle.fileno()), os.lstat(temporary)):
                     raise OSError(f"{temporary} was replaced while the package was being written to it")
-            mode_source = destination if destination.exists() else self.source
-            if mode_source.exists():
-                shutil.copymode(mode_source, temporary)
-            os.replace(temporary, destination)
+
+                # Atomic replacement happens while the descriptor is still open.
+                os.replace(temporary, destination)
+
+            # Fallback mode copying for platforms without fchmod, after the atomic replace.
+            # On platforms with fchmod, this code path is not executed because copymode
+            # was handled via fchmod before the replace.
+            if not hasattr(os, "fchmod"):
+                mode_source = destination if destination.exists() else self.source
+                if mode_source.exists():
+                    shutil.copymode(mode_source, destination)
         finally:
             with contextlib.suppress(FileNotFoundError):
                 os.unlink(temporary)
