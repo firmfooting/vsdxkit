@@ -38,7 +38,6 @@ import hashlib
 import json
 import math
 import os
-import shutil
 import stat
 import tempfile
 import xml.etree.ElementTree as ET
@@ -579,11 +578,25 @@ class PackageStore:
         zipfile's own transformations to ensure the written archive can be read
         back as written.
 
-        There is a residual window between the final samestat check and the
-        atomic rename: an attacker with write access to the destination directory
-        can swap the destination itself during this window. This is the best
-        that can be achieved without renameat2; the temporary file itself is
-        protected through the entire write and check process.
+        The temporary file goes through a fixed sequence. `mkstemp` creates it
+        and the archive is written through that descriptor, never by reopening
+        the path. While the descriptor is still open its identity is taken with
+        `fstat`, and the mode is applied with `fchmod` where the platform has
+        it. The descriptor is then closed, because Windows will not rename a
+        file while any handle to it is open. Where there is no `fchmod`
+        (Windows before Python 3.13) the mode is applied by path after the
+        close. Only then is the path checked with `lstat` against the identity
+        taken through the descriptor, so a temporary entry swapped for a
+        symlink or another file after creation -- including during the
+        path-based chmod -- is refused rather than moved over the target. The
+        rename follows the check directly.
+
+        A window remains between that check and the rename: someone with write
+        access to the directory can swap the temporary entry in that interval,
+        and nothing short of `renameat2` (which checks and renames in one step)
+        closes it. The mode is decided before anything is written, from the
+        destination as it stood before the save, so the rename cannot make the
+        destination its own mode source.
         """
         # Use self.source directly (already absolute from open()) when target is None,
         # avoiding working-directory-dependent behavior.
@@ -599,26 +612,26 @@ class PackageStore:
             members_bytes.append((name, data))
             total_uncompressed += len(data)
 
-        # Check member count against limit.
+        # The limit messages below mirror read_archive_members word for word on
+        # purpose: a limit is one rule whichever side of the archive trips it, and
+        # a caller matching on the message should not have to know which did.
+        # The member names are the archive spelling for the same reason.
         if len(members_bytes) > self._limits.max_members:
             raise PackageLimitError(
                 "member_count",
-                f"package has {len(members_bytes)} parts; max_members={self._limits.max_members}",
+                f"package has {len(members_bytes)} entries (including directories); max_members={self._limits.max_members}",
             )
-
-        # Check each member's size against limit.
         for name, data in members_bytes:
             if len(data) > self._limits.max_member_size:
                 raise PackageLimitError(
                     "member_size",
-                    f"package member '{name}' is {len(data)} bytes; max_member_size={self._limits.max_member_size}",
+                    f"package member '{name[1:]}' declares {len(data)} bytes; max_member_size={self._limits.max_member_size}",
                 )
-
-        # Check total uncompressed size against limit.
         if total_uncompressed > self._limits.max_total_uncompressed:
             raise PackageLimitError(
                 "total_size",
-                f"package declares {total_uncompressed} uncompressed bytes; max_total_uncompressed={self._limits.max_total_uncompressed}",
+                f"package declares {total_uncompressed} uncompressed bytes;"
+                f" max_total_uncompressed={self._limits.max_total_uncompressed}",
             )
 
         # Check that zipfile will not transform any member names.
@@ -629,12 +642,15 @@ class PackageStore:
                     f"part name {name!r} would be transformed by zipfile to {zipfile.ZipInfo(archive_name).filename!r}"
                 )
 
+        # Decide the mode before anything is written. Once the rename has run the
+        # destination always exists, so asking afterwards would read the new
+        # file's own mode back and a new target would lose the source's.
+        mode_source = destination if destination.exists() else self.source
+        mode = stat.S_IMODE(os.stat(mode_source).st_mode) if mode_source.exists() else None
+
         destination.parent.mkdir(parents=True, exist_ok=True)
         fd, temporary = tempfile.mkstemp(prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent)
         try:
-            # Write through the descriptor to prevent symlink races: keep the fd open
-            # from creation through write and mode setting, then prove the path still
-            # points to the file we wrote before replacing the destination.
             with os.fdopen(fd, "wb") as handle:
                 with zipfile.ZipFile(handle, "w", compression=zipfile.ZIP_DEFLATED) as archive:
                     for name, data in members_bytes:
@@ -648,35 +664,18 @@ class PackageStore:
                             archive.writestr(name[1:], data, compress_type=zipfile.ZIP_STORED)
                         else:
                             archive.writestr(name[1:], data)
-
-                # Apply mode through the still-open descriptor, before closing it.
-                mode_source = destination if destination.exists() else self.source
-                if mode_source.exists():
-                    mode = stat.S_IMODE(os.stat(mode_source).st_mode)
-                    if hasattr(os, "fchmod"):
-                        os.fchmod(handle.fileno(), mode)
-                    else:
-                        # Fallback for platforms without fchmod (e.g., some BSD variants).
-                        # This is applied before closing the handle, but after this point
-                        # shutil.copymode will not be called again.
-                        pass
-
-                # Prove the path still points to the file we wrote, preventing race where
-                # someone swapped in a symlink while we were writing. This is the last
-                # check while the descriptor is still open.
-                if not os.path.samestat(os.fstat(handle.fileno()), os.lstat(temporary)):
-                    raise OSError(f"{temporary} was replaced while the package was being written to it")
-
-                # Atomic replacement happens while the descriptor is still open.
-                os.replace(temporary, destination)
-
-            # Fallback mode copying for platforms without fchmod, after the atomic replace.
-            # On platforms with fchmod, this code path is not executed because copymode
-            # was handled via fchmod before the replace.
-            if not hasattr(os, "fchmod"):
-                mode_source = destination if destination.exists() else self.source
-                if mode_source.exists():
-                    shutil.copymode(mode_source, destination)
+                # The identity of the file actually written, taken through the
+                # descriptor so no path lookup can substitute another file.
+                kept = os.fstat(handle.fileno())
+                if mode is not None and hasattr(os, "fchmod"):
+                    os.fchmod(handle.fileno(), mode)
+            # The handle is closed from here on: Windows refuses to rename a file
+            # that has an open handle, and mkstemp does not share delete access.
+            if mode is not None and not hasattr(os, "fchmod"):
+                os.chmod(temporary, mode)
+            if not os.path.samestat(kept, os.lstat(temporary)):
+                raise OSError(f"{temporary} was replaced while the package was being written to it")
+            os.replace(temporary, destination)
         finally:
             with contextlib.suppress(FileNotFoundError):
                 os.unlink(temporary)

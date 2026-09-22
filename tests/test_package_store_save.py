@@ -6,6 +6,7 @@ fixture, never through the store (see test_package_store.py's docstring).
 
 from __future__ import annotations
 
+import contextlib
 import os
 import shutil
 import tempfile
@@ -248,6 +249,8 @@ def test_save_rejects_package_exceeding_member_count_limit(source, tmp_path):
     with pytest.raises(PackageLimitError) as exc_info:
         store_limited.save(target)
     assert exc_info.value.reason == "member_count"
+    # The wording mirrors read_archive_members; fails if save() words the same limit differently.
+    assert f"package has {current_count + 1} entries (including directories)" in str(exc_info.value)
     # Target should not have been created
     assert not target.exists()
 
@@ -271,6 +274,8 @@ def test_save_rejects_package_exceeding_member_size_limit(source, tmp_path):
     with pytest.raises(PackageLimitError) as exc_info:
         store_limited.save(target)
     assert exc_info.value.reason == "member_size"
+    # The wording mirrors read_archive_members; fails if save() words the same limit differently.
+    assert f"package member 'visio/big.xml' declares {member_limit + 1} bytes" in str(exc_info.value)
     # Target should not have been created
     assert not target.exists()
 
@@ -297,6 +302,7 @@ def test_save_rejects_package_exceeding_total_size_limit(source, tmp_path):
     assert not target.exists()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits are not meaningful on Windows")
 def test_save_mode_uses_fchmod_when_available(source, tmp_path, monkeypatch):
     """Fails if mode copying is not done via fchmod on platforms that support it.
 
@@ -340,3 +346,61 @@ def test_save_rejects_nul_in_part_name(source):
     # Attempt to write a part with NUL in the name
     with pytest.raises(ValueError, match="cannot contain"):
         store.write_bytes("/visio/bad\x00.xml", b"data")
+
+
+def test_save_closes_the_temporary_file_before_renaming_it(source, tmp_path, monkeypatch):
+    """Fails if `os.replace` runs while the writer still holds the temporary file open.
+
+    Windows will not rename a file that has an open handle (`mkstemp` does not
+    grant delete sharing), so a rename inside the `with os.fdopen(...)` block
+    fails every save there. Linux does not care, so the test cannot wait for
+    the rename to fail: it records every file object `os.fdopen` hands the
+    writer and, at the moment `os.replace` is called on the temporary file,
+    asserts each one is closed. Where `/proc/self/fd` exists it also checks
+    that no descriptor in the process still points at the temporary file,
+    which catches a writer that stops going through `os.fdopen`.
+    """
+    opened = []
+    original_fdopen = os.fdopen
+    original_replace = os.replace
+    checked = []
+
+    def recording_fdopen(*args, **kwargs):
+        handle = original_fdopen(*args, **kwargs)
+        opened.append(handle)
+        return handle
+
+    def checking_replace(src, dst, *args, **kwargs):
+        if os.path.basename(os.fspath(src)).startswith(".out.vsdx."):
+            assert opened, "the writer did not open the temporary file through os.fdopen"
+            assert all(handle.closed for handle in opened), "os.replace ran with the temporary file still open"
+            if os.path.isdir("/proc/self/fd"):
+                temporary = os.path.realpath(src)
+                for entry in os.listdir("/proc/self/fd"):
+                    with contextlib.suppress(OSError):
+                        assert os.readlink(f"/proc/self/fd/{entry}") != temporary, "a descriptor still holds the file"
+            checked.append(src)
+        return original_replace(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(os, "fdopen", recording_fdopen)
+    monkeypatch.setattr(os, "replace", checking_replace)
+    target = tmp_path / "out.vsdx"
+    PackageStore.open(source).save(target)
+    assert checked, "save() never renamed its temporary file"
+    assert _members(target) == _members(source)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits are not meaningful on Windows")
+def test_a_new_target_takes_the_source_mode_without_fchmod(source, tmp_path, monkeypatch):
+    """Fails if the no-`fchmod` path reads the mode after the rename, or skips applying it.
+
+    Windows before Python 3.13 has no `os.fchmod`, so the mode goes on by path.
+    If the mode source is chosen after `os.replace`, the destination always
+    exists by then and the new file's own `mkstemp` mode (0o600) is copied
+    onto itself, so a new target loses the source's 0o640.
+    """
+    monkeypatch.delattr(os, "fchmod", raising=False)
+    source.chmod(0o640)
+    target = tmp_path / "out.vsdx"
+    PackageStore.open(source).save(target)
+    assert target.stat().st_mode & 0o777 == 0o640
