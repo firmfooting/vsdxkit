@@ -33,10 +33,13 @@ which is the one thing this is here to avoid.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import math
 import os
+import shutil
+import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 from dataclasses import dataclass
@@ -541,3 +544,35 @@ class PackageStore:
         if checked not in self._parts:
             raise KeyError(name)
         del self._parts[checked]
+
+    def save(self, target: str | os.PathLike[str] | None = None) -> Path:
+        """Write the package to `target`, or back over the source, and say where.
+
+        The only archive writer. Every part goes out once, in `names()` order,
+        as `read_bytes` gives it -- which is the original bytes for any part
+        nothing changed, promoted or not. The archive is built beside the
+        target and moved over it, so a failure part-way leaves the target as
+        it was; the temporary file takes the target's mode, or the source's
+        when the target is new.
+
+        Saving elsewhere does not make elsewhere the source. A later `save()`
+        with no target still writes where the package was opened from.
+        """
+        destination = Path(os.path.abspath(self.source if target is None else target))
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        fd, temporary = tempfile.mkstemp(prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent)
+        os.close(fd)
+        try:
+            with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                for name in self.names():
+                    data = self.read_bytes(name)
+                    assert data is not None  # names() lists only parts that are present
+                    archive.writestr(name[1:], data)
+            mode_source = destination if destination.exists() else Path(os.path.abspath(self.source))
+            if mode_source.exists():
+                shutil.copymode(mode_source, temporary)
+            os.replace(temporary, destination)
+        finally:
+            with contextlib.suppress(FileNotFoundError):
+                os.unlink(temporary)
+        return destination
