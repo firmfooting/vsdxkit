@@ -25,6 +25,7 @@ from .errors import InvalidOperationError, MalformedPackageError, MissingPartErr
 from .logging_support import attach_debug_stream_handler, get_logger
 from .package import PackageLimitError as PackageLimitError
 from .package import PackageLimits, PackageStore, XmlPart, _checked
+from .partnames import PAGES_PART, relationships_part_name, target_part_name
 from .zip_contents import ZipFileContentsView, part_name_for_path
 
 # TODO(#362): `PackageLimitError` is imported here only to keep
@@ -71,6 +72,12 @@ def _page_relationship_path(rel_dir: str, page_path: str) -> str:
     """Return an in-memory OPC relationship key; OPC member names use `/`."""
     filename = posixpath.basename(page_path.replace("\\", "/"))
     return posixpath.join(rel_dir, f"{filename}.rels")
+
+
+def _page_part_taken(taken: set[str], filename: str) -> bool:
+    """Whether a page part called `filename`, or the relationships part it would have, is already in `taken`."""
+    part_name = target_part_name(PAGES_PART, filename)
+    return part_name in taken or relationships_part_name(part_name) in taken
 
 
 def _normalise_page_path(path: str) -> str:
@@ -444,7 +451,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             # look for visio/pages/_rels/page3.xml.rels
             page_rels_path = _page_relationship_path(rel_dir, page_path)
 
-            if page_rels_path in self.zip_file_contents:
+            if self._package.part(self._part_name(page_rels_path)) is not None:
                 new_page.rels_xml_filename = page_rels_path
                 # past the setter: the document is not open yet, which the
                 # setter refuses, and the tree is the store's own, so there is
@@ -595,7 +602,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
                 )
 
                 # remove the page's own rels part if one exists
-                if page.rels_xml_filename and page.rels_xml_filename in self.zip_file_contents:
+                if page.rels_xml_filename and self._package.part(self._part_name(page.rels_xml_filename)) is not None:
                     self._package.remove(self._part_name(page.rels_xml_filename))
 
                 # remove page<index>.xml file
@@ -657,13 +664,11 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         own tree and refuses to write over it, so the new page's `rels_xml`
         assignment becomes a silent no-op.
         """
-        page_dir = f"{self.directory}/visio/pages/"
-        rel_dir = f"{self.directory}/visio/pages/_rels/"
-        taken = set(self.zip_file_contents)
+        taken = set(self._package.names())
         rels_root = self._part_root(self.pages_xml_rels, "pages.xml.rels")
-        taken.update(f"{page_dir}{rel.attrib['Target']}" for rel in rels_root)
+        taken.update(target_part_name(PAGES_PART, rel.attrib["Target"]) for rel in rels_root)
         counter = 1
-        while f"{page_dir}page{counter}.xml" in taken or f"{rel_dir}page{counter}.xml.rels" in taken:
+        while _page_part_taken(taken, f"page{counter}.xml"):
             counter += 1
         return f"page{counter}.xml"
 

@@ -20,10 +20,9 @@ def _snapshot(page):
     shapes = sorted((s.ID, s.text, tuple(sorted(s.cells))) for s in page.all_shapes)
     records = sorted((c.from_id, c.to_id, c.from_rel, c.to_rel) for c in page.connects)
     document = page.vis
-    master_parts = sorted(
-        name for name in document.zip_file_contents if name.endswith((".xml", ".rels")) and "/masters/" in name
-    )
-    page_rels = sorted(name for name in document.zip_file_contents if name.endswith("page1.xml.rels"))
+    names = document._package.names()
+    master_parts = sorted(name for name in names if name.endswith((".xml", ".rels")) and "/masters/" in name)
+    page_rels = sorted(name for name in names if name.endswith("page1.xml.rels"))
     document_rels = document.document_rels()
     rel_types = sorted(r.attrib.get("Type", "") for r in document_rels)
     return shapes, records, master_parts, page_rels, rel_types

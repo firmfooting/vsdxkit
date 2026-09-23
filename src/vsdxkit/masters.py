@@ -8,9 +8,7 @@ while vsdxfile.py stays reviewable.
 from __future__ import annotations
 
 import copy as copy_module
-import io
 import xml.etree.ElementTree as ET
-from collections.abc import MutableMapping
 from typing import TYPE_CHECKING, cast
 
 from vsdxkit import namespace, r_namespace
@@ -20,6 +18,7 @@ from .errors import MissingPartError
 from .logging_support import get_logger
 from .package import PackageStore
 from .pages import Page
+from .partnames import MASTERS_PART, target_part_name
 from .shapes import Shape
 
 if TYPE_CHECKING:
@@ -30,7 +29,6 @@ logger = get_logger(__name__)
 
 class MastersImportMixin:
     # attributes provided by the VisioFile host class
-    zip_file_contents: MutableMapping[str, io.BytesIO]
     _package: PackageStore
     master_pages: list[Page]
     master_index: dict[str, Page]
@@ -106,11 +104,11 @@ class MastersImportMixin:
             self._bootstrap_masters()
 
         # 2. copy the master part bytes under the next free filename
-        prefix = f"{self._masters_folder}/master"
+        prefix = target_part_name(MASTERS_PART, "master")
         existing_numbers = [
-            int(f[len(prefix) : -4])
-            for f in self.zip_file_contents
-            if f.startswith(prefix) and f.endswith(".xml") and f[len(prefix) : -4].isdigit()
+            int(name[len(prefix) : -4])
+            for name in self._package.names()
+            if name.startswith(prefix) and name.endswith(".xml") and name[len(prefix) : -4].isdigit()
         ]
         master_rels_path = f"{self._masters_folder}/_rels/masters.xml.rels"
         rels_tree: ET.ElementTree[ET.Element] | None = self._read_part_xml(master_rels_path)

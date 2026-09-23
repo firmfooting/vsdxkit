@@ -1,8 +1,6 @@
 """Relative page positions must not silently append without a reference page."""
 
-import io
 import os
-import xml.etree.ElementTree as ET
 
 import pytest
 
@@ -13,10 +11,7 @@ FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
 def _pages_rels_root(visio_file):
     """The Relationship element root of the loaded package's pages.xml.rels."""
-    for key, content in visio_file.zip_file_contents.items():
-        if key.endswith("visio/pages/_rels/pages.xml.rels"):
-            return ET.parse(io.BytesIO(content.getvalue())).getroot()
-    raise AssertionError("pages.xml.rels not found in package")
+    return visio_file._package.require_xml("/visio/pages/_rels/pages.xml.rels").getroot()
 
 
 @pytest.mark.parametrize("position", [PagePosition.BEFORE, PagePosition.AFTER])

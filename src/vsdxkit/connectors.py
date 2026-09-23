@@ -7,6 +7,7 @@ from xml.etree.ElementTree import Element
 import vsdxkit
 
 from .errors import InvalidOperationError, MalformedPackageError
+from .partnames import MASTERS_PART, target_part_name
 from .shapes import Shape
 
 namespace = "{http://schemas.microsoft.com/office/visio/2012/main}"
@@ -112,15 +113,20 @@ class Connect:
             )
             new_master_id = None
             if not masters_rel_present:
-                # document has no masters at all: copy the media masters folder
-                # by key, and only the matches read: reading a member of the
-                # view serialises it if the donor has parsed it, and the donor
-                # has parsed every page it holds
-                donor_contents = media.media.zip_file_contents
-                for file_name in donor_contents:
-                    if file_name.startswith(media.media._masters_folder):
-                        new_file_name = file_name.replace(media.media._masters_folder, page.vis._masters_folder)
-                        page.vis.zip_file_contents[new_file_name] = donor_contents[file_name]
+                # document has no masters at all: copy the donor's masters
+                # parts, part name for part name. `read_bytes` gives a part the
+                # donor has parsed but not changed as the bytes it arrived as,
+                # and only the masters are read -- the donor has parsed every
+                # page it holds, and reading one would serialise it for nothing
+                donor_store = media.media._package
+                # the masters folder as a part-name prefix; the trailing slash
+                # keeps a sibling such as /visio/masters-old/ out of the copy
+                masters_folder = target_part_name(MASTERS_PART, "")
+                for name in donor_store.names():
+                    if name.startswith(masters_folder):
+                        data = donor_store.read_bytes(name)
+                        assert data is not None  # names() lists only parts the store holds
+                        page.vis._package.write_bytes(name, data)
                 page.vis.load_master_pages()  # load copied master page files into VisioFile object
                 # document-level masters relationship
                 page.vis._add_document_rel(
