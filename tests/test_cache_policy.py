@@ -5,6 +5,9 @@ to be read through the other. Each test names the cache that used to make it
 fail.
 """
 
+import copy
+
+from vsdxkit import namespace
 from vsdxkit.vsdxfile import VisioFile
 
 
@@ -83,3 +86,31 @@ def test_a_master_added_after_a_shape_missed_it_is_resolved(vsdx_copy):
         master = waiting.master_shape
         assert master is not None
         assert master.page.page_id == imported_id
+
+
+def test_a_geometry_section_added_to_a_resolved_master_is_merged(vsdx_copy):
+    """Fails if a shape holds on to a master resolved before the master's Geometry section changed.
+
+    The Shape held for the master locates its Geometry section when it is
+    built, so the memo is keyed on the master element's children as well as
+    on the catalog's revision.
+    """
+    with VisioFile(vsdx_copy("test5_master.vsdx")) as vis:
+        instance = vis.pages[0].shapes.require_id("2")
+        master = instance.master_shape
+        assert master is not None
+        section = master.xml.find(f"{namespace}Section[@N='Geometry']")
+        assert section is not None
+        replacement = copy.deepcopy(section)
+        row = replacement.find(f"{namespace}Row")
+        assert row is not None
+        replacement.remove(row)
+
+        position = list(master.xml).index(section)
+        master.xml.remove(section)
+        master.xml.insert(position, replacement)
+
+        held = instance.master_shape
+        assert held is not None
+        assert held.geometry is not None
+        assert held.geometry.xml is replacement

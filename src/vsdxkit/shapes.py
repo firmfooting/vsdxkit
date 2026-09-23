@@ -461,7 +461,7 @@ class Shape(DocumentPart):
     _geometry_xml: Element | None
     _master_shape: Shape | None
     _master_shape_resolved: bool
-    _master_shape_key: tuple[str | None, str | None, int] | None
+    _master_shape_key: tuple[str | None, str | None, int, tuple[Element, ...] | None] | None
     _slot: int | None
 
     def __init__(self, xml: Element, parent: Page | Shape, page: Page):
@@ -767,11 +767,13 @@ class Shape(DocumentPart):
         afresh each time made reading a page's coordinates over twice as slow.
 
         It is resolved again when what decides it changes: this shape's
-        ``Master`` or ``MasterShape`` attribute, read from the XML each time,
-        or the masters the document holds, which
-        :attr:`vsdxkit.masters.MasterCatalog.revision` counts. The master's
-        cells and properties are read live through the Shape held, so an edit
-        to the master shows up on the next read.
+        ``Master`` or ``MasterShape`` attribute, read from the XML each time;
+        the masters the document holds, which
+        :attr:`vsdxkit.masters.MasterCatalog.revision` counts; or the master
+        element's own children, by identity, since the Shape held locates its
+        Geometry section when it is built. The master's cells and properties
+        are read live through the Shape held, so an edit to one shows up on the
+        next read.
         """
         if self._master_shape_resolved and self._master_shape_key == self._master_shape_state():
             return self._master_shape
@@ -780,13 +782,17 @@ class Shape(DocumentPart):
         self._master_shape_key = self._master_shape_state()
         return self._master_shape
 
-    def _master_shape_state(self) -> tuple[str | None, str | None, int]:
+    def _master_shape_state(self) -> tuple[str | None, str | None, int, tuple[Element, ...] | None]:
         """What the memo was built from.
 
         The reference this shape holds, which is writable - ``Connect.create``
-        repoints ``master_page_ID`` - and the catalog's count of master changes.
+        repoints ``master_page_ID``; the catalog's count of master changes; and
+        the master element's children, so a section added to, removed from or
+        swapped on the master rebuilds the Shape that reads it.
         """
-        return (self.master_page_ID, self.master_shape_ID, self.page.vis._master_revision())
+        master = self._master_shape
+        children = None if master is None else tuple(master.xml)
+        return (self.master_page_ID, self.master_shape_ID, self.page.vis._master_revision(), children)
 
     def _resolve_master_shape(self) -> Shape | None:
         if self.master_page_ID is None:

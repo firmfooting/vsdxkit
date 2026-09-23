@@ -20,19 +20,19 @@ Since #101, two Shape objects for one shape are equal. Four reads were held per 
 |---|---|---|---|
 | walk (`all_shapes`, IDs) | 9.41 ms | 1.69 ms | 0.18× |
 | geometry (`x`, `y`, `width`, `height`, `text`) | 39.15 ms | 21.03 ms | 0.54× |
-| the same, read 10× per Shape object | 70.69 ms | 121.60 ms | 1.72× |
+| the same, read 10× per Shape object | 69.62 ms | 124.87 ms | 1.79× |
 | cells | 9.75 ms | 12.00 ms | 1.23× |
 | properties | 42.61 ms | 15.44 ms | 0.36× |
-| properties, read 10× per Shape object | 57.98 ms | 93.14 ms | 1.61× |
+| properties, read 10× per Shape object | 58.95 ms | 95.43 ms | 1.62× |
 | background × 1,000 | 0.02 ms | 0.86 ms | 43× |
 
 On s05 alone (47 shapes), most ratios are the same. The exceptions:
 
 | s05, 47 shapes | Ratio |
 |---|---|
-| geometry, read 10× | 1.78× |
-| properties, read 10× | 1.67× |
-| cells | 1.50× |
+| geometry, read 10× | 1.88× |
+| properties, read 10× | 1.75× |
+| cells | 1.55× |
 
 **`master_shape`, resolved on every read.** Also measured:
 - reading a page's coordinates 10× went to 174 ms (2.2×);
@@ -54,7 +54,7 @@ On s05 alone (47 shapes), most ratios are the same. The exceptions:
 
 **D4. `Shape.master_shape` stays memoised, and the catalog's counter lets it go.** Resolving on every read failed the gate at 2.2×.
 - **The key** is the shape's `Master` and `MasterShape` attributes, read live, plus `MasterCatalog.revision`. The revision counts every `load` and every master added.
-- **Dropped:** `tuple(master.xml)` is out of the key. The master's cells and properties are now read live through the Shape held, so the memo only answers which element is the master.
+- **Kept:** `tuple(master.xml)` stays in the key. The master's cells and properties are read live through the Shape held, but that Shape locates its Geometry section when it is built, so a section added to, removed from or swapped on the master must rebuild it. The first cut dropped it, and Codex caught the stale Geometry on #396. The repeated-read numbers above are measured with it in the key.
 - **Ruling: why not a document-wide counter.** One bumped in `_require_open` has two faults:
   - it would drop every memo on every cell write;
   - its bump precedes the write it guards, so a memo filled during that write would be stamped current.
@@ -72,11 +72,12 @@ On s05 alone (47 shapes), most ratios are the same. The exceptions:
 
 ## Tests
 
-`tests/test_cache_policy.py` has five tests, each failing on the base:
+`tests/test_cache_policy.py` has six tests, each failing on the base or on the first cut:
 - a cell added through one Shape object is read through another;
 - a cell removed from the XML is gone;
 - a property relabelled in place is keyed under its new label, through both objects;
 - `Page.background` follows pages.xml;
-- a master added after a shape missed it is resolved.
+- a master added after a shape missed it is resolved;
+- a Geometry section swapped on an already-resolved master is the one merged.
 
 Also: `test_the_section_is_located_when_the_shape_is_built` now asserts that `cells` is live, and the #101 detached-read test covers `cells`.
