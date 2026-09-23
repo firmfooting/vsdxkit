@@ -161,6 +161,23 @@ def test_provisioning_masters_copies_the_donors_master_parts_byte_for_byte(vsdx_
     # the copy is exact at the moment it is made; masters.xml and its rels may
     # be edited afterwards by the connector's own master registration, so
     # compare the master drawing parts, which nothing edits
+    assert set(copied) == set(donor_masters)
     drawing = [n for n in donor_masters if re.fullmatch(r"master\d+\.xml", n.rsplit("/", 1)[-1])]
     assert drawing
     assert {n: copied.get(n) for n in drawing} == {n: donor_masters[n] for n in drawing}
+
+
+def test_provisioning_masters_leaves_a_sibling_of_the_masters_folder_behind(vsdx_copy):
+    """Fails if the masters copy takes a donor part whose folder merely starts with `masters`.
+
+    The copy selects parts by the part-name prefix `/visio/masters/`. Without
+    its trailing slash that prefix also matches `/visio/masters-old/`, and the
+    target would gain a part nothing refers to.
+    """
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        page = vis.pages[0]
+        donor = vis._shared_media().media
+        donor._package.write_bytes("/visio/masters-old/x.xml", b"<x/>")
+        shapes = page.child_shapes
+        Connect.create(page=page, from_shape=shapes[0], to_shape=shapes[1])
+        assert vis._package.part("/visio/masters-old/x.xml") is None
