@@ -66,6 +66,7 @@ class JinjaTemplatingMixin:
             # check if page should be removed
             if JinjaTemplatingMixin.jinja_page_showif(page, context):
                 loop_shape_ids = list()
+                shown_before = page._shape_ids()
                 JinjaTemplatingMixin.jinja_render_shape(shape=page, context=context, loop_shape_ids=loop_shape_ids)
 
                 page_root = page.xml.getroot()
@@ -92,6 +93,12 @@ class JinjaTemplatingMixin:
                             self.increment_sub_shape_ids(shape, page)
                             delta += shape.height or 0.0  # automatically move each duplicate down
                             shape.move(0, -delta)  # move duplicated shapes so they are visible
+
+                # a shape a showif rendered out is deleted like any other: the
+                # connectors glued to it and the records naming it go too
+                hidden = shown_before - page._shape_ids()
+                if hidden:
+                    page._delete((), hidden)
             else:
                 # note page to remove after this loop has completed
                 pages_to_remove.append(page)

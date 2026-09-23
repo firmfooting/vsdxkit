@@ -12,6 +12,7 @@ import xml.etree.ElementTree as ET
 import pytest
 
 from vsdxkit import namespace
+from vsdxkit.errors import InvalidOperationError
 from vsdxkit.vsdxfile import VisioFile
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
@@ -185,3 +186,97 @@ def test_deleting_a_shape_belonging_to_another_page_is_refused(vsdx_copy):
 
         assert [shape.ID for shape in page3.all_shapes] == bystander_ids
         assert page1.shapes.by_id("1") is not None
+
+
+def _three_connected(vis):
+    """A-B and B-C joined by connectors: the page, the shapes and the connectors."""
+    page = vis.pages[0]
+    a = vis.create_shape(page, "PALETTE_PROCESS", 1.0, 2.0, text="A")
+    b = vis.create_shape(page, "PALETTE_PROCESS", 4.0, 2.0, text="B")
+    c = vis.create_shape(page, "PALETTE_PROCESS", 7.0, 2.0, text="C")
+    return page, (a, b, c), (page.connect_shapes(a, b), page.connect_shapes(b, c))
+
+
+def test_a_half_glued_connector_goes_with_the_shape_it_is_glued_to(vsdx_copy):
+    """Fails if a connector whose other end floats survives the one shape it was glued to (#105)."""
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        page, (a, b, _), (ab, _) = _three_connected(vis)
+        connects = page.xml.find(f".//{namespace}Connects")
+        end_record = next(
+            record
+            for record in _connect_records(page)
+            if record.attrib["FromSheet"] == ab.ID and record.attrib["FromCell"] == "EndX"
+        )
+        connects.remove(end_record)  # its end now floats; only its begin is glued, to A
+
+        page.delete_shape(a)
+
+        assert page.shapes.by_id(ab.ID) is None
+        assert _referencing(page, ab.ID) == []
+        assert page.shapes.by_id(b.ID) is not None
+
+
+def test_deleting_a_connector_leaves_the_shapes_it_joined_and_their_other_glue(vsdx_copy):
+    """Fails if deleting a connector directly cascades into the shapes it joins (#105)."""
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        page, (a, b, c), (ab, bc) = _three_connected(vis)
+
+        page.delete_shape(ab)
+
+        assert page.shapes.by_id(ab.ID) is None
+        assert _referencing(page, ab.ID) == []
+        for shape in (a, b, c, bc):
+            assert page.shapes.by_id(shape.ID) is not None
+        assert {record.attrib["FromCell"] for record in _referencing(page, bc.ID)} == {"BeginX", "EndX"}
+
+
+def test_every_shape_a_delete_takes_is_detached(vsdx_copy):
+    """Fails if a connector removed by the cascade still answers through a Shape held before the delete (#105)."""
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        page, (_, b, _), (ab, bc) = _three_connected(vis)
+
+        page.delete_shape(b)
+
+        for gone in (b, ab, bc):
+            assert not gone.is_attached
+            with pytest.raises(InvalidOperationError, match="no longer in the document"):
+                _ = gone.text
+
+
+def test_a_shape_a_showif_hides_takes_its_connectors_and_records(vsdx_copy):
+    """Fails if a template that renders a shape out leaves its connector and glue behind (#105).
+
+    The shape leaves the page through the template, not through
+    `delete_shape`, and the connector glued to it survived with a record
+    naming a shape no longer there.
+    """
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        page, (a, b, c), (ab, bc) = _three_connected(vis)
+        a.text = "{% showif show_a %}A"
+
+        vis.jinja_render_vsdx({"show_a": False})
+
+        page = vis.pages[0]
+        ids = {shape.ID for shape in page.shapes}
+        assert a.ID not in ids
+        assert ab.ID not in ids
+        assert _referencing(page, a.ID) == []
+        assert _referencing(page, ab.ID) == []
+        assert {b.ID, c.ID, bc.ID} <= ids
+        assert len(_referencing(page, bc.ID)) == 2
+
+
+def test_a_connector_a_showif_hides_takes_only_its_own_records(vsdx_copy):
+    """Fails if a connector rendered out leaves its glue records naming it (#105)."""
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        page, (a, b, _), (ab, bc) = _three_connected(vis)
+        ab.text = "{% showif False %}"
+
+        vis.jinja_render_vsdx({})
+
+        page = vis.pages[0]
+        ids = {shape.ID for shape in page.shapes}
+        assert ab.ID not in ids
+        assert _referencing(page, ab.ID) == []
+        assert {a.ID, b.ID, bc.ID} <= ids
+        assert len(_referencing(page, bc.ID)) == 2
