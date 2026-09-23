@@ -674,3 +674,99 @@ def test_copy_is_a_plain_dict_detached_from_the_store(view, store):
     snapshot[f"{DIRECTORY}/visio/new.xml"] = io.BytesIO(b"<New/>")
     snapshot.clear()
     assert store.names() == names
+
+
+def _page1_with_marker(store: PackageStore) -> bytes:
+    """Page 1 as new XML: the parsed tree with one attribute added, serialised."""
+    changed = copy.deepcopy(store.require_xml(PAGE1).getroot())
+    changed.set("VsdxkitMarker", "1")
+    return serialise_part(ET.ElementTree(changed))
+
+
+def test_assigning_new_xml_to_a_parsed_member_detaches_an_older_buffer(view, store):
+    """Fails if `view[key] = new_xml` on a parsed part leaves a buffer read before it bound, so it writes over new_xml.
+
+    The assignment lands in the part's tree and keeps the part object, so
+    only the view's generation for the name can tell the old buffer that
+    its member was rebound, as a rebound dict value would have been.
+    """
+    key = f"{DIRECTORY}{PAGE1}"
+    tree = store.require_xml(PAGE1)
+    old = view[key]
+    stale = old.getvalue()
+    new_xml = _page1_with_marker(store)
+    view[key] = io.BytesIO(new_xml)
+    old.seek(0)
+    old.write(stale)
+    root = tree.getroot()
+    assert root is not None
+    assert root.get("VsdxkitMarker") == "1"
+    assert old.getvalue() == stale  # still an ordinary BytesIO
+
+
+def test_assigning_new_xml_to_a_parsed_page_survives_an_older_buffers_write_at_save(vsdx_copy, tmp_path):
+    """Fails if a buffer read before `zip_file_contents[page] = new_xml` can write the old page back before save."""
+    target = str(tmp_path / "saved.vsdx")
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        page = vis.pages[0]
+        old = vis.zip_file_contents[page.filename]
+        stale = old.getvalue()
+        vis.zip_file_contents[page.filename] = io.BytesIO(_page1_with_marker(vis._package))
+        old.seek(0)
+        old.write(stale)
+        vis.save_vsdx(target)
+    with VisioFile(target) as saved:
+        assert saved.pages[0].xml.getroot().get("VsdxkitMarker") == "1"
+
+
+def test_an_exported_snapshot_is_not_synced_after_its_parsed_member_is_rebound(view, store):
+    """Fails if sync() writes an exported snapshot's memoryview edit after `view[key] = new_xml` on its parsed part."""
+    key = f"{DIRECTORY}{PAGE1}"
+    tree = store.require_xml(PAGE1)
+    memory = view[key].getbuffer()
+    new_xml = _page1_with_marker(store)
+    view[key] = io.BytesIO(new_xml)
+    memory[0:1] = b"#"
+    view.sync()
+    part = store.part(PAGE1)
+    assert isinstance(part, XmlPart)
+    assert part.tree is tree
+    root = tree.getroot()
+    assert root is not None
+    assert root.get("VsdxkitMarker") == "1"
+
+
+def test_held_back_bytes_are_not_settled_after_their_parsed_member_is_rebound(view, store):
+    """Fails if sync() settles a buffer's unparseable bytes after `view[key] = new_xml` rebound its parsed part."""
+    key = f"{DIRECTORY}{PAGE1}"
+    tree = store.require_xml(PAGE1)
+    view[key].write(b"not xml")
+    view[key] = io.BytesIO(_page1_with_marker(store))
+    view.sync()
+    part = store.part(PAGE1)
+    assert isinstance(part, XmlPart)
+    assert part.tree is tree
+
+
+def test_two_snapshots_of_a_parsed_part_both_write_and_the_last_wins(view, store):
+    """Fails if one snapshot's own write-through detaches another snapshot of the same parsed part.
+
+    Pins the documented limitation rather than a goal: neither snapshot
+    rebinds the member, so both stay bound, and each write lands in the
+    tree in turn. The dict gave both holders one buffer; the view gives
+    each its own copy, so the second writer's bytes are what the part holds.
+    """
+    key = f"{DIRECTORY}{PAGE1}"
+    tree = store.require_xml(PAGE1)
+    first = view[key]
+    second = view[key]
+    assert first is not second
+    first.seek(0)
+    first.write(b"<First/>")
+    first.truncate()
+    second.seek(0)
+    second.write(b"<Second/>")
+    second.truncate()
+    root = tree.getroot()
+    assert root is not None
+    assert root.tag == "Second"

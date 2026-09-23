@@ -88,9 +88,16 @@ class _WriteThroughBuffer(io.BytesIO):
     detaches this one for good, and it carries on as a plain in-memory
     BytesIO. Its own writes re-bind it to the part they leave in the store,
     and so does a promotion of its part, which changes how the store holds
-    the part and not what it holds. Two snapshots of one parsed part are
-    both bound to that part, because a write into its tree keeps the part
-    object, so the last of them to write wins: the documented limitation.
+    the part and not what it holds.
+
+    The part object alone cannot see every replacement: new XML assigned to
+    a parsed part goes into its tree, and the part object stays. So the
+    buffer is also bound to its view's generation for the name, which
+    `view[key] = ...` and `del view[key]` bump, and it writes through only
+    while both still match. Its own writes do not bump it. Two snapshots of
+    one parsed part therefore both stay bound: neither rebinds the member,
+    each write lands in the tree in turn, and the last of them to write wins,
+    the documented limitation.
     """
 
     def __init__(
@@ -103,6 +110,7 @@ class _WriteThroughBuffer(io.BytesIO):
         live: dict[str, _WriteThroughBuffer],
         pending: dict[int, _WriteThroughBuffer],
         superseded: dict[str, tuple[BytesPart, ET.ElementTree[ET.Element]]],
+        generations: dict[str, int],
     ) -> None:
         super().__init__(initial_bytes)
         self._store = store
@@ -113,13 +121,18 @@ class _WriteThroughBuffer(io.BytesIO):
         self._live = live
         self._pending = pending
         self._superseded = superseded
+        self._generations = generations
+        # the view's generation for the name when this buffer was bound; a
+        # different one means the member was rebound or deleted through the
+        # view since
+        self._generation = generations.get(name, 0)
         # what the store last agreed this buffer held, set on first export;
         # None means no memoryview has ever been handed out
         self._baseline: bytes | None = None
 
     def is_bound_to(self, part: PartValue) -> bool:
-        """Whether this buffer speaks for exactly this part object."""
-        return self._bound is part
+        """Whether this buffer speaks for exactly this part object, under the name's current generation."""
+        return self._bound is part and self._generation == self._generations.get(self._name, 0)
 
     def _attached(self) -> bool:
         """Whether the store still holds the part this buffer is bound to, detaching it for good if not."""
@@ -127,11 +140,12 @@ class _WriteThroughBuffer(io.BytesIO):
         if bound is None:
             return False
         held = self._store.part(self._name)
-        if held is bound:
-            return True
-        if isinstance(held, XmlPart) and held.promoted_from is bound:
-            self._bound = held
-            return True
+        if self._generation == self._generations.get(self._name, 0):
+            if held is bound:
+                return True
+            if isinstance(held, XmlPart) and held.promoted_from is bound:
+                self._bound = held
+                return True
         self._bound = None
         # a detached buffer has nothing left to sync or settle, and must not
         # be handed out as the member's buffer again
@@ -154,6 +168,9 @@ class _WriteThroughBuffer(io.BytesIO):
         self._pending.pop(id(self), None)
         part = self._store.part(self._name)
         self._bound = part
+        # a write of this buffer's own does not bump the generation, so this
+        # changes nothing today; it keeps the buffer bound if that ever changes
+        self._generation = self._generations.get(self._name, 0)
         if isinstance(replaced, XmlPart) and isinstance(part, BytesPart):
             # the document still holds the tree these bytes replaced; say so,
             # so a save that writes trees back does not write it over them
@@ -274,9 +291,11 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
     has been parsed (an `XmlPart`) is read as a fresh snapshot every time,
     because its tree is authoritative and can change without the view seeing
     it. Two holders of such a part's buffers are back to one snapshot each,
-    and the second write-through wins. Likewise `view[key] = buf` stores the
-    bytes of `buf` rather than `buf` itself, so a later read does not return
-    the object assigned, and a later write to `buf` does not reach the store.
+    both stay bound, and the second write-through wins. An assignment or
+    delete through the view does detach both, as it would have detached a
+    dict value. Likewise `view[key] = buf` stores the bytes of `buf` rather
+    than `buf` itself, so a later read does not return the object assigned,
+    and a later write to `buf` does not reach the store.
     New XML written to a parsed part replaces its tree's root, so an element
     a caller took from the old root belongs to no part any more. Bytes that
     do not parse, written through a buffer of a parsed part, reach the store
@@ -304,6 +323,12 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
         # id. Held strongly for the reason exports are: `view[k].write(...)`
         # leaves nothing else holding the buffer whose bytes sync must write.
         self._pending: dict[int, _WriteThroughBuffer] = {}
+        # how often each name has been rebound or deleted through the view.
+        # A buffer bound under an older generation is detached: assigning new
+        # XML to a parsed part keeps the part object, so the part alone cannot
+        # tell a buffer read before the assignment that it no longer speaks
+        # for the member
+        self._generations: dict[str, int] = {}
         # parts whose tree a buffer's final bytes replaced, by part name: the
         # bytes part written, and the tree it replaced (see `holds_bytes_over`)
         self._superseded: dict[str, tuple[BytesPart, ET.ElementTree[ET.Element]]] = {}
@@ -398,7 +423,9 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
         return buffer
 
     def _new_buffer(self, name: str, part: PartValue, data: bytes) -> _WriteThroughBuffer:
-        return _WriteThroughBuffer(self._store, name, part, data, self._exports, self._live, self._pending, self._superseded)
+        return _WriteThroughBuffer(
+            self._store, name, part, data, self._exports, self._live, self._pending, self._superseded, self._generations
+        )
 
     @override
     def __setitem__(self, key: str, value: io.BytesIO) -> None:
@@ -406,6 +433,7 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
         if name is None:
             raise ValueError(f"{key!r} is not under the package directory {self._directory!r}")
         self._store.write_bytes_keeping_tree(name, value.getvalue())
+        self._rebound(name)
         # the cached buffer no longer holds what the part does, and the new
         # part detaches it; the binding check would catch that on the next
         # read, but dropping it here lets its bytes go now
@@ -421,7 +449,12 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
         except ValueError as e:
             # not a valid part name, so not a part
             raise KeyError(key) from e
+        self._rebound(name)
         self._live.pop(name, None)
+
+    def _rebound(self, name: str) -> None:
+        """Detach every buffer handed out for `name` before now, the way rebinding a dict key let its value go."""
+        self._generations[name] = self._generations.get(name, 0) + 1
 
     @override
     def __contains__(self, key: object) -> bool:
