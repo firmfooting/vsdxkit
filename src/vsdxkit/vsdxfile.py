@@ -814,8 +814,8 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             return None
         return scores.index(best)
 
-    def _titles_of_parts_section(self, section: _Section, page_titles: set[str]) -> tuple[Element, int, int]:
-        """The TitlesOfParts vector, and the ``[start, stop)`` slice of it `section` owns.
+    def _titles_of_parts_section(self, section: _Section, page_titles: set[str]) -> tuple[Element, int | None, int, int]:
+        """The TitlesOfParts vector, which HeadingPairs entry `section` is, and the ``[start, stop)`` slice it owns.
 
         A section HeadingPairs does not mention owns the empty slice at the end
         of the vector: it has no titles yet, and the first one it gets belongs
@@ -825,29 +825,37 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         They come from whatever wrote the file, and a count read as a position
         is a count that can point past the last title there is. Only the slice
         is clipped: the count itself is the file's to keep.
+
+        The entry comes back with the slice so that a caller changing the
+        vector counts the change against the section it changed. Resolving it
+        again afterwards reads a vector the counts no longer cut the way they
+        did, and on a localised document that can find a different section or
+        none.
         """
         vector = require_element(self._titles_of_parts().find(f"{vt_namespace}vector"), "TitlesOfParts vector")
         total = len(vector)
         wanted = self._resolve_section(section, page_titles)
         if wanted is None:
-            return vector, total, total
+            return vector, None, total, total
         start = 0
         for index, (_, count) in enumerate(self._heading_pairs_list()):
             titles_here = int(count.text or 0)
             if index == wanted:
-                return vector, min(start, total), min(start + titles_here, total)
+                return vector, wanted, min(start, total), min(start + titles_here, total)
             start += titles_here
-        return vector, total, total
+        return vector, None, total, total
 
-    def _section_count(self, section: _Section, change: int, page_titles: set[str]) -> None:
-        """Add `change` to `section`'s count in HeadingPairs, creating the pair if needed.
+    def _section_count(self, section: _Section, index: int | None, change: int) -> None:
+        """Add `change` to the count of HeadingPairs entry `index`, creating `section`'s pair if it is None.
 
         The stored count is what moves, not the length of the slice it turned
         out to name: a section reporting more titles than the vector holds
         still knows how many parts it has, and re-deriving the number from
         where the titles ended up would throw that away.
+
+        `index` is taken rather than found: the caller resolved it before
+        changing the vector, which is the only time the answer is reliable.
         """
-        index = self._resolve_section(section, page_titles)
         if index is None:
             self._set_app_xml_value(section.label, str(change))
             return
@@ -868,14 +876,14 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         master being added stopped the master being listed at all.
         """
         titles = self._page_titles() if page_titles is None else page_titles
-        vector, start, stop = self._titles_of_parts_section(section, titles)
+        vector, index, start, stop = self._titles_of_parts_section(section, titles)
         if any(vector[position].text == title for position in range(start, stop)):
             return
         entry = Element(f"{vt_namespace}lpstr")
         entry.text = title
         vector.insert(stop, entry)
         vector.attrib["size"] = str(len(vector))
-        self._section_count(section, 1, titles)
+        self._section_count(section, index, 1)
 
     def _titles_of_parts_remove(self, title: str, section: _Section, page_titles: set[str] | None = None) -> None:
         """Drop `section`'s entry for `title`, and stop counting it.
@@ -885,12 +893,12 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         thing, and the one being removed is the one in this section.
         """
         titles = self._page_titles() if page_titles is None else page_titles
-        vector, start, stop = self._titles_of_parts_section(section, titles)
+        vector, index, start, stop = self._titles_of_parts_section(section, titles)
         for position in range(start, stop):
             if vector[position].text == title:
                 del vector[position]
                 vector.attrib["size"] = str(len(vector))
-                self._section_count(section, -1, titles)
+                self._section_count(section, index, -1)
                 return
 
     def _titles_of_parts_rename(self, old_title: str, new_title: str, section: _Section, page_titles: set[str]) -> None:
@@ -900,7 +908,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         leaves the section, so neither its count nor the order of its titles
         has any business changing.
         """
-        vector, start, stop = self._titles_of_parts_section(section, page_titles)
+        vector, _, start, stop = self._titles_of_parts_section(section, page_titles)
         for position in range(start, stop):
             if vector[position].text == old_title:
                 vector[position].text = new_title

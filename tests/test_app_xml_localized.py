@@ -228,3 +228,79 @@ def test_a_master_sharing_the_only_page_s_name_does_not_make_the_masters_the_pag
     master_count = int(headings_out[headings_out.index("Master") + 1])
     assert master_count == 1, f"the new page was counted among the masters: {headings_out}"
     assert titles_out[:master_count] == ["Page-1"], f"the new page's title landed in the masters slice: {titles_out}"
+
+
+def test_removing_the_only_page_of_a_localised_document_uncounts_its_title(tmp_path, basedir):
+    """The section has to be found before its title goes, not after.
+
+    Removing a title from the vector moves every title after it one place
+    left, so the counts in HeadingPairs cut the vector differently until the
+    count is brought down too. Asking which section names the pages in
+    between reads that other cut: on a one-page document the pages section
+    now holds the first master's title, nothing names the page, and the
+    decrement goes to a newly created "Pages" pair with a count of -1.
+
+    An English document gives `Pages 0`; a localised one has to give the same.
+    Fails if the count is resolved against the vector after the removal.
+    """
+    localised = str(tmp_path / "german_house.vsdx")
+    _localise(os.path.join(basedir, "test3_house.vsdx"), localised, {"Pages": "Seiten", "Masters": "Master"})
+    out = str(tmp_path / "out.vsdx")
+    with vsdxkit.VisioFile(localised) as vis:
+        vis.remove_page_by_index(0)
+        vis.save_vsdx(out)
+    headings, titles = _app_xml(out)
+    assert headings == ["Seiten", "0", "Master", "1"]
+    assert titles == ["House"]
+
+
+def _masters_listed_first(source: str, destination: str) -> None:
+    """Swap the two sections, headings and titles both, and localise the labels."""
+    with zipfile.ZipFile(source) as archive:
+        order = archive.namelist()
+        members = {name: archive.read(name) for name in order}
+    root = ET.fromstring(members["docProps/app.xml"])
+
+    headings = root.find(f"{EXT}HeadingPairs").find(f"{VT}vector")
+    pairs = list(headings)
+    assert len(pairs) == 4, f"expected two pairs, got {len(pairs) // 2}"
+    for variant in pairs:
+        headings.remove(variant)
+    for variant in pairs[2:] + pairs[:2]:
+        headings.append(variant)
+    for entry in headings.iter(f"{VT}lpstr"):
+        entry.text = {"Pages": "Seiten", "Masters": "Master"}[entry.text]
+
+    titles = root.find(f"{EXT}TitlesOfParts").find(f"{VT}vector")
+    entries = list(titles)
+    assert [e.text for e in entries] == ["Page-1", "House"], [e.text for e in entries]
+    titles.remove(entries[0])
+    titles.append(entries[0])
+
+    members["docProps/app.xml"] = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+    with zipfile.ZipFile(destination, "w") as archive:
+        for name in order:
+            archive.writestr(name, members[name])
+
+
+def test_a_master_added_ahead_of_the_pages_is_counted_among_the_masters(tmp_path, basedir):
+    """The same fault from the other side: an insertion rather than a removal.
+
+    With the masters listed first, the new master's title goes in at the
+    boundary and pushes the page's title one place right, out of the slice
+    the pages count names. Resolved after the insertion, no section names the
+    page, the masters cannot be told from anything either, and the new master
+    is counted in a newly created "Masters" pair instead of in `Master`.
+
+    Fails if the count is resolved against the vector after the insertion.
+    """
+    reordered = str(tmp_path / "masters_first.vsdx")
+    _masters_listed_first(os.path.join(basedir, "test3_house.vsdx"), reordered)
+    out = str(tmp_path / "out.vsdx")
+    with vsdxkit.VisioFile(reordered) as vis:
+        page = vis.pages[0]
+        page.connect_shapes(page.find_shape_by_id("1"), page.find_shape_by_id("5"))
+        vis.save_vsdx(out)
+    headings, titles = _app_xml(out)
+    assert headings == ["Master", "2", "Seiten", "1"]
+    assert titles == ["House", "Dynamic connector", "Page-1"]
