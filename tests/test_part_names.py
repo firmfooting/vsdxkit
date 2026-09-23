@@ -185,3 +185,25 @@ def test_xmlio_has_no_helpers_over_the_old_mapping(name):
 
     assert not hasattr(vsdxkit.xmlio, name)
     assert not hasattr(vsdxkit.vsdxfile, name)
+
+
+def test_a_removed_pages_xml_assignment_writes_nothing(vsdx_copy):
+    """Fails if a page removed from the document can still write its part."""
+    with VisioFile(vsdx_copy("test2.vsdx")) as vis:
+        removed = vis.pages[-1]
+        name = removed.filename
+        vis.remove_page_by_index(len(vis.pages) - 1)
+        removed.xml = ET.ElementTree(ET.fromstring(ET.tostring(removed.xml.getroot())))
+        assert vis._package.part(name) is None
+
+
+def test_a_page_with_no_rels_part_gets_one_on_assignment(vsdx_copy):
+    """Fails if a live page with no relationship part cannot be given one."""
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        page = vis.pages[0]
+        assert page.rels_xml is None, "the fixture has changed: page 1 should have no rels part"
+        page.rels_xml_filename = f"/visio/pages/_rels/{page.filename.rsplit('/', 1)[-1]}.rels"
+        page.rels_xml = ET.ElementTree(
+            ET.fromstring('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
+        )
+        assert vis._package.part(page.rels_xml_filename) is not None

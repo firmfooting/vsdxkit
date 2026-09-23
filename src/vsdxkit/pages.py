@@ -16,7 +16,7 @@ from vsdxkit import namespace
 
 from .connectors import Connect
 from .errors import InvalidOperationError, MissingPartError, NotFoundError
-from .package import BytesPart, XmlPart
+from .package import XmlPart
 from .partnames import relationship_target, relationships_part_name
 from .shapes import Shape, parent_of, to_float
 from .xmlio import require_element, xml_value
@@ -251,7 +251,7 @@ class Page:
         return isinstance(held, XmlPart) and held.tree is tree
 
     def _attached(self) -> bool:
-        """Whether this page's own part is still in its document's package.
+        """Whether an assignment to `xml` may write this page's part.
 
         A caller may keep holding a `Page` after it has been removed from the
         document (`VisioFile.remove_page_by_index`); a later assignment to its
@@ -260,39 +260,31 @@ class Page:
         name, and the next page takes it. So this asks whether the part at the
         page's name is this page's own tree, not merely whether there is one.
 
-        A page's part can also be plain bytes -- written directly through the
-        store rather than as a tree -- or be gone, removed from the store.
-        No page holds such a part, so it is this page's own exactly when this
-        page is still one of the document's -- a removed page is not -- and a
-        tree assigned afterwards must replace the bytes or bring the part
-        back, since pages.xml still names it.
+        The one other way in is a part that is gone while its page is still
+        one of the document's. Nothing at open stops two pages' relationships
+        targeting the same part, and then the two pages share it; removing one
+        takes the part out from under the other. pages.xml still names the
+        part, so a tree assigned to the page left behind must bring it back.
         """
         if self._holds(self.filename, self._xml):
             return True
-        held = self.vis._package.part(self.filename)
-        if held is not None and not isinstance(held, BytesPart):
-            return False
-        return any(page is self for page in (*self.vis.pages, *self.vis.master_pages))
+        return self.vis._package.part(self.filename) is None and any(page is self for page in self.vis.pages)
 
     def _rels_attached(self) -> bool:
         """Whether an assignment to `rels_xml` may write this page's relationship part.
 
         Only while the page itself is attached, and only over the relationship
-        part the page holds -- or where the package holds no rels part there,
-        which is how one is first created, or holds only plain bytes.
-        A removed page's rels name is freed along with its page's, and the
-        page that takes the name must not be given the removed page's
-        relationships.
+        part the page holds -- or where the package holds none yet, which is
+        how one is first created. A removed page's rels name is freed along
+        with its page's, and the page that takes the name must not be given
+        the removed page's relationships.
         """
         if self.rels_xml_filename is None or not self._attached():
             return False
-        # the page itself is attached, so no removed page and no page that took
-        # its name can be in play: a rels part that is gone, or that was
-        # written directly as plain bytes, is this page's to replace
         held = self.vis._package.part(self.rels_xml_filename)
-        if held is None or isinstance(held, BytesPart):
+        if held is None:
             return True
-        return held.tree is self._rels_xml
+        return isinstance(held, XmlPart) and held.tree is self._rels_xml
 
     @property
     def rels_xml(self) -> ET.ElementTree[ET.Element] | None:
