@@ -10,13 +10,23 @@ from __future__ import annotations
 
 import io
 import sys
+import weakref
 from collections.abc import Iterable, Iterator, MutableMapping
+from typing import TYPE_CHECKING
 
 if sys.version_info >= (3, 12):
-    from collections.abc import Buffer
     from typing import override
 else:
-    from typing_extensions import Buffer, override
+    from typing_extensions import override
+
+if TYPE_CHECKING:
+    # annotations only: typing_extensions grew Buffer in 4.6, and the declared
+    # floor is 4.4, so importing it at runtime would break an install the
+    # package metadata allows
+    if sys.version_info >= (3, 12):
+        from collections.abc import Buffer
+    else:
+        from typing_extensions import Buffer
 
 from .package import PackageStore
 
@@ -34,30 +44,80 @@ class _WriteThroughBuffer(io.BytesIO):
     A write through the buffer replaces the part with bytes, detaching any
     promoted tree (the same way __setitem__ does), so a caller who holds the
     buffer and a removed tree keeps a working, detached tree.
+
+    `getbuffer()` is the one mutation this cannot see: a write through the
+    memoryview it returns lands in the buffer's memory without calling any
+    method here. So an exported buffer records what it held when it was first
+    exported and joins its view's `exports`, and `ZipFileContentsView.sync()`
+    collects whatever changed since, which `VisioFile.save_vsdx` does before
+    it writes anything. The buffer holds the export set rather than the view,
+    so a buffer a caller keeps does not keep the view alive.
     """
 
-    def __init__(self, store: PackageStore, name: str, initial_bytes: bytes) -> None:
+    def __init__(
+        self, store: PackageStore, name: str, initial_bytes: bytes, exports: weakref.WeakSet[_WriteThroughBuffer]
+    ) -> None:
         super().__init__(initial_bytes)
         self._store = store
         self._name = name
+        self._exports = exports
+        # what the store last agreed this buffer held, set on first export;
+        # None means no memoryview has ever been handed out
+        self._baseline: bytes | None = None
+
+    def _write_through(self) -> None:
+        value = self.getvalue()
+        self._store.write_bytes(self._name, value)
+        if self._baseline is not None:
+            # the store has these bytes now, so a later sync has nothing of
+            # this buffer's to collect and must not write them over whatever
+            # the store is given after this
+            self._baseline = value
 
     @override
     def write(self, buffer: Buffer, /) -> int:
         result = super().write(buffer)
-        self._store.write_bytes(self._name, self.getvalue())
+        self._write_through()
         return result
 
     @override
     def writelines(self, lines: Iterable[Buffer], /) -> None:
         result = super().writelines(lines)
-        self._store.write_bytes(self._name, self.getvalue())
+        self._write_through()
         return result
 
     @override
     def truncate(self, size: int | None = None, /) -> int:
         result = super().truncate(size)
-        self._store.write_bytes(self._name, self.getvalue())
+        self._write_through()
         return result
+
+    @override
+    def getbuffer(self) -> memoryview:
+        view = super().getbuffer()
+        if self._baseline is None:
+            # only the first export sets the baseline: a second export while an
+            # earlier memoryview still has uncollected edits must not hide them
+            self._baseline = self.getvalue()
+            self._exports.add(self)
+        return view
+
+    def collect(self) -> None:
+        """Write memoryview edits made since the baseline to the store, if the part is still there.
+
+        A part removed since this buffer was read stays removed: the old dict
+        dropped its buffer on delete, so an edit to it never reached a save,
+        and bringing a deleted page's part back as an orphan would be worse. A
+        closed buffer has nothing left to read, and is skipped the same way.
+        """
+        if self._baseline is None or self.closed:
+            return
+        value = self.getvalue()
+        if value == self._baseline:
+            return
+        self._baseline = value
+        if self._store.part(self._name) is not None:
+            self._store.write_bytes(self._name, value)
 
 
 def part_name_for_path(directory: str, path: str) -> str | None:
@@ -74,6 +134,26 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
     def __init__(self, store: PackageStore, directory: str) -> None:
         self._store = store
         self._directory = directory
+        # buffers a caller has taken a memoryview of, held weakly so the view
+        # never keeps a copy of a part alive by itself; the price is that a
+        # buffer dropped before save, memoryview and all, takes its edits with it
+        self._exports: weakref.WeakSet[_WriteThroughBuffer] = weakref.WeakSet()
+
+    def sync(self) -> None:
+        """Write to the store every change made through a `getbuffer()` memoryview.
+
+        The old dict handed out its own buffers, so a write through
+        `buf.getbuffer()` changed the package. A memoryview write calls no
+        method that could forward it, so it is collected here instead, and
+        `VisioFile.save_vsdx` calls this before it writes anything. The cost
+        is ordering: an exported buffer's edit, collected at save, wins over a
+        store write to the same part made after the edit, where the old dict
+        would have kept whichever came last.
+        """
+        # a snapshot: the set is weak, and collecting must not race a buffer
+        # being dropped mid-iteration
+        for buffer in list(self._exports):
+            buffer.collect()
 
     def _name(self, key: object) -> str | None:
         return part_name_for_path(self._directory, key) if isinstance(key, str) else None
@@ -88,7 +168,7 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
         if data is None:
             raise KeyError(key)
         assert name is not None  # name is guaranteed non-None if data is not None
-        return _WriteThroughBuffer(self._store, name, data)
+        return _WriteThroughBuffer(self._store, name, data, self._exports)
 
     @override
     def __setitem__(self, key: str, value: io.BytesIO) -> None:
