@@ -13,9 +13,10 @@ import sys
 from collections.abc import Iterable, Iterator, MutableMapping
 
 if sys.version_info >= (3, 12):
+    from collections.abc import Buffer
     from typing import override
 else:
-    from typing_extensions import override
+    from typing_extensions import Buffer, override
 
 from .package import PackageStore
 
@@ -41,20 +42,20 @@ class _WriteThroughBuffer(io.BytesIO):
         self._name = name
 
     @override
-    def write(self, __s):  # type: ignore[override]
-        result = super().write(__s)
+    def write(self, buffer: Buffer, /) -> int:
+        result = super().write(buffer)
         self._store.write_bytes(self._name, self.getvalue())
         return result
 
     @override
-    def writelines(self, __lines: Iterable[bytes]) -> None:  # type: ignore[override]
-        result = super().writelines(__lines)
+    def writelines(self, lines: Iterable[Buffer], /) -> None:
+        result = super().writelines(lines)
         self._store.write_bytes(self._name, self.getvalue())
         return result
 
     @override
-    def truncate(self, __size: int | None = None) -> int:  # type: ignore[override]
-        result = super().truncate(__size)
+    def truncate(self, size: int | None = None, /) -> int:
+        result = super().truncate(size)
         self._store.write_bytes(self._name, self.getvalue())
         return result
 
