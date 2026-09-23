@@ -83,6 +83,14 @@ class MastersImportMixin:
         source_master_page = src_vis.get_master_page_by_id(master_ref)
         if source_master_page is None or src_vis._package.part(src_vis._part_name(source_master_page.filename)) is None:
             return ""
+        # read before anything here is changed, so a failure leaves this
+        # package as it was. The check above says the part is there, so None
+        # is a source store contradicting itself; writing empty bytes in its
+        # place would make a master part no reader can parse.
+        source_part_name = src_vis._part_name(source_master_page.filename)
+        master_bytes = src_vis._package.read_bytes(source_part_name)
+        if master_bytes is None:
+            raise ValueError(f"source master part {source_part_name} could not be read, though the package lists it")
 
         # 1. ensure this document has a masters.xml (and rels) to append to,
         # BEFORE resolving master_rels_path below. A masters relationship can
@@ -121,9 +129,7 @@ class MastersImportMixin:
             next_num += 1
         part_name = f"master{next_num}.xml"
         part_path = f"{self._masters_folder}/{part_name}"
-        self._package.write_bytes(
-            self._part_name(part_path), src_vis._package.read_bytes(src_vis._part_name(source_master_page.filename)) or b""
-        )
+        self._package.write_bytes(self._part_name(part_path), master_bytes)
 
         # 3. append the Master element with a fresh logical ID
         assert self.masters_xml is not None  # bootstrap above guarantees it

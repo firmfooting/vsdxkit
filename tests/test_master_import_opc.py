@@ -320,3 +320,21 @@ def test_import_survives_masters_declared_with_no_masters_parts(vsdx_copy):
         os.remove(crafted_path)
         with contextlib.suppress(FileNotFoundError):
             os.remove(os.path.join(os.path.dirname(crafted_path), "reopened.vsdx"))
+
+
+def test_a_source_master_that_cannot_be_read_fails_before_the_target_changes(vsdx_copy, monkeypatch):
+    """Fails if importing a master falls back to writing empty bytes when the source part reads as None.
+
+    The import checks that the source master part exists before it starts, so
+    a None from reading it is a store that contradicts itself. An empty master
+    part is not a master Visio can open, and falling back to one hides that
+    until the file is opened; the import has to stop, and stop before it has
+    changed the target package.
+    """
+    with VisioFile(vsdx_copy("test4_connectors.vsdx")) as source, VisioFile(vsdx_copy("test1.vsdx")) as target:
+        shape = next(shape for shape in source.pages[0].all_shapes if shape.xml.attrib.get("Master"))
+        before = target._package.names()
+        monkeypatch.setattr(source._package, "read_bytes", lambda name: None)
+        with pytest.raises(ValueError, match="could not be read"):
+            target._ensure_masters_for_shape(shape)
+        assert target._package.names() == before
