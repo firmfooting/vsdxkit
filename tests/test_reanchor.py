@@ -236,6 +236,34 @@ def test_a_kept_floating_end_loses_its_old_glue(vsdx_copy):
         assert not any("Sheet90!" in (cell.formula or "") for cell in connector.cells.values())
 
 
+def test_retarget_removes_the_begintrigger_earlier_releases_wrote(vsdx_copy):
+    """Codex on #401: point glue before #106 wrote a `BeginTrigger` cell, which Visio does not have."""
+    with VisioFile(vsdx_copy(S05)) as vis:
+        page = vis.pages[0]
+        source, target, other = (page.shapes.by_id(i) for i in ("90", "97", "102"))
+        connector = page.connect_shapes(source, target, route="point")
+        connector.get_or_create_cell("BeginTrigger", f="_XFTRIGGER(Sheet90!EventXFMod)")
+
+        page.reanchor_connector(connector, to_shape=other)
+
+        assert _own_cell(connector, "BeginTrigger") is None
+
+
+def test_a_record_without_toparts_keeps_its_point_glue(vsdx_copy):
+    """Codex on #401: `ToPart` is optional, and `ToCell` alone still names the point."""
+    with VisioFile(vsdx_copy(S05)) as vis:
+        page = vis.pages[0]
+        source, target, other = (page.shapes.by_id(i) for i in ("90", "97", "102"))
+        connector = page.connect_shapes(source, target, route="point", from_cp=1, to_cp=2)
+        for record in page.connects:
+            if record.from_id == connector.ID:
+                del record.xml.attrib["ToPart"]
+
+        page.reanchor_connector(connector, to_shape=other)
+
+        assert _records(page, connector) == {"BeginX": ("90", "Connections.X2"), "EndX": ("102", "Connections.X3")}
+
+
 def test_a_route_still_replaces_the_glue_of_both_ends(vsdx_copy):
     with VisioFile(vsdx_copy(S05)) as vis:
         page = vis.pages[0]

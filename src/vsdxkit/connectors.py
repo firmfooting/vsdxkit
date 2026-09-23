@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, TypeAlias
 from xml.etree.ElementTree import Element
 
@@ -28,8 +29,9 @@ if TYPE_CHECKING:
 
 namespace = "{http://schemas.microsoft.com/office/visio/2012/main}"
 
-# a Connect record's ToPart for connection point row n is 100 + n
+# a Connect record's ToPart for connection point row n is 100 + n, and its ToCell Connections.X{n + 1}
 _FIRST_CONNECTION_POINT_PART = 100
+_CONNECTION_CELL = re.compile(r"Connections\.X(\d+)")
 
 
 def _options(route: str | None, from_cp: int, to_cp: int, options: ConnectorOptions | None) -> ConnectorOptions | None:
@@ -96,6 +98,19 @@ def _check_point(end: _End) -> None:
         raise InvalidOperationError(
             f"Shape ID {shape.ID} has {len(rows)} connection point(s); cannot glue to connection point index {point}"
         )
+
+
+def _record_point(connect: Connect) -> int | None:
+    """The connection point a record glues to, or ``None`` for dynamic glue.
+
+    ``ToPart`` is 100 plus the point's row. It is optional, and without it
+    ``ToCell`` still names the row, as ``Connections.X3``.
+    """
+    part = connect.xml.attrib.get("ToPart", "")
+    if part.isdigit():
+        return int(part) - _FIRST_CONNECTION_POINT_PART if int(part) >= _FIRST_CONNECTION_POINT_PART else None
+    named = _CONNECTION_CELL.fullmatch(connect.to_rel or "")
+    return int(named.group(1)) - 1 if named else None
 
 
 def _end_glue(end: _End) -> EndGlue | None:
@@ -250,10 +265,7 @@ class Connect:
             shape = page.shapes.by_id(connect.to_id)
             if shape is None:
                 continue
-            part = connect.xml.attrib.get("ToPart", "")
-            is_point = part.isdigit() and int(part) >= _FIRST_CONNECTION_POINT_PART
-            point = int(part) - _FIRST_CONNECTION_POINT_PART if is_point else None
-            ends[connect.from_rel] = (shape, point)
+            ends[connect.from_rel] = (shape, _record_point(connect))
         return ends.get("BeginX"), ends.get("EndX")
 
     @staticmethod

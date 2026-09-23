@@ -100,6 +100,7 @@ def test_dynamic_glue_at_both_ends_is_what_visio_writes():
         CellWrite("EndY", formula=WALKGLUE_END),
         CellWrite("GlueType", value="2"),
         CellWrite("ObjType", value="2"),
+        CellInherit("BeginTrigger"),
     )
 
 
@@ -116,6 +117,7 @@ def test_point_glue_at_both_ends_writes_the_begin_trigger_to_begtrigger():
         CellWrite("EndY", formula=end_point),
         CellInherit("GlueType"),
         CellInherit("ObjType"),
+        CellInherit("BeginTrigger"),
     )
 
 

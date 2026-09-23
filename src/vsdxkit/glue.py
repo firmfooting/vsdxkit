@@ -183,7 +183,8 @@ def glue_cells(begin: EndGlue | None, end: EndGlue | None) -> tuple[CellChange, 
         connector: tuple[CellChange, ...] = (CellWrite("GlueType", value="2"), CellWrite("ObjType", value="2"))
     else:
         connector = (CellInherit("GlueType"), CellInherit("ObjType"))
-    return (*triggers, *coordinates, *connector)
+    # point glue before 1.0 wrote its begin trigger here; Visio has no such cell
+    return (*triggers, *coordinates, *connector, CellInherit("BeginTrigger"))
 
 
 def _any_dynamic(begin: EndGlue | None, end: EndGlue | None) -> bool:
