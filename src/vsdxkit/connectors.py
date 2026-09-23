@@ -110,10 +110,14 @@ class Connect:
             new_master_id = None
             if not masters_rel_present:
                 # document has no masters at all: copy the media masters folder
-                for file_name, file in media.media.zip_file_contents.items():
+                # by key, and only the matches read: reading a member of the
+                # view serialises it if the donor has parsed it, and the donor
+                # has parsed every page it holds
+                donor_contents = media.media.zip_file_contents
+                for file_name in donor_contents:
                     if file_name.startswith(media.media._masters_folder):
                         new_file_name = file_name.replace(media.media._masters_folder, page.vis._masters_folder)
-                        page.vis.zip_file_contents[new_file_name] = file
+                        page.vis.zip_file_contents[new_file_name] = donor_contents[file_name]
                 page.vis.load_master_pages()  # load copied master page files into VisioFile object
                 # document-level masters relationship
                 page.vis._add_document_rel(
