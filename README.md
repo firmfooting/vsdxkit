@@ -80,6 +80,8 @@ with VisioFile("diagram.vsdx") as vis:
     vis.save_vsdx()
 ```
 
+A save writes every part you did not change exactly as it arrived. A part you did change is written as equivalent XML, but not in Visio's own spelling: the XML declaration, attribute quotes, empty-element form and namespace declarations can differ, and a CRLF inside text becomes LF. Visio and LibreOffice open both.
+
 ## Create shapes and connectors
 
 Shape coordinates are in Visio page units, normally inches. `x` and `y` identify the shape centre.

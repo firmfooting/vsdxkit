@@ -7,9 +7,9 @@ package and saving it without changing anything moves nothing at all.
 
 That second half is the behaviour freeze the 1.0 package rewrite is measured
 against: `PackageStore` and `MasterCatalog` may reorganise how parts are held in
-memory, but the bytes that reach disk must not move. Until #89 a no-op save
-re-serialised every part it held as a tree, and the drift that caused is
-recorded in `tests/fixtures/package_manifests/KNOWN_DRIFT.md`.
+memory, but the bytes that reach disk must not move. A no-op save allows no
+drift at all, over all 29 packages; the README's "Open, edit and save" section
+describes the spelling a part picks up when the library does change it.
 """
 
 import io
@@ -425,10 +425,9 @@ def test_a_round_trip_changes_nothing(package_path, round_trip):
 
     Fails if the save writes any part it did not change -- a part added,
     removed or reordered, or one respelled, even with its canonical form
-    intact. Until #89 every part the library held as a tree drifted here, and
-    `tests/fixtures/package_manifests/KNOWN_DRIFT.md` records how; a save now
-    writes an unchanged part as the bytes it arrived as, so no allowance is
-    left to make.
+    intact. A no-op save writes every part as the bytes it arrived as, so no
+    allowance is left to make; see the README's "Open, edit and save" section
+    for the spelling a part picks up when the library does change it.
     """
     before, after = round_trip(package_path)
     assert_manifest_equal(before, after)
