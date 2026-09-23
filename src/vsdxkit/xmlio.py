@@ -7,7 +7,7 @@ import re
 import threading
 import weakref
 import xml.etree.ElementTree as ET
-from collections.abc import Generator, Mapping, MutableMapping
+from collections.abc import Generator
 from contextlib import contextmanager
 
 from .errors import MalformedPackageError, MissingPartError, PartParseError
@@ -225,13 +225,12 @@ def parse_part(data: bytes, name: str = "") -> ET.ElementTree[ET.Element]:
     are collected here and kept against the root element.
 
     A part that will not parse is reported here rather than at each call site.
-    Both routes into the parser -- `file_to_xml`, which is how a document is
-    opened, and `PackageStore`'s promotion -- come through this function, so a
-    translation at one of them would leave the other raising whatever
-    ElementTree raised. A part that is not well-formed is a `PartParseError`,
-    which is still an `ET.ParseError` and carries the parser's `position` and
-    `code`, so code written to catch what the parser raised keeps working; the
-    original stays as the cause.
+    The one route into the parser -- `PackageStore`'s promotion -- comes
+    through this function, so a translation here is the only one needed. A
+    part that is not well-formed is a `PartParseError`, which is still an
+    `ET.ParseError` and carries the parser's `position` and `code`, so code
+    written to catch what the parser raised keeps working; the original stays
+    as the cause.
     """
     subject = f"package part {name}" if name else "package part"
     root: ET.Element | None = None
@@ -287,18 +286,12 @@ def adopt_prefixes(root: ET.Element, source: ET.Element) -> None:
         _declared_prefixes[root] = declared
 
 
-def file_to_xml(filename: str, zip_file_contents: Mapping[str, io.BytesIO]) -> ET.ElementTree[ET.Element] | None:
-    """Import a file as an ElementTree."""
-    if filename in zip_file_contents:
-        return parse_part(zip_file_contents[filename].getvalue(), filename)
-    return None
-
-
 def serialise_part(xml: ET.ElementTree[ET.Element]) -> bytes:
     """One package part as bytes, prefixed the way Visio writes it.
 
-    Split out of `xml_to_file` so that a part written through `PackageStore`
-    and one written through `xml_to_file` cannot disagree about the
+    The one writer of a part's bytes: `XmlPart.current_bytes` -- reached
+    through `PackageStore.read_bytes` and so every save -- and `canonical_hash`
+    both go through here, so a part cannot disagree with itself about the
     declaration, the encoding or the per-part prefix map.
 
     Every tree that becomes an archive member goes through here. The two that
@@ -317,11 +310,6 @@ def serialise_part(xml: ET.ElementTree[ET.Element]) -> bytes:
     return file.getvalue()
 
 
-def xml_to_file(xml: ET.ElementTree[ET.Element], filename: str, zip_file_contents: MutableMapping[str, io.BytesIO]) -> None:
-    """Save an ElementTree to zip_file_contents, prefixed the way Visio writes it."""
-    zip_file_contents[filename] = io.BytesIO(serialise_part(xml))
-
-
 def xml_value(value: object) -> str:
     """Coerce a value before assigning it to an ElementTree attribute."""
     if value is None:
@@ -334,21 +322,6 @@ def require_tree(tree: ET.ElementTree[ET.Element] | None, description: str) -> E
     if tree is None:
         raise MissingPartError(f"expected document part not found: {description}")
     return tree
-
-
-def require_xml_tree(
-    filename: str, zip_file_contents: Mapping[str, io.BytesIO], description: str
-) -> ET.ElementTree[ET.Element]:
-    """Parse a required XML part from the zip and return its ElementTree."""
-    tree = file_to_xml(filename, zip_file_contents)
-    if tree is None:
-        raise MissingPartError(f"expected XML part not found: {description} ({filename})")
-    return tree
-
-
-def require_root(filename: str, zip_file_contents: Mapping[str, io.BytesIO], description: str) -> ET.Element:
-    """Parse a required XML part from the zip and return its root element."""
-    return require_element(require_xml_tree(filename, zip_file_contents, description).getroot(), description)
 
 
 def require_element(element: ET.Element | None, description: str) -> ET.Element:

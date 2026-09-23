@@ -230,93 +230,62 @@ def test_setting_a_pages_xml_to_none_is_refused(vsdx_copy):
         assert vis._package.part(part_name) is not None
 
 
-def test_a_tree_assigned_after_a_pages_bytes_were_flushed_is_saved(vsdx_copy, tmp_path):
-    """Fails if `Page.xml` stops writing through once a buffer's bytes replaced the page's tree in the store.
-
-    Bytes written through `zip_file_contents` that do not parse land at
-    `sync()` as plain bytes, so the store no longer holds the page's tree. A
-    tree the caller assigns to the page afterwards is their later word; if
-    the setter took the bytes for another page's part and kept out, the save
-    would write the unparseable bytes and the file would not open again.
-    """
-    target = str(tmp_path / "saved.vsdx")
-    with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
-        page = vis.pages[0]
-        replacement = parse_part(serialise_part(page.xml))
-        root = replacement.getroot()
-        assert root is not None
-        root.set("VsdxkitMarker", "1")
-        buf = vis.zip_file_contents[f"{vis.directory}{page.filename}"]
-        buf.seek(0)
-        buf.write(b"not xml")
-        vis.zip_file_contents.sync()
-        page.xml = replacement
-        vis.save_vsdx(target)
-    with vsdxkit.VisioFile(target) as saved:
-        assert saved.pages[0].xml.getroot().get("VsdxkitMarker") == "1"
-
-
-def test_a_rels_tree_assigned_after_the_view_deleted_the_part_is_saved(vsdx_copy, tmp_path):
+def test_a_rels_tree_assigned_after_the_part_is_cleared_is_saved(vsdx_copy, tmp_path):
     """Fails if `Page.rels_xml` writes through only over the page's own rels tree, not where the part is gone.
 
-    Deleting the member through `zip_file_contents` leaves the page attached
-    and still holding its old rels tree. A tree the caller assigns afterwards
-    is their later word and must bring the part back, or the save would leave
-    the page's master and image relationships out of the file.
+    `Page.rels_xml = None` takes the part out of the package and leaves the
+    page attached with no rels part at all. A tree the caller assigns
+    afterwards is their later word and must bring the part back, or the save
+    would leave the page's master and image relationships out of the file.
     """
     target = str(tmp_path / "saved.vsdx")
     with vsdxkit.VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
         page = next(p for p in vis.pages if p.rels_xml is not None)
-        assert page.rels_xml_filename is not None
+        assert page.rels_xml is not None
         replacement = parse_part(serialise_part(page.rels_xml))
-        del vis.zip_file_contents[f"{vis.directory}{page.rels_xml_filename}"]
+        page.rels_xml = None
         page.rels_xml = replacement
+        assert page.rels_xml_filename is not None
         member = page.rels_xml_filename[1:]
         vis.save_vsdx(target)
     with zipfile.ZipFile(target) as archive:
         assert member in archive.namelist()
 
 
-@pytest.mark.allow_invalid_package("unreadable-part")
-def test_none_assigned_to_rels_after_the_view_wrote_bytes_over_them_removes_the_part(vsdx_copy, tmp_path):
-    """Fails if `Page.rels_xml = None` keeps out when the page's rels part is bytes, not the page's tree.
-
-    Bytes that do not parse, written through `zip_file_contents`, land at
-    `sync()` as plain bytes. Assigning None afterwards must still take the
-    part out, or the save writes the unparseable bytes.
-    """
-    target = str(tmp_path / "saved.vsdx")
-    with vsdxkit.VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
-        page = next(p for p in vis.pages if p.rels_xml is not None)
-        assert page.rels_xml_filename is not None
-        buf = vis.zip_file_contents[f"{vis.directory}{page.rels_xml_filename}"]
-        buf.seek(0)
-        buf.write(b"not xml")
-        vis.zip_file_contents.sync()
-        page.rels_xml = None
-        member = page.rels_xml_filename[1:]
-        vis.save_vsdx(target)
-    with zipfile.ZipFile(target) as archive:
-        assert member not in archive.namelist()
+def _two_pages_on_one_part(source: str, crafted: str) -> None:
+    """Write `source` again with its second page's relationship aimed at the first page's part."""
+    with zipfile.ZipFile(source) as original, zipfile.ZipFile(crafted, "w") as rewritten:
+        for entry in original.infolist():
+            data = original.read(entry.filename)
+            if entry.filename == "visio/pages/_rels/pages.xml.rels":
+                data = data.replace(b'Target="page2.xml"', b'Target="page1.xml"')
+            rewritten.writestr(entry, data)
 
 
-def test_a_tree_assigned_after_the_view_deleted_a_pages_part_is_saved(vsdx_copy, tmp_path):
+@pytest.mark.allow_invalid_package("reused-page-part")
+def test_a_tree_assigned_after_the_pages_part_is_removed_is_saved(vsdx_copy, tmp_path):
     """Fails if `Page.xml` keeps out when the page's part is gone rather than someone else's.
 
-    Deleting the member through `zip_file_contents` leaves the page in the
-    document, and pages.xml, its relationship and the content-type override
-    still name the part. A tree the caller assigns afterwards must bring the
-    part back, or the saved package names a part it does not hold.
+    Nothing at open stops two pages' relationships targeting one part, and
+    then the two pages share it. Removing one (`remove_page_by_index`) takes
+    the part out from under the other, which stays in the document with
+    pages.xml and its own relationship still naming the part. A tree the
+    caller assigns to it afterwards must bring the part back, or the saved
+    package names a part it does not hold.
     """
+    crafted = str(tmp_path / "crafted.vsdx")
+    _two_pages_on_one_part(vsdx_copy("test2.vsdx"), crafted)
     target = str(tmp_path / "saved.vsdx")
-    with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
-        page = vis.pages[0]
-        replacement = parse_part(serialise_part(page.xml))
+    with vsdxkit.VisioFile(crafted) as vis:
+        first, second = vis.pages[0], vis.pages[1]
+        assert first.filename == second.filename, "the crafted package should give both pages one part"
+        replacement = parse_part(serialise_part(second.xml))
         root = replacement.getroot()
         assert root is not None
         root.set("VsdxkitMarker", "1")
-        del vis.zip_file_contents[f"{vis.directory}{page.filename}"]
-        page.xml = replacement
+        vis.remove_page_by_index(0)
+        assert vis._package.part(second.filename) is None
+        second.xml = replacement
         vis.save_vsdx(target)
     with vsdxkit.VisioFile(target) as saved:
         assert saved.pages[0].xml.getroot().get("VsdxkitMarker") == "1"

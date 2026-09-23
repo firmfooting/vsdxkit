@@ -168,3 +168,42 @@ def test_a_connector_reaches_a_master_kept_in_a_subfolder_of_the_masters_folder(
         resolved = {t: posixpath.normpath(posixpath.join(posixpath.dirname(page.filename), t)) for t in targets}
         assert {t: name for t, name in resolved.items() if vis._package.part(name) is None} == {}
         vis.save_vsdx(str(tmp_path / "out.vsdx"))
+
+
+def test_a_document_has_no_zip_file_contents_or_directory(vsdx_copy):
+    """Fails if the pre-store view or its pseudo-path root is still on `VisioFile` (#91)."""
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        assert not hasattr(vis, "zip_file_contents")
+        assert not hasattr(vis, "directory")
+
+
+@pytest.mark.parametrize("name", ["file_to_xml", "xml_to_file", "require_xml_tree", "require_root"])
+def test_xmlio_has_no_helpers_over_the_old_mapping(name):
+    """Fails if a helper that took the pre-store `{path: BytesIO}` mapping is still in `xmlio` (#91)."""
+    import vsdxkit.vsdxfile
+    import vsdxkit.xmlio
+
+    assert not hasattr(vsdxkit.xmlio, name)
+    assert not hasattr(vsdxkit.vsdxfile, name)
+
+
+def test_a_removed_pages_xml_assignment_writes_nothing(vsdx_copy):
+    """Fails if a page removed from the document can still write its part."""
+    with VisioFile(vsdx_copy("test2.vsdx")) as vis:
+        removed = vis.pages[-1]
+        name = removed.filename
+        vis.remove_page_by_index(len(vis.pages) - 1)
+        removed.xml = ET.ElementTree(ET.fromstring(ET.tostring(removed.xml.getroot())))
+        assert vis._package.part(name) is None
+
+
+def test_a_page_with_no_rels_part_gets_one_on_assignment(vsdx_copy):
+    """Fails if a live page with no relationship part cannot be given one."""
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        page = vis.pages[0]
+        assert page.rels_xml is None, "the fixture has changed: page 1 should have no rels part"
+        page.rels_xml_filename = f"/visio/pages/_rels/{page.filename.rsplit('/', 1)[-1]}.rels"
+        page.rels_xml = ET.ElementTree(
+            ET.fromstring('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
+        )
+        assert vis._package.part(page.rels_xml_filename) is not None
