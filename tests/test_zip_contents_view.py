@@ -536,7 +536,7 @@ def test_a_partial_rewrite_and_a_later_object_model_edit_both_reach_disk(vsdx_co
     target = str(tmp_path / "saved.vsdx")
     with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         page = vis.pages[0]
-        buf = vis.zip_file_contents[page.filename]
+        buf = vis.zip_file_contents[f"{vis.directory}{page.filename}"]
         _partial_rewrite(buf, _shorter_replacement(buf.getvalue()))
         shape = page.find_shape_by_id("1")
         assert shape is not None
@@ -750,9 +750,9 @@ def test_assigning_new_xml_to_a_parsed_page_survives_an_older_buffers_write_at_s
     target = str(tmp_path / "saved.vsdx")
     with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         page = vis.pages[0]
-        old = vis.zip_file_contents[page.filename]
+        old = vis.zip_file_contents[f"{vis.directory}{page.filename}"]
         stale = old.getvalue()
-        vis.zip_file_contents[page.filename] = io.BytesIO(_page1_with_marker(vis._package))
+        vis.zip_file_contents[f"{vis.directory}{page.filename}"] = io.BytesIO(_page1_with_marker(vis._package))
         old.seek(0)
         old.write(stale)
         vis.save_vsdx(target)
@@ -822,7 +822,7 @@ def test_a_page_xml_assignment_detaches_a_snapshot_of_the_old_tree(vsdx_copy, tm
     target = str(tmp_path / "saved.vsdx")
     with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         page = vis.pages[0]
-        buf = vis.zip_file_contents[page.filename]
+        buf = vis.zip_file_contents[f"{vis.directory}{page.filename}"]
         stale = buf.getvalue()
         replacement = copy.deepcopy(page.xml)
         root = replacement.getroot()

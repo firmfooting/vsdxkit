@@ -252,7 +252,7 @@ def test_imported_master_survives_a_reopen(imported_master: ImportedMaster):
         master_page = vis.get_master_page_by_id(imported_master.master_id)
         assert master_page is not None, f"master {imported_master.master_id} did not survive the round trip"
         assert master_page.name == imported_master.master_name
-        assert vis._package.part(vis._part_name(master_page.filename)) is not None
+        assert vis._package.part(master_page.filename) is not None
 
 
 def test_import_survives_masters_declared_with_no_masters_parts(vsdx_copy):

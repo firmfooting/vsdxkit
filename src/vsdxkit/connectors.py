@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import posixpath
 import xml.etree.ElementTree as ET
 from xml.etree.ElementTree import Element
 
@@ -134,10 +135,11 @@ class Connect:
                 )
                 # content-type overrides for masters.xml and master1.xml
                 page.vis._add_content_types_override(
-                    content_type="application/vnd.ms-visio.masters+xml", part_name_path="/visio/masters/masters.xml"
+                    content_type="application/vnd.ms-visio.masters+xml", part_name_path=MASTERS_PART
                 )
                 page.vis._add_content_types_override(
-                    content_type="application/vnd.ms-visio.master+xml", part_name_path="/visio/masters/master1.xml"
+                    content_type="application/vnd.ms-visio.master+xml",
+                    part_name_path=target_part_name(MASTERS_PART, "master1.xml"),
                 )
                 # per-page master relationship (creates the page rels part and
                 # writes it into the package store, which is what a save writes)
@@ -157,7 +159,7 @@ class Connect:
             effective_master_id = new_master_id or connector_shape.master_page_ID
             master_page = page.vis.get_master_page_by_id(effective_master_id) if effective_master_id else None
             if master_page is not None:
-                master_part = master_page.filename.replace(page.vis._masters_folder + "/", "")
+                master_part = posixpath.basename(master_page.filename)
                 page._ensure_page_master_rel(master_page.rel_id, master_part)
 
             # app.xml lists master names too, and the document has just

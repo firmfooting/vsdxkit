@@ -132,15 +132,6 @@ def test_open_abs_path():
         assert all(page.name for page in vis.pages)
 
 
-def test_page_relationship_lookup_uses_opc_path_separator():
-    from vsdxkit.vsdxfile import _page_relationship_path
-
-    rel_dir = "C:\\diagram/visio/pages/_rels/"
-    page_path = "C:\\diagram/visio/pages/page1.xml"
-
-    assert _page_relationship_path(rel_dir, page_path) == f"{rel_dir}page1.xml.rels"
-
-
 def test_close_does_not_delete_same_stem_directory(vsdx_copy):
     filename = Path(vsdx_copy("test1.vsdx"))
     sibling = filename.with_suffix("")
@@ -450,7 +441,7 @@ def test_copy_page_clones_relationship_part(vsdx_copy, tmp_path):
         assert copied.rels_xml is not source.rels_xml
         assert ET.tostring(copied.rels_xml.getroot()) == source_rels
         assert copied.rels_xml_filename is not None
-        member = copied.rels_xml_filename.removeprefix(f"{vis.directory}/")
+        member = copied.rels_xml_filename[1:]
         vis.save_vsdx(str(output))
 
     with zipfile.ZipFile(output) as archive:

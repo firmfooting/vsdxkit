@@ -43,7 +43,7 @@ def test_one_edit_changes_one_member(vsdx_copy, tmp_path):
         shape = vis.pages[0].find_shape_by_text("Shape A")
         assert shape is not None
         shape.text = "Renamed A"
-        page_member = vis._part_name(vis.pages[0].filename)[1:]
+        page_member = vis.pages[0].filename[1:]
         vis.save_vsdx(str(target))
     before, after = dict(_members(source)), dict(_members(target))
     assert list(after) == list(before)
@@ -167,7 +167,7 @@ def test_a_tree_held_across_a_save_stays_the_documents_tree(vsdx_copy, tmp_path)
     first, second = tmp_path / "first.vsdx", tmp_path / "second.vsdx"
     with vsdxkit.VisioFile(source) as vis:
         app, pages, page = vis.app_xml, vis.pages_xml, vis.pages[0].xml
-        page_member = vis._part_name(vis.pages[0].filename)[1:]
+        page_member = vis.pages[0].filename[1:]
         vis.save_vsdx(str(first))
         assert vis.app_xml is app
         assert vis.pages_xml is pages
@@ -193,7 +193,7 @@ def test_clearing_a_pages_rels_takes_its_part_out_of_the_package(vsdx_copy, tmp_
     with vsdxkit.VisioFile(source) as vis:
         page = vis.pages[0]
         assert page.rels_xml_filename is not None
-        rels_member = vis._part_name(page.rels_xml_filename)[1:]
+        rels_member = page.rels_xml_filename[1:]
         page.rels_xml = None
         vis.save_vsdx(str(target))
     with zipfile.ZipFile(source) as archive:
@@ -224,7 +224,7 @@ def test_setting_a_pages_xml_to_none_is_refused(vsdx_copy):
     """
     with vsdxkit.VisioFile(vsdx_copy("test3_house.vsdx")) as vis:
         page = vis.pages[0]
-        part_name = vis._part_name(page.filename)
+        part_name = page.filename
         with pytest.raises(ValueError, match=r"Page\.xml"):
             page.xml = None
         assert vis._package.part(part_name) is not None
@@ -246,7 +246,7 @@ def test_a_tree_assigned_after_a_pages_bytes_were_flushed_is_saved(vsdx_copy, tm
         root = replacement.getroot()
         assert root is not None
         root.set("VsdxkitMarker", "1")
-        buf = vis.zip_file_contents[page.filename]
+        buf = vis.zip_file_contents[f"{vis.directory}{page.filename}"]
         buf.seek(0)
         buf.write(b"not xml")
         vis.zip_file_contents.sync()
@@ -269,9 +269,9 @@ def test_a_rels_tree_assigned_after_the_view_deleted_the_part_is_saved(vsdx_copy
         page = next(p for p in vis.pages if p.rels_xml is not None)
         assert page.rels_xml_filename is not None
         replacement = parse_part(serialise_part(page.rels_xml))
-        del vis.zip_file_contents[page.rels_xml_filename]
+        del vis.zip_file_contents[f"{vis.directory}{page.rels_xml_filename}"]
         page.rels_xml = replacement
-        member = page.rels_xml_filename.removeprefix(f"{vis.directory}/")
+        member = page.rels_xml_filename[1:]
         vis.save_vsdx(target)
     with zipfile.ZipFile(target) as archive:
         assert member in archive.namelist()
@@ -289,12 +289,12 @@ def test_none_assigned_to_rels_after_the_view_wrote_bytes_over_them_removes_the_
     with vsdxkit.VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
         page = next(p for p in vis.pages if p.rels_xml is not None)
         assert page.rels_xml_filename is not None
-        buf = vis.zip_file_contents[page.rels_xml_filename]
+        buf = vis.zip_file_contents[f"{vis.directory}{page.rels_xml_filename}"]
         buf.seek(0)
         buf.write(b"not xml")
         vis.zip_file_contents.sync()
         page.rels_xml = None
-        member = page.rels_xml_filename.removeprefix(f"{vis.directory}/")
+        member = page.rels_xml_filename[1:]
         vis.save_vsdx(target)
     with zipfile.ZipFile(target) as archive:
         assert member not in archive.namelist()
@@ -315,7 +315,7 @@ def test_a_tree_assigned_after_the_view_deleted_a_pages_part_is_saved(vsdx_copy,
         root = replacement.getroot()
         assert root is not None
         root.set("VsdxkitMarker", "1")
-        del vis.zip_file_contents[page.filename]
+        del vis.zip_file_contents[f"{vis.directory}{page.filename}"]
         page.xml = replacement
         vis.save_vsdx(target)
     with vsdxkit.VisioFile(target) as saved:

@@ -25,8 +25,16 @@ from .errors import InvalidOperationError, MalformedPackageError, MissingPartErr
 from .logging_support import attach_debug_stream_handler, get_logger
 from .package import PackageLimitError as PackageLimitError
 from .package import PackageLimits, PackageStore, XmlPart, _checked
-from .partnames import PAGES_PART, relationships_part_name, target_part_name
-from .zip_contents import ZipFileContentsView, part_name_for_path
+from .partnames import (
+    APP_PART,
+    CONTENT_TYPES_PART,
+    DOCUMENT_PART,
+    MASTERS_PART,
+    PAGES_PART,
+    relationships_part_name,
+    target_part_name,
+)
+from .zip_contents import ZipFileContentsView
 
 # TODO(#362): `PackageLimitError` is imported here only to keep
 # `vsdxkit.vsdxfile.PackageLimitError` working -- it moved to `vsdxkit.package`,
@@ -52,10 +60,11 @@ from .shapes import Shape, find_or_create_shapes_tag  # noqa: E402
 from .templating import JinjaTemplatingMixin  # noqa: E402
 
 # `file_to_xml` is not called directly in this module any more -- every read
-# here goes through `_read_part_xml`/`_require_part_xml`, which promote the
-# store's own tree instead of parsing a private copy. It stays importable as
-# `vsdxkit.vsdxfile.file_to_xml`: `Page.set_name` imports it from here to avoid
-# a circular import, and tests/test_visiofile.py imports it the same way.
+# here goes through the store's `read_xml` or `_require_part_xml`, which
+# promote the store's own tree instead of parsing a private copy. It stays
+# importable as `vsdxkit.vsdxfile.file_to_xml`: `Page.set_name` imports it from
+# here to avoid a circular import, and tests/test_visiofile.py imports it the
+# same way.
 from .xmlio import (  # noqa: E402
     adopt_prefixes,
     file_to_xml,  # noqa: F401
@@ -66,12 +75,6 @@ from .xmlio import (  # noqa: E402
 )
 
 register_namespaces()
-
-
-def _page_relationship_path(rel_dir: str, page_path: str) -> str:
-    """Return an in-memory OPC relationship key; OPC member names use `/`."""
-    filename = posixpath.basename(page_path.replace("\\", "/"))
-    return posixpath.join(rel_dir, f"{filename}.rels")
 
 
 def _page_part_taken(taken: set[str], filename: str) -> bool:
@@ -92,17 +95,6 @@ def _normalise_page_path(path: str) -> str:
 MACRO_ENABLED_CONTENT_TYPE = "application/vnd.ms-visio.drawing.macroEnabled.main+xml"
 DRAWING_CONTENT_TYPE = "application/vnd.ms-visio.drawing.main+xml"
 _SUFFIX_BY_CONTENT_TYPE = {MACRO_ENABLED_CONTENT_TYPE: ".vsdm", DRAWING_CONTENT_TYPE: ".vsdx"}
-
-# OPC part names for the document-level parts `VisioFile` exposes as
-# properties. Fixed, unlike a page's part name, because there is only ever one
-# of each in a package.
-_PAGES_PART = "/visio/pages/pages.xml"
-_PAGES_RELS_PART = "/visio/pages/_rels/pages.xml.rels"
-_CONTENT_TYPES_PART = "/[Content_Types].xml"
-_APP_PART = "/docProps/app.xml"
-_DOCUMENT_PART = "/visio/document.xml"
-_DOCUMENT_RELS_PART = "/visio/_rels/document.xml.rels"
-_MASTERS_PART = "/visio/masters/masters.xml"
 
 # A ShapeSheet formula addresses another shape as `Sheet.5!Cell` or `Sheet5!Cell`.
 # Visio writes the dotted form in inherited cells and the undotted form in the
@@ -251,21 +243,8 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         self._opened_filename = self.filename
         self.zip_file_contents = ZipFileContentsView(self._package, self.directory)
 
-    @override
-    def _part_name(self, path: str) -> str:
-        """The OPC part name for one of this document's `{directory}/...` paths."""
-        name = part_name_for_path(self.directory, path)
-        if name is None:
-            raise ValueError(f"{path!r} is not a part of this document")
-        return name
-
-    @override
-    def _read_part_xml(self, path: str) -> ET.ElementTree[ET.Element] | None:
-        """The store's own tree for a part, promoting it -- never a private copy."""
-        return self._package.read_xml(self._part_name(path))
-
-    def _check_relationship_target(self, path: str, subject: str, target: str) -> None:
-        """Refuse a relationship whose `target`, joined into `path`, names no part.
+    def _check_relationship_target(self, name: str, subject: str, target: str) -> None:
+        """Refuse a relationship whose `target`, joined into `name`, names no part.
 
         The store checks every name it is handed and reports a bad one as a
         plain `ValueError`, because a caller passing it one has made an
@@ -278,15 +257,15 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         it in `except ValueError` would have swallowed.
         """
         try:
-            _checked(self._part_name(path))
+            _checked(name)
         except ValueError as error:
             raise MalformedPackageError(f"{subject} targets {target!r}, which is not a part name in this package") from error
 
-    def _require_part_xml(self, path: str, description: str) -> ET.ElementTree[ET.Element]:
+    def _require_part_xml(self, name: str, description: str) -> ET.ElementTree[ET.Element]:
         """The store's own tree for a required part, or a MissingPartError naming it."""
-        tree = self._read_part_xml(path)
+        tree = self._package.read_xml(name)
         if tree is None:
-            raise MissingPartError(f"expected XML part not found: {description} ({path})")
+            raise MissingPartError(f"expected XML part not found: {description} ({name})")
         return tree
 
     def _set_part_xml(self, name: str, tree: ET.ElementTree[ET.Element] | None) -> None:
@@ -328,72 +307,72 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
 
     @property
     def pages_xml(self) -> ET.ElementTree[ET.Element] | None:
-        return self._package.read_xml(_PAGES_PART)
+        return self._package.read_xml(PAGES_PART)
 
     @pages_xml.setter
     def pages_xml(self, tree: ET.ElementTree[ET.Element] | None) -> None:
-        self._set_document_part_xml("pages_xml", _PAGES_PART, tree)
+        self._set_document_part_xml("pages_xml", PAGES_PART, tree)
 
     @property
     def pages_xml_rels(self) -> ET.ElementTree[ET.Element] | None:
-        return self._package.read_xml(_PAGES_RELS_PART)
+        return self._package.read_xml(relationships_part_name(PAGES_PART))
 
     @pages_xml_rels.setter
     def pages_xml_rels(self, tree: ET.ElementTree[ET.Element] | None) -> None:
-        self._set_document_part_xml("pages_xml_rels", _PAGES_RELS_PART, tree)
+        self._set_document_part_xml("pages_xml_rels", relationships_part_name(PAGES_PART), tree)
 
     @property
     def content_types_xml(self) -> ET.ElementTree[ET.Element] | None:
-        return self._package.read_xml(_CONTENT_TYPES_PART)
+        return self._package.read_xml(CONTENT_TYPES_PART)
 
     @content_types_xml.setter
     def content_types_xml(self, tree: ET.ElementTree[ET.Element] | None) -> None:
-        self._set_document_part_xml("content_types_xml", _CONTENT_TYPES_PART, tree)
+        self._set_document_part_xml("content_types_xml", CONTENT_TYPES_PART, tree)
 
     @property
     def app_xml(self) -> ET.ElementTree[ET.Element] | None:
-        return self._package.read_xml(_APP_PART)
+        return self._package.read_xml(APP_PART)
 
     @app_xml.setter
     def app_xml(self, tree: ET.ElementTree[ET.Element] | None) -> None:
-        self._set_document_part_xml("app_xml", _APP_PART, tree)
+        self._set_document_part_xml("app_xml", APP_PART, tree)
 
     @property
     def document_xml(self) -> ET.ElementTree[ET.Element] | None:
-        return self._package.read_xml(_DOCUMENT_PART)
+        return self._package.read_xml(DOCUMENT_PART)
 
     @document_xml.setter
     def document_xml(self, tree: ET.ElementTree[ET.Element] | None) -> None:
-        self._set_document_part_xml("document_xml", _DOCUMENT_PART, tree)
+        self._set_document_part_xml("document_xml", DOCUMENT_PART, tree)
 
     @property
     def document_xml_rels(self) -> ET.ElementTree[ET.Element] | None:
-        return self._package.read_xml(_DOCUMENT_RELS_PART)
+        return self._package.read_xml(relationships_part_name(DOCUMENT_PART))
 
     @document_xml_rels.setter
     def document_xml_rels(self, tree: ET.ElementTree[ET.Element] | None) -> None:
-        self._set_document_part_xml("document_xml_rels", _DOCUMENT_RELS_PART, tree)
+        self._set_document_part_xml("document_xml_rels", relationships_part_name(DOCUMENT_PART), tree)
 
     @property
     @override
     def masters_xml(self) -> ET.Element | None:
         """The `<Masters>` root, read from the store so it can never be a stale copy."""
-        tree = self._package.read_xml(_MASTERS_PART)
+        tree = self._package.read_xml(MASTERS_PART)
         return None if tree is None else tree.getroot()
 
     @masters_xml.setter
     @override
     def masters_xml(self, root: ET.Element | None) -> None:
         if root is None:
-            self._set_document_part_xml("masters_xml", _MASTERS_PART, None)  # raises: see there
+            self._set_document_part_xml("masters_xml", MASTERS_PART, None)  # raises: see there
             return
         # asked of the part as held rather than through `read_xml`: whether the
         # root is already the part's own needs no parse, and promoting the part
         # here would make assigning over bytes that are not XML raise
-        held = self._package.part(_MASTERS_PART)
+        held = self._package.part(MASTERS_PART)
         if isinstance(held, XmlPart) and held.tree.getroot() is root:
             return
-        self._set_document_part_xml("masters_xml", _MASTERS_PART, ET.ElementTree(root))
+        self._set_document_part_xml("masters_xml", MASTERS_PART, ET.ElementTree(root))
 
     def open_vsdx_file(self) -> None:
         self._load_zip_file_contents_to_memory()
@@ -403,24 +382,12 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         self.load_master_pages()
         self.file_open = True
 
-    def _pages_filename(self):
-        # pages.xml contains Page name, width, height, mapped to Id
-        return f"{self.directory}{_PAGES_PART}"
-
-    @property
-    @override
-    def _masters_folder(self) -> str:
-        return f"{self.directory}/visio/masters"
-
     def load_pages(self) -> None:
-        rel_dir = f"{self.directory}/visio/pages/_rels/"
-        page_dir = f"{self.directory}/visio/pages/"
-
-        rel_filename = rel_dir + "pages.xml.rels"
-        pages_xml_rels = self._require_part_xml(rel_filename, "pages.xml.rels")
+        rels_name = relationships_part_name(PAGES_PART)
+        pages_xml_rels = self._require_part_xml(rels_name, "pages.xml.rels")
         rels = require_element(pages_xml_rels.getroot(), "pages.xml.rels")
         if self.debug:
-            logger.debug("Relationships(%s)\n%s", rel_filename, VisioFile.pretty_print_element(rels))
+            logger.debug("Relationships(%s)\n%s", rels_name, VisioFile.pretty_print_element(rels))
         relid_page_dict = {}
 
         for rel in rels:
@@ -428,11 +395,11 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             page_file = require_attribute(rel, "Target", f"pages.xml.rels Relationship {rel.attrib.get('Id', '')!r}")
             relid_page_dict[rel_id] = page_file
 
-        pages_filename = self._pages_filename()  # pages contains Page name, width, height, mapped to Id
-        pages_xml = self._require_part_xml(pages_filename, "pages.xml")
+        # pages.xml contains Page name, width, height, mapped to Id
+        pages_xml = self._require_part_xml(PAGES_PART, "pages.xml")
         pages = require_element(pages_xml.getroot(), "pages.xml")
         if self.debug:
-            logger.debug("Pages(%s)\n%s", pages_filename, VisioFile.pretty_print_element(pages))
+            logger.debug("Pages(%s)\n%s", PAGES_PART, VisioFile.pretty_print_element(pages))
 
         for page in pages:  # type: Element
             rel_id = require_attribute(
@@ -443,20 +410,20 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             page_file = relid_page_dict.get(rel_id)
             if page_file is None:
                 raise MissingPartError(f"no page part found for relationship {rel_id}")
-            page_path = page_dir + page_file
+            page_path = target_part_name(PAGES_PART, page_file)
             self._check_relationship_target(page_path, f"pages.xml.rels Relationship {rel_id!r}", page_file)
             page_id = page.attrib.get("ID", "")
 
             new_page = Page(self._require_part_xml(page_path, "page part"), page_path, page_name, page_id, rel_id, self)
-            # look for visio/pages/_rels/page3.xml.rels
-            page_rels_path = _page_relationship_path(rel_dir, page_path)
+            # look for /visio/pages/_rels/page3.xml.rels
+            page_rels_path = relationships_part_name(page_path)
 
-            if self._package.part(self._part_name(page_rels_path)) is not None:
+            if self._package.part(page_rels_path) is not None:
                 new_page.rels_xml_filename = page_rels_path
                 # past the setter: the document is not open yet, which the
                 # setter refuses, and the tree is the store's own, so there is
                 # nothing for it to write through
-                new_page._rels_xml = self._read_part_xml(page_rels_path)
+                new_page._rels_xml = self._package.read_xml(page_rels_path)
             self.pages.append(new_page)
 
             if self.debug:
@@ -470,19 +437,19 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         # particular, may simply be missing, and promoting a missing part is
         # just None), and a part that is not well-formed XML fails the open
         # itself, with a `PartParseError`, rather than the first access to it.
-        self._read_part_xml(f"{self.directory}/[Content_Types].xml")
-        self._read_part_xml(f"{self.directory}/docProps/app.xml")
-        self._read_part_xml(f"{self.directory}/visio/document.xml")
-        self._read_part_xml(f"{self.directory}/visio/_rels/document.xml.rels")
+        self._package.read_xml(CONTENT_TYPES_PART)
+        self._package.read_xml(APP_PART)
+        self._package.read_xml(DOCUMENT_PART)
+        self._package.read_xml(relationships_part_name(DOCUMENT_PART))
         # TODO: add correctness cross-check. Or maybe the other way round, start from [Content_Types].xml
         #       to get page_dir and other paths...
 
     @override
     def load_master_pages(self) -> None:
         # get data from /visio/masters folder
-        master_rel_path = f"{self.directory}/visio/masters/_rels/masters.xml.rels"
+        master_rel_path = relationships_part_name(MASTERS_PART)
 
-        master_rels_data = self._read_part_xml(master_rel_path)
+        master_rels_data = self._package.read_xml(master_rel_path)
         # a document with no masters has no rels part: iterate an empty list
         master_rels: list[Element] = list(master_rels_data.getroot()) if master_rels_data is not None else []
         if self.debug:
@@ -515,7 +482,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             master_target = relid_to_target.get(rel_id)
             if master_target is None:
                 raise MissingPartError(f"no master part found for relationship {rel_id}")
-            master_path = f"{self.directory}/visio/masters/{master_target}"
+            master_path = target_part_name(MASTERS_PART, master_target)
             self._check_relationship_target(master_path, f"masters.xml.rels Relationship {rel_id!r}", master_target)
 
             master_page = Page(
@@ -598,15 +565,15 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
                 relationships.remove(self._part_root(self.pages_xml_rels, "pages.xml.rels"), page.rel_id or "")
                 relationships.remove_override(
                     self._part_root(self.content_types_xml, "[Content_Types].xml"),
-                    f"/visio/pages/{os.path.basename(page.filename)}",
+                    page.filename,
                 )
 
                 # remove the page's own rels part if one exists
-                if page.rels_xml_filename and self._package.part(self._part_name(page.rels_xml_filename)) is not None:
-                    self._package.remove(self._part_name(page.rels_xml_filename))
+                if page.rels_xml_filename and self._package.part(page.rels_xml_filename) is not None:
+                    self._package.remove(page.rels_xml_filename)
 
                 # remove page<index>.xml file
-                self._package.remove(self._part_name(self.pages[index].filename))
+                self._package.remove(self.pages[index].filename)
                 del self.pages[index]
 
     def remove_page_by_name(self, page_name: str) -> None:
@@ -1022,8 +989,6 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         # Add to [Content_Types].xml
         # Add to docProps\app.xml
 
-        page_dir = f"{self.directory}/visio/pages/"  # TODO: better concatenation
-
         # create pageX.xml
         new_page_root = ET.fromstring(new_page_xml_str)
         if source_page is not None:
@@ -1031,14 +996,14 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             # its source declared; the copy is still the same page
             adopt_prefixes(new_page_root, require_element(source_page.xml.getroot(), "source page root"))
         new_page_xml: ET.ElementTree[ET.Element] = ET.ElementTree(new_page_root)
-        new_page_path = page_dir + new_page_filename  # TODO: better concatenation
+        new_page_path = target_part_name(PAGES_PART, new_page_filename)
 
         # update pages.xml - insert the PageElement Element in it's correct location
         index = self._get_index(index=index, page=source_page)
         self._part_root(self.pages_xml, "pages.xml").insert(index, new_page_element)
 
         # update [Content_Types].xml - insert reference to the new page
-        self._add_content_types_override(f"/visio/pages/{new_page_filename}", "application/vnd.ms-visio.page+xml")
+        self._add_content_types_override(new_page_path, "application/vnd.ms-visio.page+xml")
 
         # update app.xml, if it exists
         if self.app_xml:
@@ -1052,15 +1017,14 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         # at its part name for any later assignment, and because this call is
         # what gets the new page into the package at all: a save writes the
         # store and nothing else
-        self._package.write_xml(self._part_name(new_page_path), new_page_xml)
+        self._package.write_xml(new_page_path, new_page_xml)
         new_page = Page(new_page_xml, new_page_path, page_name, page_id, new_page_relid, self)
         if source_page is not None and source_page.rels_xml is not None:
             source_rels_root = require_element(source_page.rels_xml.getroot(), "source page relationships root")
-            rel_dir = f"{self.directory}/visio/pages/_rels/"
             # the filename first: the `rels_xml` setter only writes through when
             # `rels_xml_filename` is already set (and the page's own tree, above,
             # is already its part)
-            new_page.rels_xml_filename = _page_relationship_path(rel_dir, new_page_path)
+            new_page.rels_xml_filename = relationships_part_name(new_page_path)
             new_page.rels_xml = ET.ElementTree(copy.deepcopy(source_rels_root))
 
         self.pages.insert(index, new_page)  # insert new page at defined index
@@ -1493,7 +1457,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         content_types = self._part_root(self.content_types_xml, "[Content_Types].xml")
         overrides = content_types.findall(f"{cont_types_namespace}Override")
         for override in overrides:
-            if override.attrib.get("PartName") == "/visio/document.xml":
+            if override.attrib.get("PartName") == DOCUMENT_PART:
                 return override.attrib.get("ContentType", "")
         # an unusual package may name the main part differently; fall back to
         # whichever override declares a Visio main document content type

@@ -17,6 +17,7 @@ from vsdxkit import namespace
 from .connectors import Connect
 from .errors import InvalidOperationError, MissingPartError, NotFoundError
 from .package import BytesPart, XmlPart
+from .partnames import relationships_part_name
 from .shapes import Shape, parent_of, to_float
 from .xmlio import require_element, xml_value
 
@@ -242,11 +243,11 @@ class Page:
         attached = self._attached()
         self._xml = value
         if attached:
-            self.vis._set_part_xml(self.vis._part_name(self.filename), value)
+            self.vis._set_part_xml(self.filename, value)
 
     def _holds(self, filename: str, tree: ET.ElementTree[ET.Element] | None) -> bool:
         """Whether the package's part at `filename` is `tree` itself."""
-        held = self.vis._package.part(self.vis._part_name(filename))
+        held = self.vis._package.part(filename)
         return isinstance(held, XmlPart) and held.tree is tree
 
     def _attached(self) -> bool:
@@ -268,7 +269,7 @@ class Page:
         """
         if self._holds(self.filename, self._xml):
             return True
-        held = self.vis._package.part(self.vis._part_name(self.filename))
+        held = self.vis._package.part(self.filename)
         if held is not None and not isinstance(held, BytesPart):
             return False
         return any(page is self for page in (*self.vis.pages, *self.vis.master_pages))
@@ -288,7 +289,7 @@ class Page:
         # the page itself is attached, so no removed page and no page that took
         # its name can be in play: a rels part that is gone, or that
         # `zip_file_contents` wrote as plain bytes, is this page's to replace
-        held = self.vis._package.part(self.vis._part_name(self.rels_xml_filename))
+        held = self.vis._package.part(self.rels_xml_filename)
         if held is None or isinstance(held, BytesPart):
             return True
         return held.tree is self._rels_xml
@@ -306,7 +307,7 @@ class Page:
         self._rels_xml = value
         if attached:
             assert self.rels_xml_filename is not None  # _rels_attached() says so
-            self.vis._set_part_xml(self.vis._part_name(self.rels_xml_filename), value)
+            self.vis._set_part_xml(self.rels_xml_filename, value)
 
     @property
     def _shapes(self) -> list[Shape]:
@@ -400,8 +401,7 @@ class Page:
         """
         rels_xml: ET.ElementTree[ET.Element] | None = self.rels_xml
         if rels_xml is None:
-            rels_filename = self.filename.replace("visio/pages/", "visio/pages/_rels/") + ".rels"
-            self.rels_xml_filename = rels_filename
+            self.rels_xml_filename = relationships_part_name(self.filename)
             rels_xml = ET.ElementTree(
                 ET.fromstring('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
             )
