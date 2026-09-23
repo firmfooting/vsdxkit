@@ -175,3 +175,13 @@ def test_a_document_has_no_zip_file_contents_or_directory(vsdx_copy):
     with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         assert not hasattr(vis, "zip_file_contents")
         assert not hasattr(vis, "directory")
+
+
+@pytest.mark.parametrize("name", ["file_to_xml", "xml_to_file", "require_xml_tree", "require_root"])
+def test_xmlio_has_no_helpers_over_the_old_mapping(name):
+    """Fails if a helper that took the pre-store `{path: BytesIO}` mapping is still in `xmlio` (#91)."""
+    import vsdxkit.vsdxfile
+    import vsdxkit.xmlio
+
+    assert not hasattr(vsdxkit.xmlio, name)
+    assert not hasattr(vsdxkit.vsdxfile, name)

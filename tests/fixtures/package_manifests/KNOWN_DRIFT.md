@@ -43,8 +43,8 @@ Across every fixture:
 Every part `save_vsdx` wrote went back out through `ElementTree.write`, and
 what it produces is not what Visio wrote. The save path adds nothing of its own:
 each saved part is byte-identical to re-parsing the original and writing it
-straight back through `vsdx.xmlio.xml_to_file`. Every difference below comes
-from that one round trip through ElementTree.
+straight back through `vsdxkit.xmlio.serialise_part`. Every difference below
+comes from that one round trip through ElementTree.
 
 | Part | What changes | Fixtures |
 | --- | --- | --- |

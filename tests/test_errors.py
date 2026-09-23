@@ -243,14 +243,15 @@ def test_require_tree_raises_missing_part_error():
         vsdxkit.xmlio.require_tree(None, "pages.xml")
 
 
-def test_require_xml_tree_raises_missing_part_error():
-    """Fails if `xmlio.require_xml_tree` reports an absent member with anything but `MissingPartError`.
+def test_requiring_an_absent_part_raises_missing_part_error():
+    """Fails if `PackageStore.require_xml` reports an absent part with anything but `MissingPartError`.
 
-    It looks a required part up in a member mapping, and a member that is not
-    there is a missing part, whichever mapping it was looked up in.
+    It looks a required part up in the store, and a part that is not there is
+    a missing part, whichever caller asked for it.
     """
-    with pytest.raises(MissingPartError, match=r"absent\.xml"):
-        vsdxkit.xmlio.require_xml_tree("absent.xml", {}, "a part that is not there")
+    store = vsdxkit.package.PackageStore.open(os.path.join(BASEDIR, "test1.vsdx"))
+    with pytest.raises(MissingPartError, match=r"/visio/absent\.xml"):
+        store.require_xml("/visio/absent.xml")
 
 
 def test_store_require_xml_raises_missing_part_error(tmp_path):
@@ -316,10 +317,10 @@ def test_promoting_a_part_that_is_not_xml_raises_malformed_package_error(tmp_pat
 def test_opening_a_package_whose_xml_is_broken_raises_malformed_package_error(broken_document_package):
     """The public open path parses through `parse_part`, which must translate too.
 
-    `PackageStore._promoted` was not the only way into the parser: `VisioFile`
-    opens a document through `file_to_xml` -> `parse_part`, where a malformed
-    part used to surface as a raw `ET.ParseError` and miss the hierarchy
-    entirely (#365 review).
+    `PackageStore._promoted` is the one way into the parser now: `VisioFile`
+    opens a document through the store's promotion, which is `parse_part`,
+    where a malformed part used to surface as a raw `ET.ParseError` and miss
+    the hierarchy entirely (#365 review).
     """
     with pytest.raises(MalformedPackageError, match="not well-formed XML"):
         vsdxkit.VisioFile(broken_document_package)
@@ -366,10 +367,10 @@ def test_a_required_attribute_missing_on_open_raises_malformed_package_error(vsd
 def test_a_page_part_the_relationships_name_and_the_package_lacks_raises_missing_part_error(vsdx_copy, tmp_path):
     """Fails if `VisioFile._require_part_xml` reports a required part that is not there as a plain `ValueError`.
 
-    #365 made `xmlio.require_xml_tree` raise `MissingPartError`, and the open
-    path read every required part through it. #371 moved the open path onto the
-    store, through `_require_part_xml`, which kept the old `ValueError`; the
-    merge has to carry the type across to the helper that replaced it.
+    #365 made `require_xml` raise `MissingPartError`, and the open path read
+    every required part through it. #371 moved the open path onto the store,
+    through `_require_part_xml`, which kept the old `ValueError`; the merge
+    has to carry the type across to the helper that replaced it.
     """
     source = vsdx_copy("test1.vsdx")
     destination = str(tmp_path / "no-page-part.vsdx")

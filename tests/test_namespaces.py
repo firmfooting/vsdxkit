@@ -124,11 +124,7 @@ LUCIDCHART = "http://www.lucidchart.com"
 
 def _round_trip_part(source: str) -> str:
     """Parse a part the way the library does, then write it straight back out."""
-    contents = {"part.xml": io.BytesIO(source.encode("utf-8"))}
-    tree = xmlio.file_to_xml("part.xml", contents)
-    assert tree is not None
-    xmlio.xml_to_file(tree, "part.xml", contents)
-    return contents["part.xml"].getvalue().decode("utf-8")
+    return xmlio.serialise_part(xmlio.parse_part(source.encode("utf-8"))).decode("utf-8")
 
 
 def test_a_prefix_the_document_chose_survives_a_round_trip():
@@ -170,14 +166,11 @@ def test_a_generated_prefix_in_the_source_is_not_preserved():
 
 def _round_trip_with_added(source: str, tag: str) -> str:
     """Round-trip a part with one element the source never declared added to it."""
-    contents = {"part.xml": io.BytesIO(source.encode("utf-8"))}
-    tree = xmlio.file_to_xml("part.xml", contents)
-    assert tree is not None
+    tree = xmlio.parse_part(source.encode("utf-8"))
     root = tree.getroot()
     assert root is not None
     root.append(ElementTree.Element(tag))
-    xmlio.xml_to_file(tree, "part.xml", contents)
-    return contents["part.xml"].getvalue().decode("utf-8")
+    return xmlio.serialise_part(tree).decode("utf-8")
 
 
 def test_a_namespace_the_part_never_declared_takes_the_registered_prefix():
@@ -202,9 +195,7 @@ def test_a_tree_the_library_built_itself_still_takes_the_registered_prefixes():
     """Templating and page creation parse from a string, not from the package."""
     root = ElementTree.fromstring(f'<PageContents xmlns="{VISIO_MAIN}"/>')
     root.append(ElementTree.Element(f"{{{RELATIONSHIPS}}}Rel"))
-    contents: dict[str, io.BytesIO] = {}
-    xmlio.xml_to_file(ElementTree.ElementTree(root), "part.xml", contents)
-    written = contents["part.xml"].getvalue().decode("utf-8")
+    written = xmlio.serialise_part(ElementTree.ElementTree(root)).decode("utf-8")
     assert f'<PageContents xmlns="{VISIO_MAIN}"' in written
     assert f'xmlns:r="{RELATIONSHIPS}"' in written
 
@@ -272,7 +263,7 @@ def test_a_copied_page_keeps_the_prefixes_its_source_declared(tmp_path):
     """Otherwise one package spells the same vocabulary two ways.
 
     `copy_page` serialises the source page and parses the string back, which
-    loses what `file_to_xml` recorded about it.
+    loses what `parse_part` recorded about it.
     """
     out = os.path.join(str(tmp_path), "copied.vsdx")
     with vsdxkit.VisioFile(os.path.join(FIXTURES, "test5_master.vsdx")) as vis:

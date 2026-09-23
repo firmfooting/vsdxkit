@@ -54,16 +54,8 @@ from .masters import MastersImportMixin  # noqa: E402
 from .pages import Page, PagePosition  # noqa: E402
 from .shapes import Shape, find_or_create_shapes_tag  # noqa: E402
 from .templating import JinjaTemplatingMixin  # noqa: E402
-
-# `file_to_xml` is not called directly in this module any more -- every read
-# here goes through the store's `read_xml` or `_require_part_xml`, which
-# promote the store's own tree instead of parsing a private copy. It stays
-# importable as `vsdxkit.vsdxfile.file_to_xml`: `Page.set_name` imports it from
-# here to avoid a circular import, and tests/test_visiofile.py imports it the
-# same way.
 from .xmlio import (  # noqa: E402
     adopt_prefixes,
-    file_to_xml,  # noqa: F401
     register_namespaces,
     require_attribute,
     require_element,
