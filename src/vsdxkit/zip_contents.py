@@ -42,9 +42,12 @@ class _WriteThroughBuffer(io.BytesIO):
     is mutated, ensuring that buf.write(...); buf.truncate() changes the
     package the way it did before.
 
-    A write through the buffer replaces the part with bytes, detaching any
-    promoted tree (the same way __setitem__ does), so a caller who holds the
-    buffer and a removed tree keeps a working, detached tree.
+    A write through the buffer goes to the store the way `__setitem__` does,
+    through `PackageStore.write_bytes_keeping_tree`: a parsed part keeps the
+    tree the document is editing, and only bytes that do not parse replace
+    it. Replacing it on every write would detach that tree, and the document's
+    later edits would go into a tree nothing saves; a buffer read and
+    truncated at its end would be enough to do it.
 
     `getbuffer()` is the one mutation this cannot see: a write through the
     memoryview it returns lands in the buffer's memory without calling any
@@ -79,12 +82,14 @@ class _WriteThroughBuffer(io.BytesIO):
         self._baseline: bytes | None = None
 
     def _store_value(self, value: bytes) -> None:
-        self._store.write_bytes(self._name, value)
+        self._store.write_bytes_keeping_tree(self._name, value)
         part = self._store.part(self._name)
-        # write_bytes always leaves a BytesPart; the assert only tells the
-        # type checker so
-        assert isinstance(part, BytesPart)
-        self._live[self._name] = (part, self)
+        if isinstance(part, BytesPart):
+            self._live[self._name] = (part, self)
+        else:
+            # a parsed part kept its tree, which is authoritative and is read
+            # as a fresh snapshot every time, so no buffer is live for it
+            self._live.pop(self._name, None)
 
     def _write_through(self) -> None:
         value = self.getvalue()
@@ -164,6 +169,12 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
     `VisioFile` setter -- the buffer no longer describes the part, and the
     next read makes a new one from what the store holds now.
 
+    A write to a part that has been parsed lands in its tree rather than
+    replacing it (see `PackageStore.write_bytes_keeping_tree`), because the
+    document holds that tree and goes on editing it: the old
+    `xml_to_file(page.xml, page.filename, vis.zip_file_contents)` idiom, or
+    new XML for the page, must leave `page.xml` the tree the package saves.
+
     Known limitation, left for #91 to delete along with the view: a part that
     has been parsed (an `XmlPart`) is read as a fresh snapshot every time,
     because its tree is authoritative and can change without the view seeing
@@ -171,6 +182,8 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
     and the second write-through wins. Likewise `view[key] = buf` stores the
     bytes of `buf` rather than `buf` itself, so a later read does not return
     the object assigned, and a later write to `buf` does not reach the store.
+    New XML written to a parsed part replaces its tree's root, so an element
+    a caller took from the old root belongs to no part any more.
     """
 
     def __init__(self, store: PackageStore, directory: str) -> None:
@@ -243,7 +256,7 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
         name = self._name(key)
         if name is None:
             raise ValueError(f"{key!r} is not under the package directory {self._directory!r}")
-        self._store.write_bytes(name, value.getvalue())
+        self._store.write_bytes_keeping_tree(name, value.getvalue())
         # the cached buffer no longer holds what the part does; the identity
         # check would catch that on the next read, but dropping it here lets
         # its bytes go now

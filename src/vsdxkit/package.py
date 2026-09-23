@@ -533,6 +533,44 @@ class PackageStore:
         """Replace a part with these bytes, discarding any tree it had."""
         self._parts[_checked(name)] = BytesPart(data)
 
+    def write_bytes_keeping_tree(self, name: str, data: bytes) -> None:
+        """Replace a part's content with these bytes, into the tree it already has if it has one.
+
+        `write_bytes` is right for a caller that means to replace a part; this
+        is for the caller that only has bytes to say what a part now holds --
+        `zip_file_contents`, which predates the store and whose callers wrote
+        a page back with `xml_to_file(page.xml, ...)` as a matter of course.
+        Replacing the part there would detach the tree the document edits, and
+        every later object-model edit would go into a tree nothing saves.
+
+        So a parsed part keeps its tree. Bytes that mean what the tree already
+        means change nothing, and the part keeps its baseline, so a save still
+        writes the bytes it arrived as. Bytes that mean something else are
+        parsed and become the tree's root: the tree object is the one the
+        document holds, and the baseline stays the part's original bytes, so a
+        later save compares against what the package arrived with rather than
+        against this write. Only bytes that do not parse replace the part, as
+        `write_bytes` would -- there is no tree they could be.
+
+        A part that has not been parsed, or is not there, is written as bytes.
+        """
+        checked = _checked(name)
+        held = self._parts.get(checked)
+        if not isinstance(held, XmlPart):
+            self._parts[checked] = BytesPart(data)
+            return
+        try:
+            written = parse_part(data)
+        except ET.ParseError:
+            self._parts[checked] = BytesPart(data)
+            return
+        if canonical_hash(written) == canonical_hash(held.tree):
+            return
+        new_root = written.getroot()
+        # parse_part always yields a root; the assert only tells the type checker so
+        assert new_root is not None
+        held.tree._setroot(new_root)
+
     def read_xml(self, name: str) -> ET.ElementTree[ET.Element] | None:
         """This part's tree, promoting it on first ask, or None if it is absent."""
         checked = _checked(name)

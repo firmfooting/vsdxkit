@@ -7,14 +7,17 @@ store would save.
 
 from __future__ import annotations
 
+import copy
 import io
 import os
+import xml.etree.ElementTree as ET
 import zipfile
 
 import pytest
 
 from vsdxkit import VisioFile
 from vsdxkit.package import PackageStore, XmlPart
+from vsdxkit.xmlio import serialise_part
 from vsdxkit.zip_contents import ZipFileContentsView, part_name_for_path
 
 BASEDIR = os.path.dirname(os.path.realpath(__file__))
@@ -321,3 +324,26 @@ def test_a_cached_exported_buffer_is_still_collected_by_sync(view, store):
     view.sync()
     assert store.read_bytes("/docProps/thumbnail.emf")[:1] == b"\x07"
     assert view[key].getbuffer()[0] == 7
+
+
+def test_a_write_to_a_parsed_part_keeps_the_baseline_it_arrived_with(view, store):
+    """Fails if a view write to a parsed part replaces the part, so its arrival bytes stop being what an unchanged save writes.
+
+    Two writes: one that changes the page, then one that puts back what it
+    meant on arrival, in ElementTree's spelling rather than the file's. The
+    part is unchanged in meaning after both, so it must read back as the bytes
+    it arrived as, which is only possible if neither write threw away the
+    baseline the store took when the page was parsed.
+    """
+    name = "/visio/pages/page1.xml"
+    key = f"{DIRECTORY}{name}"
+    original = store.read_bytes(name)
+    tree = store.require_xml(name)
+    respelled = serialise_part(tree)
+    assert respelled != original  # the test needs two spellings of one meaning
+    changed = copy.deepcopy(tree.getroot())
+    changed.set("VsdxkitMarker", "1")
+    view[key] = io.BytesIO(serialise_part(ET.ElementTree(changed)))
+    assert b"VsdxkitMarker" in store.read_bytes(name)
+    view[key] = io.BytesIO(respelled)
+    assert store.read_bytes(name) == original
