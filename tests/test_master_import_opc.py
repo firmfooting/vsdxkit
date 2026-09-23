@@ -9,9 +9,8 @@ any one of them yields a package Visio repairs or rejects while the in-memory
 object model still looks right.
 
 So these assertions read the saved archive rather than the ``VisioFile``.
-``test3_house.vsdx`` is the fixture because it ships exactly one master, which
-is what puts ``Connect.create()`` on the import branch rather than the
-copy-the-whole-masters-folder branch.
+``test3_house.vsdx`` is the fixture because it ships exactly one master, so
+the connector master is imported alongside one the document already has.
 """
 
 import contextlib
@@ -134,8 +133,8 @@ def _master_ids_used_on_page(path: str, page_part: str) -> set[str]:
 def imported_master(vsdx_copy, tmp_path) -> ImportedMaster:
     """Connect two shapes in a one-master document, then save it.
 
-    ``Connect.create()`` is the only caller of ``_ensure_masters_for_shape``,
-    so creating a connector is the only way to reach the import path. The
+    Creating a connector copies the bundled connector shape into this
+    document, which imports its master through ``MasterCatalog``. The
     documented public entry point, ``Page.connect_shapes()``, delegates here.
     """
     source = vsdx_copy("test3_house.vsdx")
@@ -258,14 +257,10 @@ def test_imported_master_survives_a_reopen(imported_master: ImportedMaster):
 
 def test_import_survives_masters_declared_with_no_masters_parts(vsdx_copy):
     """A masters relationship in document.xml.rels with no masters parts behind
-    it takes `Connect.create()` down the "document already has masters" import
-    branch (`connectors.py` checks only that the relationship is declared, not
-    that `masters.xml`/`masters.xml.rels` exist), which reaches
-    `_ensure_masters_for_shape` with `masters_xml is None`.
+    it reaches `MasterCatalog.import_master` with `masters_xml is None`.
 
-    Fails if that method resolves `masters.xml.rels` into a tree of its own
-    and only then calls `_bootstrap_masters()`: bootstrap writes a second,
-    empty rels tree into the store, orphaning the one already built, and the
+    Fails if the import resolves `masters.xml.rels` into a tree of its own and
+    only then bootstraps: bootstrap writes a second, empty rels tree into the store, orphaning the one already built, and the
     relationship appended to the orphaned tree afterwards never reaches the
     package. The saved file then has a master naming a relationship id that
     masters.xml.rels does not declare, and reopening it raises `KeyError` in
@@ -337,5 +332,5 @@ def test_a_source_master_that_cannot_be_read_fails_before_the_target_changes(vsd
         before = target._package.names()
         monkeypatch.setattr(source._package, "read_bytes", lambda name: None)
         with pytest.raises(ValueError, match="could not be read"):
-            target._ensure_masters_for_shape(shape)
+            shape.copy(target.pages[0])
         assert target._package.names() == before

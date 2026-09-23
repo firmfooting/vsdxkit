@@ -16,7 +16,7 @@ _LOG_METHODS = frozenset({"debug", "info", "warning", "warn", "error", "exceptio
 # nothing would pass with an empty offender list and report a contract it had
 # not checked - which is the failure this whole commit is about. Raise it when
 # you add logging; if it has gone down, say why in the commit.
-_LOG_CALLS_IN_THE_PACKAGE = 19
+_LOG_CALLS_IN_THE_PACKAGE = 18
 
 
 def _is_logger(node: ast.expr) -> bool:

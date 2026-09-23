@@ -211,10 +211,10 @@ def test_importing_a_master_keeps_masters_parts_as_the_stores_trees(vsdx_copy):
 
 
 def test_bootstrapping_masters_writes_trees(vsdx_copy):
-    """Fails if `_bootstrap_masters` still writes masters.xml.rels as a bytes
+    """Fails if the masters bootstrap writes masters.xml.rels as a bytes
     literal rather than a tree through the store."""
     with VisioFile(vsdx_copy("test1.vsdx")) as vis:
-        vis._bootstrap_masters()
+        vis._masters.bootstrap()
         assert isinstance(vis._package.part("/visio/masters/masters.xml"), XmlPart)
         assert isinstance(vis._package.part("/visio/masters/_rels/masters.xml.rels"), XmlPart)
 

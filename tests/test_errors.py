@@ -256,7 +256,7 @@ def test_a_source_master_listed_but_unreadable_is_a_missing_part(vsdx_copy, monk
         shape = next(shape for shape in source.pages[0].all_shapes if shape.xml.attrib.get("Master"))
         monkeypatch.setattr(source._package, "read_bytes", lambda name: None)
         with pytest.raises(MissingPartError, match="could not be read"):
-            target._ensure_masters_for_shape(shape)
+            shape.copy(target.pages[0])
 
 
 # --------------------------------------------------------------------------

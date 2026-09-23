@@ -1,209 +1,337 @@
-"""Master-part import for vsdx documents.
+"""The one owner of a document's masters: index, lookup, bootstrap and import.
 
-Methods defined here are bound onto VisioFile at import time
-(see vsdxfile._bind_extracted_support) so the public API is unchanged
-while vsdxfile.py stays reviewable.
+A document's masters are `masters.xml`, its relationships part, one part per
+master, and the wiring that makes the package declare them. `MasterCatalog`
+holds all of it for one package. It never imports the document class: the
+document hands it a factory for the `Page` each master is read as.
 """
 
 from __future__ import annotations
 
-import copy as copy_module
+import copy
+import weakref
 import xml.etree.ElementTree as ET
-from typing import TYPE_CHECKING, cast
+from collections.abc import Callable, Iterable
+from xml.etree.ElementTree import Element
 
 from vsdxkit import namespace, r_namespace, relationships
 from vsdxkit.errors import MissingPartError
-from vsdxkit.logging_support import get_logger
-from vsdxkit.package import PackageStore
+from vsdxkit.package import PackageStore, check_relationship_target
 from vsdxkit.pages import Page
-from vsdxkit.partnames import MASTERS_PART, folder_of, relationships_part_name, target_part_name
-from vsdxkit.shapes import Shape
-from vsdxkit.xmlio import PartTree
+from vsdxkit.partnames import (
+    CONTENT_TYPES_PART,
+    DOCUMENT_PART,
+    MASTERS_PART,
+    folder_of,
+    relationship_target,
+    relationships_part_name,
+    target_part_name,
+)
+from vsdxkit.xmlio import PartTree, require_attribute, require_element
 
-if TYPE_CHECKING:
-    from vsdxkit.vsdxfile import VisioFile
+MASTERS_RELATIONSHIP = "http://schemas.microsoft.com/visio/2010/relationships/masters"
+MASTER_RELATIONSHIP = "http://schemas.microsoft.com/visio/2010/relationships/master"
+MASTERS_CONTENT_TYPE = "application/vnd.ms-visio.masters+xml"
+MASTER_CONTENT_TYPE = "application/vnd.ms-visio.master+xml"
 
-logger = get_logger(__name__)
+# How a document reads one master as a page: the master part's tree, its part
+# name, the master's name, its ID in masters.xml and its relationship id there.
+MasterPageFactory = Callable[[PartTree, str, str, str, str], Page]
 
 
-class MastersImportMixin:
-    # attributes provided by the VisioFile host class
-    _package: PackageStore
-    master_pages: list[Page]
-    master_index: dict[str, Page]
-    masters_xml: ET.Element | None
+def _empty_relationships() -> PartTree:
+    return ET.ElementTree(
+        ET.fromstring('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
+    )
 
-    def _add_content_types_override(self, part_name_path: str, content_type: str) -> None: ...
-    def _add_document_rel(self, rel_type: str, target: str) -> None: ...
-    def load_master_pages(self) -> None: ...
-    def _ensure_masters_for_shape(self, source_shape: Shape) -> str:
-        """Ensure this document contains the master that source_shape uses.
 
-        Call with the SOURCE shape (still attached to its original document)
-        BEFORE copying it into this document. Master identity is by NAME
-        (NameU), matching Visio's MatchByName semantics: numeric master IDs
-        are per-document and coincide across documents by chance.
+def _master_name(master: Element) -> str:
+    """The name a master is matched by: `NameU`, else `Name`, else "" for a master with neither."""
+    return master.attrib.get("NameU") or master.attrib.get("Name") or ""
 
-        :param source_shape: the shape in its source document
-        :return: the logical master ID the copied shape should reference in
-                 this document ('' when the shape references no master or the
-                 source reference is dangling)
+
+def _identity(master: Element) -> str | None:
+    """What makes two masters of one batch the same master, as `MasterCatalog.matching` would decide it.
+
+    The `UniqueID` where there is one, else the name; a master with neither
+    is like no other.
+    """
+    unique_id = master.attrib.get("UniqueID")
+    if unique_id:
+        return f"U{unique_id}"
+    name = _master_name(master)
+    return f"N{name}" if name else None
+
+
+def _page_name(master: Element) -> str:
+    """The name a master's page carries. A page cannot be nameless: `Page.name` would go looking in pages.xml."""
+    return _master_name(master) or "Unknown"
+
+
+class MasterCatalog:
+    """Every master in one package, and the only code that changes them."""
+
+    def __init__(self, store: PackageStore, make_page: MasterPageFactory) -> None:
+        self._store = store
+        self._make_page = make_page
+        self._pages: list[Page] = []
+        # which master here each source master was imported as, by the
+        # source's ID: an import renamed to avoid a collision no longer
+        # matches by name, and would be imported again by every later copy
+        self._imported: weakref.WeakKeyDictionary[MasterCatalog, dict[str, str]] = weakref.WeakKeyDictionary()
+
+    @property
+    def pages(self) -> list[Page]:
+        """The masters as pages, in `masters.xml` order. A copy: adding a master goes through the catalog."""
+        return list(self._pages)
+
+    @property
+    def root(self) -> Element | None:
+        """The `<Masters>` element, or None for a package with no masters part."""
+        tree = self._store.read_xml(MASTERS_PART)
+        return None if tree is None else tree.getroot()
+
+    def by_id(self, master_id: str) -> Page | None:
+        for page in self._pages:
+            if page.page_id == master_id:
+                return page
+        return None
+
+    def by_name(self, name: str) -> Page | None:
+        """The first master whose `NameU` (or `Name`, where it has no `NameU`) is `name`."""
+        for page in self._pages:
+            if page.name == name:
+                return page
+        return None
+
+    def matching(self, master: Element) -> Page | None:
+        """The master here that an instance of `master`, from another document, would use.
+
+        Visio's rule on a drop: the same `UniqueID` is the same master, and a
+        document master that sets `MatchByName` answers for any master of its
+        name. That flag is how every document shares one Dynamic connector.
+        Otherwise a master of the same name is a different master. Where
+        neither master carries a `UniqueID`, as some producers write them, the
+        name is all there is to go on.
         """
-        src_vis = source_shape.page.vis
-        master_ref = source_shape.xml.attrib.get("Master")
-        if not master_ref:
-            return ""  # shape has no master - nothing to import
-        src_masters = src_vis.masters_xml
-        if src_masters is None or isinstance(src_masters, list):
-            return ""  # source document has no masters part
+        unique_id = master.attrib.get("UniqueID")
+        name = _master_name(master)
+        for page in self._pages:
+            element = self.element_by_id(page.page_id)
+            if element is None:
+                continue
+            if unique_id and element.attrib.get("UniqueID") == unique_id:
+                return page
+            if not name or _master_name(element) != name:
+                continue
+            if element.attrib.get("MatchByName") in ("1", "true"):
+                return page
+            if not unique_id and not element.attrib.get("UniqueID"):
+                return page
+        return None
 
-        # locate the source Master element by numeric ID within the source doc
-        source_element = None
-        for m in src_masters:
-            if m.attrib.get("ID") == master_ref:
-                source_element = m
-                break
-        if source_element is None:
-            return ""  # dangling reference - drop rather than corrupt
+    def element_by_id(self, master_id: str) -> Element | None:
+        """The `<Master>` element with this ID."""
+        root = self.root
+        if root is None:
+            return None
+        for master in root:
+            if master.attrib.get("ID") == master_id:
+                return master
+        return None
 
-        master_name = source_element.attrib.get("NameU") or source_element.attrib.get("Name") or ""
+    def load(self) -> None:
+        """Read every master from the package. Idempotent: it rebuilds rather than appends."""
+        rels_tree = self._store.read_xml(relationships_part_name(MASTERS_PART))
+        targets: dict[str, str] = {}
+        for relationship in (
+            [] if rels_tree is None else relationships.all_of(require_element(rels_tree.getroot(), "masters.xml.rels"))
+        ):
+            subject = "masters.xml.rels Relationship"
+            targets[require_attribute(relationship, "Id", subject)] = require_attribute(relationship, "Target", subject)
 
-        # already present in this document, by name?
-        existing = self.master_index.get(master_name)
-        if existing is not None:
-            return existing.page_id
-
-        source_master_page = src_vis.get_master_page_by_id(master_ref)
-        if source_master_page is None or src_vis._package.part(source_master_page.filename) is None:
-            return ""
-        # read before anything here is changed, so a failure leaves this
-        # package as it was. The check above says the part is there, so None
-        # is a source store contradicting itself; writing empty bytes in its
-        # place would make a master part no reader can parse.
-        master_bytes = src_vis._package.read_bytes(source_master_page.filename)
-        if master_bytes is None:
-            raise MissingPartError(
-                f"source master part {source_master_page.filename} could not be read, though the package lists it"
+        pages: list[Page] = []
+        for master in [] if self.root is None else list(self.root):
+            rel_id = require_attribute(
+                require_element(master.find(f"{namespace}Rel"), "Master/Rel"), f"{r_namespace}id", "masters.xml Master/Rel"
             )
-
-        # 1. ensure this document has a masters.xml (and rels) to append to,
-        # BEFORE resolving master_rels_path below. A masters relationship can
-        # be declared in document.xml.rels with the masters parts themselves
-        # missing (a crafted or partially-written package), so `masters_xml`
-        # being None here is reachable through the public API, not only from
-        # a freshly opened document. Bootstrapping after building a rels tree
-        # of our own would have `_bootstrap_masters` write a second, empty
-        # rels tree over the one just constructed, orphaning it and silently
-        # dropping the relationship appended to it below.
-        if self.masters_xml is None:
-            self._bootstrap_masters()
-
-        # 2. copy the master part bytes under the next free filename
-        prefix = folder_of(MASTERS_PART) + "master"
-        existing_numbers = [
-            int(name[len(prefix) : -4])
-            for name in self._package.names()
-            if name.startswith(prefix) and name.endswith(".xml") and name[len(prefix) : -4].isdigit()
-        ]
-        master_rels_path = relationships_part_name(MASTERS_PART)
-        rels_tree: PartTree | None = self._package.read_xml(master_rels_path)
-        if rels_tree is None:
-            rels_tree = ET.ElementTree(
-                ET.fromstring('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
+            target = targets.get(rel_id)
+            if target is None:
+                raise MissingPartError(f"no master part found for relationship {rel_id}")
+            part_name = target_part_name(MASTERS_PART, target)
+            check_relationship_target(part_name, f"masters.xml.rels Relationship {rel_id!r}", target)
+            tree = self._store.read_xml(part_name)
+            if tree is None:
+                raise MissingPartError(f"expected XML part not found: master part ({part_name})")
+            page = self._make_page(
+                tree,
+                part_name,
+                _page_name(master),
+                require_attribute(master, "ID", "masters.xml Master"),
+                rel_id,
             )
-            self._package.write_xml(master_rels_path, rels_tree)
-        rels_root = rels_tree.getroot()
-        assert rels_root is not None  # freshly built above, or parsed from real bytes: always has a root
+            page.master_unique_id = master.attrib.get("UniqueID")
+            page.master_base_id = master.attrib.get("BaseID")
+            pages.append(page)
+        self._pages = pages
 
-        # The part name is settled against the existing targets before the bytes
-        # are written, and the rel id is allocated separately.
-        taken_targets = {r.attrib.get("Target") for r in relationships.all_of(rels_root)}
-        next_num = max(existing_numbers, default=0) + 1
-        while f"master{next_num}.xml" in taken_targets:
-            next_num += 1
-        part_name = f"master{next_num}.xml"
-        part_path = target_part_name(MASTERS_PART, part_name)
-        self._package.write_bytes(part_path, master_bytes)
+    def bootstrap(self) -> None:
+        """Give a package with no masters part an empty one, declared and related.
 
-        # 3. append the Master element with a fresh logical ID
-        assert self.masters_xml is not None  # bootstrap above guarantees it
-        numeric_ids = [int(m.attrib["ID"]) for m in self.masters_xml if m.attrib.get("ID", "").isdigit()]
-        new_id = max(numeric_ids, default=1) + 1
-        if new_id < 2:
-            new_id = 2
-        new_master_element = copy_module.deepcopy(source_element)
-        new_master_element.attrib["ID"] = str(new_id)
-
-        # 4. masters.xml.rels: map a fresh rel id to the part filename
-        relationship = relationships.append_if_absent(
-            rels_root,
-            rel_type="http://schemas.microsoft.com/visio/2010/relationships/master",
-            target=part_name,
-        )
-        rel_el = new_master_element.find(f"{namespace}Rel")
-        if rel_el is not None:
-            rel_el.attrib[f"{r_namespace}id"] = relationship.attrib["Id"]
-        self.masters_xml.append(new_master_element)
-        # masters.xml and its rels are the store's own trees (promoted above,
-        # or written by `_bootstrap_masters`), and appending to them mutates
-        # what the store already holds -- there is nothing left to persist.
-
-        # 5. package wiring (helpers are idempotent); PartName paths are
-        # archive-relative, never absolute
-        self._add_content_types_override(part_name_path=MASTERS_PART, content_type="application/vnd.ms-visio.masters+xml")
-        self._add_content_types_override(part_name_path=part_path, content_type="application/vnd.ms-visio.master+xml")
-        self._add_document_rel(
-            rel_type="http://schemas.microsoft.com/visio/2010/relationships/masters", target="masters/masters.xml"
-        )
-
-        # 6. register the new master directly - a full load_master_pages()
-        # reload would re-append every existing master to master_pages
-        master_page_xml = self._package.read_xml(part_path)
-        if master_page_xml is None:
-            raise MissingPartError(f"imported master part {part_path} missing from package")
-        new_master_page = Page(
-            master_page_xml,
-            part_path,
-            master_name,
-            str(new_id),
-            relationship.attrib["Id"],
-            cast("VisioFile", self),
-        )
-        new_master_page.master_unique_id = new_master_element.attrib.get("UniqueID")
-        new_master_page.master_base_id = new_master_element.attrib.get("BaseID")
-        self.master_pages.append(new_master_page)
-        self.master_index[master_name] = new_master_page
-        return str(new_id)
-
-    def _bootstrap_masters(self):
-        """Create an empty masters part + wiring for documents without masters.
-
-        `masters.xml.rels` is written only when the package does not already
-        have one. A masters relationship can be declared in document.xml.rels
-        while only `masters.xml` itself is missing -- `masters_xml is None`
-        does not imply the rels part is absent too -- and replacing an
-        existing rels part here would discard whatever relationships it
-        already held (issue found in review: `_ensure_masters_for_shape`
-        calls this and then appends to a rels tree of its own; if this
-        overwrote it unconditionally, that append would be lost).
+        The only bootstrap. A masters relationship can be declared while the
+        parts behind it are missing, so each piece is written only when absent:
+        replacing an existing `masters.xml.rels` would drop what it relates.
         """
-        masters_root = ET.fromstring(
-            '<Masters xmlns="http://schemas.microsoft.com/office/visio/2012/main" '
-            'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>'
-        )
-        # written as trees, not bytes literals (#366): the store holds both
-        # from the moment this document gets masters, and `masters_xml`'s own
-        # getter reads the tree straight back from it.
-        self._package.write_xml(MASTERS_PART, ET.ElementTree(masters_root))
-        master_rels_path = relationships_part_name(MASTERS_PART)
-        if self._package.part(master_rels_path) is None:
-            self._package.write_xml(
-                master_rels_path,
+        if self._store.part(MASTERS_PART) is None:
+            self._store.write_xml(
+                MASTERS_PART,
                 ET.ElementTree(
-                    ET.fromstring('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
+                    ET.fromstring(
+                        '<Masters xmlns="http://schemas.microsoft.com/office/visio/2012/main" '
+                        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" '
+                        # Visio writes it on the masters part, and the part it bootstraps matches
+                        'xml:space="preserve"/>'
+                    )
                 ),
             )
-        self._add_content_types_override(part_name_path=MASTERS_PART, content_type="application/vnd.ms-visio.masters+xml")
-        self._add_document_rel(
-            rel_type="http://schemas.microsoft.com/visio/2010/relationships/masters", target="masters/masters.xml"
+        rels_name = relationships_part_name(MASTERS_PART)
+        if self._store.part(rels_name) is None:
+            self._store.write_xml(rels_name, _empty_relationships())
+        self._declare(MASTERS_PART, MASTERS_CONTENT_TYPE)
+        relationships.append_if_absent(
+            self._required_root(relationships_part_name(DOCUMENT_PART)),
+            rel_type=MASTERS_RELATIONSHIP,
+            target=relationship_target(DOCUMENT_PART, MASTERS_PART),
         )
+
+    def import_masters(self, source: MasterCatalog, master_ids: Iterable[str]) -> dict[str, Page]:
+        """This package's copy of each master `source` holds under `master_ids`, importing any it lacks.
+
+        Keyed by the ID `source` uses. A master matches as `matching` decides:
+        numeric master IDs are per-document and coincide across documents by
+        chance. One that matches nothing is imported, under a name of its own
+        if this package already has a master of its name. Within one batch,
+        masters `matching` would treat as one are imported once. An ID `source`
+        cannot resolve is left out: copying it would name a master no package
+        declares.
+
+        Every source part is read before anything here changes, so a master
+        that cannot be read leaves this package as it was.
+        """
+        found: dict[str, Page] = {}
+        pending: list[tuple[str, Element, bytes]] = []
+        first_by_identity: dict[str, str] = {}
+        aliases: dict[str, str] = {}
+        for master_id in dict.fromkeys(master_ids):
+            element = source.element_by_id(master_id)
+            source_page = source.by_id(master_id)
+            if element is None or source_page is None:
+                continue
+            existing = self._imported_from(source, master_id) or self.matching(element)
+            if existing is not None:
+                found[master_id] = existing
+                continue
+            identity = _identity(element)
+            if identity is not None and identity in first_by_identity:
+                aliases[master_id] = first_by_identity[identity]
+                continue
+            if source._store.part(source_page.filename) is None:
+                continue
+            # The check above says the part is there, so None is a source
+            # store contradicting itself; empty bytes in its place would be a
+            # master part no reader can parse.
+            master_bytes = source._store.read_bytes(source_page.filename)
+            if master_bytes is None:
+                raise MissingPartError(
+                    f"source master part {source_page.filename} could not be read, though the package lists it"
+                )
+            pending.append((master_id, element, master_bytes))
+            if identity is not None:
+                first_by_identity[identity] = master_id
+
+        if pending:
+            self.bootstrap()
+            rels_root = self._required_root(relationships_part_name(MASTERS_PART))
+            for master_id, element, master_bytes in pending:
+                found[master_id] = self._add(element, master_bytes, rels_root)
+                self._imported.setdefault(source, {})[master_id] = found[master_id].page_id
+        for master_id, first in aliases.items():
+            if first in found:
+                found[master_id] = found[first]
+        return found
+
+    def _imported_from(self, source: MasterCatalog, master_id: str) -> Page | None:
+        """The master here that `source`'s master `master_id` was imported as, while both are open."""
+        imported = self._imported.get(source, {}).get(master_id)
+        return None if imported is None else self.by_id(imported)
+
+    def _add(self, source_element: Element, master_bytes: bytes, rels_root: Element) -> Page:
+        """Write one master part, declare and relate it, and record it."""
+        part_name = self._unused_master_part(rels_root)
+        self._store.write_bytes(part_name, master_bytes)
+
+        masters_root = self.root
+        assert masters_root is not None  # the caller bootstrapped
+        numeric_ids = [int(m.attrib["ID"]) for m in masters_root if m.attrib.get("ID", "").isdigit()]
+        new_id = str(max(max(numeric_ids, default=1) + 1, 2))
+        relationship = relationships.append_if_absent(
+            rels_root, rel_type=MASTER_RELATIONSHIP, target=relationship_target(MASTERS_PART, part_name)
+        )
+        element = copy.deepcopy(source_element)
+        element.attrib["ID"] = new_id
+        taken = {
+            master.attrib[attribute]
+            for master in masters_root
+            for attribute in ("NameU", "Name")
+            if attribute in master.attrib
+        }
+        nameless = not _master_name(element)
+        if nameless or _master_name(element) in taken:
+            # Two masters of one name would leave a lookup by name answering
+            # for the wrong one. The `.ID` suffix is how Visio's own duplicate
+            # shape names read; what it does for masters is not yet checked.
+            # A nameless master is named as Visio names one it creates. Counting
+            # up from the new ID finds a suffix no name already has.
+            names = (
+                {"NameU": "Master", "Name": "Master"}
+                if nameless
+                else {attribute: element.attrib[attribute] for attribute in ("NameU", "Name") if attribute in element.attrib}
+            )
+            suffix = int(new_id)
+            while any(f"{name}.{suffix}" in taken for name in names.values()):
+                suffix += 1
+            for attribute, name in names.items():
+                element.attrib[attribute] = f"{name}.{suffix}"
+        rel = element.find(f"{namespace}Rel")
+        if rel is not None:
+            rel.attrib[f"{r_namespace}id"] = relationship.attrib["Id"]
+        masters_root.append(element)
+        self._declare(part_name, MASTER_CONTENT_TYPE)
+
+        tree = self._store.read_xml(part_name)
+        if tree is None:
+            raise MissingPartError(f"imported master part {part_name} missing from package")
+        page = self._make_page(tree, part_name, _page_name(element), new_id, relationship.attrib["Id"])
+        page.master_unique_id = element.attrib.get("UniqueID")
+        page.master_base_id = element.attrib.get("BaseID")
+        self._pages.append(page)
+        return page
+
+    def _unused_master_part(self, rels_root: Element) -> str:
+        """The first `masterN.xml` neither the store nor `masters.xml.rels` already names."""
+        prefix = folder_of(MASTERS_PART) + "master"
+        taken = set(self._store.names())
+        taken |= {target_part_name(MASTERS_PART, r.attrib.get("Target", "")) for r in relationships.all_of(rels_root)}
+        number = 1
+        while f"{prefix}{number}.xml" in taken:
+            number += 1
+        return f"{prefix}{number}.xml"
+
+    def _declare(self, part_name: str, content_type: str) -> None:
+        relationships.ensure_override(self._required_root(CONTENT_TYPES_PART), part_name, content_type)
+
+    def _required_root(self, part_name: str) -> Element:
+        tree = self._store.read_xml(part_name)
+        if tree is None:
+            raise MissingPartError(f"expected XML part not found: {part_name}")
+        return require_element(tree.getroot(), f"{part_name} root")

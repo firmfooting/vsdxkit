@@ -396,6 +396,24 @@ def _checked(name: str) -> str:
     return name
 
 
+def check_relationship_target(name: str, subject: str, target: str) -> None:
+    """Refuse a relationship whose `target`, joined into `name`, names no part.
+
+    The store checks every name it is handed and reports a bad one as a plain
+    `ValueError`, because a caller passing it one has made an argument error.
+    A relationship `Target` is not an argument: it is package content, so a
+    `Target` that joins into something that is not a part name (`../page1.xml`,
+    a URI, an empty string) makes the package malformed, and opening it has to
+    say so with `MalformedPackageError`. Only this check is translated. The read
+    that follows goes on raising `MissingPartError` and `PartParseError` as
+    themselves, which wrapping it in `except ValueError` would have swallowed.
+    """
+    try:
+        _checked(name)
+    except ValueError as error:
+        raise MalformedPackageError(f"{subject} targets {target!r}, which is not a part name in this package") from error
+
+
 def _part_name_for_member(member: str) -> str:
     """The part name an archive member holds: the same string, made absolute.
 
