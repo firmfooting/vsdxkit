@@ -54,9 +54,10 @@ The library starts from an existing package. It does not construct a complete
 Visio document from an empty file. A macro-enabled ``.vsdm`` can be edited and
 saved, but only back to a ``.vsdm`` destination: the package kind is decided by
 the content type of ``visio/document.xml``, not by the filename, so saving one
-as ``.vsdx`` (or a plain drawing as ``.vsdm``) raises ``ValueError`` rather than
-writing a file Visio reports as corrupt. Stripping macros to convert a ``.vsdm``
-into a ``.vsdx`` is not supported.
+as ``.vsdx`` (or a plain drawing as ``.vsdm``) raises
+``vsdxkit.InvalidOperationError`` rather than writing a file Visio reports as
+corrupt. Stripping macros to convert a ``.vsdm`` into a ``.vsdx`` is not
+supported.
 
 Project
 -------

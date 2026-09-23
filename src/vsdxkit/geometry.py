@@ -13,8 +13,10 @@ else:
 import vsdxkit
 
 from .document_part import DocumentPart
+from .errors import InvalidOperationError
 from .inheritance import InheritedRow
 from .logging_support import get_logger
+from .shapes import to_float
 from .xmlio import make_cell_element, xml_value
 
 logger = get_logger(__name__)
@@ -248,7 +250,7 @@ class GeometryRow(InheritedRow, DocumentPart):
         indexes = [x.attrib["IX"] for x in children if x.tag == f"{namespace}Row" and x.attrib.get("IX")]
         if IX in indexes:
             # todo: replace existing row with new one
-            raise ValueError(f"geometry row IX={IX} already exists")
+            raise InvalidOperationError(f"geometry row IX={IX} already exists")
         indexes.append(IX)
         indexes.sort(key=_row_index_sort_key)
         # count positions from the section's first Row, so the Cells ahead of
@@ -291,7 +293,7 @@ class GeometryRow(InheritedRow, DocumentPart):
         coordinate every other instance reads.
         """
         x_cell = self.cells.get("X")
-        return float(x_cell.value) if x_cell and x_cell.value else None
+        return to_float(x_cell.value, "X") if x_cell and x_cell.value else None
 
     @x.setter
     def x(self, value: float | str) -> None:
@@ -311,7 +313,7 @@ class GeometryRow(InheritedRow, DocumentPart):
     def y(self) -> float | None:
         """The row's Y coordinate. Behaves as :attr:`x` does."""
         y_cell = self.cells.get("Y")
-        return float(y_cell.value) if y_cell and y_cell.value else None
+        return to_float(y_cell.value, "Y") if y_cell and y_cell.value else None
 
     @y.setter
     def y(self, value: float | str) -> None:

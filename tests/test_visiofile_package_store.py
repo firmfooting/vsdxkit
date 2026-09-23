@@ -11,6 +11,7 @@ import zipfile
 import pytest
 from helpers.broken_package import rewritten
 
+import vsdxkit
 from vsdxkit import VisioFile, namespace, r_namespace
 from vsdxkit.package import PartParseError, XmlPart
 from vsdxkit.xmlio import serialise_part, xml_to_file
@@ -87,6 +88,31 @@ def test_malformed_xml_at_open_is_both_a_parse_error_and_a_value_error(basedir, 
         pass
     else:  # pragma: no cover - the assertion is the failure
         pytest.fail("a malformed page opened without a ValueError")
+
+
+@pytest.mark.allow_invalid_package  # a page that is not XML is the point
+def test_malformed_xml_at_open_is_also_a_vsdx_error_with_its_position(basedir, tmp_path):
+    """Fails if the malformed-part error falls outside the `VsdxError` hierarchy, or loses the parser's position.
+
+    The sibling above holds the two spellings a malformed part had before the
+    hierarchy. `except VsdxError` is the third, and the one #365 promises
+    covers the open path; the `position` has to come across on the error
+    itself, not only on its `__cause__`, so the catch reads the same as it did.
+    """
+    path = rewritten(
+        os.path.join(basedir, "test1.vsdx"),
+        str(tmp_path / "broken.vsdx"),
+        {"visio/pages/page1.xml": b"<PageContents>"},
+    )
+    try:
+        VisioFile(path)
+    except vsdxkit.VsdxError as error:
+        assert isinstance(error, vsdxkit.MalformedPackageError)
+        assert "/visio/pages/page1.xml" in str(error)
+        assert error.position == error.__cause__.position
+        assert error.code == error.__cause__.code
+    else:  # pragma: no cover - the assertion is the failure
+        pytest.fail("a malformed page opened without a VsdxError")
 
 
 def _held_tree(vis, page):

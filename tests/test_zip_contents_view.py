@@ -16,7 +16,7 @@ import zipfile
 import pytest
 
 from vsdxkit import VisioFile
-from vsdxkit.package import PackageStore, XmlPart
+from vsdxkit.package import BytesPart, PackageStore, XmlPart
 from vsdxkit.xmlio import serialise_part
 from vsdxkit.zip_contents import ZipFileContentsView, part_name_for_path
 
@@ -479,6 +479,11 @@ def test_promotion_does_not_detach_a_buffer(view, store):
 PAGE1 = "/visio/pages/page1.xml"
 MARKER = b"VsdxkitMarker='1'"
 
+# UTF-7 is the encoding `ET.iterparse` refuses outright with a ValueError
+# ("multi-byte encodings are not supported") rather than a LookupError -- see
+# tests/test_errors.py's REFUSED_MULTIBYTE_PART, reproduced the same way.
+REFUSED_MULTIBYTE_PART = '<?xml version="1.0" encoding="UTF-7"?><a/>'.encode("UTF-7")
+
 
 def _shorter_replacement(original: bytes) -> bytes:
     """The same page with one attribute added, and shorter than `original`.
@@ -570,6 +575,64 @@ def test_bytes_that_do_not_parse_are_held_until_sync(view, store):
     assert isinstance(store.part(PAGE1), XmlPart)
     view.sync()
     assert store.read_bytes(PAGE1) == b"not xml" + original[len(b"not xml") :]
+
+
+def test_bytes_declaring_an_undecodable_encoding_are_held_back_like_unparseable_bytes(view, store):
+    """Fails if write_bytes_keeping_tree catches only ET.ParseError, so a LookupError-shaped failure escapes buf.write()."""
+    tree = store.require_xml(PAGE1)
+    buf = view[f"{DIRECTORY}{PAGE1}"]
+    buf.seek(0)
+    buf.write(b'<?xml version="1.0" encoding="x-no-such-codec"?><a/>')
+    held = store.part(PAGE1)
+    assert isinstance(held, XmlPart) and held.tree is tree
+
+
+def test_bytes_declaring_a_refused_multibyte_encoding_are_held_back_like_unparseable_bytes(view, store):
+    """Fails if parse_part's bare ValueError for a refused multi-byte encoding escapes buf.write() untranslated.
+
+    `write_bytes_keeping_tree` only holds a write back for a `MalformedPackageError`;
+    if `parse_part` still let a multi-byte encoding's ValueError through raw, this
+    write would raise instead of being held back like any other unparseable write.
+    """
+    tree = store.require_xml(PAGE1)
+    buf = view[f"{DIRECTORY}{PAGE1}"]
+    buf.seek(0)
+    buf.write(REFUSED_MULTIBYTE_PART)
+    held = store.part(PAGE1)
+    assert isinstance(held, XmlPart) and held.tree is tree
+
+
+def test_bytes_declaring_an_undecodable_encoding_are_written_as_bytes_when_the_buffer_is_closed(view, store):
+    """Fails if write_bytes_keeping_tree's widened catch does not also cover close()'s final write.
+
+    Guards the widened `except MalformedPackageError` in `write_bytes_keeping_tree`:
+    reverting it to `except ET.ParseError` makes this fail, because a LookupError-shaped
+    failure would escape `close()`'s write instead of landing as a BytesPart.
+    """
+    store.require_xml(PAGE1)
+    data = b'<?xml version="1.0" encoding="x-no-such-codec"?><a/>'
+    with view[f"{DIRECTORY}{PAGE1}"] as buf:
+        buf.seek(0)
+        buf.write(data)
+        buf.truncate()
+    held = store.part(PAGE1)
+    assert isinstance(held, BytesPart)
+    assert held.data == data
+
+
+def test_assigning_bytes_declaring_an_undecodable_encoding_does_not_raise(view, store):
+    """Fails if write_bytes_keeping_tree's widened catch does not also cover `view[key] = ...`.
+
+    Guards the widened `except MalformedPackageError` in `write_bytes_keeping_tree`:
+    reverting it to `except ET.ParseError` makes this fail, because a LookupError-shaped
+    failure would escape the assignment instead of landing as a BytesPart.
+    """
+    store.require_xml(PAGE1)
+    data = b'<?xml version="1.0" encoding="x-no-such-codec"?><a/>'
+    view[f"{DIRECTORY}{PAGE1}"] = io.BytesIO(data)
+    held = store.part(PAGE1)
+    assert isinstance(held, BytesPart)
+    assert held.data == data
 
 
 def test_bytes_that_do_not_parse_are_written_when_the_buffer_is_closed(view, store):

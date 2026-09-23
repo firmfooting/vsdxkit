@@ -21,16 +21,18 @@ else:
 import vsdxkit
 
 from . import relationships
+from .errors import InvalidOperationError, MalformedPackageError, MissingPartError, NotFoundError, VisioFileNotOpen
 from .logging_support import attach_debug_stream_handler, get_logger
 from .package import PackageLimitError as PackageLimitError
-from .package import PackageLimits, PackageStore, XmlPart
+from .package import PackageLimits, PackageStore, XmlPart, _checked
 from .zip_contents import ZipFileContentsView, part_name_for_path
 
 # TODO(#362): `PackageLimitError` is imported here only to keep
-# `vsdxkit.vsdxfile.PackageLimitError` working -- it moved to `vsdxkit.package`
-# and `docs/classes.rst` had named the old path. It is spelled as an explicit
-# re-export (`X as X`) rather than under a `noqa: F401`, because a `noqa` on the
-# shared import line also hid imports that really were unused. It wants a
+# `vsdxkit.vsdxfile.PackageLimitError` working -- it moved to `vsdxkit.package`,
+# then to `vsdxkit.errors`, and `docs/classes.rst` had named the old path. It is
+# spelled as an explicit re-export (`X as X`) rather than under a `noqa: F401`,
+# because a `noqa` on the shared import line also hid imports that really were
+# unused. It wants a
 # deprecation shim, or removal once the old path is no longer published.
 # Tested by tests/test_package_limit_error_import.py.
 logger = get_logger(__name__)
@@ -57,6 +59,7 @@ from .xmlio import (  # noqa: E402
     adopt_prefixes,
     file_to_xml,  # noqa: F401
     register_namespaces,
+    require_attribute,
     require_element,
     require_tree,
 )
@@ -123,12 +126,6 @@ def _remap_sheet_references(formula: str, id_map: dict[str, int]) -> str:
         return f"Sheet{separator}{id_map[shape_id]}!"
 
     return _SHEET_REFERENCE_RE.sub(replace, formula)
-
-
-class VisioFileNotOpen(Exception):
-    """Error class to report when a VisioFile is attempted to be saved when no longer open"""
-
-    pass
 
 
 class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
@@ -260,11 +257,29 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         """The store's own tree for a part, promoting it -- never a private copy."""
         return self._package.read_xml(self._part_name(path))
 
+    def _check_relationship_target(self, path: str, subject: str, target: str) -> None:
+        """Refuse a relationship whose `target`, joined into `path`, names no part.
+
+        The store checks every name it is handed and reports a bad one as a
+        plain `ValueError`, because a caller passing it one has made an
+        argument error. A relationship `Target` is not an argument: it is
+        package content, so a `Target` that joins into something that is not
+        a part name (`../page1.xml`, a URI, an empty string) makes the package
+        malformed, and opening it has to say so with `MalformedPackageError`.
+        Only this check is translated. The read that follows goes on raising
+        `MissingPartError` and `PartParseError` as themselves, which wrapping
+        it in `except ValueError` would have swallowed.
+        """
+        try:
+            _checked(self._part_name(path))
+        except ValueError as error:
+            raise MalformedPackageError(f"{subject} targets {target!r}, which is not a part name in this package") from error
+
     def _require_part_xml(self, path: str, description: str) -> ET.ElementTree[ET.Element]:
-        """The store's own tree for a required part, or a ValueError naming it."""
+        """The store's own tree for a required part, or a MissingPartError naming it."""
         tree = self._read_part_xml(path)
         if tree is None:
-            raise ValueError(f"expected XML part not found: {description} ({path})")
+            raise MissingPartError(f"expected XML part not found: {description} ({path})")
         return tree
 
     def _set_part_xml(self, name: str, tree: ET.ElementTree[ET.Element] | None) -> None:
@@ -296,7 +311,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         `_set_part_xml` directly.
         """
         if tree is None:
-            raise ValueError(
+            raise InvalidOperationError(
                 f"VisioFile.{attribute} cannot remove {name} through this property: this "
                 f"property does not also remove the relationship and content-type override "
                 f"that name a document part, so setting it to None would leave the package "
@@ -402,8 +417,8 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         relid_page_dict = {}
 
         for rel in rels:
-            rel_id = rel.attrib["Id"]
-            page_file = rel.attrib["Target"]
+            rel_id = require_attribute(rel, "Id", "pages.xml.rels Relationship")
+            page_file = require_attribute(rel, "Target", f"pages.xml.rels Relationship {rel.attrib.get('Id', '')!r}")
             relid_page_dict[rel_id] = page_file
 
         pages_filename = self._pages_filename()  # pages contains Page name, width, height, mapped to Id
@@ -413,13 +428,16 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             logger.debug("Pages(%s)\n%s", pages_filename, VisioFile.pretty_print_element(pages))
 
         for page in pages:  # type: Element
-            rel_id = require_element(page.find(f"{namespace}Rel"), "Page/Rel").attrib[f"{r_namespace}id"]
-            page_name = page.attrib["Name"]
+            rel_id = require_attribute(
+                require_element(page.find(f"{namespace}Rel"), "Page/Rel"), f"{r_namespace}id", "pages.xml Page/Rel"
+            )
+            page_name = require_attribute(page, "Name", "pages.xml Page")
 
             page_file = relid_page_dict.get(rel_id)
             if page_file is None:
-                raise ValueError(f"no page part found for relationship {rel_id}")
+                raise MissingPartError(f"no page part found for relationship {rel_id}")
             page_path = page_dir + page_file
+            self._check_relationship_target(page_path, f"pages.xml.rels Relationship {rel_id!r}", page_file)
             page_id = page.attrib.get("ID", "")
 
             new_page = Page(self._require_part_xml(page_path, "page part"), page_path, page_name, page_id, rel_id, self)
@@ -463,13 +481,16 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         if self.debug:
             logger.debug("Master Relationships(%s)\n%s", master_rel_path, master_rels)
 
-        # populate relid to master path
-        relid_to_path: dict[str, str] = {}
+        # populate relid to the master's relationship Target
+        relid_to_target: dict[str, str] = {}
         for rel in master_rels:
-            master_id = rel.attrib.get("Id")
-            if master_id is None:
-                continue
-            relid_to_path[master_id] = f"{self.directory}/visio/masters/{rel.attrib.get('Target')}"
+            # Skipping a relationship with no Id used to leave the master that
+            # names it with no path, and the lookup below reported that as
+            # `KeyError: 'rId1'`; the Target went in unchecked and spelled a
+            # part called "None".
+            subject = "masters.xml.rels Relationship"
+            target = require_attribute(rel, "Target", subject)
+            relid_to_target[require_attribute(rel, "Id", subject)] = target
 
         # masters_xml is a store-backed property (contains more info about
         # master page, i.e. Name, Icon); reading it here promotes the part.
@@ -477,12 +498,18 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         # for each master page, create the Page object
         for master in self.masters_xml if self.masters_xml is not None else []:
             master_name = master.attrib.get("NameU") or master.attrib.get("Name") or "Unknown"
-            rel_id = require_element(master.find(f"{namespace}Rel"), "Master/Rel").attrib[f"{r_namespace}id"]
-            master_id = master.attrib["ID"]
+            rel_id = require_attribute(
+                require_element(master.find(f"{namespace}Rel"), "Master/Rel"), f"{r_namespace}id", "masters.xml Master/Rel"
+            )
+            master_id = require_attribute(master, "ID", "masters.xml Master")
             master_unique_id = master.attrib.get("UniqueID")
             master_base_id = master.attrib.get("BaseID")
 
-            master_path = relid_to_path[rel_id]
+            master_target = relid_to_target.get(rel_id)
+            if master_target is None:
+                raise MissingPartError(f"no master part found for relationship {rel_id}")
+            master_path = f"{self.directory}/visio/masters/{master_target}"
+            self._check_relationship_target(master_path, f"masters.xml.rels Relationship {rel_id!r}", master_target)
 
             master_page = Page(
                 self._require_part_xml(master_path, "master part"),
@@ -1263,11 +1290,11 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         media = page.vis._shared_media()
         source = media.palette.pages[0].find_shape_by_text(palette_name)
         if source is None:
-            raise ValueError(f"palette has no shape named {palette_name}")
+            raise NotFoundError(f"palette has no shape named {palette_name}")
         new_shape_xml = self.copy_shape(source.xml, page)
         new_shape = page.find_shape_by_id(new_shape_xml.attrib["ID"])
         if new_shape is None:
-            raise ValueError("newly created shape not found on page")
+            raise NotFoundError("newly created shape not found on page")
 
         # palette shapes are drawn around their centre: position via PinX/PinY
         new_shape.get_or_create_cell("PinX", v=str(x))
@@ -1495,12 +1522,12 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         if given is None or given == expected:
             return given
         if macro_enabled:
-            raise ValueError(
+            raise InvalidOperationError(
                 f"cannot save a macro-enabled package as {filename!r}: it declares "
                 f"{MACRO_ENABLED_CONTENT_TYPE} and still contains its vbaProject part, so it must be saved "
                 "with a .vsdm extension"
             )
-        raise ValueError(
+        raise InvalidOperationError(
             f"cannot save {filename!r}: the .vsdm extension is for macro-enabled packages, and this "
             f"package declares {self._main_part_content_type() or DRAWING_CONTENT_TYPE}"
         )
@@ -1532,12 +1559,12 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             or over `filename` if that has been reassigned since the document
             was opened; that name is checked the same way but never renamed.
         :type new_filename: str
-        :raises ValueError: if the extension contradicts the package kind
+        :raises InvalidOperationError: if the extension contradicts the package kind
 
         """
         self._require_open("VisioFile.save_vsdx()")
         if not self._package.names():
-            raise ValueError("cannot save an empty package")
+            raise InvalidOperationError("cannot save an empty package")
 
         # resolve the destination first, so a refused extension writes nothing
         target = self._in_place_filename() if new_filename is None else self._destination_filename(new_filename)

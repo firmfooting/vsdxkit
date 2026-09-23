@@ -30,6 +30,7 @@ else:
 import vsdxkit
 
 from .document_part import DocumentPart
+from .errors import InvalidOperationError, MissingPartError
 from .shapes import Shape
 
 # observed lane pitch in the Visio 16 CFF capture (inches)
@@ -169,13 +170,13 @@ class Container(DocumentPart):
         self._require_open("Container.add_swimlane()")
         lanes = self.lanes
         if not lanes:
-            raise ValueError("page has no Swimlane lanes; not a CFF diagram")
+            raise InvalidOperationError("page has no Swimlane lanes; not a CFF diagram")
         top_lane = lanes[0]
         shapes_tag = self.page.xml.find(f"{vsdxkit.namespace}Shapes")
         if shapes_tag is None:
             # not reachable: a page with no Shapes tag has no lanes either, so
             # the check above fires first. Kept to narrow the type for append()
-            raise ValueError("page has no Shapes tag")
+            raise MissingPartError("page has no Shapes tag")
 
         # The lane is built and labelled while still detached, because labelling
         # is the step that can fail. It used to run after the clone was appended
@@ -214,7 +215,7 @@ class Container(DocumentPart):
         List that owns the lane, and inventing one would produce a heading the
         CFF engine does not know about.
 
-        :raises ValueError: if ``lane`` has no heading sub-shape, or no writable
+        :raises InvalidOperationError: if ``lane`` has no heading sub-shape, or no writable
             ``visHeadingText`` row.
         """
         self._require_open("Container.set_lane_label()")
@@ -242,9 +243,9 @@ class Container(DocumentPart):
             raise TypeError(f"lane label must be a str, not {type(label).__name__}")
         heading = self.lane_heading(lane)
         if heading is None:
-            raise ValueError(f"{subject} has no heading sub-shape, so it is not a swimlane lane")
+            raise InvalidOperationError(f"{subject} has no heading sub-shape, so it is not a swimlane lane")
         if not set_user_row_value(lane, ROW_HEADING_TEXT, label):
-            raise ValueError(f"{subject} has no {ROW_HEADING_TEXT} row with a Value cell to write the label into")
+            raise InvalidOperationError(f"{subject} has no {ROW_HEADING_TEXT} row with a Value cell to write the label into")
         heading.text = label
 
     @staticmethod

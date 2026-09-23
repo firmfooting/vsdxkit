@@ -47,6 +47,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+from .errors import MalformedPackageError, MissingPartError, PackageLimitError, PartParseError
 from .xmlio import parse_part, serialise_part
 
 __all__ = [
@@ -65,19 +66,6 @@ __all__ = [
 # --------------------------------------------------------------------------
 # load limits
 # --------------------------------------------------------------------------
-
-
-class PackageLimitError(OSError):
-    """A package violated a load limit: size, member count, ratio, names or duplicates.
-
-    ``reason`` is a stable slug (``member_size``, ``total_size``,
-    ``member_count``, ``compression_ratio``, ``duplicate_member``,
-    ``member_name``, ``limits_file``) so callers can branch by failure mode.
-    """
-
-    def __init__(self, reason: str, message: str) -> None:
-        super().__init__(message)
-        self.reason = reason
 
 
 @dataclass(frozen=True)
@@ -289,6 +277,22 @@ def read_archive_members(path: str | os.PathLike[str], limits: PackageLimits) ->
     """
     source = os.fspath(path)
     _preflight_eocd(source, limits)
+    try:
+        return _members_within(source, limits)
+    except (zipfile.BadZipFile, UnicodeDecodeError, NotImplementedError) as error:
+        # A file that is not an archive, one whose members do not read back as
+        # they were declared, or one whose central directory claims a member
+        # name is UTF-8 and then is not, is a malformed package rather than a
+        # zipfile problem the caller of this library asked for. The name is
+        # decoded by the `ZipFile` constructor, before `infolist()` runs. So is
+        # a central directory record that needs a zip version above 6.3: the
+        # constructor refuses it with `NotImplementedError`, but the version is
+        # the package's own claim about itself, not a gap in this library.
+        raise MalformedPackageError(f"{source} is not a readable package: {error}") from error
+
+
+def _members_within(source: str, limits: PackageLimits) -> list[tuple[str, bytes]]:
+    """`read_archive_members` without the archive-level error translation."""
     with zipfile.ZipFile(source, "r") as archive:
         infos = archive.infolist()
         if len(infos) > limits.max_members:
@@ -321,9 +325,52 @@ def read_archive_members(path: str | os.PathLike[str], limits: PackageLimits) ->
             )
         members: list[tuple[str, bytes]] = []
         for info in file_infos:
-            with archive.open(info, "r") as member_reader:
-                members.append((info.filename, _read_bounded(member_reader, info.file_size, info.filename, limits)))
+            members.append((info.filename, _member_bytes(archive, info, limits)))
     return members
+
+
+def _member_bytes(archive: zipfile.ZipFile, info: zipfile.ZipInfo, limits: PackageLimits) -> bytes:
+    """One member's bytes, or a MalformedPackageError saying it cannot be decoded.
+
+    Every codec reports a stream it cannot decode differently: `zlib.error`
+    from deflate, `lzma.LZMAError` from LZMA, a bare `OSError` from bz2, a
+    `RuntimeError` for an encrypted member, a `NotImplementedError` for a
+    method this build does not have, and whatever the next codec CPython gains
+    chooses. Enumerating them is a list that goes stale one release at a time,
+    so this translates whatever the read raises: inside this block there is
+    nothing but opening a member and reading it, and a member that cannot be
+    read is a malformed package however the codec says so.
+
+    Two exceptions are handed back rather than translated. `PackageLimitError`
+    is raised by `_read_bounded` from inside this very block, and is the
+    library's own answer already. And an `OSError` carrying an `errno` came
+    from the operating system - the disk the archive is on - where saying the
+    package is malformed would be a lie about a file that is fine; a codec's
+    `OSError` carries no `errno`.
+
+    That claim holds only once a member that lies before the archive is
+    refused. `ZipFile` places each header by adding the gap between where the
+    central directory is and where the end record says it is, so an end record
+    that overstates the directory's offset puts a header before byte zero, and
+    seeking there raises `OSError(EINVAL)` about a disk that is fine.
+    """
+    if info.header_offset < 0:
+        raise MalformedPackageError(f"package member {info.filename!r} lies before the start of the archive")
+    try:
+        with archive.open(info, "r") as member_reader:
+            return _read_bounded(member_reader, info.file_size, info.filename, limits)
+    except PackageLimitError:
+        raise
+    except OSError as error:
+        if error.errno is not None:
+            raise
+        raise MalformedPackageError(f"package member {info.filename!r} cannot be read: {error}") from error
+    except MemoryError:
+        # the process ran out, not the package: blaming the archive would let an
+        # `except VsdxError` caller carry on under memory pressure
+        raise
+    except Exception as error:
+        raise MalformedPackageError(f"package member {info.filename!r} cannot be read: {error}") from error
 
 
 # --------------------------------------------------------------------------
@@ -452,31 +499,9 @@ class XmlPart:
 PartValue = BytesPart | XmlPart
 
 
-class PartParseError(ET.ParseError, ValueError):
-    """A part that is not well-formed XML, named, and catchable as either error it has been.
-
-    Before the store, a malformed part reached the caller as the bare
-    `ET.ParseError` the parser raised. The store rewrapped it as a `ValueError`
-    so the message could name the part. Both spellings are in callers' code
-    now, and a caller should not have to know which release it is running
-    against to catch a broken package, so this is both. The parser's
-    `position` and `code` are carried across, because they are what says where
-    in the part it broke.
-    """
-
-
 def _promoted(name: str, part: BytesPart) -> XmlPart:
-    data = part.data
-    try:
-        tree = parse_part(data)
-    except ET.ParseError as error:
-        raised = PartParseError(f"package part {name} is not well-formed XML: {error}")
-        # ParseError sets these on the instance rather than taking them in its
-        # constructor, so they are copied the same way
-        raised.position = error.position
-        raised.code = error.code
-        raise raised from error
-    return XmlPart(tree=tree, original_bytes=data, original_canonical_hash=canonical_hash(tree), promoted_from=part)
+    tree = parse_part(part.data, name)
+    return XmlPart(tree=tree, original_bytes=part.data, original_canonical_hash=canonical_hash(tree), promoted_from=part)
 
 
 # --------------------------------------------------------------------------
@@ -576,7 +601,10 @@ class PackageStore:
             return True
         try:
             written = parse_part(data)
-        except ET.ParseError:
+        except MalformedPackageError:
+            # not only a well-formedness fault: bytes declaring an encoding
+            # nothing can decode do not parse either, and are held back or
+            # stored as bytes the same way rather than escaping the write
             if refuse_unparseable:
                 return False
             self._parts[checked] = BytesPart(data)
@@ -602,10 +630,10 @@ class PackageStore:
         return promoted.tree
 
     def require_xml(self, name: str) -> ET.ElementTree[ET.Element]:
-        """This part's tree, or a ValueError naming the part that is not there."""
+        """This part's tree, or a MissingPartError naming the part that is not there."""
         tree = self.read_xml(name)
         if tree is None:
-            raise ValueError(f"expected XML part not found: {name}")
+            raise MissingPartError(f"expected XML part not found: {name}")
         return tree
 
     def write_xml(self, name: str, tree: ET.ElementTree[ET.Element]) -> None:
