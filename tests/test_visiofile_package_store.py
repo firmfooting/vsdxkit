@@ -282,3 +282,31 @@ def test_a_removed_page_does_not_clobber_a_page_that_reuses_its_part_name(vsdx_c
         vis.save_vsdx(out)
     with zipfile.ZipFile(out) as archive:
         assert b'VsdxkitMarker="1"' in archive.read("visio/pages/page1.xml")
+
+
+@pytest.mark.parametrize(
+    ("attribute", "name"),
+    [
+        ("app_xml", "/docProps/app.xml"),
+        ("document_xml", "/visio/document.xml"),
+        ("document_xml_rels", "/visio/_rels/document.xml.rels"),
+        ("pages_xml", "/visio/pages/pages.xml"),
+        ("pages_xml_rels", "/visio/pages/_rels/pages.xml.rels"),
+        ("content_types_xml", "/[Content_Types].xml"),
+        ("masters_xml", "/visio/masters/masters.xml"),
+    ],
+)
+def test_setting_a_document_part_to_none_is_refused(vsdx_copy, attribute, name):
+    """Fails if a VisioFile document-part setter takes None as "remove the part" again.
+
+    Removing `app.xml` or `document.xml` from the store leaves the
+    relationship that points at it and the content-type override that
+    describes it, so the saved package promises a part it does not hold.
+    None is refused, and the part stays where it was.
+    """
+    with VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
+        before = vis._package.part(name)
+        assert before is not None  # the fixture has changed if this does not hold
+        with pytest.raises(ValueError, match=attribute):
+            setattr(vis, attribute, None)
+        assert vis._package.part(name) is before

@@ -280,13 +280,27 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             return
         self._package.write_xml(name, tree)
 
+    def _set_document_part_xml(self, attribute: str, name: str, tree: ET.ElementTree[ET.Element] | None) -> None:
+        """`_set_part_xml` for a part the document itself is wired to, which None may not remove.
+
+        `app.xml`, `document.xml`, `pages.xml` and the rest are each named by a
+        relationship and described by a content-type override. Taking one out
+        of the store leaves both behind, and the saved package promises a part
+        it does not hold. A page's rels part is different -- nothing points at
+        it -- so `Page.rels_xml = None` still removes it, through
+        `_set_part_xml` directly.
+        """
+        if tree is None:
+            raise ValueError(f"VisioFile.{attribute} cannot be set to None: the package still refers to {name}")
+        self._set_part_xml(name, tree)
+
     @property
     def pages_xml(self) -> ET.ElementTree[ET.Element] | None:
         return self._package.read_xml(_PAGES_PART)
 
     @pages_xml.setter
     def pages_xml(self, tree: ET.ElementTree[ET.Element] | None) -> None:
-        self._set_part_xml(_PAGES_PART, tree)
+        self._set_document_part_xml("pages_xml", _PAGES_PART, tree)
 
     @property
     def pages_xml_rels(self) -> ET.ElementTree[ET.Element] | None:
@@ -294,7 +308,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
 
     @pages_xml_rels.setter
     def pages_xml_rels(self, tree: ET.ElementTree[ET.Element] | None) -> None:
-        self._set_part_xml(_PAGES_RELS_PART, tree)
+        self._set_document_part_xml("pages_xml_rels", _PAGES_RELS_PART, tree)
 
     @property
     def content_types_xml(self) -> ET.ElementTree[ET.Element] | None:
@@ -302,7 +316,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
 
     @content_types_xml.setter
     def content_types_xml(self, tree: ET.ElementTree[ET.Element] | None) -> None:
-        self._set_part_xml(_CONTENT_TYPES_PART, tree)
+        self._set_document_part_xml("content_types_xml", _CONTENT_TYPES_PART, tree)
 
     @property
     def app_xml(self) -> ET.ElementTree[ET.Element] | None:
@@ -310,7 +324,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
 
     @app_xml.setter
     def app_xml(self, tree: ET.ElementTree[ET.Element] | None) -> None:
-        self._set_part_xml(_APP_PART, tree)
+        self._set_document_part_xml("app_xml", _APP_PART, tree)
 
     @property
     def document_xml(self) -> ET.ElementTree[ET.Element] | None:
@@ -318,7 +332,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
 
     @document_xml.setter
     def document_xml(self, tree: ET.ElementTree[ET.Element] | None) -> None:
-        self._set_part_xml(_DOCUMENT_PART, tree)
+        self._set_document_part_xml("document_xml", _DOCUMENT_PART, tree)
 
     @property
     def document_xml_rels(self) -> ET.ElementTree[ET.Element] | None:
@@ -326,7 +340,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
 
     @document_xml_rels.setter
     def document_xml_rels(self, tree: ET.ElementTree[ET.Element] | None) -> None:
-        self._set_part_xml(_DOCUMENT_RELS_PART, tree)
+        self._set_document_part_xml("document_xml_rels", _DOCUMENT_RELS_PART, tree)
 
     @property
     @override
@@ -338,10 +352,13 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
     @masters_xml.setter
     @override
     def masters_xml(self, root: ET.Element | None) -> None:
-        current = self._package.read_xml(_MASTERS_PART)
-        if root is not None and current is not None and current.getroot() is root:
+        if root is None:
+            self._set_document_part_xml("masters_xml", _MASTERS_PART, None)  # raises: see there
             return
-        self._set_part_xml(_MASTERS_PART, None if root is None else ET.ElementTree(root))
+        current = self._package.read_xml(_MASTERS_PART)
+        if current is not None and current.getroot() is root:
+            return
+        self._set_document_part_xml("masters_xml", _MASTERS_PART, ET.ElementTree(root))
 
     def open_vsdx_file(self) -> None:
         self._load_zip_file_contents_to_memory()
