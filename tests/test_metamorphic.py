@@ -202,11 +202,19 @@ def _assert_same_package_as_respelled(relation: str, package_path: str, expected
     (#89), so a part that an earlier session edited and saved is in vsdxkit's
     own spelling from then on -- even after a later session undoes the edit,
     because that session's baseline is the respelled part, not the fixture's.
-    `respelled_by` is the earlier session's output. The parts it changed may
-    differ from `expected` in spelling alone -- declaration, namespace
-    bindings, bytes -- never in canonical XML, and must be spelled exactly as
-    that session wrote them, so the undoing session did not respell them
-    again. Every other part must still be byte-identical.
+    `respelled_by` is the earlier session's output. Exactly this is pinned:
+
+    * every part that session did not change is byte-identical to `expected`;
+    * a part it did change differs from `expected` in spelling alone --
+      declaration, namespace bindings, bytes -- never in canonical XML;
+    * such a part has the XML declaration and the namespace bindings that
+      session wrote it with, so the undoing session did not respell it in
+      some third way.
+
+    The changed part's bytes are not pinned to that session's. The undoing
+    session changed its content back, so it no longer matches that session's
+    baseline and is written as a fresh serialisation; bytes equal to the
+    earlier session's would mean the undo never reached the file.
     """
     expected_manifest, actual_manifest, respelled_manifest = (
         PackageManifest.from_path(path) for path in (expected, actual, respelled_by)
