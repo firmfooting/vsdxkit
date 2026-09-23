@@ -22,14 +22,17 @@ import vsdxkit
 
 from . import relationships
 from .logging_support import attach_debug_stream_handler, get_logger
-from .package import PackageLimitError, PackageLimits, PackageStore, read_archive_members  # noqa: F401
+from .package import PackageLimitError as PackageLimitError
+from .package import PackageLimits, PackageStore
 from .zip_contents import ZipFileContentsView, part_name_for_path
 
 # TODO(#362): `PackageLimitError` is imported here only to keep
 # `vsdxkit.vsdxfile.PackageLimitError` working -- it moved to `vsdxkit.package`
-# and `docs/classes.rst` had named the old path. The `noqa` on that import is the
-# ugly part; it wants a deprecation shim, or removal once the old path is no
-# longer published. Tested by tests/test_package_limit_error_import.py.
+# and `docs/classes.rst` had named the old path. It is spelled as an explicit
+# re-export (`X as X`) rather than under a `noqa: F401`, because a `noqa` on the
+# shared import line also hid imports that really were unused. It wants a
+# deprecation shim, or removal once the old path is no longer published.
+# Tested by tests/test_package_limit_error_import.py.
 logger = get_logger(__name__)
 
 from . import (  # noqa: E402
