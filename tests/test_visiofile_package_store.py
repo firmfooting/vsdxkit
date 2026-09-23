@@ -197,3 +197,45 @@ def test_reassigning_the_same_tree_keeps_the_promotion_baseline(vsdx_copy):
         before = vis._package.part("/docProps/app.xml")
         vis.app_xml = vis.app_xml
         assert vis._package.part("/docProps/app.xml") is before
+
+
+def test_an_added_page_is_in_the_store_before_any_save(vsdx_copy):
+    """Fails if `_create_page` constructs the `Page` before the new page part
+    is written into the store, so an added page reaches disk only through
+    save_vsdx's rewrite rather than at the moment it is created."""
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        page = vis.add_page("Added")
+        held = vis._package.part(vis._part_name(page.filename))
+        assert isinstance(held, XmlPart) and held.tree is page.xml
+
+
+def test_a_copied_page_brings_its_rels_part_into_the_store(vsdx_copy):
+    """Fails if `_create_page` assigns a copied page's `rels_xml` before its
+    `rels_xml_filename`, so the `rels_xml` setter's write-through guard never
+    sees a filename and the rels part never reaches the store."""
+    with VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
+        source = next(p for p in vis.pages if p.rels_xml is not None)
+        copy = vis.copy_page(source)
+        assert copy.rels_xml_filename is not None
+        held = vis._package.part(vis._part_name(copy.rels_xml_filename))
+        assert isinstance(held, XmlPart) and held.tree is copy.rels_xml
+
+
+def test_importing_a_master_keeps_masters_parts_as_the_stores_trees(vsdx_copy):
+    """#366 and the eager-write removal: masters.xml(.rels) are trees in the store, not bytes."""
+    with VisioFile(vsdx_copy("test3_house.vsdx")) as vis:
+        page = vis.pages[0]
+        page.connect_shapes(page.find_shape_by_id("1"), page.find_shape_by_id("5"))
+        masters = vis._package.part("/visio/masters/masters.xml")
+        rels = vis._package.part("/visio/masters/_rels/masters.xml.rels")
+        assert isinstance(masters, XmlPart) and masters.tree.getroot() is vis.masters_xml
+        assert isinstance(rels, XmlPart)
+
+
+def test_bootstrapping_masters_writes_trees(vsdx_copy):
+    """Fails if `_bootstrap_masters` still writes masters.xml.rels as a bytes
+    literal through `zip_file_contents` instead of a tree through the store."""
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        vis._bootstrap_masters()
+        assert isinstance(vis._package.part("/visio/masters/masters.xml"), XmlPart)
+        assert isinstance(vis._package.part("/visio/masters/_rels/masters.xml.rels"), XmlPart)

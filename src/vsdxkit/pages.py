@@ -18,7 +18,7 @@ from vsdxkit import namespace
 
 from .connectors import Connect
 from .shapes import Shape, parent_of
-from .xmlio import require_element, xml_to_file, xml_value
+from .xmlio import require_element, xml_value
 
 # the two places a Connect record names a shape: the connector it leads from,
 # and the shape that connector is glued to
@@ -344,7 +344,7 @@ class Page:
 
         Visio writes a per-page relationship to each master used by shapes on
         that page (Target '../masters/masterN.xml'). The rels part is created
-        on demand; the filename is registered so save_vsdx persists it.
+        on demand; assigning it writes it into the package.
         """
         rels_xml: ET.ElementTree[ET.Element] | None = self.rels_xml
         if rels_xml is None:
@@ -366,13 +366,6 @@ class Page:
             f'Id="{master_rel_id}" Target="{target}"/>'
         )
         rels_root.append(rel_element)
-        # persist into the zip contents so save picks it up even for pages
-        # that never had a rels part before. Through `xml_to_file` rather than
-        # `ET.tostring`: this part is in the package-relationships namespace,
-        # which does not hold the process-wide default prefix, so serialising
-        # it outside the per-part prefix map wrote `<ns0:Relationships>` (#360).
-        if self.rels_xml_filename:
-            xml_to_file(rels_xml, self.rels_xml_filename, self.vis.zip_file_contents)
 
     def get_connects(self) -> list[Connect]:
         elements = self.xml.findall(f".//{namespace}Connect")  # search recursively

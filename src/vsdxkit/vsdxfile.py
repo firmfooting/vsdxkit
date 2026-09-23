@@ -245,6 +245,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         self._package = PackageStore.open(self.filename, limits=self.limits)
         self.zip_file_contents = ZipFileContentsView(self._package, self.directory)
 
+    @override
     def _part_name(self, path: str) -> str:
         """The OPC part name for one of this document's `{directory}/...` paths."""
         name = part_name_for_path(self.directory, path)
@@ -963,12 +964,21 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         # Update VisioFile object; the page carries its real ID and relationship
         # id immediately (issue #7: they were blank until a reload)
         page_id = new_page_element.attrib["ID"]
+        # written into the store before the Page is constructed, so `Page.xml`'s
+        # write-through guard (`_attached()`) already finds the part present for
+        # any later assignment, and so this call itself is what gets the new page
+        # into the package at the moment it is created, rather than waiting on
+        # save_vsdx's rewrite
+        self._package.write_xml(self._part_name(new_page_path), new_page_xml)
         new_page = Page(new_page_xml, new_page_path, page_name, page_id, new_page_relid, self)
         if source_page is not None and source_page.rels_xml is not None:
             source_rels_root = require_element(source_page.rels_xml.getroot(), "source page relationships root")
-            new_page.rels_xml = ET.ElementTree(copy.deepcopy(source_rels_root))
             rel_dir = f"{self.directory}/visio/pages/_rels/"
+            # the filename first: the `rels_xml` setter only writes through when
+            # `rels_xml_filename` is already set (and the page part, above, is
+            # already in the package)
             new_page.rels_xml_filename = _page_relationship_path(rel_dir, new_page_path)
+            new_page.rels_xml = ET.ElementTree(copy.deepcopy(source_rels_root))
 
         self.pages.insert(index, new_page)  # insert new page at defined index
 
