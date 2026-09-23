@@ -223,3 +223,101 @@ def test_sync_skips_and_drops_a_closed_buffer(view, store):
     view.sync()
     assert store.read_bytes("/docProps/thumbnail.emf") == original
     assert view._exports == {}
+
+
+def test_two_reads_of_a_member_share_one_buffer_so_both_edits_land(view, store):
+    """Fails if __getitem__ returns a fresh snapshot per read, so the second buffer's write-through restores byte 0."""
+    key = f"{DIRECTORY}/docProps/thumbnail.emf"
+    original = store.read_bytes("/docProps/thumbnail.emf")
+    assert original is not None
+    a = view[key]
+    b = view[key]
+    assert a is b
+    a.seek(0)
+    a.write(bytes([original[0] ^ 0xFF]))
+    b.seek(1)
+    b.write(bytes([original[1] ^ 0xFF]))
+    expected = bytes([original[0] ^ 0xFF, original[1] ^ 0xFF]) + original[2:]
+    assert store.read_bytes("/docProps/thumbnail.emf") == expected
+
+
+def test_a_read_after_a_write_through_is_the_same_buffer(view, store):
+    """Fails if a write-through does not re-point the cache at the part it wrote, so the next read snapshots afresh."""
+    key = f"{DIRECTORY}/docProps/thumbnail.emf"
+    a = view[key]
+    a.seek(0)
+    a.write(b"\x00")
+    assert view[key] is a
+
+
+def test_two_reads_then_two_edits_reach_disk(vsdx_copy, tmp_path):
+    """Fails if VisioFile.zip_file_contents hands out one snapshot per read, so an interleaved edit is lost at save."""
+    target = str(tmp_path / "saved.vsdx")
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        key = f"{vis.directory}/docProps/thumbnail.emf"
+        a = vis.zip_file_contents[key]
+        b = vis.zip_file_contents[key]
+        original = a.getvalue()
+        a.seek(0)
+        a.write(bytes([original[0] ^ 0xFF]))
+        b.seek(1)
+        b.write(bytes([original[1] ^ 0xFF]))
+        vis.save_vsdx(target)
+    with zipfile.ZipFile(target) as archive:
+        assert archive.read("docProps/thumbnail.emf")[:2] == bytes([original[0] ^ 0xFF, original[1] ^ 0xFF])
+
+
+def test_a_store_write_between_reads_invalidates_the_cached_buffer(view, store):
+    """Fails if the view returns its cached buffer without checking the store still holds the part it was made from."""
+    key = f"{DIRECTORY}/docProps/thumbnail.emf"
+    a = view[key]
+    store.write_bytes("/docProps/thumbnail.emf", b"replaced")
+    b = view[key]
+    assert b is not a
+    assert b.getvalue() == b"replaced"
+
+
+def test_setitem_and_delitem_drop_the_cached_buffer(view, store):
+    """Fails if __setitem__ or __delitem__ leave a cached buffer behind that a later read could hand out."""
+    key = f"{DIRECTORY}/docProps/thumbnail.emf"
+    a = view[key]
+    view[key] = io.BytesIO(b"set")
+    b = view[key]
+    assert b is not a
+    assert b.getvalue() == b"set"
+    del view[key]
+    assert view._live == {}
+
+
+def test_a_closed_cached_buffer_is_not_handed_out_again(view):
+    """Fails if the cache returns a buffer the caller closed, which can no longer be read."""
+    key = f"{DIRECTORY}/docProps/thumbnail.emf"
+    a = view[key]
+    a.close()
+    b = view[key]
+    assert b is not a
+    assert not b.closed
+
+
+def test_a_promoted_part_is_read_as_a_fresh_snapshot(view, store):
+    """Fails if an XML part's buffer is cached, so a read after a tree edit returns bytes the tree has moved past."""
+    tree = store.require_xml("/visio/pages/page1.xml")
+    key = f"{DIRECTORY}/visio/pages/page1.xml"
+    a = view[key]
+    root = tree.getroot()
+    assert root is not None
+    root.set("VsdxkitMarker", "1")
+    b = view[key]
+    assert b is not a
+    assert b"VsdxkitMarker" in b.getvalue()
+
+
+def test_a_cached_exported_buffer_is_still_collected_by_sync(view, store):
+    """Fails if caching bypasses the export registry, so a memoryview edit on a re-read buffer never reaches the store."""
+    key = f"{DIRECTORY}/docProps/thumbnail.emf"
+    view[key]
+    memory = view[key].getbuffer()
+    memory[0] = 7
+    view.sync()
+    assert store.read_bytes("/docProps/thumbnail.emf")[:1] == b"\x07"
+    assert view[key].getbuffer()[0] == 7

@@ -3,7 +3,9 @@
 The old mapping held the package itself, keyed by a filesystem path no file was
 ever at. The store holds it now, by part name, so this is only a translation:
 it holds nothing, and every read and write lands in the store. A second copy
-here would be a second writer, which is what #89 exists to remove.
+here would be a second writer, which is what #89 exists to remove. The one
+buffer per member it does keep is only ever handed out while it holds exactly
+the part the store has.
 """
 
 from __future__ import annotations
@@ -27,7 +29,7 @@ if TYPE_CHECKING:
     else:
         from typing_extensions import Buffer
 
-from .package import PackageStore
+from .package import BytesPart, PackageStore
 
 
 class _WriteThroughBuffer(io.BytesIO):
@@ -51,20 +53,42 @@ class _WriteThroughBuffer(io.BytesIO):
     writes whatever changed since, which `VisioFile.save_vsdx` does before it
     writes anything. The buffer holds the view's registry rather than the
     view, so a buffer a caller keeps does not keep the view alive.
+
+    Every write this buffer makes to the store also makes it the view's live
+    buffer for its part, because the part the store now holds is exactly
+    these bytes: the next read of the key has nothing newer to snapshot, and
+    handing back this buffer is what keeps a second holder's edits from
+    being written over by a stale copy.
     """
 
-    def __init__(self, store: PackageStore, name: str, initial_bytes: bytes, exports: dict[int, _WriteThroughBuffer]) -> None:
+    def __init__(
+        self,
+        store: PackageStore,
+        name: str,
+        initial_bytes: bytes,
+        exports: dict[int, _WriteThroughBuffer],
+        live: dict[str, tuple[BytesPart, _WriteThroughBuffer]],
+    ) -> None:
         super().__init__(initial_bytes)
         self._store = store
         self._name = name
         self._exports = exports
+        self._live = live
         # what the store last agreed this buffer held, set on first export;
         # None means no memoryview has ever been handed out
         self._baseline: bytes | None = None
 
+    def _store_value(self, value: bytes) -> None:
+        self._store.write_bytes(self._name, value)
+        part = self._store.part(self._name)
+        # write_bytes always leaves a BytesPart; the assert only tells the
+        # type checker so
+        assert isinstance(part, BytesPart)
+        self._live[self._name] = (part, self)
+
     def _write_through(self) -> None:
         value = self.getvalue()
-        self._store.write_bytes(self._name, value)
+        self._store_value(value)
         if self._baseline is not None:
             # the store has these bytes now, so a later sync has nothing of
             # this buffer's to write and must not write them over whatever the
@@ -116,7 +140,7 @@ class _WriteThroughBuffer(io.BytesIO):
             return
         self._baseline = value
         if self._store.part(self._name) is not None:
-            self._store.write_bytes(self._name, value)
+            self._store_value(value)
 
 
 def part_name_for_path(directory: str, path: str) -> str | None:
@@ -128,7 +152,26 @@ def part_name_for_path(directory: str, path: str) -> str | None:
 
 
 class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
-    """The store, addressed by `f"{directory}/{member}"` and valued as `BytesIO`."""
+    """The store, addressed by `f"{directory}/{member}"` and valued as `BytesIO`.
+
+    The old dict returned the same BytesIO every time a key was read, so two
+    holders of one member edited one buffer and both edits survived. A fresh
+    snapshot per read would break that: the second holder's write-through
+    would put back the bytes the first holder had just changed. So the view
+    keeps one live buffer per member and returns it for as long as the store
+    still holds the very part that buffer was made from. When anything else
+    replaces or removes the part -- `view[key] = ...`, a store write, a
+    `VisioFile` setter -- the buffer no longer describes the part, and the
+    next read makes a new one from what the store holds now.
+
+    Known limitation, left for #91 to delete along with the view: a part that
+    has been parsed (an `XmlPart`) is read as a fresh snapshot every time,
+    because its tree is authoritative and can change without the view seeing
+    it. Two holders of such a part's buffers are back to one snapshot each,
+    and the second write-through wins. Likewise `view[key] = buf` stores the
+    bytes of `buf` rather than `buf` itself, so a later read does not return
+    the object assigned, and a later write to `buf` does not reach the store.
+    """
 
     def __init__(self, store: PackageStore, directory: str) -> None:
         self._store = store
@@ -140,6 +183,12 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
         # for the life of the document anyway. They stay registered after a
         # sync, so a memoryview a caller still holds is synced again next time.
         self._exports: dict[int, _WriteThroughBuffer] = {}
+        # the one buffer each member is read as, by part name, alongside the
+        # part it was made from. Held strongly, like the old dict held its
+        # buffers, so `view[k].seek(0); view[k].write(...)` edits one buffer.
+        # An entry whose part the store no longer holds is stale and is
+        # replaced on the next read of that member.
+        self._live: dict[str, tuple[BytesPart, _WriteThroughBuffer]] = {}
 
     def sync(self) -> None:
         """Write to the store every change made through a `getbuffer()` memoryview.
@@ -167,13 +216,27 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
     def __getitem__(self, key: str) -> io.BytesIO:
         name = self._name(key)
         try:
-            data = None if name is None else self._store.read_bytes(name)
+            part = None if name is None else self._store.part(name)
         except ValueError:  # not a part name, so not a part
-            data = None
-        if data is None:
+            part = None
+        if part is None:
             raise KeyError(key)
-        assert name is not None  # name is guaranteed non-None if data is not None
-        return _WriteThroughBuffer(self._store, name, data, self._exports)
+        assert name is not None  # name is guaranteed non-None if part is not None
+        if not isinstance(part, BytesPart):
+            # a promoted tree is authoritative and changes without telling
+            # the view, so a cached buffer could hold bytes the tree has
+            # moved past; this is the documented limitation
+            self._live.pop(name, None)
+            return self._new_buffer(name, part.current_bytes())
+        cached = self._live.get(name)
+        if cached is not None and cached[0] is part and not cached[1].closed:
+            return cached[1]
+        buffer = self._new_buffer(name, part.data)
+        self._live[name] = (part, buffer)
+        return buffer
+
+    def _new_buffer(self, name: str, data: bytes) -> _WriteThroughBuffer:
+        return _WriteThroughBuffer(self._store, name, data, self._exports, self._live)
 
     @override
     def __setitem__(self, key: str, value: io.BytesIO) -> None:
@@ -181,6 +244,10 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
         if name is None:
             raise ValueError(f"{key!r} is not under the package directory {self._directory!r}")
         self._store.write_bytes(name, value.getvalue())
+        # the cached buffer no longer holds what the part does; the identity
+        # check would catch that on the next read, but dropping it here lets
+        # its bytes go now
+        self._live.pop(name, None)
 
     @override
     def __delitem__(self, key: str) -> None:
@@ -192,6 +259,7 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
         except ValueError as e:
             # not a valid part name, so not a part
             raise KeyError(key) from e
+        self._live.pop(name, None)
 
     @override
     def __contains__(self, key: object) -> bool:
