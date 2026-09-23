@@ -30,7 +30,7 @@ Shape, ShapeCollection, Cell and DataProperty
 ---------------------------------------------
 
 .. autoclass:: vsdxkit.shapes.Shape
-   :members: ID, all_shapes, bounds, cell_value, cells, center_x_y, child_shapes, children, connected_shapes, connects, copy, data_properties, descendants, fill_color, find_replace, find_shape_by_text, find_shapes_by_text, geometry, get_or_create_cell, height, line_color, line_weight, master_page_ID, master_shape_ID, move, remove, shape_name, shape_type, tag, text, text_color, width, x, y
+   :members: ID, all_shapes, bounds, cell_value, cells, center_x_y, child_shapes, children, connected_shapes, connects, copy, data_properties, descendants, fill_color, is_attached, find_replace, find_shape_by_text, find_shapes_by_text, geometry, get_or_create_cell, height, line_color, line_weight, master_page_ID, master_shape_ID, move, remove, shape_name, shape_type, tag, text, text_color, width, x, y
    :undoc-members:
 
 .. autoclass:: vsdxkit.shapes.ShapeCollection

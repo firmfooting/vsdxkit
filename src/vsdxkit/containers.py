@@ -182,21 +182,23 @@ class Container(DocumentPart):
             # the check above fires first. Kept to narrow the type for append()
             raise MissingPartError("page has no Shapes tag")
 
-        # The lane is built and labelled while still detached, because labelling
-        # is the step that can fail. It used to run after the clone was appended
-        # and the list and container grown, so a caller that caught the
-        # ValueError and saved wrote a diagram with an extra unlabelled lane,
-        # which the structural validator cannot see (#330). A failed call still
-        # burns the ids the clone was allocated; the page's id mark only rises,
-        # so the next shape gets a higher number and nothing else changes.
+        # Whether the new lane can take the label is settled on the lane it is
+        # cloned from, which it matches row for row, before anything is built.
+        # Labelling used to run after the clone was appended and the list and
+        # container grown, so a caller that caught the ValueError and saved
+        # wrote a diagram with an extra unlabelled lane, which the structural
+        # validator cannot see (#330). The clone is written only once it is on
+        # the page: a Shape refuses writes to an element its page does not hold.
+        subject = f"shape {top_lane.ID} (cloned to make the new lane)"
+        if label:
+            self._check_lane_label(top_lane, label, subject=subject)
         new_xml = ET.fromstring(ET.tostring(top_lane.xml))
         self.page.vis.renumber_shape_ids(new_xml, self.page)
+        shapes_tag.append(new_xml)
         new_lane = Shape(xml=new_xml, parent=self.page, page=self.page)
         new_lane.get_or_create_cell("PinY", v=str((top_lane.y or 0.0) + LANE_PITCH_INCHES))
         if label:
-            self._write_lane_label(new_lane, label, subject=f"shape {top_lane.ID} (cloned to make the new lane)")
-
-        shapes_tag.append(new_xml)
+            self._write_lane_label(new_lane, label, subject=subject)
         # grow the list and container so the new lane sits inside them
         pitch = LANE_PITCH_INCHES
         lane_list = self.swimlane_list
@@ -239,6 +241,12 @@ class Container(DocumentPart):
         and in the reference capture that is the lane band rather than the
         shape showing the text. Tracked by #337.
         """
+        heading = self._check_lane_label(lane, label, subject=subject)
+        set_user_row_value(lane, ROW_HEADING_TEXT, label)
+        heading.text = label
+
+    def _check_lane_label(self, lane: Shape, label: str, *, subject: str) -> Shape:
+        """Refuse a label `lane` cannot take, writing nothing; return the heading that will show it."""
         if not isinstance(label, str):
             # the second write is Shape.text, which rejects a non-str only once
             # it is already writing. The User row would be left holding a value
@@ -248,9 +256,10 @@ class Container(DocumentPart):
         heading = self.lane_heading(lane)
         if heading is None:
             raise InvalidOperationError(f"{subject} has no heading sub-shape, so it is not a swimlane lane")
-        if not set_user_row_value(lane, ROW_HEADING_TEXT, label):
+        row = get_user_row(lane, ROW_HEADING_TEXT)
+        if row is None or row.find(f'{vsdxkit.namespace}Cell[@N="Value"]') is None:
             raise InvalidOperationError(f"{subject} has no {ROW_HEADING_TEXT} row with a Value cell to write the label into")
-        heading.text = label
+        return heading
 
     @staticmethod
     def lane_heading(lane: Shape) -> Shape | None:
