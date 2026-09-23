@@ -1248,7 +1248,7 @@ class Shape(DocumentPart):
             start_x, start_y = start
             finish_x, finish_y = finish
             if start_x is None or start_y is None or finish_x is None or finish_y is None:
-                raise ValueError("connector start and finish coordinates cannot be None")
+                raise InvalidOperationError("connector start and finish coordinates cannot be None")
             self.x, self.y = start_x, start_y
             # lines/connectors are defined in different ways
             # Check whether shape is a connector based on name in known languages

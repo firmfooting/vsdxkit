@@ -725,6 +725,30 @@ def test_gluing_to_a_connection_point_a_shape_does_not_have_raises_invalid_opera
             page.connect_shapes(a, b, route="point", from_cp=99)
 
 
+def test_connecting_a_shape_with_no_pin_coordinates_raises_invalid_operation(vsdx_copy):
+    """Fails if `Shape.set_start_and_finish` refuses a missing coordinate with a plain `ValueError` again.
+
+    `Connect.create()` hands `set_start_and_finish` the two shapes'
+    `center_x_y`, which a shape with no `PinX` reports as None. That is not an
+    argument the caller spelled: the refusal is about the state of a shape the
+    document holds, which is what `InvalidOperationError` is for, and the text
+    position a few lines further on already reported the same None that way.
+    It stays a `ValueError`, so code catching the old type still catches it.
+    """
+    with vsdxkit.VisioFile(vsdx_copy("test8_simple_connector.vsdx")) as vis:
+        page = vis.pages[0]
+        source = page.find_shape_by_text("Shape A")
+        target = page.find_shape_by_text("Shape B")
+        assert source is not None and target is not None
+        pin_x = source.cells.pop("PinX")
+        source.xml.remove(pin_x.xml)
+        assert source.x is None, "the fixture has changed: Shape A still has a PinX"
+
+        with pytest.raises(InvalidOperationError, match="start and finish coordinates cannot be None") as caught:
+            page.connect_shapes(source, target)
+        assert isinstance(caught.value, ValueError)
+
+
 def test_a_page_with_no_container_raises_invalid_operation(vsdx_copy):
     with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
         with pytest.raises(InvalidOperationError, match="no CFF Container"):
