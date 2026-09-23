@@ -353,7 +353,7 @@ def test_bootstrapping_masters_writes_the_visio_default_namespace(vsdx_copy):
     with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
         assert vis.masters_xml is None, "fixture is expected to have no masters part"
         vis._bootstrap_masters()
-        written = vis.zip_file_contents[f"{vis._masters_folder}/masters.xml"].getvalue()
+        written = vis.zip_file_contents[f"{vis.directory}/visio/masters/masters.xml"].getvalue()
 
     assert f'<Masters xmlns="{namespace[1:-1]}"'.encode() in written
     assert not GENERATED_PREFIX_RE.search(written)

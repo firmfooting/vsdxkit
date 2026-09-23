@@ -8,9 +8,7 @@ while vsdxfile.py stays reviewable.
 from __future__ import annotations
 
 import copy as copy_module
-import io
 import xml.etree.ElementTree as ET
-from collections.abc import MutableMapping
 from typing import TYPE_CHECKING, cast
 
 from vsdxkit import namespace, r_namespace
@@ -20,6 +18,7 @@ from .errors import MissingPartError
 from .logging_support import get_logger
 from .package import PackageStore
 from .pages import Page
+from .partnames import MASTERS_PART, folder_of, relationships_part_name, target_part_name
 from .shapes import Shape
 
 if TYPE_CHECKING:
@@ -30,20 +29,14 @@ logger = get_logger(__name__)
 
 class MastersImportMixin:
     # attributes provided by the VisioFile host class
-    zip_file_contents: MutableMapping[str, io.BytesIO]
     _package: PackageStore
     master_pages: list[Page]
     master_index: dict[str, Page]
     masters_xml: ET.Element | None
-    directory: str
 
-    @property
-    def _masters_folder(self) -> str: ...
     def _add_content_types_override(self, part_name_path: str, content_type: str) -> None: ...
     def _add_document_rel(self, rel_type: str, target: str) -> None: ...
     def load_master_pages(self) -> None: ...
-    def _read_part_xml(self, path: str) -> ET.ElementTree[ET.Element] | None: ...
-    def _part_name(self, path: str) -> str: ...
     def _ensure_masters_for_shape(self, source_shape: Shape) -> str:
         """Ensure this document contains the master that source_shape uses.
 
@@ -82,16 +75,17 @@ class MastersImportMixin:
             return existing.page_id
 
         source_master_page = src_vis.get_master_page_by_id(master_ref)
-        if source_master_page is None or src_vis._package.part(src_vis._part_name(source_master_page.filename)) is None:
+        if source_master_page is None or src_vis._package.part(source_master_page.filename) is None:
             return ""
         # read before anything here is changed, so a failure leaves this
         # package as it was. The check above says the part is there, so None
         # is a source store contradicting itself; writing empty bytes in its
         # place would make a master part no reader can parse.
-        source_part_name = src_vis._part_name(source_master_page.filename)
-        master_bytes = src_vis._package.read_bytes(source_part_name)
+        master_bytes = src_vis._package.read_bytes(source_master_page.filename)
         if master_bytes is None:
-            raise MissingPartError(f"source master part {source_part_name} could not be read, though the package lists it")
+            raise MissingPartError(
+                f"source master part {source_master_page.filename} could not be read, though the package lists it"
+            )
 
         # 1. ensure this document has a masters.xml (and rels) to append to,
         # BEFORE resolving master_rels_path below. A masters relationship can
@@ -106,19 +100,19 @@ class MastersImportMixin:
             self._bootstrap_masters()
 
         # 2. copy the master part bytes under the next free filename
-        prefix = f"{self._masters_folder}/master"
+        prefix = folder_of(MASTERS_PART) + "master"
         existing_numbers = [
-            int(f[len(prefix) : -4])
-            for f in self.zip_file_contents
-            if f.startswith(prefix) and f.endswith(".xml") and f[len(prefix) : -4].isdigit()
+            int(name[len(prefix) : -4])
+            for name in self._package.names()
+            if name.startswith(prefix) and name.endswith(".xml") and name[len(prefix) : -4].isdigit()
         ]
-        master_rels_path = f"{self._masters_folder}/_rels/masters.xml.rels"
-        rels_tree: ET.ElementTree[ET.Element] | None = self._read_part_xml(master_rels_path)
+        master_rels_path = relationships_part_name(MASTERS_PART)
+        rels_tree: ET.ElementTree[ET.Element] | None = self._package.read_xml(master_rels_path)
         if rels_tree is None:
             rels_tree = ET.ElementTree(
                 ET.fromstring('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
             )
-            self._package.write_xml(self._part_name(master_rels_path), rels_tree)
+            self._package.write_xml(master_rels_path, rels_tree)
         rels_root = rels_tree.getroot()
         assert rels_root is not None  # freshly built above, or parsed from real bytes: always has a root
 
@@ -129,8 +123,8 @@ class MastersImportMixin:
         while f"master{next_num}.xml" in taken_targets:
             next_num += 1
         part_name = f"master{next_num}.xml"
-        part_path = f"{self._masters_folder}/{part_name}"
-        self._package.write_bytes(self._part_name(part_path), master_bytes)
+        part_path = target_part_name(MASTERS_PART, part_name)
+        self._package.write_bytes(part_path, master_bytes)
 
         # 3. append the Master element with a fresh logical ID
         assert self.masters_xml is not None  # bootstrap above guarantees it
@@ -157,19 +151,15 @@ class MastersImportMixin:
 
         # 5. package wiring (helpers are idempotent); PartName paths are
         # archive-relative, never absolute
-        self._add_content_types_override(
-            part_name_path="/visio/masters/masters.xml", content_type="application/vnd.ms-visio.masters+xml"
-        )
-        self._add_content_types_override(
-            part_name_path=f"/visio/masters/{part_name}", content_type="application/vnd.ms-visio.master+xml"
-        )
+        self._add_content_types_override(part_name_path=MASTERS_PART, content_type="application/vnd.ms-visio.masters+xml")
+        self._add_content_types_override(part_name_path=part_path, content_type="application/vnd.ms-visio.master+xml")
         self._add_document_rel(
             rel_type="http://schemas.microsoft.com/visio/2010/relationships/masters", target="masters/masters.xml"
         )
 
         # 6. register the new master directly - a full load_master_pages()
         # reload would re-append every existing master to master_pages
-        master_page_xml = self._read_part_xml(part_path)
+        master_page_xml = self._package.read_xml(part_path)
         if master_page_xml is None:
             raise MissingPartError(f"imported master part {part_path} missing from package")
         new_master_page = Page(
@@ -202,11 +192,11 @@ class MastersImportMixin:
             '<Masters xmlns="http://schemas.microsoft.com/office/visio/2012/main" '
             'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>'
         )
-        # written as trees, not `xml_to_file` bytes literals (#366): the store
-        # holds both from the moment this document gets masters, and
-        # `masters_xml`'s own getter reads the tree straight back from it.
-        self._package.write_xml(self._part_name(f"{self._masters_folder}/masters.xml"), ET.ElementTree(masters_root))
-        master_rels_path = self._part_name(f"{self._masters_folder}/_rels/masters.xml.rels")
+        # written as trees, not bytes literals (#366): the store holds both
+        # from the moment this document gets masters, and `masters_xml`'s own
+        # getter reads the tree straight back from it.
+        self._package.write_xml(MASTERS_PART, ET.ElementTree(masters_root))
+        master_rels_path = relationships_part_name(MASTERS_PART)
         if self._package.part(master_rels_path) is None:
             self._package.write_xml(
                 master_rels_path,
@@ -214,9 +204,7 @@ class MastersImportMixin:
                     ET.fromstring('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
                 ),
             )
-        self._add_content_types_override(
-            part_name_path="/visio/masters/masters.xml", content_type="application/vnd.ms-visio.masters+xml"
-        )
+        self._add_content_types_override(part_name_path=MASTERS_PART, content_type="application/vnd.ms-visio.masters+xml")
         self._add_document_rel(
             rel_type="http://schemas.microsoft.com/visio/2010/relationships/masters", target="masters/masters.xml"
         )

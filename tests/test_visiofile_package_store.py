@@ -21,7 +21,7 @@ def test_the_page_tree_is_the_stores_tree(vsdx_copy):
     """Fails if the loader parses its own copy instead of promoting the store's part."""
     with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         page = vis.pages[0]
-        held = vis._package.part(vis._part_name(page.filename))
+        held = vis._package.part(page.filename)
         assert isinstance(held, XmlPart) and held.tree is page.xml
 
 
@@ -116,7 +116,7 @@ def test_malformed_xml_at_open_is_also_a_vsdx_error_with_its_position(basedir, t
 
 
 def _held_tree(vis, page):
-    held = vis._package.part(vis._part_name(page.filename))
+    held = vis._package.part(page.filename)
     assert isinstance(held, XmlPart), "the page part was detached from its tree"
     return held.tree
 
@@ -132,7 +132,7 @@ def test_writing_a_page_back_through_the_view_keeps_the_tree_attached(vsdx_copy,
     """
     with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         page = vis.pages[0]
-        xml_to_file(page.xml, page.filename, vis.zip_file_contents)
+        xml_to_file(page.xml, f"{vis.directory}{page.filename}", vis.zip_file_contents)
         assert _held_tree(vis, page) is page.xml
         shape = page.child_shapes[0]
         shape.text = "written back, then edited"
@@ -155,7 +155,7 @@ def test_different_xml_written_through_the_view_reaches_the_page_and_disk(vsdx_c
         tree = page.xml
         replacement = copy.deepcopy(tree.getroot())
         replacement.set("VsdxkitMarker", "1")
-        vis.zip_file_contents[page.filename] = io.BytesIO(serialise_part(ET.ElementTree(replacement)))
+        vis.zip_file_contents[f"{vis.directory}{page.filename}"] = io.BytesIO(serialise_part(ET.ElementTree(replacement)))
         assert _held_tree(vis, page) is tree
         assert page.xml.getroot().get("VsdxkitMarker") == "1"
         out = str(tmp_path / "out.vsdx")
@@ -173,7 +173,7 @@ def test_truncating_a_read_buffer_of_a_parsed_page_keeps_the_tree_attached(vsdx_
     """
     with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         page = vis.pages[0]
-        buffer = vis.zip_file_contents[page.filename]
+        buffer = vis.zip_file_contents[f"{vis.directory}{page.filename}"]
         buffer.read()
         buffer.truncate()
         assert _held_tree(vis, page) is page.xml
@@ -200,7 +200,7 @@ def test_assigning_page_xml_replaces_the_page_part(vsdx_copy):
         replacement.getroot().set("VsdxkitMarker", "1")
         page.xml = replacement
         assert page.xml is replacement
-        assert b"VsdxkitMarker" in (vis._package.read_bytes(vis._part_name(page.filename)) or b"")
+        assert b"VsdxkitMarker" in (vis._package.read_bytes(page.filename) or b"")
 
 
 def test_a_removed_page_does_not_write_its_part_back(vsdx_copy):
@@ -209,7 +209,7 @@ def test_a_removed_page_does_not_write_its_part_back(vsdx_copy):
     already removed."""
     with VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
         page = vis.pages[1]
-        name = vis._part_name(page.filename)
+        name = page.filename
         vis.remove_page_by_index(1)
         page.xml = ET.ElementTree(ET.Element("PageContents"))
         assert vis._package.part(name) is None
@@ -231,7 +231,7 @@ def test_an_added_page_is_in_the_store_before_any_save(vsdx_copy):
     disk at all."""
     with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         page = vis.add_page("Added")
-        held = vis._package.part(vis._part_name(page.filename))
+        held = vis._package.part(page.filename)
         assert isinstance(held, XmlPart) and held.tree is page.xml
 
 
@@ -243,7 +243,7 @@ def test_a_copied_page_brings_its_rels_part_into_the_store(vsdx_copy):
         source = next(p for p in vis.pages if p.rels_xml is not None)
         copy = vis.copy_page(source)
         assert copy.rels_xml_filename is not None
-        held = vis._package.part(vis._part_name(copy.rels_xml_filename))
+        held = vis._package.part(copy.rels_xml_filename)
         assert isinstance(held, XmlPart) and held.tree is copy.rels_xml
 
 
@@ -259,10 +259,10 @@ def test_a_copied_page_still_writes_its_rels_past_an_orphan_at_the_next_name(vsd
     with VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
         source = next(p for p in vis.pages if p.rels_xml is not None)
         candidate = vis._unused_page_part_name()
-        orphan_name = vis._part_name(f"{vis.directory}/visio/pages/_rels/{candidate}.rels")
+        orphan_name = f"/visio/pages/_rels/{candidate}.rels"
         vis._package.write_xml(orphan_name, ET.ElementTree(ET.Element("Relationships")))
         copy = vis.copy_page(source)
-        held = vis._package.part(vis._part_name(copy.rels_xml_filename))
+        held = vis._package.part(copy.rels_xml_filename)
         assert isinstance(held, XmlPart) and held.tree is copy.rels_xml
 
 
@@ -313,8 +313,8 @@ def test_a_removed_page_does_not_clobber_a_page_that_reuses_its_part_name(vsdx_c
         vis.remove_page_by_index(0)
         fresh = vis.add_page(name="Fresh")
         assert fresh.filename == removed.filename  # the fixture has changed if this does not hold
-        name = vis._part_name(fresh.filename)
-        rels_name = vis._part_name(removed.rels_xml_filename)
+        name = fresh.filename
+        rels_name = removed.rels_xml_filename
         removed.xml = ET.ElementTree(ET.Element(f"{namespace}PageContents"))
         removed.rels_xml = ET.ElementTree(ET.Element("Relationships"))
         held = vis._package.part(name)
