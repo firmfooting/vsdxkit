@@ -10,8 +10,18 @@ import xml.dom.minidom as minidom
 import xml.etree.ElementTree as ET
 from collections.abc import Generator
 from contextlib import contextmanager
+from typing import TYPE_CHECKING, TypeAlias
 
 from vsdxkit.errors import MalformedPackageError, MissingPartError, PartParseError
+
+# A parsed part. ElementTree is generic only in the type stubs: at runtime the
+# class cannot be subscripted, so `ET.ElementTree[ET.Element]` in an annotation
+# made `typing.get_type_hints` raise. Type checkers see the precise type, and
+# the runtime sees the class.
+if TYPE_CHECKING:
+    PartTree: TypeAlias = ET.ElementTree[ET.Element]
+else:
+    PartTree = ET.ElementTree
 
 # Prefixes Visio itself writes. ElementTree invents `ns0:`, `ns1:`, ... for any
 # namespace it has no prefix for, and consumers stricter than Visio -- libvisio
@@ -86,7 +96,7 @@ def register_namespaces() -> None:
         _registered = True
 
 
-def pretty_print_element(xml: ET.Element | ET.ElementTree[ET.Element]) -> str:
+def pretty_print_element(xml: ET.Element | PartTree) -> str:
     """An element, or a tree's root, as indented XML for reading.
 
     Registers the prefixes first, so the output spells namespaces the way Visio
@@ -229,7 +239,7 @@ def make_cell_element(name: str, v: object | None = None, f: object | None = Non
     return cell
 
 
-def parse_part(data: bytes, name: str = "") -> ET.ElementTree[ET.Element]:
+def parse_part(data: bytes, name: str = "") -> PartTree:
     """Parse one package part, recording the namespace prefixes it declares.
 
     A parsed tree holds expanded names and nothing else: by the time `ET.parse`
@@ -299,7 +309,7 @@ def adopt_prefixes(root: ET.Element, source: ET.Element) -> None:
         _declared_prefixes[root] = declared
 
 
-def serialise_part(xml: ET.ElementTree[ET.Element]) -> bytes:
+def serialise_part(xml: PartTree) -> bytes:
     """One package part as bytes, prefixed the way Visio writes it.
 
     The one writer of a part's bytes: `XmlPart.current_bytes` -- reached
@@ -330,7 +340,7 @@ def xml_value(value: object) -> str:
     return str(value)
 
 
-def require_tree(tree: ET.ElementTree[ET.Element] | None, description: str) -> ET.ElementTree[ET.Element]:
+def require_tree(tree: PartTree | None, description: str) -> PartTree:
     """A required in-memory ElementTree (already parsed from the package)."""
     if tree is None:
         raise MissingPartError(f"expected document part not found: {description}")

@@ -13,16 +13,19 @@ holds ``vis``, and the document is the thing being asked about.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Protocol
 
-if TYPE_CHECKING:
-    from vsdxkit.vsdxfile import VisioFile
+
+class GuardedDocument(Protocol):
+    """What a part needs from the document it belongs to: a refusal once it is closed."""
+
+    def _require_open(self, operation: str) -> None: ...
 
 
 class DocumentPart:
     @property
-    def _document(self) -> VisioFile:
-        """The VisioFile whose XML this part would change."""
+    def _document(self) -> GuardedDocument:
+        """The document whose XML this part would change."""
         raise NotImplementedError
 
     def _require_open(self, operation: str) -> None:

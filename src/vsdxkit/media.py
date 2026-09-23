@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from vsdxkit.errors import NotFoundError, VisioFileNotOpen
 from vsdxkit.shapes import Shape
 from vsdxkit.vsdxfile import VisioFile
+from vsdxkit.xmlio import PartTree
 
 
 def _media_path(filename: str) -> str:
@@ -73,7 +73,7 @@ class Media:
         return shape
 
     @property
-    def rels_xml(self) -> ET.ElementTree[ET.Element] | None:
+    def rels_xml(self) -> PartTree | None:
         return self.media.pages[0].rels_xml
 
     @property

@@ -40,7 +40,7 @@ from vsdxkit.partnames import (
 )
 from vsdxkit.shapes import Shape, _text_runs_of, _write_text, find_or_create_shapes_tag, substitute
 from vsdxkit.templating import JinjaTemplatingMixin
-from vsdxkit.xmlio import adopt_prefixes, register_namespaces, require_attribute, require_element, require_tree
+from vsdxkit.xmlio import PartTree, adopt_prefixes, register_namespaces, require_attribute, require_element, require_tree
 
 if TYPE_CHECKING:
     from vsdxkit.media import Media
@@ -185,7 +185,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             raise VisioFileNotOpen(f"{operation} is not available once the document is closed")
 
     @staticmethod
-    def _part_tree(tree: ET.ElementTree[ET.Element] | None, description: str) -> ET.ElementTree[ET.Element]:
+    def _part_tree(tree: PartTree | None, description: str) -> PartTree:
         """A required document part (pages.xml, app.xml, ...).
 
         A missing part means the package is malformed for the operation being
@@ -194,12 +194,12 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         return require_tree(tree, description)
 
     @staticmethod
-    def _part_root(tree: ET.ElementTree[ET.Element] | None, description: str) -> ET.Element:
+    def _part_root(tree: PartTree | None, description: str) -> ET.Element:
         """Root element of a required document part."""
         return require_element(VisioFile._part_tree(tree, description).getroot(), f"{description} root")
 
     @staticmethod
-    def pretty_print_element(xml: Element | ET.ElementTree[ET.Element]) -> str:
+    def pretty_print_element(xml: Element | PartTree) -> str:
         return xmlio.pretty_print_element(xml)
 
     def _check_relationship_target(self, name: str, subject: str, target: str) -> None:
@@ -220,14 +220,14 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         except ValueError as error:
             raise MalformedPackageError(f"{subject} targets {target!r}, which is not a part name in this package") from error
 
-    def _require_part_xml(self, name: str, description: str) -> ET.ElementTree[ET.Element]:
+    def _require_part_xml(self, name: str, description: str) -> PartTree:
         """The store's own tree for a required part, or a MissingPartError naming it."""
         tree = self._package.read_xml(name)
         if tree is None:
             raise MissingPartError(f"expected XML part not found: {description} ({name})")
         return tree
 
-    def _set_part_xml(self, name: str, tree: ET.ElementTree[ET.Element] | None) -> None:
+    def _set_part_xml(self, name: str, tree: PartTree | None) -> None:
         """Make `tree` the part called `name`, or take the part out for None.
 
         Handing back the tree the store already holds is not a change, and
@@ -245,7 +245,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         # what the part already meant still saves as the bytes it arrived as
         self._package.replace_tree(name, tree)
 
-    def _set_document_part_xml(self, attribute: str, name: str, tree: ET.ElementTree[ET.Element] | None) -> None:
+    def _set_document_part_xml(self, attribute: str, name: str, tree: PartTree | None) -> None:
         """`_set_part_xml` for a part the document itself is wired to, which None may not remove.
 
         `app.xml`, `document.xml`, `pages.xml` and the rest are each named by a
@@ -265,51 +265,51 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         self._set_part_xml(name, tree)
 
     @property
-    def pages_xml(self) -> ET.ElementTree[ET.Element] | None:
+    def pages_xml(self) -> PartTree | None:
         return self._package.read_xml(PAGES_PART)
 
     @pages_xml.setter
-    def pages_xml(self, tree: ET.ElementTree[ET.Element] | None) -> None:
+    def pages_xml(self, tree: PartTree | None) -> None:
         self._set_document_part_xml("pages_xml", PAGES_PART, tree)
 
     @property
-    def pages_xml_rels(self) -> ET.ElementTree[ET.Element] | None:
+    def pages_xml_rels(self) -> PartTree | None:
         return self._package.read_xml(relationships_part_name(PAGES_PART))
 
     @pages_xml_rels.setter
-    def pages_xml_rels(self, tree: ET.ElementTree[ET.Element] | None) -> None:
+    def pages_xml_rels(self, tree: PartTree | None) -> None:
         self._set_document_part_xml("pages_xml_rels", relationships_part_name(PAGES_PART), tree)
 
     @property
-    def content_types_xml(self) -> ET.ElementTree[ET.Element] | None:
+    def content_types_xml(self) -> PartTree | None:
         return self._package.read_xml(CONTENT_TYPES_PART)
 
     @content_types_xml.setter
-    def content_types_xml(self, tree: ET.ElementTree[ET.Element] | None) -> None:
+    def content_types_xml(self, tree: PartTree | None) -> None:
         self._set_document_part_xml("content_types_xml", CONTENT_TYPES_PART, tree)
 
     @property
-    def app_xml(self) -> ET.ElementTree[ET.Element] | None:
+    def app_xml(self) -> PartTree | None:
         return self._package.read_xml(APP_PART)
 
     @app_xml.setter
-    def app_xml(self, tree: ET.ElementTree[ET.Element] | None) -> None:
+    def app_xml(self, tree: PartTree | None) -> None:
         self._set_document_part_xml("app_xml", APP_PART, tree)
 
     @property
-    def document_xml(self) -> ET.ElementTree[ET.Element] | None:
+    def document_xml(self) -> PartTree | None:
         return self._package.read_xml(DOCUMENT_PART)
 
     @document_xml.setter
-    def document_xml(self, tree: ET.ElementTree[ET.Element] | None) -> None:
+    def document_xml(self, tree: PartTree | None) -> None:
         self._set_document_part_xml("document_xml", DOCUMENT_PART, tree)
 
     @property
-    def document_xml_rels(self) -> ET.ElementTree[ET.Element] | None:
+    def document_xml_rels(self) -> PartTree | None:
         return self._package.read_xml(relationships_part_name(DOCUMENT_PART))
 
     @document_xml_rels.setter
-    def document_xml_rels(self, tree: ET.ElementTree[ET.Element] | None) -> None:
+    def document_xml_rels(self, tree: PartTree | None) -> None:
         self._set_document_part_xml("document_xml_rels", relationships_part_name(DOCUMENT_PART), tree)
 
     @property
@@ -955,7 +955,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             # a copied page reaches here as a string, which drops the prefixes
             # its source declared; the copy is still the same page
             adopt_prefixes(new_page_root, require_element(source_page.xml.getroot(), "source page root"))
-        new_page_xml: ET.ElementTree[ET.Element] = ET.ElementTree(new_page_root)
+        new_page_xml: PartTree = ET.ElementTree(new_page_root)
         new_page_path = target_part_name(PAGES_PART, new_page_filename)
 
         # update pages.xml - insert the PageElement Element in it's correct location
