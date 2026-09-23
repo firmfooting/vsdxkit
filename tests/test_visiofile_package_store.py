@@ -42,9 +42,20 @@ def test_the_document_parts_are_the_stores_trees(vsdx_copy):
 
 
 def test_zip_file_contents_is_a_view_of_the_store(vsdx_copy):
-    """Fails if `zip_file_contents` is still a plain dict rather than a view over `_package`."""
+    """Fails if `zip_file_contents` is a copy of the package rather than a view over `_package`.
+
+    Matching the store's names in archive order is not enough: a dict built
+    from the archive at open does that too, and is a second copy of the
+    package that the store's writes never reach. A part the store gains after
+    the mapping was taken has to show up through it.
+    """
     with VisioFile(vsdx_copy("test1.vsdx")) as vis:
-        assert list(vis.zip_file_contents) == [f"{vis.directory}{name}" for name in vis._package.names()]
+        contents = vis.zip_file_contents
+        assert list(contents) == [f"{vis.directory}{name}" for name in vis._package.names()]
+        vis._package.write_bytes("/visio/vsdxkit-marker.xml", b"<Marker/>")
+        key = f"{vis.directory}/visio/vsdxkit-marker.xml"
+        assert list(contents)[-1] == key
+        assert contents[key].getvalue() == b"<Marker/>"
 
 
 @pytest.mark.allow_invalid_package  # a page that is not XML is the point
