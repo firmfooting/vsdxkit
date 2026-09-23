@@ -615,11 +615,18 @@ class VisioFile(JinjaTemplatingMixin):
         return require_element(root.find(f"{ext_prop_namespace}HeadingPairs"), "app.xml HeadingPairs")
 
     def _lists_titles(self) -> bool:
-        """Whether app.xml lists this document's parts by title. Both it and its TitlesOfParts are optional."""
+        """Whether app.xml lists this document's parts by title, in sections a new title can be counted in.
+
+        app.xml, its TitlesOfParts and its HeadingPairs are each optional.
+        Without HeadingPairs no title belongs to a section, so there is no
+        section for a new one to join.
+        """
         if self.app_xml is None:
             return False
-        titles = self._part_root(self.app_xml, "docProps/app.xml").find(f"{ext_prop_namespace}TitlesOfParts")
-        return titles is not None and titles.find(f"{vt_namespace}vector") is not None
+        root = self._part_root(self.app_xml, "docProps/app.xml")
+        titles = root.find(f"{ext_prop_namespace}TitlesOfParts")
+        has_titles = titles is not None and titles.find(f"{vt_namespace}vector") is not None
+        return has_titles and root.find(f"{ext_prop_namespace}HeadingPairs") is not None
 
     def _titles_of_parts(self) -> Element:
         # return TitlesOfParts element from app.xml

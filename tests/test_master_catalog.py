@@ -441,3 +441,12 @@ def test_a_colliding_import_takes_a_name_no_master_already_has(vsdx_copy):
         instance.copy(target.pages[0])
         names = [master.attrib["NameU"] for master in target._masters.root]
         assert len(names) == len(set(names)), names
+
+
+def test_a_target_whose_app_xml_has_no_heading_pairs_still_takes_a_copy(vsdx_copy):
+    """Fails if a copy into a document whose app.xml has no HeadingPairs raises: without them no title has a section."""
+    with VisioFile(vsdx_copy("test_master.vsdx")) as source, VisioFile(vsdx_copy("test1.vsdx")) as target:
+        app = target.app_xml.getroot()
+        app.remove(app.find("{http://schemas.openxmlformats.org/officeDocument/2006/extended-properties}HeadingPairs"))
+        _master_instance(source).copy(target.pages[0])
+        assert len(target.master_pages) == 1
