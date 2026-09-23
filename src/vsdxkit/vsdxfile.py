@@ -347,6 +347,10 @@ class VisioFile(JinjaTemplatingMixin):
         """Re-read the masters from the package. Idempotent."""
         self._masters.load()
 
+    def _master_revision(self) -> int:
+        """The catalog's :attr:`MasterCatalog.revision`: a master resolved at one count holds until the next."""
+        return self._masters.revision
+
     def get_master_page_by_id(self, id: str) -> Page | None:
         """The master page with this ID, as :attr:`Shape.master_page_ID` names it, or None."""
         return self._masters.by_id(id)

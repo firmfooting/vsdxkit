@@ -75,6 +75,7 @@ class MasterCatalog:
         self._store = store
         self._make_page = make_page
         self._pages: list[Page] = []
+        self._revision = 0
         # which master here each source master was imported as, by the
         # source's ID: an import renamed to avoid a collision no longer
         # matches by name, and would be imported again by every later copy
@@ -84,6 +85,15 @@ class MasterCatalog:
     def pages(self) -> list[Page]:
         """The masters as pages, in `masters.xml` order. A copy: adding a master goes through the catalog."""
         return list(self._pages)
+
+    @property
+    def revision(self) -> int:
+        """Counts the changes to which masters the catalog holds: every load and every master added.
+
+        A master resolved while this is unchanged is still the master: IDs
+        are never reused, and nothing else here adds, drops or replaces one.
+        """
+        return self._revision
 
     @property
     def root(self) -> Element | None:
@@ -174,6 +184,7 @@ class MasterCatalog:
             page.master_base_id = master.attrib.get("BaseID")
             pages.append(page)
         self._pages = pages
+        self._revision += 1
 
     def bootstrap(self) -> None:
         """Give a package with no masters part an empty one, declared and related.
@@ -315,6 +326,7 @@ class MasterCatalog:
         page.master_unique_id = element.attrib.get("UniqueID")
         page.master_base_id = element.attrib.get("BaseID")
         self._pages.append(page)
+        self._revision += 1
         return page
 
     def _unused_master_part(self, rels_root: Element) -> str:

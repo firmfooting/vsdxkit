@@ -279,8 +279,13 @@ class DataProperty(InheritedRow, DocumentPart):
     def __init__(self, *, xml: Element, shape: Shape):
         """init a DataProperty from a property xml element in a Shape object"""
         name = xml.attrib.get("N")
-        # get Cell element for each property of DataProperty
-        label_cell = xml.find(f'{namespace}Cell[@N="Label"]')
+        # the row's cells by name, first of each, in one pass: a property is
+        # read whenever data_properties is, so four searches of the row apiece
+        # added up
+        cells: dict[str, Element] = {}
+        for cell in xml.iterfind(f"{namespace}Cell"):
+            cells.setdefault(cell.get("N", ""), cell)
+        label_cell = cells.get("Label")
 
         # initialise empty DataProperty properties
         self.shape = shape  # reference back to Shape object
@@ -295,9 +300,9 @@ class DataProperty(InheritedRow, DocumentPart):
         self.xml = xml  # reference to xml used to create DataProperty
 
         if isinstance(label_cell, Element):
-            value_type_cell = xml.find(f'{namespace}Cell[@N="Type"]')
-            prompt_cell = xml.find(f'{namespace}Cell[@N="Prompt"]')
-            sort_key_cell = xml.find(f'{namespace}Cell[@N="SortKey"]')
+            value_type_cell = cells.get("Type")
+            prompt_cell = cells.get("Prompt")
+            sort_key_cell = cells.get("SortKey")
 
             # get values from each Cell Element
             self.value_type = value_type_cell.attrib.get("V") if isinstance(value_type_cell, Element) else None
@@ -452,14 +457,11 @@ class Shape(DocumentPart):
     xml: Element
     parent: Page | Shape
     page: Page
-    cells: dict[str, Cell]
     _geometry: Geometry | None
     _geometry_xml: Element | None
     _master_shape: Shape | None
     _master_shape_resolved: bool
-    _master_shape_key: tuple[str | None, str | None, tuple[Element, ...] | None] | None
-    _data_properties: dict[str, DataProperty] | None
-    _data_properties_key: tuple[Element, ...] | None
+    _master_shape_key: tuple[str | None, str | None, int] | None
     _slot: int | None
 
     def __init__(self, xml: Element, parent: Page | Shape, page: Page):
@@ -467,46 +469,16 @@ class Shape(DocumentPart):
         self.parent = parent
         self.page = page
 
-        # get Cells in Shape
-        self.cells = {}
         self._geometry = None
         self._master_shape = None
         self._master_shape_resolved = False
         self._slot = None  # where this element last sat among its container's children
         self._master_shape_key = None
-        for e in self.xml.findall(f"{namespace}Cell"):
-            cell = Cell(xml=e, shape=self)
-            if cell.name is not None:
-                self.cells[cell.name] = cell
         geometry = self.xml.find(f'{namespace}Section[@N="Geometry"]')
-        # the section is located here, alongside the cells read out of it, but
-        # the Geometry object over it is left to the property: building one
-        # resolves this shape's master, and a caller walking a page for ids or
-        # text never looks at geometry at all
+        # the section is located here, but the Geometry object over it is left
+        # to the property: building one resolves this shape's master, and a
+        # caller walking a page for ids or text never looks at geometry at all
         self._geometry_xml = geometry if type(geometry) is Element else None
-        if type(geometry) is Element:
-            # this shape's own Geometry cells, read straight from the XML; the
-            # merged view of the master's is Shape.geometry's job
-            for r in geometry.findall(f"{namespace}Row"):
-                row_type = r.attrib["T"]
-                if row_type:
-                    for e in r.findall(f"{namespace}Cell"):
-                        cell = Cell(xml=e, shape=self)
-                        if cell.name is not None:
-                            self.cells[f"Geometry/{row_type}/{cell.name}"] = cell
-
-        control = self.xml.find(f'{namespace}Section[@N="Control"]')
-        if type(control) is Element:
-            for r in control.findall(f"{namespace}Row"):
-                row_type = r.attrib["N"]
-                if row_type:
-                    for e in r.findall(f"{namespace}Cell"):
-                        cell = Cell(xml=e, shape=self)
-                        if cell.name is not None:
-                            self.cells[f"Control/{row_type}/{cell.name}"] = cell
-
-        self._data_properties = None  # internal field to hold Shape.data_properties, set by property
-        self._data_properties_key = None  # the Property section state the cache was built from
 
     def __repr__(self) -> str:
         if not self.is_attached:
@@ -676,10 +648,9 @@ class Shape(DocumentPart):
         no geometry at all.
 
         Only the building is deferred. Which section it reads is decided when
-        the Shape is built, as :attr:`cells` decides which of that section's
-        rows it lists, so the two stay in step: a section added to or removed
-        from the XML afterwards is seen by neither until the shape is read
-        again.
+        the Shape is built: a Geometry section added to or removed from the
+        XML afterwards is seen from the next Shape for this element, not this
+        one.
         """
         self._require_attached("reading a shape's geometry")
         if self._geometry_xml is None:
@@ -792,22 +763,15 @@ class Shape(DocumentPart):
 
         The result is held rather than rebuilt on every read. Resolving a
         master walks the master page and builds a Shape there, and a shape
-        reads through its master for geometry, cells, text and data
-        properties, so the same answer was being paid for several times over.
+        reads through its master for every cell it inherits: resolving it
+        afresh each time made reading a page's coordinates over twice as slow.
 
-        The memo is checked against the reference this shape holds and the
-        master element's children, by identity, in the way
-        :attr:`data_properties` is checked against this shape's Property rows.
-        Repointing ``master_page_ID`` or ``master_shape_ID``, as
-        :meth:`vsdxkit.connectors.Connect.create` does, resolves the new master rather than
-        answering with the old one, and a cell added to, removed from or
-        swapped on the master is picked up on the next read. One limitation
-        remains, the same one :attr:`data_properties` has: the key covers the
-        master shape's own children, not their contents, so a row added
-        *inside* the master's Geometry or Property section leaves the memo in
-        place. Walking the page again resolves it - ``child_shapes`` and
-        ``all_shapes`` mint a Shape per element, so no memo survives a
-        traversal.
+        It is resolved again when what decides it changes: this shape's
+        ``Master`` or ``MasterShape`` attribute, read from the XML each time,
+        or the masters the document holds, which
+        :attr:`vsdxkit.masters.MasterCatalog.revision` counts. The master's
+        cells and properties are read live through the Shape held, so an edit
+        to the master shows up on the next read.
         """
         if self._master_shape_resolved and self._master_shape_key == self._master_shape_state():
             return self._master_shape
@@ -816,15 +780,13 @@ class Shape(DocumentPart):
         self._master_shape_key = self._master_shape_state()
         return self._master_shape
 
-    def _master_shape_state(self) -> tuple[str | None, str | None, tuple[Element, ...] | None]:
+    def _master_shape_state(self) -> tuple[str | None, str | None, int]:
         """What the memo was built from.
 
         The reference this shape holds, which is writable - ``Connect.create``
-        repoints ``master_page_ID`` - and the master element's children by
-        identity.
+        repoints ``master_page_ID`` - and the catalog's count of master changes.
         """
-        master = self._master_shape
-        return (self.master_page_ID, self.master_shape_ID, None if master is None else tuple(master.xml))
+        return (self.master_page_ID, self.master_shape_ID, self.page.vis._master_revision())
 
     def _resolve_master_shape(self) -> Shape | None:
         if self.master_page_ID is None:
@@ -857,17 +819,9 @@ class Shape(DocumentPart):
         Get data properties of the shape - which labels, names, and values
         returns a dictionary of DataProperty objects indexed by property label
 
-        The result is cached against this shape's own ``Property`` rows, so
-        adding, removing or replacing one is picked up on the next read. A row
-        edited *in place* is not: the cache is keyed on row identity, so
-        renaming a property's ``Label`` leaves the dictionary keyed under the
-        old label until some row is added or removed. One limitation remains,
-        over inherited properties:
-
-        - A property inherited from a master is resolved when this shape is
-          first read. Editing the master afterwards is not reflected here: the
-          cache key covers this shape's own rows, not the master's, and this
-          shape holds the master it resolved for as long as it lives.
+        Read from the XML on every call, so a property added, removed or
+        relabelled - through this Shape object, another one for the same
+        shape, or the XML itself - is in the next dictionary.
 
         Setting :attr:`DataProperty.value` on an inherited property is safe:
         the property is marked inherited, so writing to it creates an override
@@ -881,13 +835,6 @@ class Shape(DocumentPart):
         self._require_attached("reading a shape's data properties")
         properties_xml = self.xml.find(f'{namespace}Section[@N="Property"]')
         property_rows: list[Element] = [] if properties_xml is None else properties_xml.findall(f"{namespace}Row")
-        # The rows themselves, by identity: a tuple of them costs no more to
-        # build than a count and also catches a row that was swapped for a
-        # different one, which leaves the count unchanged.
-        key = tuple(property_rows)
-        if self._data_properties is not None and self._data_properties_key == key:
-            return self._data_properties
-
         # marked copies, so neither this shape's rows nor a write through an
         # inherited property reaches what the master hands back
         master = self.master_shape
@@ -899,16 +846,70 @@ class Shape(DocumentPart):
             # add properties to dict to allow fast lookup by property.label
             # (a property row without a Label cell keys under "")
             properties[data_prop.label or ""] = data_prop
-        self._data_properties = properties  # cache for next call
-        self._data_properties_key = key
         return properties
+
+    @property
+    def cells(self) -> dict[str, Cell]:
+        """This shape's own cells by name, read from its XML on every call.
+
+        A top-level cell keys by its name, a Geometry row's cell by
+        ``Geometry/{row type}/{name}`` and a Control row's by
+        ``Control/{row name}/{name}``. A cell the shape inherits from its
+        master is not here; :meth:`cell_value` and :meth:`cell_formula` look
+        there too.
+
+        The dictionary is built afresh, so a cell added through another Shape
+        object for this shape, or straight to the XML, is in the next one.
+        Changing the dictionary writes nothing.
+        """
+        self._require_attached("reading a shape's cells")
+        return {name: Cell(xml=element, shape=self) for name, element in self._cell_elements()}
+
+    def _cell_elements(self) -> Iterator[tuple[str, Element]]:
+        """This shape's own cell elements, each with the name :attr:`cells` keys it under.
+
+        A name can come round twice; the later element is the one that counts.
+        """
+        for element in self.xml.iterfind(f"{namespace}Cell"):
+            name = element.get("N")
+            if name is not None:
+                yield name, element
+        for section_name, row_key in (("Geometry", "T"), ("Control", "N")):
+            section = self.xml.find(f'{namespace}Section[@N="{section_name}"]')
+            if section is None:
+                continue
+            for row in section.iterfind(f"{namespace}Row"):
+                row_name = row.get(row_key)
+                if not row_name:
+                    continue
+                for element in row.iterfind(f"{namespace}Cell"):
+                    name = element.get("N")
+                    if name is not None:
+                        yield f"{section_name}/{row_name}/{name}", element
+
+    def _cell(self, name: str) -> Cell | None:
+        """This shape's own cell `name`, as :attr:`cells` would key it, or ``None``.
+
+        A plain name, the common case, is found among the top-level cells
+        without reading the sections.
+        """
+        found = None
+        if "/" in name:
+            for key, element in self._cell_elements():
+                if key == name:
+                    found = element
+        else:
+            for element in self.xml.iterfind(f"{namespace}Cell"):
+                if element.get("N") == name:
+                    found = element
+        return None if found is None else Cell(xml=found, shape=self)
 
     def shape_value(self, name: str) -> str | None:
         return self.xml.attrib.get(name, None)
 
     def cell_value(self, name: str) -> str | None:
         self._require_attached(f"reading cell {name}")
-        cell = self.cells.get(name)
+        cell = self._cell(name)
         if cell:
             return cell.value
 
@@ -920,7 +921,7 @@ class Shape(DocumentPart):
 
     def cell_formula(self, name: str) -> str | None:
         self._require_attached(f"reading cell {name}")
-        cell = self.cells.get(name)
+        cell = self._cell(name)
         if cell:
             return cell.formula
 
@@ -948,7 +949,7 @@ class Shape(DocumentPart):
         # guard covers them all; the message describes the write because which
         # setter the caller used is not knowable from here (issue #329)
         self._require_open(f"writing shape cell {name!r}")
-        cell = self.cells.get(name)
+        cell = self._cell(name)
         if cell is not None:  # update in place
             if f is not None:
                 cell.formula = f
@@ -966,11 +967,11 @@ class Shape(DocumentPart):
         if cell_xml is None:
             cell_xml = make_cell_element(name)
 
-        self.cells[name] = Cell(xml=cell_xml, shape=self)
+        cell = Cell(xml=cell_xml, shape=self)
         if f is not None:
-            self.cells[name].formula = f
+            cell.formula = f
         if v is not None:
-            self.cells[name].value = v
+            cell.value = v
         # schema order: a shape's cells come before its Text and Sections
         cells = self.xml.findall(f"{namespace}Cell")
         self.xml.insert(list(self.xml).index(cells[-1]) + 1 if cells else 0, cell_xml)
@@ -1289,7 +1290,7 @@ class Shape(DocumentPart):
         # second entry point for writing a named cell; #319 folds it into
         # _write_cell, and the guard has to be on both until it does
         self._require_open(f"writing shape cell {name!r}")
-        cell = self.cells.get(name)
+        cell = self._cell(name)
         if cell is not None:
             if f is not None:
                 cell.formula = f
@@ -1305,9 +1306,7 @@ class Shape(DocumentPart):
             if child.tag == f"{vsdxkit.namespace}Cell":
                 insert_at = i + 1
         self.xml.insert(insert_at, cell_el)
-        cell = Cell(xml=cell_el, shape=self)
-        self.cells[name] = cell
-        return cell
+        return Cell(xml=cell_el, shape=self)
 
     @property
     def height(self) -> float | None:
@@ -1397,8 +1396,8 @@ class Shape(DocumentPart):
             if self.geometry is not None:
                 self.geometry.set_move_to(0.0, 0.0)
                 self.geometry.set_line_to(width, height)
-            txt_pin_x = self.cells.get("TxtPinX")
-            txt_pin_y = self.cells.get("TxtPinY")
+            txt_pin_x = self._cell("TxtPinX")
+            txt_pin_y = self._cell("TxtPinY")
             if txt_pin_x and txt_pin_y:
                 if is_connector:
                     text_x = width / 2
@@ -1426,7 +1425,7 @@ class Shape(DocumentPart):
                 if formula and c.name is not None:
                     master = self.master_shape
                     if formula == "Inh" and master is not None:
-                        master_c = master.cells.get(c.name)
+                        master_c = master._cell(c.name)
                         formula = master_c.formula if master_c else formula
                     if formula is None:
                         continue

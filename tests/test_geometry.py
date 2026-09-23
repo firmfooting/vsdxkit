@@ -650,16 +650,16 @@ def test_the_master_is_resolved_once_per_shape(monkeypatch):
 def test_the_section_is_located_when_the_shape_is_built():
     """Only building the Geometry is deferred; which section it reads is not.
 
-    `Shape.cells` lists that same section's rows from `__init__`, so the two
-    stay in step: a section removed from the XML afterwards is seen by neither
-    until the shape is read again.
+    `Shape.cells` reads the XML on every call (#102), so it drops a removed
+    section's rows at once; the Geometry keeps the section it located until
+    the shape is read again.
     """
     with VisioFile(TEST9) as vis:
         line = vis.pages[0].find_shape_by_text("Line A")
         line.xml.remove(geometry_xml(line))
 
+        assert "Geometry/LineTo/X" not in line.cells
         assert line.geometry is not None  # located before the removal
-        assert "Geometry/LineTo/X" in line.cells
         assert reparse(line).geometry is None
 
 

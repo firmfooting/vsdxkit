@@ -100,6 +100,7 @@ def test_a_detached_shape_refuses_reads_and_writes(vsdx_copy):
             lambda: shape.x,
             lambda: shape.cell_value("PinX"),
             lambda: shape.data_properties,
+            lambda: shape.cells,
             lambda: list(shape.children),
         ):
             with pytest.raises(InvalidOperationError, match=r"shape 1 .*no longer"):
