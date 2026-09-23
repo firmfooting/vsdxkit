@@ -72,10 +72,20 @@ class PackageError(VsdxError):
 
 
 class MalformedPackageError(PackageError, ValueError):
-    """A part of the package does not hold what the format requires.
+    """The package's own content breaks the format, so it cannot be read as it stands.
 
-    Bytes that are not well-formed XML, or a ShapeSheet cell holding something
-    that is not the number its cell has to be.
+    Raised for:
+
+    - an archive, or a member of one, that cannot be read or decoded;
+    - a part that is not well-formed XML, as :class:`PartParseError`;
+    - a part that declares an encoding that cannot be decoded;
+    - a required element or attribute that is missing when the package is read;
+    - a relationship target that is not a part name;
+    - a ShapeSheet number that is not a number.
+
+    Every one of these is a fault in the file, not in how the caller used the
+    library. It is a ``ValueError`` because several of these sites raised one
+    before the hierarchy existed, and code that caught that still catches this.
     """
 
 
