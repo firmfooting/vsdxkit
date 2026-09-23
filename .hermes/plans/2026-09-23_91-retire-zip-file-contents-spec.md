@@ -49,7 +49,7 @@ Today they hold `/home/me/drawing/visio/pages/page1.xml`. They will hold `/visio
 
 ### D3. Removals are recorded in the changelog, not a migration guide
 
-#347 closed #87 by deciding against `docs/migration-1.0.rst`. Breaking changes live in `CHANGELOG.md`, which release-please builds from the squash commit, so the PR body's `BREAKING CHANGE:` footer carries every removed name and what to use instead.
+#347 closed #87 by deciding against `docs/migration-1.0.rst`. Releases go through release-please, as in every firmfooting product. `publish.yml` runs it as the firmfooting-bot app, it keeps the release PR (currently #349, 0.9.0) up to date, and it writes `CHANGELOG.md` from the conventional commits on `main`. Both PRs are squash-merged, so each one's title (`refactor!: …`) and its body's `BREAKING CHANGE:` footer become the changelog entry. That footer lists every removed name and what to use instead. Nothing edits `CHANGELOG.md` or the version by hand.
 
 ### D4. `KNOWN_DRIFT.md` becomes a short note in the README
 
