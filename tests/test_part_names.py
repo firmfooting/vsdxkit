@@ -120,8 +120,8 @@ def test_the_connector_master_is_imported_from_the_donor_not_the_target(vsdx_cop
         page = vis.pages[0]
         shapes = page.child_shapes
         Connect.create(page=page, from_shape=shapes[0], to_shape=shapes[1])
-        donor = media.donor(media.MEDIA)
-        master_page_id = media.connector_shape().master_page_ID
+        donor = media._donor(media.MEDIA)
+        master_page_id = media._sentinel(media.MEDIA, media.STRAIGHT_CONNECTOR).master_page_ID
         assert master_page_id is not None
         connector_master = donor.get_master_page_by_id(master_page_id)
         assert connector_master is not None

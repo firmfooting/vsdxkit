@@ -1183,7 +1183,7 @@ class VisioFile(JinjaTemplatingMixin):
         # module level would be a cycle
         from vsdxkit import media
 
-        new_shape = media.palette_shape(palette_name).copy(page)
+        new_shape = media.copy_palette_shape(palette_name, page)
 
         # palette shapes are drawn around their centre: position via PinX/PinY
         new_shape.get_or_create_cell("PinX", v=str(x))

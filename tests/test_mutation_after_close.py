@@ -6,7 +6,6 @@ would have written did not, so the failure surfaced at the save, or never
 bundled donor, too.
 """
 
-import functools
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
 
@@ -150,16 +149,10 @@ def test_the_guard_follows_the_page_not_the_receiver(vsdx_copy):
         into_closed_destination.copy(destination.pages[0])
 
 
-def record_donor_loads(monkeypatch) -> list[str]:
-    """Record every bundled donor loaded for the duration of a test, starting from none loaded."""
-    loaded: list[str] = []
-    load = vsdxkit.media.donor.__wrapped__
-
-    def recording(filename: str) -> VisioFile:
-        loaded.append(filename)
-        return load(filename)
-
-    monkeypatch.setattr(vsdxkit.media, "donor", functools.cache(recording))
+def record_donor_loads(monkeypatch) -> dict[str, VisioFile]:
+    """The donors loaded for the duration of a test, starting from none loaded."""
+    loaded: dict[str, VisioFile] = {}
+    monkeypatch.setattr(vsdxkit.media, "_donors", loaded)
     return loaded
 
 
@@ -172,7 +165,7 @@ def test_create_shape_after_close_loads_no_donor(vsdx_copy, monkeypatch):
     with pytest.raises(VisioFileNotOpen):
         vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="B")
 
-    assert loaded == []
+    assert loaded == {}
 
 
 def test_connect_shapes_after_close_loads_no_donor(vsdx_copy, monkeypatch):
@@ -185,7 +178,7 @@ def test_connect_shapes_after_close_loads_no_donor(vsdx_copy, monkeypatch):
     with pytest.raises(VisioFileNotOpen):
         page.connect_shapes(shapes[0], shapes[1])
 
-    assert loaded == []
+    assert loaded == {}
 
 
 def _page_xml(vis: VisioFile) -> list[bytes]:

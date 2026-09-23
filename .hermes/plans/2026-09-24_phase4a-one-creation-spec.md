@@ -21,20 +21,21 @@
 ## Decisions
 
 **D1. `vsdxkit.media` is a set of functions over donors loaded once per process.**
-- **Loading:** `_donor(filename)` is `functools.cache`d. It opens the bundled package and closes it at once.
+- **Loading:** `_donor(filename)` opens the bundled package and closes it at once, under a lock, so threads racing to create their first shapes load each donor once. Codex caught `functools.cache`'s lack of single-flight on #398.
 - **Why closing works:** a closed `VisioFile` still reads, and copying from it works, but every guarded write raises `VisioFileNotOpen`. So no caller can change what the next creation copies.
 - **Nothing to release:** the package is read into memory with no handle held, so documents have nothing to close. `VisioFile._media`, `_shared_media` and the `Media` class go.
 - **Lookups:**
-  - `palette_shape(name)` and `media_shape(sentinel)` match the sentinel text exactly. An unknown name raises `NotFoundError` listing the names there are, which closes #310.
-  - `connector_shape(curved=False)` answers the straight or curved connector.
+  - `copy_palette_shape(name, page)` and `copy_connector(page, curved=False)` answer a copy on `page`, made through `Shape.copy`.
+  - They match the sentinel text exactly. An unknown name raises `NotFoundError` listing the names there are, which closes #310.
+- **Only copies leave the module.** No function hands out a donor or one of its shapes, and `media_style` answers a deep copy. A caller holding a donor's own elements could edit them past the closed guard, and every later creation would copy the edit (Codex, #398).
   - `media_style(style_id)` answers the media document's StyleSheet.
 - **Ruling: no `ShapeKind` yet.** No public `ShapeKind` enum is added here. Phase 5 names the public creation API; the sentinel map stays private.
 
 **D2. `Shape.copy` is the one creation operation.**
 - **The steps:** validate, resolve and import masters through the catalog, copy the element, allocate IDs, insert at the page's top level, relate the page to its masters, and wrap.
 - **Callers:**
-  - `create_shape` calls `palette_shape(name).copy(page)`, then sets position, size and text.
-  - `Connect.create` calls `connector_shape().copy(page)`.
+  - `create_shape` calls `copy_palette_shape(name, page)`, then sets position, size and text.
+  - `Connect.create` calls `copy_connector(page)`.
 - **Below it:** `copy_shape` and `insert_shape` stay as the element-level allocation and insert primitives that `Shape.copy` uses.
 
 **D3. A copy's parent is the page it lands on, and it names the master it inherited, whatever page is given.**

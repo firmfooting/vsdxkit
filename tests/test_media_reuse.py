@@ -26,11 +26,9 @@ DONORS = (media.MEDIA, media.PALETTE)
 
 
 @pytest.fixture
-def fresh_donors():
-    """An empty donor cache for the test, and another after it, so no test sees a donor another loaded."""
-    media.donor.cache_clear()
-    yield
-    media.donor.cache_clear()
+def fresh_donors(monkeypatch):
+    """A donor table of the test's own, so it loads its donors and no other test sees them."""
+    monkeypatch.setattr(media, "_donors", {})
 
 
 def count_package_opens(monkeypatch) -> Counter:
@@ -80,11 +78,11 @@ def _donor_xml() -> dict[str, bytes]:
     """Every part of both donors as its store holds it, parsed parts serialised."""
     parts = {}
     for filename in DONORS:
-        store = media.donor(filename)._package
+        store = media._donor(filename)._package
         for name in store.names():
             parts[f"{filename}{name}"] = store.read_bytes(name)
     for filename in DONORS:
-        for page in media.donor(filename).pages:
+        for page in media._donor(filename).pages:
             parts[f"{filename}:{page.name}"] = ET.tostring(page.xml.getroot())
     return parts
 
@@ -116,7 +114,7 @@ def test_provisioning_masters_reads_only_the_donors_master_parts(vsdx_copy, monk
     """
     with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         page = vis.pages[0]
-        donor = media.donor(media.MEDIA)
+        donor = media._donor(media.MEDIA)
         read: list[str] = []
         original = PackageStore.read_bytes
 
@@ -137,7 +135,7 @@ def test_provisioning_masters_copies_the_donors_master_parts_byte_for_byte(vsdx_
     with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         assert not [n for n in vis._package.names() if n.startswith("/visio/masters/")]
         page = vis.pages[0]
-        donor = media.donor(media.MEDIA)
+        donor = media._donor(media.MEDIA)
         shapes = page.child_shapes
         Connect.create(page=page, from_shape=shapes[0], to_shape=shapes[1])
         donor_masters = {n: donor._package.read_bytes(n) for n in donor._package.names() if n.startswith("/visio/masters/")}
@@ -162,7 +160,7 @@ def test_provisioning_masters_leaves_a_sibling_of_the_masters_folder_behind(vsdx
     """
     with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         page = vis.pages[0]
-        media.donor(media.MEDIA)._package.write_bytes("/visio/masters-old/x.xml", b"<x/>")
+        media._donor(media.MEDIA)._package.write_bytes("/visio/masters-old/x.xml", b"<x/>")
         shapes = page.child_shapes
         Connect.create(page=page, from_shape=shapes[0], to_shape=shapes[1])
         assert vis._package.part("/visio/masters-old/x.xml") is None

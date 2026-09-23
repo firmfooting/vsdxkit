@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import copy
 import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING
 from xml.etree.ElementTree import Element
@@ -109,7 +108,7 @@ class Connect:
 
             # the copy imports the connector's master, whether or not this
             # document has masters yet, and relates the page to it (#375)
-            connector_shape = media.connector_shape().copy(page)
+            connector_shape = media.copy_connector(page)
             connector_shape.text = ""  # clear text used to find shape
 
             # copy style used by new connector shape
@@ -119,10 +118,7 @@ class Connect:
                 # assume same if is ok, todo: use names for match and increment IDs
                 media_style = media.media_style(line_style_id)
                 if media_style is not None:
-                    # copy, not alias: the donor document now outlives this
-                    # call, so appending its live element would leave the two
-                    # documents sharing one mutable StyleSheet
-                    page.vis._style_sheets().append(copy.deepcopy(media_style))
+                    page.vis._style_sheets().append(media_style)  # a copy of the donor's
 
             # wire glue to the from/to shapes (Visio-faithful formulas, see
             # tests/fixtures/com_reference/manifest.json for ground truth)
