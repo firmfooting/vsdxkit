@@ -562,7 +562,8 @@ class PackageStore:
         nothing changed, promoted or not. The archive is built beside the
         target and moved over it, so a failure part-way leaves the target as
         it was; the temporary file takes the target's mode, or the source's
-        when the target is new.
+        when the target is new, wherever the platform can set it through the
+        open descriptor (see below).
 
         Saving elsewhere does not make elsewhere the source. A later `save()`
         with no target still writes where the package was opened from.
@@ -583,13 +584,19 @@ class PackageStore:
         the path. While the descriptor is still open its identity is taken with
         `fstat`, and the mode is applied with `fchmod` where the platform has
         it. The descriptor is then closed, because Windows will not rename a
-        file while any handle to it is open. Where there is no `fchmod`
-        (Windows before Python 3.13) the mode is applied by path after the
-        close. Only then is the path checked with `lstat` against the identity
-        taken through the descriptor, so a temporary entry swapped for a
-        symlink or another file after creation -- including during the
-        path-based chmod -- is refused rather than moved over the target. The
-        rename follows the check directly.
+        file while any handle to it is open. Only then is the path checked with
+        `lstat` against the identity taken through the descriptor, so a
+        temporary entry swapped for a symlink or another file after creation
+        is refused rather than moved over the target. The rename follows the
+        check directly.
+
+        Where there is no `fchmod` (Windows before Python 3.13) the mode is not
+        copied at all. Applying it by path after the close would change
+        whatever the temporary entry had been swapped for, and the identity
+        check can refuse the rename but cannot undo that chmod. On those
+        platforms the only mode bit that means anything is read-only, so what
+        is given up is small: a new target there is created with default
+        permissions instead of inheriting the source's read-only bit.
 
         A window remains between that check and the rename: someone with write
         access to the directory can swap the temporary entry in that interval,
@@ -645,8 +652,18 @@ class PackageStore:
         # Decide the mode before anything is written. Once the rename has run the
         # destination always exists, so asking afterwards would read the new
         # file's own mode back and a new target would lose the source's.
-        mode_source = destination if destination.exists() else self.source
-        mode = stat.S_IMODE(os.stat(mode_source).st_mode) if mode_source.exists() else None
+        #
+        # The mode goes on only through the open descriptor, so it is decided only
+        # where fchmod exists. Without it (Windows before Python 3.13) the mode is
+        # not copied: a chmod by path could land on whatever the temporary entry
+        # has been swapped for, and the identity check below can refuse the rename
+        # but cannot undo that side effect. Read-only is the only mode bit that
+        # means anything there, so a new target just misses the source's read-only.
+        mode: int | None = None
+        if hasattr(os, "fchmod"):
+            mode_source = destination if destination.exists() else self.source
+            if mode_source.exists():
+                mode = stat.S_IMODE(os.stat(mode_source).st_mode)
 
         destination.parent.mkdir(parents=True, exist_ok=True)
         fd, temporary = tempfile.mkstemp(prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent)
@@ -675,12 +692,12 @@ class PackageStore:
                 # The identity of the file actually written, taken through the
                 # descriptor so no path lookup can substitute another file.
                 kept = os.fstat(handle.fileno())
+                # mode is only ever set where fchmod exists; hasattr repeats that
+                # so type checkers targeting Windows before 3.13 accept the call.
                 if mode is not None and hasattr(os, "fchmod"):
                     os.fchmod(handle.fileno(), mode)
             # The handle is closed from here on: Windows refuses to rename a file
             # that has an open handle, and mkstemp does not share delete access.
-            if mode is not None and not hasattr(os, "fchmod"):
-                os.chmod(temporary, mode)
             if not os.path.samestat(kept, os.lstat(temporary)):
                 raise OSError(f"{temporary} was replaced while the package was being written to it")
             os.replace(temporary, destination)

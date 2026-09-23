@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pytest
 
+import vsdxkit.package as package_module
 from vsdxkit.package import PackageLimitError, PackageLimits, PackageStore
 
 BASEDIR = os.path.dirname(os.path.realpath(__file__))
@@ -417,17 +418,23 @@ def test_save_closes_the_temporary_file_before_renaming_it(source, tmp_path, mon
     assert _members(target) == _members(source)
 
 
-@pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits are not meaningful on Windows")
-def test_a_new_target_takes_the_source_mode_without_fchmod(source, tmp_path, monkeypatch):
-    """Fails if the no-`fchmod` path reads the mode after the rename, or skips applying it.
+def test_save_without_fchmod_never_changes_a_mode_by_path(source, tmp_path, monkeypatch):
+    """Fails if `save()` falls back to `os.chmod` or `shutil.copymode` where there is no `os.fchmod`.
 
-    Windows before Python 3.13 has no `os.fchmod`, so the mode goes on by path.
-    If the mode source is chosen after `os.replace`, the destination always
-    exists by then and the new file's own `mkstemp` mode (0o600) is copied
-    onto itself, so a new target loses the source's 0o640.
+    Windows before Python 3.13 has no `os.fchmod`. A mode applied there by
+    path, after the descriptor is closed, lands on whatever the temporary entry
+    has been swapped for, and the later identity check can refuse the rename
+    but cannot undo the chmod. So on those platforms the mode is not copied at
+    all, and the save must still succeed.
     """
+
+    def forbidden(*args, **kwargs):
+        pytest.fail(f"save() changed a mode by path: {args!r}")
+
     monkeypatch.delattr(os, "fchmod", raising=False)
-    source.chmod(0o640)
+    monkeypatch.setattr(package_module.os, "chmod", forbidden)
+    monkeypatch.setattr(shutil, "copymode", forbidden)
     target = tmp_path / "out.vsdx"
-    PackageStore.open(source).save(target)
-    assert target.stat().st_mode & 0o777 == 0o640
+    assert PackageStore.open(source).save(target) == target
+    assert target.exists()
+    assert _members(target) == _members(source)
