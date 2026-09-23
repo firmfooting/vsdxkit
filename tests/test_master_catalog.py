@@ -181,11 +181,12 @@ def test_a_page_master_relationship_takes_an_id_the_page_rels_does_not_hold(vsdx
         assert len(ids) == len(set(ids))
 
 
-def test_a_nameless_master_imports_as_unknown_and_leaves_the_catalog_usable(vsdx_copy, tmp_path):
+def test_a_nameless_master_imports_under_a_name_of_its_own(vsdx_copy, tmp_path):
     """Fails if a master with neither NameU nor Name poisons the catalog it is imported into.
 
     A master page cannot be nameless: `Page.name` falls back to pages.xml, which
-    a master page is not in, and every later lookup by name raised.
+    a master page is not in, and every later lookup by name raised. The import
+    is named `Master.N`, as Visio names a master it creates.
     """
     saved = str(tmp_path / "nameless.vsdx")
     with VisioFile(vsdx_copy("test4_connectors.vsdx")) as source, VisioFile(vsdx_copy("test1.vsdx")) as target:
@@ -196,8 +197,53 @@ def test_a_nameless_master_imports_as_unknown_and_leaves_the_catalog_usable(vsdx
         shape = _master_instance(source)
         shape.copy(target.pages[0])
         shape.copy(target.pages[0])
-        assert "Unknown" in target.master_index
+        assert len(target.master_pages) == 1
+        (master,) = target.master_pages
+        assert master.name == f"Master.{master.page_id}"
+        assert target.master_index[master.name] is master
         target.save_vsdx(saved)
+
+
+def test_two_nameless_masters_import_under_two_names(vsdx_copy):
+    """Fails if two nameless imports share a fallback name, hiding one from lookups and from TitlesOfParts."""
+    with VisioFile(vsdx_copy("test_master.vsdx")) as source, VisioFile(vsdx_copy("test1.vsdx")) as target:
+        for master in source._masters.root:
+            master.attrib.pop("NameU", None)
+            master.attrib.pop("Name", None)
+        source.load_master_pages()
+        target._masters.import_masters(source._masters, [page.page_id for page in source.master_pages])
+        names = [page.name for page in target.master_pages]
+        assert len(names) == 2
+        assert len(set(names)) == 2, names
+
+
+def test_a_renamed_import_is_recognised_by_the_next_copy(vsdx_copy):
+    """Fails if a master imported under a new name is imported again by every later copy of its instances."""
+    with VisioFile(vsdx_copy("test5_master.vsdx")) as source, VisioFile(vsdx_copy("test_master.vsdx")) as target:
+        instance = _master_instance(source)
+        own = _master_element(target, "Test Master")
+        own.attrib["NameU"] = own.attrib["Name"] = instance.master_page.name
+        target.load_master_pages()
+        first = instance.copy(target.pages[0])
+        second = instance.copy(target.pages[0])
+        assert first.master_page is second.master_page
+        assert first.master_page.name != instance.master_page.name
+
+
+def test_a_nested_group_with_an_unresolvable_master_does_not_inherit_the_outer_one(vsdx_copy):
+    """Fails if members of a nested group whose own master was dropped reach into the enclosing group's master."""
+    with (
+        VisioFile(vsdx_copy("test_master_multiple_child_shapes.vsdx")) as source,
+        VisioFile(vsdx_copy("test1.vsdx")) as target,
+    ):
+        group = _master_instance(source)
+        nested = next(child for child in group.child_shapes if child.shape_type == "Group")
+        nested.xml.attrib["Master"] = "999"
+        copied = group.copy(target.pages[0])
+        copied_nested = next(child for child in copied.child_shapes if child.shape_type == "Group")
+        assert "Master" not in copied_nested.xml.attrib
+        assert [node.attrib.get("MasterShape") for node in copied_nested.xml.iter(f"{{{MAIN_NS}}}Shape")] == [None] * 4
+        assert all(child.xml.attrib.get("MasterShape") for child in copied.child_shapes if child.shape_type != "Group")
 
 
 def test_a_document_without_app_xml_still_takes_a_master(vsdx_copy, tmp_path):

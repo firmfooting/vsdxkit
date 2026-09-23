@@ -9,6 +9,7 @@ document hands it a factory for the `Page` each master is read as.
 from __future__ import annotations
 
 import copy
+import weakref
 import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterable
 from xml.etree.ElementTree import Element
@@ -74,6 +75,10 @@ class MasterCatalog:
         self._store = store
         self._make_page = make_page
         self._pages: list[Page] = []
+        # which master here each source master was imported as, by the
+        # source's ID: an import renamed to avoid a collision no longer
+        # matches by name, and would be imported again by every later copy
+        self._imported: weakref.WeakKeyDictionary[MasterCatalog, dict[str, str]] = weakref.WeakKeyDictionary()
 
     @property
     def pages(self) -> list[Page]:
@@ -222,7 +227,7 @@ class MasterCatalog:
             source_page = source.by_id(master_id)
             if element is None or source_page is None:
                 continue
-            existing = self.matching(element)
+            existing = self._imported_from(source, master_id) or self.matching(element)
             if existing is not None:
                 found[master_id] = existing
                 continue
@@ -249,10 +254,16 @@ class MasterCatalog:
             rels_root = self._required_root(relationships_part_name(MASTERS_PART))
             for master_id, element, master_bytes in pending:
                 found[master_id] = self._add(element, master_bytes, rels_root)
+                self._imported.setdefault(source, {})[master_id] = found[master_id].page_id
         for master_id, first in aliases.items():
             if first in found:
                 found[master_id] = found[first]
         return found
+
+    def _imported_from(self, source: MasterCatalog, master_id: str) -> Page | None:
+        """The master here that `source`'s master `master_id` was imported as, while both are open."""
+        imported = self._imported.get(source, {}).get(master_id)
+        return None if imported is None else self.by_id(imported)
 
     def _add(self, source_element: Element, master_bytes: bytes, rels_root: Element) -> Page:
         """Write one master part, declare and relate it, and record it."""
@@ -274,12 +285,18 @@ class MasterCatalog:
             for attribute in ("NameU", "Name")
             if attribute in master.attrib
         }
-        if _master_name(element) in taken:
+        nameless = not _master_name(element)
+        if nameless or _master_name(element) in taken:
             # Two masters of one name would leave a lookup by name answering
             # for the wrong one. The `.ID` suffix is how Visio's own duplicate
             # shape names read; what it does for masters is not yet checked.
-            # Counting up from the new ID finds a suffix no name already has.
-            names = {attribute: element.attrib[attribute] for attribute in ("NameU", "Name") if attribute in element.attrib}
+            # A nameless master is named as Visio names one it creates. Counting
+            # up from the new ID finds a suffix no name already has.
+            names = (
+                {"NameU": "Master", "Name": "Master"}
+                if nameless
+                else {attribute: element.attrib[attribute] for attribute in ("NameU", "Name") if attribute in element.attrib}
+            )
             suffix = int(new_id)
             while any(f"{name}.{suffix}" in taken for name in names.values()):
                 suffix += 1
