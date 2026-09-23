@@ -24,7 +24,13 @@ is separate work.
 
 from __future__ import annotations
 
+import sys
 import xml.etree.ElementTree as ET
+
+if sys.version_info >= (3, 12):
+    from typing import override
+else:
+    from typing_extensions import override
 
 __all__ = [
     "InvalidOperationError",
@@ -99,7 +105,19 @@ class PartParseError(MalformedPackageError, ET.ParseError):
     A caller should not have to know which release it runs against to catch a
     broken package, so this is all of them. It carries the parser's
     `position` and `code`, which say where in the part it broke.
+
+    `msg` and `__str__` are set here, not inherited. `SyntaxError` formats
+    itself from `msg`, and before Python 3.14 an instance built through this
+    MRO never has `msg` set, so it printed as "None" instead of its message.
     """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.msg = message
+
+    @override
+    def __str__(self) -> str:
+        return self.msg
 
 
 class PackageLimitError(PackageError, OSError):
