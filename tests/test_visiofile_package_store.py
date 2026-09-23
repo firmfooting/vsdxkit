@@ -154,7 +154,7 @@ def test_truncating_a_read_buffer_of_a_parsed_page_keeps_the_tree_attached(vsdx_
 
 
 def test_assigning_a_document_part_replaces_it_in_the_store(vsdx_copy):
-    """`vis.app_xml = tree` has to reach disk once save stops rewriting (Review Focus 1)."""
+    """Fails if the `app_xml` setter stops writing the new tree through to the store."""
     with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         replacement = ET.ElementTree(ET.fromstring(serialise_part(vis.app_xml)))
         root = replacement.getroot()
@@ -166,17 +166,21 @@ def test_assigning_a_document_part_replaces_it_in_the_store(vsdx_copy):
 
 
 def test_assigning_page_xml_replaces_the_page_part(vsdx_copy):
-    """What Jinja rendering does to every page it renders (Review Focus 1)."""
+    """Fails if the `Page.xml` setter stops writing the new tree through to the
+    store. Jinja rendering replaces every page it renders this way."""
     with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         page = vis.pages[0]
         replacement = ET.ElementTree(ET.fromstring(serialise_part(page.xml)))
         replacement.getroot().set("VsdxkitMarker", "1")
         page.xml = replacement
+        assert page.xml is replacement
         assert b"VsdxkitMarker" in (vis._package.read_bytes(vis._part_name(page.filename)) or b"")
 
 
 def test_a_removed_page_does_not_write_its_part_back(vsdx_copy):
-    """A caller still holding a removed Page must not resurrect an orphan part (Review Focus 2)."""
+    """Fails if the `Page.xml` setter writes through even when the page's own
+    part is no longer in the package, resurrecting a part `remove_page_by_index`
+    already removed."""
     with VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
         page = vis.pages[1]
         name = vis._part_name(page.filename)
@@ -186,7 +190,9 @@ def test_a_removed_page_does_not_write_its_part_back(vsdx_copy):
 
 
 def test_reassigning_the_same_tree_keeps_the_promotion_baseline(vsdx_copy):
-    """Identity is not a change: the part must still save as its original bytes."""
+    """Fails if the `app_xml` setter re-writes the part even when handed back
+    the tree the store already holds, discarding the promotion baseline that
+    lets an untouched part save as the bytes it arrived as."""
     with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         before = vis._package.part("/docProps/app.xml")
         vis.app_xml = vis.app_xml
