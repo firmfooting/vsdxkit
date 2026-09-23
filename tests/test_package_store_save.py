@@ -7,11 +7,13 @@ fixture, never through the store (see test_package_store.py's docstring).
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import os
 import shutil
 import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
+import zlib
 from pathlib import Path
 
 import pytest
@@ -192,6 +194,31 @@ def test_members_exceeding_compression_ratio_are_stored_uncompressed(source, tmp
         for info in archive.infolist():
             if info.filename != "visio/big.xml" and not info.is_dir():
                 assert info.compress_type == zipfile.ZIP_DEFLATED
+
+
+@pytest.mark.allow_invalid_package
+def test_a_permissive_max_ratio_still_writes_what_a_default_reader_accepts(source, tmp_path):
+    """Fails if save() decides store-or-deflate against the opened `max_ratio` alone.
+
+    The store-or-deflate threshold is `min(self._limits.max_ratio,
+    PackageLimits().max_ratio)`. Drop the `min` and a store opened with
+    `max_ratio=1000` deflates this member at a ratio of a few hundred, which a
+    reader with the default limit of 100 then refuses with `compression_ratio`.
+    """
+    block = hashlib.sha256(b"vsdxkit").digest()
+    big = (block * (500_000 // len(block) + 1))[:500_000]
+    compressor = zlib.compressobj(zlib.Z_DEFAULT_COMPRESSION, zlib.DEFLATED, -15)
+    deflated_ratio = len(big) / len(compressor.compress(big) + compressor.flush())
+    assert PackageLimits().max_ratio < deflated_ratio < 1000, "the fixture no longer lands between the two limits"
+
+    store = PackageStore.open(source, limits=PackageLimits(max_ratio=1000))
+    store.write_bytes("/visio/big.bin", big)
+    target = tmp_path / "out.vsdx"
+    store.save(target)
+
+    PackageStore.open(target)  # default limits; raises PackageLimitError if the member was deflated
+    with zipfile.ZipFile(target) as archive:
+        assert archive.getinfo("visio/big.bin").compress_type == zipfile.ZIP_STORED
 
 
 @pytest.mark.skipif(os.name == "nt", reason="symlink-based test is not meaningful on Windows")

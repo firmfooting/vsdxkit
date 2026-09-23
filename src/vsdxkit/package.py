@@ -652,6 +652,14 @@ class PackageStore:
         fd, temporary = tempfile.mkstemp(prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent)
         try:
             with os.fdopen(fd, "wb") as handle:
+                # The ratio a member is stored at is the stricter of the opened limit
+                # and the default one, unlike the size and count checks above. A ratio
+                # violation is always avoidable -- storing a member makes its ratio 1 --
+                # so the writer defers to the strictest reader likely to open the file,
+                # and a store opened with a permissive max_ratio still writes a package
+                # a default reader accepts. A size violation cannot be avoided short of
+                # refusing to save, so for those the caller's own raised limits stand.
+                store_above = min(self._limits.max_ratio, PackageLimits().max_ratio)
                 with zipfile.ZipFile(handle, "w", compression=zipfile.ZIP_DEFLATED) as archive:
                     for name, data in members_bytes:
                         # Measure deflated size the way zipfile does: zlib with window=-15
@@ -660,7 +668,7 @@ class PackageStore:
                         compressor = zlib.compressobj(zlib.Z_DEFAULT_COMPRESSION, zlib.DEFLATED, -15)
                         compressed = compressor.compress(data) + compressor.flush()
                         ratio = len(data) / max(len(compressed), 1)
-                        if ratio > self._limits.max_ratio:
+                        if ratio > store_above:
                             archive.writestr(name[1:], data, compress_type=zipfile.ZIP_STORED)
                         else:
                             archive.writestr(name[1:], data)
