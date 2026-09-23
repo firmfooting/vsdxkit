@@ -748,3 +748,26 @@ def test_two_snapshots_of_a_parsed_part_both_write_and_the_last_wins(view, store
     root = tree.getroot()
     assert root is not None
     assert root.tag == "Second"
+
+
+def test_a_page_xml_assignment_detaches_a_snapshot_of_the_old_tree(vsdx_copy, tmp_path):
+    """Fails if a buffer read before `Page.xml = tree` still writes through, putting the old page over the new tree.
+
+    The setter gives the part a new tree (`PackageStore.replace_tree`), so
+    the store no longer holds the part the snapshot was bound to.
+    """
+    target = str(tmp_path / "saved.vsdx")
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        page = vis.pages[0]
+        buf = vis.zip_file_contents[page.filename]
+        stale = buf.getvalue()
+        replacement = copy.deepcopy(page.xml)
+        root = replacement.getroot()
+        assert root is not None
+        root.set("VsdxkitMarker", "1")
+        page.xml = replacement
+        buf.seek(0)
+        buf.write(stale)
+        vis.save_vsdx(target)
+    with VisioFile(target) as saved:
+        assert saved.pages[0].xml.getroot().get("VsdxkitMarker") == "1"
