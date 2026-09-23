@@ -7,7 +7,6 @@ from xml.etree.ElementTree import Element
 
 import vsdxkit
 from vsdxkit.errors import InvalidOperationError, MalformedPackageError
-from vsdxkit.partnames import MASTERS_PART, folder_of, target_part_name
 
 if TYPE_CHECKING:
     from vsdxkit.pages import Page
@@ -106,68 +105,10 @@ class Connect:
             # create new connect shape and get id
             media = page.vis._shared_media()
             media_shape = media.straight_connector
-            # state-based guard: masters provisioned if the document already
-            # carries the masters relationship (the on-disk folder only exists
-            # after save, so an os.path.exists guard double-provisioned on
-            # 2nd+ calls)
-            masters_rel_present = any(
-                r.attrib.get("Type") == "http://schemas.microsoft.com/visio/2010/relationships/masters"
-                for r in page.vis.document_rels()
-            )
-            new_master_id = None
-            if not masters_rel_present:
-                # document has no masters at all: copy the donor's masters
-                # parts, part name for part name. `read_bytes` gives a part the
-                # donor has parsed but not changed as the bytes it arrived as,
-                # and only the masters are read -- the donor has parsed every
-                # page it holds, and reading one would serialise it for nothing
-                donor_store = media.media._package
-                # the masters folder as a part-name prefix; the trailing slash
-                # keeps a sibling such as /visio/masters-old/ out of the copy
-                masters_folder = folder_of(MASTERS_PART)
-                for name in donor_store.names():
-                    if name.startswith(masters_folder):
-                        data = donor_store.read_bytes(name)
-                        assert data is not None  # names() lists only parts the store holds
-                        page.vis._package.write_bytes(name, data)
-                page.vis.load_master_pages()  # load copied master page files into VisioFile object
-                # document-level masters relationship
-                page.vis._add_document_rel(
-                    rel_type="http://schemas.microsoft.com/visio/2010/relationships/masters", target="masters/masters.xml"
-                )
-                # content-type overrides for masters.xml and master1.xml
-                page.vis._add_content_types_override(
-                    content_type="application/vnd.ms-visio.masters+xml", part_name_path=MASTERS_PART
-                )
-                page.vis._add_content_types_override(
-                    content_type="application/vnd.ms-visio.master+xml",
-                    part_name_path=target_part_name(MASTERS_PART, "master1.xml"),
-                )
-                # per-page master relationship (creates the page rels part and
-                # writes it into the package store, which is what a save writes)
-                page._ensure_page_master_rel("rId1", target_part_name(MASTERS_PART, "master1.xml"))
-            else:
-                # document has masters: import the connector master (by name)
-                # BEFORE the copy, while media_shape still points at its source
-                new_master_id = page.vis._ensure_masters_for_shape(media_shape) or None
-
+            # the copy imports the connector's master, whether or not this
+            # document has masters yet, and relates the page to it (#375)
             connector_shape = media_shape.copy(page)  # default to straight connector
             connector_shape.text = ""  # clear text used to find shape
-            if new_master_id:
-                # repoint the copied shape at this document's imported master
-                connector_shape.master_page_ID = new_master_id
-
-            # per-page relationship for whichever master the connector uses
-            effective_master_id = new_master_id or connector_shape.master_page_ID
-            master_page = page.vis.get_master_page_by_id(effective_master_id) if effective_master_id else None
-            if master_page is not None:
-                page._ensure_page_master_rel(master_page.rel_id, master_page.filename)
-
-            # app.xml lists master names too, and the document has just
-            # gained this one
-            shape_name = connector_shape.shape_name
-            if shape_name:
-                page.vis._titles_of_parts_insert(shape_name, page.vis.MASTERS)
 
             # copy style used by new connector shape
             master_shape = connector_shape.master_shape

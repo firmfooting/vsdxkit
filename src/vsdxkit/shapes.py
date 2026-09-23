@@ -615,7 +615,23 @@ class Shape(DocumentPart):
         :return: :class:`Shape` the new copy of shape
         """
         dst_page = page or self.page
+        # resolved, and imported from another document, before the copy: the
+        # source still holds the masters its shapes name (#331)
+        masters = dst_page.vis._masters_for(self.xml, self.page.vis)
         new_shape_xml = self.page.vis.copy_shape(self.xml, dst_page)
+        for node in new_shape_xml.iter(f"{namespace}Shape"):
+            master_id = node.attrib.get("Master")
+            if not master_id:
+                continue
+            if master_id in masters:
+                node.attrib["Master"] = masters[master_id].page_id
+            else:
+                # a master the source could not resolve: naming it would make a
+                # shape Visio drops on open
+                node.attrib.pop("Master")
+                node.attrib.pop("MasterShape", None)
+        for master in masters.values():
+            dst_page._ensure_page_master_rel(master.filename)
 
         # parent decides where the new shape tag lands: the destination
         # page's Shapes tag, or the source shape's own parent

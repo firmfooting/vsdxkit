@@ -338,13 +338,13 @@ def test_connecting_shapes_writes_the_page_rels_in_the_default_namespace(vsdx_co
 def test_bootstrapping_masters_writes_the_visio_default_namespace(vsdx_copy):
     """The masters part created for a document that declares one but has none.
 
-    Called directly, so the part is checked as `_bootstrap_masters` writes it,
-    before its only caller appends the master it is importing. The tree it
+    Called directly, so the part is checked as `MasterCatalog.bootstrap` writes
+    it, before an import appends the master it brings. The tree it
     writes is the store's own, and a save writes it out as it stands.
     """
     with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         assert vis.masters_xml is None, "fixture is expected to have no masters part"
-        vis._bootstrap_masters()
+        vis._masters.bootstrap()
         written = vis._package.read_bytes("/visio/masters/masters.xml")
 
     assert f'<Masters xmlns="{namespace[1:-1]}"'.encode() in written

@@ -24,10 +24,10 @@ from vsdxkit import (
     vt_namespace,
     xmlio,
 )
-from vsdxkit.errors import InvalidOperationError, MalformedPackageError, MissingPartError, NotFoundError, VisioFileNotOpen
+from vsdxkit.errors import InvalidOperationError, MissingPartError, NotFoundError, VisioFileNotOpen
 from vsdxkit.logging_support import attach_debug_stream_handler, get_logger
-from vsdxkit.masters import MastersImportMixin
-from vsdxkit.package import PackageLimits, PackageStore, XmlPart, _checked
+from vsdxkit.masters import MasterCatalog
+from vsdxkit.package import PackageLimits, PackageStore, XmlPart, check_relationship_target
 from vsdxkit.pages import Page, PagePosition
 from vsdxkit.partnames import (
     APP_PART,
@@ -100,7 +100,7 @@ def _remap_sheet_references(formula: str, id_map: dict[str, int]) -> str:
     return _SHEET_REFERENCE_RE.sub(replace, formula)
 
 
-class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
+class VisioFile(JinjaTemplatingMixin):
     """Represents a vsdx file
 
     :param filename: filename the :class:`VisioFile` was created from
@@ -147,8 +147,6 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         # below -- there is nothing to initialise here, since the store itself
         # is the state.
         self.pages: list[Page] = []  # populated by open_vsdx_file()
-        self.master_index: dict[str, Page] = {}  # master page info by item name e.g. 'Dynamic Connector'
-        self.master_pages: list[Page] = []  # populated by open_vsdx_file()
         self.file_open = False
         # populated by open_vsdx_file() below; declared here so an attribute
         # assigned outside __init__ still has a home for pyrefly to check it
@@ -201,24 +199,6 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
     @staticmethod
     def pretty_print_element(xml: Element | PartTree) -> str:
         return xmlio.pretty_print_element(xml)
-
-    def _check_relationship_target(self, name: str, subject: str, target: str) -> None:
-        """Refuse a relationship whose `target`, joined into `name`, names no part.
-
-        The store checks every name it is handed and reports a bad one as a
-        plain `ValueError`, because a caller passing it one has made an
-        argument error. A relationship `Target` is not an argument: it is
-        package content, so a `Target` that joins into something that is not
-        a part name (`../page1.xml`, a URI, an empty string) makes the package
-        malformed, and opening it has to say so with `MalformedPackageError`.
-        Only this check is translated. The read that follows goes on raising
-        `MissingPartError` and `PartParseError` as themselves, which wrapping
-        it in `except ValueError` would have swallowed.
-        """
-        try:
-            _checked(name)
-        except ValueError as error:
-            raise MalformedPackageError(f"{subject} targets {target!r}, which is not a part name in this package") from error
 
     def _require_part_xml(self, name: str, description: str) -> PartTree:
         """The store's own tree for a required part, or a MissingPartError naming it."""
@@ -313,14 +293,12 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         self._set_document_part_xml("document_xml_rels", relationships_part_name(DOCUMENT_PART), tree)
 
     @property
-    @override
     def masters_xml(self) -> ET.Element | None:
         """The `<Masters>` root, read from the store so it can never be a stale copy."""
         tree = self._package.read_xml(MASTERS_PART)
         return None if tree is None else tree.getroot()
 
     @masters_xml.setter
-    @override
     def masters_xml(self, root: ET.Element | None) -> None:
         if root is None:
             self._set_document_part_xml("masters_xml", MASTERS_PART, None)  # raises: see there
@@ -339,8 +317,57 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
 
         # load each page file into an ElementTree object
         self.load_pages()
-        self.load_master_pages()
+        self._masters = MasterCatalog(self._package, self._master_page)
+        self._masters.load()
         self.file_open = True
+
+    def _master_page(self, tree: PartTree, part_name: str, name: str, master_id: str, rel_id: str) -> Page:
+        """The page a master is read as; the factory this document hands its catalog."""
+        return Page(tree, part_name, name, master_id, rel_id, self)
+
+    @property
+    def master_pages(self) -> list[Page]:
+        """Every master, as a page, in `masters.xml` order."""
+        return self._masters.pages
+
+    @property
+    def master_index(self) -> dict[str, Page]:
+        """Every master by name, e.g. 'Dynamic connector'."""
+        return {page.name: page for page in self._masters.pages}
+
+    def load_master_pages(self) -> None:
+        """Re-read the masters from the package. Idempotent."""
+        self._masters.load()
+
+    def get_master_page_by_id(self, id: str) -> Page | None:
+        """The master page with this ID, as :attr:`Shape.master_page_ID` names it, or None."""
+        return self._masters.by_id(id)
+
+    def _masters_for(self, element: Element, source: VisioFile) -> dict[str, Page]:
+        """This document's master for each master that `element`'s subtree names in `source`.
+
+        Keyed by the master ID `source` uses. A master from another document is
+        imported by name if this one lacks it, and a master new to this
+        document is listed in app.xml's TitlesOfParts. A reference `source`
+        cannot resolve is left out: copying it would name a master no package
+        declares.
+        """
+        self._require_open("importing a master")
+        masters: dict[str, Page] = {}
+        for node in element.iter(f"{namespace}Shape"):
+            master_id = node.attrib.get("Master")
+            if not master_id or master_id in masters:
+                continue
+            if source is self:
+                master = self._masters.by_id(master_id)
+            else:
+                known = {page.page_id for page in self._masters.pages}
+                master = self._masters.import_master(source._masters, master_id)
+                if master is not None and master.page_id not in known:
+                    self._titles_of_parts_insert(master.name, self.MASTERS)
+            if master is not None:
+                masters[master_id] = master
+        return masters
 
     def load_pages(self) -> None:
         rels_name = relationships_part_name(PAGES_PART)
@@ -371,7 +398,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             if page_file is None:
                 raise MissingPartError(f"no page part found for relationship {rel_id}")
             page_path = target_part_name(PAGES_PART, page_file)
-            self._check_relationship_target(page_path, f"pages.xml.rels Relationship {rel_id!r}", page_file)
+            check_relationship_target(page_path, f"pages.xml.rels Relationship {rel_id!r}", page_file)
             page_id = page.attrib.get("ID", "")
 
             new_page = Page(self._require_part_xml(page_path, "page part"), page_path, page_name, page_id, rel_id, self)
@@ -404,65 +431,6 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         # TODO: add correctness cross-check. Or maybe the other way round, start from [Content_Types].xml
         #       to get page_dir and other paths...
 
-    @override
-    def load_master_pages(self) -> None:
-        # get data from /visio/masters folder
-        master_rel_path = relationships_part_name(MASTERS_PART)
-
-        master_rels_data = self._package.read_xml(master_rel_path)
-        # a document with no masters has no rels part: iterate an empty list
-        master_rels: list[Element] = list(master_rels_data.getroot()) if master_rels_data is not None else []
-        if self.debug:
-            logger.debug("Master Relationships(%s)\n%s", master_rel_path, master_rels)
-
-        # populate relid to the master's relationship Target
-        relid_to_target: dict[str, str] = {}
-        for rel in master_rels:
-            # Skipping a relationship with no Id used to leave the master that
-            # names it with no path, and the lookup below reported that as
-            # `KeyError: 'rId1'`; the Target went in unchecked and spelled a
-            # part called "None".
-            subject = "masters.xml.rels Relationship"
-            target = require_attribute(rel, "Target", subject)
-            relid_to_target[require_attribute(rel, "Id", subject)] = target
-
-        # masters_xml is a store-backed property (contains more info about
-        # master page, i.e. Name, Icon); reading it here promotes the part.
-
-        # for each master page, create the Page object
-        for master in self.masters_xml if self.masters_xml is not None else []:
-            master_name = master.attrib.get("NameU") or master.attrib.get("Name") or "Unknown"
-            rel_id = require_attribute(
-                require_element(master.find(f"{namespace}Rel"), "Master/Rel"), f"{r_namespace}id", "masters.xml Master/Rel"
-            )
-            master_id = require_attribute(master, "ID", "masters.xml Master")
-            master_unique_id = master.attrib.get("UniqueID")
-            master_base_id = master.attrib.get("BaseID")
-
-            master_target = relid_to_target.get(rel_id)
-            if master_target is None:
-                raise MissingPartError(f"no master part found for relationship {rel_id}")
-            master_path = target_part_name(MASTERS_PART, master_target)
-            self._check_relationship_target(master_path, f"masters.xml.rels Relationship {rel_id!r}", master_target)
-
-            master_page = Page(
-                self._require_part_xml(master_path, "master part"),
-                master_path,
-                master_name,
-                master_id,
-                rel_id,
-                self,
-            )
-            master_page.master_unique_id = master_unique_id
-            master_page.master_base_id = master_base_id
-            self.master_pages.append(master_page)
-            self.master_index[master_name] = master_page  # index by master_name
-
-            if self.debug:
-                logger.debug("Master(%s, id=%s)\n%s", master_path, master_id, VisioFile.pretty_print_element(master_page.xml))
-
-        return
-
     def get_page(self, n: int) -> Page | None:
         try:
             return self.pages[n]
@@ -483,20 +451,6 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         for p in self.pages:
             if p.name == name:
                 return p
-
-    def get_master_page_by_id(self, id: str) -> Page | None:
-        """Get master page from VisioFile with matching ID.
-
-        Referred by :attr:`Shape.master_ID`.
-
-                :param id: The ID of the required master
-                :type id: str
-
-                :return: :class:`Page` object representing the master page (or None if not found)
-        """
-        for m in self.master_pages:
-            if m.page_id == id:
-                return m
 
     @override
     def remove_page_by_index(self, index: int) -> None:
@@ -625,7 +579,6 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
 
         return index
 
-    @override
     def _add_content_types_override(self, part_name_path: str, content_type: str) -> None:
         relationships.ensure_override(
             self._part_root(self.content_types_xml, "[Content_Types].xml"), part_name_path, content_type
@@ -635,12 +588,6 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         rels_root = self._part_root(self.document_xml_rels, "visio/_rels/document.xml.rels")
         rels = rels_root.findall(f"{document_rels_namespace}Relationship")
         return rels
-
-    @override
-    def _add_document_rel(self, rel_type: str, target: str) -> None:
-        relationships.append_if_absent(
-            self._part_root(self.document_xml_rels, "visio/_rels/document.xml.rels"), rel_type=rel_type, target=target
-        )
 
     def _style_sheets(self) -> Element:
         # return StyleSheets element from document.xml

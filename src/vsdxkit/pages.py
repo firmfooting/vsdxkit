@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 import deprecation
 
 import vsdxkit
-from vsdxkit import namespace
+from vsdxkit import namespace, relationships
 from vsdxkit.connectors import Connect
 from vsdxkit.containers import Container
 from vsdxkit.errors import InvalidOperationError, MissingPartError, NotFoundError
@@ -382,14 +382,15 @@ class Page:
             connects = require_element(self.xml.find(f".//{namespace}Connects"), "Connects")
         connects.append(connect.xml)
 
-    def _ensure_page_master_rel(self, master_rel_id: str, master_part_name: str):
-        """Ensure this page's rels reference the master part named `master_part_name`.
+    def _ensure_page_master_rel(self, master_part_name: str) -> None:
+        """Ensure this page's rels relate it to the master part named `master_part_name`.
 
         Visio writes a per-page relationship to each master used by shapes on
-        that page (Target '../masters/masterN.xml'). The Target is derived from
-        the master's part name, so a master kept in a subfolder of the masters
-        folder is reached there. The rels part is created on demand; assigning
-        it writes it into the package.
+        that page. The Target is derived from the master's part name, so a
+        master kept in a subfolder of the masters folder is reached there. The
+        id comes from this page's own rels part: `masters.xml.rels` is a
+        different id space, and an id free there says nothing here (#357). The
+        rels part is created on demand; assigning it writes it into the package.
         """
         rels_xml: PartTree | None = self.rels_xml
         if rels_xml is None:
@@ -398,18 +399,11 @@ class Page:
                 ET.fromstring('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
             )
             self.rels_xml = rels_xml
-        rels_root = rels_xml.getroot()
-        assert rels_root is not None
-        existing = {r.attrib.get("Target") for r in rels_root}
-        target = relationship_target(self.filename, master_part_name)
-        if target in existing:
-            return
-        rel_element = ET.fromstring(
-            f'<Relationship xmlns="http://schemas.openxmlformats.org/package/2006/relationships" '
-            f'Type="http://schemas.microsoft.com/visio/2010/relationships/master" '
-            f'Id="{master_rel_id}" Target="{target}"/>'
+        relationships.append_if_absent(
+            require_element(rels_xml.getroot(), f"{self.rels_xml_filename} root"),
+            rel_type="http://schemas.microsoft.com/visio/2010/relationships/master",
+            target=relationship_target(self.filename, master_part_name),
         )
-        rels_root.append(rel_element)
 
     def get_connects(self) -> list[Connect]:
         elements = self.xml.findall(f".//{namespace}Connect")  # search recursively
