@@ -13,7 +13,7 @@ from jinja2.sandbox import SandboxedEnvironment
 
 from vsdxkit.errors import NotFoundError
 from vsdxkit.logging_support import get_logger
-from vsdxkit.pages import Page
+from vsdxkit.pages import Page, PageCollection
 from vsdxkit.shapes import Shape
 from vsdxkit.xmlio import adopt_prefixes
 
@@ -39,7 +39,8 @@ def _template(source: str):
 
 class JinjaTemplatingMixin:
     # attributes provided by the VisioFile host class
-    pages: list[Page]
+    @property
+    def pages(self) -> PageCollection: ...
 
     def increment_sub_shape_ids(self, shape: Shape, page: Page, id_map: dict[str, int] | None = None) -> dict[str, int]: ...
     def remove_page_by_index(self, index: int) -> None: ...

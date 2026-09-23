@@ -28,7 +28,7 @@ from vsdxkit.errors import InvalidOperationError, MissingPartError, NotFoundErro
 from vsdxkit.logging_support import attach_debug_stream_handler, get_logger
 from vsdxkit.masters import MasterCatalog
 from vsdxkit.package import PackageLimits, PackageStore, XmlPart, check_relationship_target
-from vsdxkit.pages import Page, PagePosition
+from vsdxkit.pages import Page, PageCollection, PagePosition
 from vsdxkit.partnames import (
     APP_PART,
     CONTENT_TYPES_PART,
@@ -146,7 +146,7 @@ class VisioFile(JinjaTemplatingMixin):
         # document_xml_rels and masters_xml are store-backed properties, defined
         # below -- there is nothing to initialise here, since the store itself
         # is the state.
-        self.pages: list[Page] = []  # populated by open_vsdx_file()
+        self._pages: list[Page] = []  # populated by open_vsdx_file()
         self.file_open = False
         # populated by open_vsdx_file() below; declared here so an attribute
         # assigned outside __init__ still has a home for pyrefly to check it
@@ -417,7 +417,7 @@ class VisioFile(JinjaTemplatingMixin):
                 # setter refuses, and the tree is the store's own, so there is
                 # nothing for it to write through
                 new_page._rels_xml = self._package.read_xml(page_rels_path)
-            self.pages.append(new_page)
+            self._pages.append(new_page)
 
             if self.debug:
                 logger.debug("Page(%s)\n%s", new_page.filename, VisioFile.pretty_print_element(new_page.xml))
@@ -436,6 +436,12 @@ class VisioFile(JinjaTemplatingMixin):
         self._package.read_xml(relationships_part_name(DOCUMENT_PART))
         # TODO: add correctness cross-check. Or maybe the other way round, start from [Content_Types].xml
         #       to get page_dir and other paths...
+
+    @property
+    @override
+    def pages(self) -> PageCollection:
+        """The document's pages, in order: see :class:`PageCollection`."""
+        return PageCollection(self._pages, self)
 
     def get_page(self, n: int) -> Page | None:
         try:
@@ -494,7 +500,7 @@ class VisioFile(JinjaTemplatingMixin):
 
                 # remove page<index>.xml file
                 self._package.remove(self.pages[index].filename)
-                del self.pages[index]
+                del self._pages[index]
 
     def remove_page_by_name(self, page_name: str) -> None:
         """Remove first page from VisioFile object that matches the page_name
@@ -954,7 +960,7 @@ class VisioFile(JinjaTemplatingMixin):
             new_page.rels_xml_filename = relationships_part_name(new_page_path)
             new_page.rels_xml = ET.ElementTree(copy.deepcopy(source_rels_root))
 
-        self.pages.insert(index, new_page)  # insert new page at defined index
+        self._pages.insert(index, new_page)  # insert new page at defined index
 
         return new_page
 

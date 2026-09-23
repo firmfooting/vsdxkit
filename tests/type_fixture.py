@@ -62,3 +62,11 @@ def group_members(shape: Shape) -> list[Shape]:
 
 def maybe_shape(page: Page, shape_id: str) -> Shape | None:
     return page.children.by_id(shape_id)
+
+
+def current_state(visio_file: VisioFile) -> Page:
+    return visio_file.pages.require_name("Current state")
+
+
+def review_page(visio_file: VisioFile) -> Page:
+    return visio_file.pages.create("Review", index=0)
