@@ -662,3 +662,15 @@ def test_a_tree_assigned_after_unparseable_bytes_were_flushed_is_saved(vsdx_copy
         vis.save_vsdx(target)
     with VisioFile(target) as saved:
         assert saved.pages[0].xml.getroot().get("VsdxkitMarker") == "1"
+
+
+def test_copy_is_a_plain_dict_detached_from_the_store(view, store):
+    """Fails if the view has no copy(), which the old dict had, or if the copy it returns writes to the store."""
+    names = store.names()
+    snapshot = view.copy()
+    assert type(snapshot) is dict
+    assert list(snapshot) == list(view)
+    del snapshot[f"{DIRECTORY}/docProps/thumbnail.emf"]
+    snapshot[f"{DIRECTORY}/visio/new.xml"] = io.BytesIO(b"<New/>")
+    snapshot.clear()
+    assert store.names() == names

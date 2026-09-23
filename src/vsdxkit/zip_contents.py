@@ -360,6 +360,17 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
             return False
         return replaced is tree
 
+    def copy(self) -> dict[str, io.BytesIO]:
+        """A plain dict of every member and the buffer a read of it returns now.
+
+        The old `zip_file_contents` was a dict, so `copy()` worked on it, and
+        `MutableMapping` does not supply one. The copy is shallow, as the
+        dict's was: it is a dict of its own, so adding or deleting keys in it
+        leaves the package alone, but its values are the view's buffers, and
+        a write to one of those still writes through while it is bound.
+        """
+        return dict(self)
+
     def _name(self, key: object) -> str | None:
         return part_name_for_path(self._directory, key) if isinstance(key, str) else None
 
