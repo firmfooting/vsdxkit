@@ -9,14 +9,12 @@ document hands it a factory for the `Page` each master is read as.
 from __future__ import annotations
 
 import copy
-import logging
 import xml.etree.ElementTree as ET
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from xml.etree.ElementTree import Element
 
 from vsdxkit import namespace, r_namespace, relationships
 from vsdxkit.errors import MissingPartError
-from vsdxkit.logging_support import get_logger
 from vsdxkit.package import PackageStore, check_relationship_target
 from vsdxkit.pages import Page
 from vsdxkit.partnames import (
@@ -28,9 +26,7 @@ from vsdxkit.partnames import (
     relationships_part_name,
     target_part_name,
 )
-from vsdxkit.xmlio import PartTree, pretty_print_element, require_attribute, require_element
-
-logger = get_logger(__name__)
+from vsdxkit.xmlio import PartTree, require_attribute, require_element
 
 MASTERS_RELATIONSHIP = "http://schemas.microsoft.com/visio/2010/relationships/masters"
 MASTER_RELATIONSHIP = "http://schemas.microsoft.com/visio/2010/relationships/master"
@@ -49,7 +45,13 @@ def _empty_relationships() -> PartTree:
 
 
 def _master_name(master: Element) -> str:
+    """The name a master is matched by: `NameU`, else `Name`, else "" for a master with neither."""
     return master.attrib.get("NameU") or master.attrib.get("Name") or ""
+
+
+def _page_name(master: Element) -> str:
+    """The name a master's page carries. A page cannot be nameless: `Page.name` would go looking in pages.xml."""
+    return _master_name(master) or "Unknown"
 
 
 class MasterCatalog:
@@ -78,7 +80,7 @@ class MasterCatalog:
         return None
 
     def by_name(self, name: str) -> Page | None:
-        """The master whose `NameU` (or `Name`, where it has no `NameU`) is `name`."""
+        """The first master whose `NameU` (or `Name`, where it has no `NameU`) is `name`."""
         for page in self._pages:
             if page.name == name:
                 return page
@@ -120,15 +122,13 @@ class MasterCatalog:
             page = self._make_page(
                 tree,
                 part_name,
-                _master_name(master) or "Unknown",
+                _page_name(master),
                 require_attribute(master, "ID", "masters.xml Master"),
                 rel_id,
             )
             page.master_unique_id = master.attrib.get("UniqueID")
             page.master_base_id = master.attrib.get("BaseID")
             pages.append(page)
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug("Master(%s, id=%s)\n%s", part_name, page.page_id, pretty_print_element(tree))
         self._pages = pages
 
     def bootstrap(self) -> None:
@@ -160,39 +160,66 @@ class MasterCatalog:
             target=relationship_target(DOCUMENT_PART, MASTERS_PART),
         )
 
-    def import_master(self, source: MasterCatalog, master_id: str) -> Page | None:
-        """This package's copy of the master `source` holds as `master_id`, importing it if needed.
+    def import_masters(self, source: MasterCatalog, master_ids: Iterable[str]) -> dict[str, Page]:
+        """This package's copy of each master `source` holds under `master_ids`, importing any it lacks.
 
-        Masters match by name, as Visio's MatchByName does: numeric master IDs
-        are per-document and coincide across documents by chance. None when
-        `source` has no such master, or cannot reach its part; a reference
-        that dangles is dropped rather than copied into a corrupt package.
+        Keyed by the ID `source` uses. Masters match by name, as Visio's
+        MatchByName does: numeric master IDs are per-document and coincide
+        across documents by chance. A master with no name matches nothing and
+        is always imported. An ID `source` cannot resolve is left out: copying
+        it would name a master no package declares.
+
+        Every source part is read before anything here changes, so a master
+        that cannot be read leaves this package as it was.
         """
-        source_element = source.element_by_id(master_id)
-        source_page = source.by_id(master_id)
-        if source_element is None or source_page is None:
-            return None
-        name = _master_name(source_element)
-        existing = self.by_name(name)
-        if existing is not None:
-            return existing
-        if source._store.part(source_page.filename) is None:
-            return None
-        # read before anything here changes, so a failure leaves this package
-        # as it was. The check above says the part is there, so None is a
-        # source store contradicting itself; empty bytes in its place would be
-        # a master part no reader can parse.
-        master_bytes = source._store.read_bytes(source_page.filename)
-        if master_bytes is None:
-            raise MissingPartError(f"source master part {source_page.filename} could not be read, though the package lists it")
+        found: dict[str, Page] = {}
+        pending: list[tuple[str, Element, bytes]] = []
+        first_by_name: dict[str, str] = {}
+        aliases: dict[str, str] = {}
+        for master_id in dict.fromkeys(master_ids):
+            element = source.element_by_id(master_id)
+            source_page = source.by_id(master_id)
+            if element is None or source_page is None:
+                continue
+            name = _master_name(element)
+            existing = self.by_name(name) if name else None
+            if existing is not None:
+                found[master_id] = existing
+                continue
+            if name in first_by_name:
+                aliases[master_id] = first_by_name[name]
+                continue
+            if source._store.part(source_page.filename) is None:
+                continue
+            # The check above says the part is there, so None is a source
+            # store contradicting itself; empty bytes in its place would be a
+            # master part no reader can parse.
+            master_bytes = source._store.read_bytes(source_page.filename)
+            if master_bytes is None:
+                raise MissingPartError(
+                    f"source master part {source_page.filename} could not be read, though the package lists it"
+                )
+            pending.append((master_id, element, master_bytes))
+            if name:
+                first_by_name[name] = master_id
 
-        self.bootstrap()
-        rels_root = self._required_root(relationships_part_name(MASTERS_PART))
+        if pending:
+            self.bootstrap()
+            rels_root = self._required_root(relationships_part_name(MASTERS_PART))
+            for master_id, element, master_bytes in pending:
+                found[master_id] = self._add(element, master_bytes, rels_root)
+        for master_id, first in aliases.items():
+            if first in found:
+                found[master_id] = found[first]
+        return found
+
+    def _add(self, source_element: Element, master_bytes: bytes, rels_root: Element) -> Page:
+        """Write one master part, declare and relate it, and record it."""
         part_name = self._unused_master_part(rels_root)
         self._store.write_bytes(part_name, master_bytes)
 
         masters_root = self.root
-        assert masters_root is not None  # bootstrap() guarantees the part
+        assert masters_root is not None  # the caller bootstrapped
         numeric_ids = [int(m.attrib["ID"]) for m in masters_root if m.attrib.get("ID", "").isdigit()]
         new_id = str(max(max(numeric_ids, default=1) + 1, 2))
         relationship = relationships.append_if_absent(
@@ -209,7 +236,7 @@ class MasterCatalog:
         tree = self._store.read_xml(part_name)
         if tree is None:
             raise MissingPartError(f"imported master part {part_name} missing from package")
-        page = self._make_page(tree, part_name, name, new_id, relationship.attrib["Id"])
+        page = self._make_page(tree, part_name, _page_name(element), new_id, relationship.attrib["Id"])
         page.master_unique_id = element.attrib.get("UniqueID")
         page.master_base_id = element.attrib.get("BaseID")
         self._pages.append(page)

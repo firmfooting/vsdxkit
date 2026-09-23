@@ -615,21 +615,35 @@ class Shape(DocumentPart):
         :return: :class:`Shape` the new copy of shape
         """
         dst_page = page or self.page
+        dst_page.vis._require_open("Shape.copy()")
+        master_ids = [node.attrib["Master"] for node in self.xml.iter(f"{namespace}Shape") if node.attrib.get("Master")]
+        # A sub-shape of a master instance names no master itself: it inherits
+        # its group's. Copied onto a page it leaves that group, so the copy has
+        # to name the master, or its MasterShape reaches into nothing.
+        inherited = self.master_page_ID if page is not None and not self.xml.attrib.get("Master") else None
+        if inherited:
+            master_ids.insert(0, inherited)
         # resolved, and imported from another document, before the copy: the
         # source still holds the masters its shapes name (#331)
-        masters = dst_page.vis._masters_for(self.xml, self.page.vis)
+        masters = dst_page.vis._masters_for(master_ids, self.page.vis)
         new_shape_xml = self.page.vis.copy_shape(self.xml, dst_page)
+        if inherited and inherited in masters:
+            new_shape_xml.attrib["Master"] = inherited
+        cross_document = dst_page.vis is not self.page.vis
         for node in new_shape_xml.iter(f"{namespace}Shape"):
             master_id = node.attrib.get("Master")
             if not master_id:
                 continue
             if master_id in masters:
                 node.attrib["Master"] = masters[master_id].page_id
-            else:
-                # a master the source could not resolve: naming it would make a
-                # shape Visio drops on open
+            elif cross_document:
+                # a master the source could not resolve: in another document it
+                # would name a master that package does not declare, and Visio
+                # drops the shape on open
                 node.attrib.pop("Master")
                 node.attrib.pop("MasterShape", None)
+        # every page that shows an instance of a master relates to it, as Visio
+        # writes it; a copy onto another page of this document adds one too
         for master in masters.values():
             dst_page._ensure_page_master_rel(master.filename)
 

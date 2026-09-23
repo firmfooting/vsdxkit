@@ -101,10 +101,9 @@ def test_no_log_call_in_the_package_formats_its_own_message():
     between, and so held whatever the library did.
 
     What it does not see is an expensive *argument*: `logger.debug("%s", f(x))`
-    calls `f` at any level, and three calls in `vsdxfile.py` pass
-    `pretty_print_element` of a part that way (`masters.py` guards its one with
-    `isEnabledFor`). Lazy formatting is not lazy evaluation, and no reading of
-    the message argument can tell you otherwise.
+    calls `f` at any level, and four calls in `vsdxfile.py` pass
+    `pretty_print_element` of a page part that way. Lazy formatting is not lazy
+    evaluation, and no reading of the message argument can tell you otherwise.
     """
     offenders = []
     inspected = 0

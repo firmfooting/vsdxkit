@@ -319,6 +319,11 @@ class VisioFile(JinjaTemplatingMixin):
         self.load_pages()
         self._masters = MasterCatalog(self._package, self._master_page)
         self._masters.load()
+        if self.debug:
+            for master in self._masters.pages:
+                logger.debug(
+                    "Master(%s, id=%s)\n%s", master.filename, master.page_id, VisioFile.pretty_print_element(master.xml)
+                )
         self.file_open = True
 
     def _master_page(self, tree: PartTree, part_name: str, name: str, master_id: str, rel_id: str) -> Page:
@@ -332,8 +337,11 @@ class VisioFile(JinjaTemplatingMixin):
 
     @property
     def master_index(self) -> dict[str, Page]:
-        """Every master by name, e.g. 'Dynamic connector'."""
-        return {page.name: page for page in self._masters.pages}
+        """Every master by name, e.g. 'Dynamic connector'. The first of a name, as `MasterCatalog.by_name` answers."""
+        index: dict[str, Page] = {}
+        for page in self._masters.pages:
+            index.setdefault(page.name, page)
+        return index
 
     def load_master_pages(self) -> None:
         """Re-read the masters from the package. Idempotent."""
@@ -343,30 +351,27 @@ class VisioFile(JinjaTemplatingMixin):
         """The master page with this ID, as :attr:`Shape.master_page_ID` names it, or None."""
         return self._masters.by_id(id)
 
-    def _masters_for(self, element: Element, source: VisioFile) -> dict[str, Page]:
-        """This document's master for each master that `element`'s subtree names in `source`.
+    def _masters_for(self, master_ids: list[str], source: VisioFile) -> dict[str, Page]:
+        """This document's master for each of `master_ids`, as `source` numbers its masters.
 
-        Keyed by the master ID `source` uses. A master from another document is
-        imported by name if this one lacks it, and a master new to this
-        document is listed in app.xml's TitlesOfParts. A reference `source`
-        cannot resolve is left out: copying it would name a master no package
-        declares.
+        From another document, a master this one lacks is imported by name,
+        and listed in app.xml's TitlesOfParts. A document without app.xml has no
+        titles to keep in step (#385). The section is resolved before anything
+        changes, so an app.xml it cannot be found in stops the import cleanly.
+        An ID `source` cannot resolve is left out.
         """
         self._require_open("importing a master")
-        masters: dict[str, Page] = {}
-        for node in element.iter(f"{namespace}Shape"):
-            master_id = node.attrib.get("Master")
-            if not master_id or master_id in masters:
-                continue
-            if source is self:
-                master = self._masters.by_id(master_id)
-            else:
-                known = {page.page_id for page in self._masters.pages}
-                master = self._masters.import_master(source._masters, master_id)
-                if master is not None and master.page_id not in known:
-                    self._titles_of_parts_insert(master.name, self.MASTERS)
-            if master is not None:
-                masters[master_id] = master
+        if source is self:
+            return {master_id: master for master_id in master_ids if (master := self._masters.by_id(master_id)) is not None}
+        lists_titles = self.app_xml is not None
+        if lists_titles:
+            self._titles_of_parts_section(self.MASTERS, self._page_titles())
+        known = {page.page_id for page in self._masters.pages}
+        masters = self._masters.import_masters(source._masters, master_ids)
+        for master in masters.values():
+            if lists_titles and master.page_id not in known:
+                self._titles_of_parts_insert(master.name, self.MASTERS)
+                known.add(master.page_id)
         return masters
 
     def load_pages(self) -> None:
