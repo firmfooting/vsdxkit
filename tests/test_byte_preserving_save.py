@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import glob
 import os
+import re
 import zipfile
 from datetime import datetime
 
 import pytest
 
 import vsdxkit
+from vsdxkit.xmlio import parse_part, serialise_part
 
 BASEDIR = os.path.dirname(os.path.realpath(__file__))
 FIXTURES = sorted(os.path.basename(p) for p in glob.glob(os.path.join(BASEDIR, "*.vsd[xm]")))
@@ -102,6 +104,43 @@ def test_reassigning_filename_redirects_an_in_place_save(vsdx_copy, tmp_path):
         assert vis.pages[0].find_shape_by_text("Redirected") is not None
     with open(source, "rb") as handle:
         assert handle.read() == original
+
+
+def test_a_canonically_equal_replacement_tree_saves_the_original_bytes(vsdx_copy, tmp_path):
+    """Fails if assigning a new tree to a parsed part drops the baseline the part arrived with.
+
+    Templating and page copying rebuild a page as a new tree and assign it
+    wholesale. A rebuild that means exactly what the page meant is not an
+    edit, and must save as the bytes the page arrived as -- which the store
+    can only tell if the new tree is compared against the old part's
+    baseline rather than written as a part with no history.
+    """
+    source = vsdx_copy("test1.vsdx")
+    target = tmp_path / "out.vsdx"
+    with vsdxkit.VisioFile(source) as vis:
+        page = vis.pages[0]
+        page.xml = parse_part(serialise_part(page.xml))
+        vis.save_vsdx(str(target))
+    assert _members(target) == _members(source)
+
+
+def test_rendering_a_template_rewrites_only_the_pages_it_changes(vsdx_copy, tmp_path):
+    """Fails if a Jinja render's wholesale page replacement respells a page it did not change.
+
+    Every page of test1.vsdx is rendered and replaced. Only page 1 holds Jinja
+    expressions -- `{{scenario}}` and `{{date}}`, which an empty context
+    renders as nothing -- so page 1 is the one page whose bytes may change;
+    the other two mean what they meant and must save as they arrived.
+    """
+    source = vsdx_copy("test1.vsdx")
+    target = tmp_path / "out.vsdx"
+    with vsdxkit.VisioFile(source) as vis:
+        vis.jinja_render_vsdx(context={})
+        vis.save_vsdx(str(target))
+    pages = [name for name, _ in _members(source) if re.fullmatch(r"visio/pages/page\d+\.xml", name)]
+    assert len(pages) == 3  # the fixture has changed if this does not hold
+    before, after = dict(_members(source)), dict(_members(target))
+    assert [name for name in pages if before[name] != after[name]] == ["visio/pages/page1.xml"]
 
 
 def test_a_rendered_template_reaches_disk(vsdx_copy, tmp_path):

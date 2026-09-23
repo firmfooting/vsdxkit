@@ -281,7 +281,9 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             return
         if isinstance(held, XmlPart) and held.tree is tree:
             return
-        self._package.write_xml(name, tree)
+        # a replacement keeps the part's arrival baseline, so one that means
+        # what the part already meant still saves as the bytes it arrived as
+        self._package.replace_tree(name, tree)
 
     def _set_document_part_xml(self, attribute: str, name: str, tree: ET.ElementTree[ET.Element] | None) -> None:
         """`_set_part_xml` for a part the document itself is wired to, which None may not remove.

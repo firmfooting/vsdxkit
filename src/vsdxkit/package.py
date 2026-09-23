@@ -616,6 +616,29 @@ class PackageStore:
         """
         self._parts[_checked(name)] = XmlPart(tree=tree, original_bytes=None, original_canonical_hash=None)
 
+    def replace_tree(self, name: str, tree: ET.ElementTree[ET.Element]) -> None:
+        """Make `tree` a part's tree, keeping the bytes the part arrived as to compare it against.
+
+        `write_xml` is for a part that is new, or that the caller means to
+        rewrite. This is for a part rebuilt wholesale -- a rendered template, a
+        page assigned through `Page.xml` -- where the rebuild may mean exactly
+        what the part already meant. Carrying the held part's baseline across
+        lets the save ask the one question it asks of every part: if the new
+        tree canonicalises to what the part arrived as, the part is written as
+        those bytes, and a rebuild that changed nothing changes nothing on disk.
+
+        A part with no baseline -- absent, never parsed, or itself written as
+        a tree -- is written the way `write_xml` writes it.
+        """
+        checked = _checked(name)
+        held = self._parts.get(checked)
+        if isinstance(held, XmlPart):
+            self._parts[checked] = XmlPart(
+                tree=tree, original_bytes=held.original_bytes, original_canonical_hash=held.original_canonical_hash
+            )
+        else:
+            self._parts[checked] = XmlPart(tree=tree, original_bytes=None, original_canonical_hash=None)
+
     def remove(self, name: str) -> None:
         """Take a part out of the package, or raise KeyError if it is not in it.
 
