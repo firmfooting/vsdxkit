@@ -289,8 +289,9 @@ def adopt_prefixes(root: ET.Element, source: ET.Element) -> None:
 def serialise_part(xml: ET.ElementTree[ET.Element]) -> bytes:
     """One package part as bytes, prefixed the way Visio writes it.
 
-    The one writer of a part's bytes: `PackageStore.write_xml` and every save
-    path go through here, so a part cannot disagree with itself about the
+    The one writer of a part's bytes: `XmlPart.current_bytes` -- reached
+    through `PackageStore.read_bytes` and so every save -- and `canonical_hash`
+    both go through here, so a part cannot disagree with itself about the
     declaration, the encoding or the per-part prefix map.
 
     Every tree that becomes an archive member goes through here. The two that

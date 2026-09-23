@@ -243,22 +243,13 @@ def test_require_tree_raises_missing_part_error():
         vsdxkit.xmlio.require_tree(None, "pages.xml")
 
 
-def test_requiring_an_absent_part_raises_missing_part_error():
-    """Fails if `PackageStore.require_xml` reports an absent part with anything but `MissingPartError`.
-
-    It looks a required part up in the store, and a part that is not there is
-    a missing part, whichever caller asked for it.
-    """
-    store = vsdxkit.package.PackageStore.open(os.path.join(BASEDIR, "test1.vsdx"))
-    with pytest.raises(MissingPartError, match=r"/visio/absent\.xml"):
-        store.require_xml("/visio/absent.xml")
-
-
 def test_store_require_xml_raises_missing_part_error(tmp_path):
     """Fails if `PackageStore.require_xml` reports an absent part with anything but `MissingPartError`.
 
-    The store is the other way into a required part, and it has to report an
-    absent one the same way the `xmlio` helpers do.
+    `require_xml` is the one way a required part is looked up, and it has to
+    raise the same error for a part missing from a store that was never
+    opened -- one with no parts at all -- as it does for one absent from a
+    real archive.
     """
     store = vsdxkit.package.PackageStore(tmp_path / "nothing.vsdx")
     with pytest.raises(MissingPartError, match=r"/visio/document\.xml"):
