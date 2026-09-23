@@ -1,7 +1,7 @@
 # Write an edited part in the spelling it arrived in (#377): design
 
-**Status:** draft for review, 2026-09-23
-**Issue:** #377 (blocks #91)
+**Status:** deferred, 2026-09-23. Not to be built until one of the reopen conditions in [Decision](#decision-deferred) holds.
+**Issue:** #377 (P3; no longer blocks #91)
 **Related:** #89 (byte-preserving save, merged), #360/#364 (`serialise_part` is the only writer), #282 (a part keeps its declared prefixes), `tests/fixtures/package_manifests/KNOWN_DRIFT.md`
 
 ## Problem
@@ -125,3 +125,41 @@ Both values come from the corpus table above.
 - **Other producers' parts.** A part from a producer other than Visio may not round-trip. G1's exception list surfaces this, and nothing silently changes.
 - **Performance.** A Python-level writer is slower than the C-accelerated `ElementTree.write`. It runs only for changed parts. Measure a 1,000-shape page before and after.
 - **Scope creep.** "Spelling" can grow without limit. The rules above are the whole contract, and G1's corpus test is what defines "done".
+
+## Decision: deferred
+
+An adversarial review on 2026-09-23 asked whether this needs to exist. It found no consumer that minds ElementTree's spelling, and the maintainer deferred the work.
+
+### Why
+
+- **Visio accepts ElementTree's spelling.** The COM oracle recordings of 2026-09-14 (#297, #315) were made before #89, when every part was rewritten. All 21 opened, with matching pages, shapes and glue. The harness sets `AlertResponse=7` and answers dialogs itself, so a repair prompt would not have been recorded.
+- **LibreOffice accepts it.** The CI import job passed on fully rewritten output before #89.
+- **Every release up to 0.8.0 wrote it**, and no issue here or upstream blames it. The known interoperability failures were `ns0:` prefixes, fixed by #60, #282 and #360.
+- **Dropping unused `xmlns:r` breaks nothing known.** 162 of the corpus's 414 XML parts declare a prefix they do not use, and none of them uses a prefix inside an attribute value or text.
+- **Noisy diffs are not a real cost.** A Visio page part is one line after its declaration, so a line diff shows the whole part either way. After a one-cell edit, 85–94% of the part's bytes already match.
+- **#91's `KNOWN_DRIFT.md` criterion predates #89.** The simplification plan and epic #22 ask for a byte-identical no-op save. #89 delivers that, and `test_a_round_trip_changes_nothing` enforces it.
+
+Building it looks feasible, at 3–5 days plus a Visio session. A throwaway writer of about 120 lines reproduced all 414 corpus parts once two rules missing from this spec were added. The cost is a hand-written writer for every edited part, while the same milestone has bugs users actually hit (#331, #313, #317, #319).
+
+### Reopen when
+
+- a consumer (Visio, LibreOffice, draw.io, a validator or a user's tooling) is shown to reject or repair a part in ElementTree's spelling, or
+- #293's Visio evidence shows Visio treats the spelling differently, or
+- a user asks for edited parts to diff cleanly against the original.
+
+### Defects to fix first if this is reopened
+
+1. **Empty-element form differs by part.** `docProps/core.xml`, `app.xml` and `custom.xml` write `<a></a>` in 84 parts, and `app.xml` is edited whenever a page is added, renamed or removed. The corpus table above is wrong about this, and `PartSpelling` has no field for it. A part already saved as `<a />` must not be respelled a third way.
+2. **Attributes can come before namespace declarations.** `windows.xml` does this in all 29 fixtures, so the interleaving has to be recorded, not just the declarations.
+3. **Encoding.** Copying a non-UTF-8 declaration onto UTF-8 output corrupts text (`café` became `cafÃ©` in a probe). Write the recorded declaration only when it says UTF-8, or encode to match it.
+4. **CRLF.** Mapping every `\n` to `\r\n` turns text a caller set as `"a\r\nb"` into `a\r\r\nb`, which reads back with an extra line. CRLF detection also needs the raw bytes, because the parser has already folded them.
+5. **Rebuilt trees lose recorded declarations.** Declarations keyed by element identity do not survive templating, `copy_page` or `deepcopy`, so a templated page still loses `xmlns:r`.
+6. **Comments and processing instructions** are not handled.
+7. **Namespaced attributes** cannot use a default (unprefixed) namespace.
+8. **The `&apos;` rule is undefined.** Record it per part or derive it from the corpus; do not leave it to the test.
+9. **`PartSpelling` keeps deleted elements alive** if it maps elements strongly.
+10. **Performance is not a risk.** `ElementTree.write` is pure Python. The prototype took 38 ms against 45 ms for `ElementTree.write` on a 1,000-shape page.
+11. **G1 tests a path that never reaches disk**, since an unchanged part is written as its original bytes. G2 is the real definition of done, and it should cover `app.xml`, a templated page and the Lucidchart page.
+12. **"No repair prompt" cannot be observed** while the oracle answers dialogs itself. The needs-visio criterion needs a harness change or different wording.
+
+The smallest useful piece, if one is wanted without the rest: keep the recorded declaration and the newline after it when the declared encoding is UTF-8. That is about 15 lines.
