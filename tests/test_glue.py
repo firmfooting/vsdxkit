@@ -9,6 +9,8 @@ import pytest
 
 from vsdxkit.errors import InvalidOperationError
 from vsdxkit.glue import (
+    CellFreeze,
+    CellInherit,
     CellWrite,
     ConnectionRecord,
     ConnectorOptions,
@@ -112,6 +114,8 @@ def test_point_glue_at_both_ends_writes_the_begin_trigger_to_begtrigger():
         CellWrite("BeginY", formula=begin_point),
         CellWrite("EndX", formula=end_point),
         CellWrite("EndY", formula=end_point),
+        CellInherit("GlueType"),
+        CellInherit("ObjType"),
     )
 
 
@@ -122,12 +126,13 @@ def test_mixed_glue_writes_each_end_its_own_way():
     assert cells["GlueType"].value == "2"
 
 
-def test_a_floating_end_gets_no_cells():
+def test_a_floating_end_stays_where_it_is():
+    """Its glue formulas go, its coordinates stay: nothing recalculates it back onto a shape."""
     cells = glue_cells(None, EndGlue("6", None))
-    names = [cell.name for cell in cells]
-    assert "BegTrigger" not in names
-    assert "BeginX" not in names
-    assert "EndTrigger" in names
+    assert cells[0] == CellInherit("BegTrigger")
+    assert CellFreeze("BeginX") in cells
+    assert CellFreeze("BeginY") in cells
+    assert CellWrite("EndTrigger", formula="_XFTRIGGER(Sheet6!EventXFMod)") in cells
 
 
 def test_dynamic_routing_starts_from_visio_defaults():
@@ -138,8 +143,13 @@ def test_dynamic_routing_starts_from_visio_defaults():
     )
 
 
-def test_point_routing_leaves_the_template_alone():
-    assert routing_cells(None, dynamic=False) == ()
+def test_point_routing_is_the_straight_connector():
+    """Every routing cell is written, so options replace what a connector had rather than add to it."""
+    assert routing_cells(None, dynamic=False) == (
+        CellWrite("ShapeRouteStyle", value="16"),
+        CellWrite("ConLineRouteExt", value="1"),
+        CellWrite("ConFixedCode", value="6"),
+    )
 
 
 @pytest.mark.parametrize(
@@ -157,8 +167,10 @@ def test_curved_point_routing_sets_what_curving_sets():
     assert cells == {"ShapeRouteStyle": "17", "ConLineRouteExt": "2", "ConFixedCode": "0"}
 
 
-def test_straight_point_routing_sets_only_the_style():
-    assert routing_cells(Routing.STRAIGHT, dynamic=False) == (CellWrite("ShapeRouteStyle", value="16"),)
+@pytest.mark.parametrize(("routing", "style"), [(Routing.STRAIGHT, "16"), (Routing.RIGHT_ANGLE, "1")])
+def test_uncurved_point_routing_undoes_a_curve(routing, style):
+    cells = {cell.name: cell.value for cell in routing_cells(routing, dynamic=False)}
+    assert cells == {"ShapeRouteStyle": style, "ConLineRouteExt": "1", "ConFixedCode": "6"}
 
 
 def test_records_are_the_end_then_the_begin():

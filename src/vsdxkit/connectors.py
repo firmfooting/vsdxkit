@@ -5,6 +5,9 @@ from xml.etree.ElementTree import Element
 
 from vsdxkit.errors import InvalidOperationError, MalformedPackageError
 from vsdxkit.glue import (
+    CellChange,
+    CellFreeze,
+    CellInherit,
     CellWrite,
     ConnectorOptions,
     EndGlue,
@@ -214,12 +217,28 @@ class Connect:
         """Glue the connector's ends as planned: its cells, then its records in place of the ones it had."""
         connector_id = _id(connector_shape)
         begin_glue, end_glue = _end_glue(begin), _end_glue(end)
-        for cell in (*glue_cells(begin_glue, end_glue), *routing):
-            connector_shape.get_or_create_cell(cell.name, v=cell.value, f=cell.formula)
+        for change in (*glue_cells(begin_glue, end_glue), *routing):
+            Connect._change_cell(connector_shape, change)
         page = connector_shape.page
         page.remove_connect_records({connector_id})
         for record in connection_records(connector_id, begin_glue, end_glue):
             page.add_connect(Connect(xml=record_element(record), page=page))
+
+    @staticmethod
+    def _change_cell(connector_shape: Shape, change: CellChange) -> None:
+        if isinstance(change, CellWrite):
+            connector_shape.get_or_create_cell(change.name, v=change.value, f=change.formula)
+            return
+        # the two below edit the element: a Cell cannot drop a formula, and
+        # nothing removes one of a shape's cells
+        connector_shape._require_open(f"writing shape cell {change.name!r}")
+        cell = connector_shape._cell(change.name)
+        if cell is None:
+            return
+        if isinstance(change, CellFreeze):
+            cell.xml.attrib.pop("F", None)
+        elif isinstance(change, CellInherit):
+            connector_shape.xml.remove(cell.xml)
 
     @staticmethod
     def _current_ends(page: Page, connector_shape: Shape) -> tuple[_End, _End]:

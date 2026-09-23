@@ -6,7 +6,7 @@ import zipfile
 import pytest
 
 from vsdxkit.errors import InvalidOperationError
-from vsdxkit.glue import ConnectorOptions
+from vsdxkit.glue import ConnectorOptions, Glue
 from vsdxkit.vsdxfile import VisioFile
 
 BASE = "test8_simple_connector.vsdx"
@@ -182,6 +182,58 @@ def test_options_replace_the_glue_of_both_ends(vsdx_copy):
 
         assert _records(page, connector) == {"BeginX": ("90", "PinX"), "EndX": ("102", "PinX")}
         assert connector.cells["ShapeRouteStyle"].value == "0"
+
+
+def _own_cell(connector, name):
+    """The connector's own cell `name`, or None where it inherits it."""
+    return connector.xml.find(f'{{http://schemas.microsoft.com/office/visio/2012/main}}Cell[@N="{name}"]')
+
+
+def test_options_to_point_glue_replace_dynamic_routing_and_glue_cells(vsdx_copy):
+    """Codex on #401: a dynamic connector moved to point glue kept ShapeRouteStyle=0 and GlueType=2."""
+    with VisioFile(vsdx_copy(S05)) as vis:
+        page = vis.pages[0]
+        source, target, other = (page.shapes.by_id(i) for i in ("90", "97", "102"))
+        dynamic = page.connect_shapes(source, target)
+        point = page.connect_shapes(source, target, route="point")
+
+        page.reanchor_connector(dynamic, to_shape=other, options=ConnectorOptions(glue=Glue.POINT))
+        page.reanchor_connector(point, to_shape=other)
+
+        for name in ("ShapeRouteStyle", "ConLineRouteExt", "ConFixedCode"):
+            assert dynamic.cells[name].value == point.cells[name].value, name
+        assert _own_cell(dynamic, "GlueType") is None
+        assert _own_cell(dynamic, "ObjType") is None
+
+
+def test_options_uncurve_a_curved_point_connector(vsdx_copy):
+    with VisioFile(vsdx_copy(S05)) as vis:
+        page = vis.pages[0]
+        source, target = page.shapes.by_id("90"), page.shapes.by_id("97")
+        connector = page.connect_shapes(source, target, route="point|curved")
+
+        page.reanchor_connector(connector, to_shape=target, route="point|straight")
+
+        values = {name: connector.cells[name].value for name in ("ShapeRouteStyle", "ConLineRouteExt", "ConFixedCode")}
+        assert values == {"ShapeRouteStyle": "16", "ConLineRouteExt": "1", "ConFixedCode": "6"}
+
+
+def test_a_kept_floating_end_loses_its_old_glue(vsdx_copy):
+    """Codex on #401: a floating begin kept `PAR(PNT(Sheet90!...))`, so Visio would glue it back to 90."""
+    with VisioFile(vsdx_copy(S05)) as vis:
+        page = vis.pages[0]
+        source, target, other = (page.shapes.by_id(i) for i in ("90", "97", "102"))
+        connector = page.connect_shapes(source, target, route="point", from_cp=1, to_cp=2)
+        _drop_record(page, connector, "BeginX")
+        begin = (connector.begin_x, connector.begin_y)
+
+        page.reanchor_connector(connector, to_shape=other)
+
+        assert connector.cells["BeginX"].formula is None
+        assert connector.cells["BeginY"].formula is None
+        assert _own_cell(connector, "BegTrigger") is None
+        assert (connector.begin_x, connector.begin_y) == begin
+        assert not any("Sheet90!" in (cell.formula or "") for cell in connector.cells.values())
 
 
 def test_a_route_still_replaces_the_glue_of_both_ends(vsdx_copy):

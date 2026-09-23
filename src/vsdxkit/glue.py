@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import TypeAlias
 from xml.etree.ElementTree import Element
 
 from vsdxkit.errors import InvalidOperationError
@@ -117,6 +118,23 @@ class CellWrite:
 
 
 @dataclass(frozen=True)
+class CellFreeze:
+    """A cell whose formula goes and whose value stays, as a floating end's coordinates do."""
+
+    name: str
+
+
+@dataclass(frozen=True)
+class CellInherit:
+    """A cell of the connector's own to remove, so that it takes its master's again."""
+
+    name: str
+
+
+CellChange: TypeAlias = CellWrite | CellFreeze | CellInherit
+
+
+@dataclass(frozen=True)
 class ConnectionRecord:
     """The attributes of one ``<Connect>`` element."""
 
@@ -135,19 +153,36 @@ def _coordinate_formula(end: EndGlue, *, begin: bool) -> str:
     return f"PAR(PNT(Sheet{end.shape_id}!Connections.X{row},Sheet{end.shape_id}!Connections.Y{row}))"
 
 
-def glue_cells(begin: EndGlue | None, end: EndGlue | None) -> tuple[CellWrite, ...]:
-    """The cells gluing the connector's ends, in the order Visio writes them. ``None`` is a floating end."""
-    ends = [(prefix, glued, is_begin) for prefix, glued, is_begin in (("Begin", begin, True), ("End", end, False)) if glued]
-    triggers = [
-        CellWrite("BegTrigger" if is_begin else "EndTrigger", formula=f"_XFTRIGGER(Sheet{glued.shape_id}!EventXFMod)")
-        for _prefix, glued, is_begin in ends
-    ]
+def _trigger(glued: EndGlue | None, name: str) -> CellChange:
+    if glued is None:
+        return CellInherit(name)
+    return CellWrite(name, formula=f"_XFTRIGGER(Sheet{glued.shape_id}!EventXFMod)")
+
+
+def _coordinate(glued: EndGlue | None, name: str, *, begin: bool) -> CellChange:
+    if glued is None:
+        return CellFreeze(name)
+    return CellWrite(name, formula=_coordinate_formula(glued, begin=begin))
+
+
+def glue_cells(begin: EndGlue | None, end: EndGlue | None) -> tuple[CellChange, ...]:
+    """Every cell that says how the connector's ends are glued, in the order Visio writes them.
+
+    ``None`` is a floating end: its trigger goes and its coordinates keep their
+    values without the formulas that tied them to a shape. The cells are the
+    whole state, not a delta, so writing them over a connector glued some
+    other way leaves nothing of the old glue behind.
+    """
+    triggers = (_trigger(begin, "BegTrigger"), _trigger(end, "EndTrigger"))
     coordinates = [
-        CellWrite(f"{prefix}{axis}", formula=_coordinate_formula(glued, begin=is_begin))
-        for prefix, glued, is_begin in ends
+        _coordinate(glued, f"{prefix}{axis}", begin=is_begin)
+        for prefix, glued, is_begin in (("Begin", begin, True), ("End", end, False))
         for axis in ("X", "Y")
     ]
-    connector = [CellWrite("GlueType", value="2"), CellWrite("ObjType", value="2")] if _any_dynamic(begin, end) else []
+    if _any_dynamic(begin, end):
+        connector: tuple[CellChange, ...] = (CellWrite("GlueType", value="2"), CellWrite("ObjType", value="2"))
+    else:
+        connector = (CellInherit("GlueType"), CellInherit("ObjType"))
     return (*triggers, *coordinates, *connector)
 
 
@@ -156,12 +191,15 @@ def _any_dynamic(begin: EndGlue | None, end: EndGlue | None) -> bool:
 
 
 def routing_cells(routing: Routing | None, *, dynamic: bool) -> tuple[CellWrite, ...]:
-    """The cells setting a connector's routing.
+    """Every cell that sets a connector's routing, so the routing replaces whatever the connector had.
 
-    Dynamic glue sets Visio's defaults first; point glue leaves the straight
-    connector it was copied from as it is.
+    With no ``routing``, dynamic glue takes Visio's defaults (s01) and point
+    glue the straight connector's (the bundled donor's own cells).
     """
-    cells = {"ShapeRouteStyle": "0", "ConLineRouteExt": "0", "ConFixedCode": "6"} if dynamic else {}
+    if dynamic:
+        cells = {"ShapeRouteStyle": "0", "ConLineRouteExt": "0", "ConFixedCode": "6"}
+    else:
+        cells = {"ShapeRouteStyle": "16", "ConLineRouteExt": "1", "ConFixedCode": "6"}
     if routing is not None:
         cells["ShapeRouteStyle"] = _ROUTE_STYLE[routing]
     if routing is Routing.CURVED:

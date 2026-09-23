@@ -66,14 +66,16 @@ def record_element(record: ConnectionRecord) -> Element
 
 `CellWrite` is `(name, formula | None, value | None)`, a frozen dataclass.
 
-- **An end that is `None` is floating.** It gets no cells and no record.
+- **The cells are the whole glue state, not a delta** (Codex on #401). `glue_cells` returns `CellWrite`, `CellFreeze` (drop the formula, keep the value) and `CellInherit` (remove the connector's own cell):
+  - **an end that is `None` is floating:** it gets no record, its trigger is inherited, and its coordinates are frozen, so no stale formula glues it back to a shape;
+  - **when no end is dynamic,** `GlueType` and `ObjType` are inherited.
 - **Per glued end, in the order Visio writes them:**
   - the trigger is `BegTrigger`/`EndTrigger`, `_XFTRIGGER(SheetN!EventXFMod)`;
   - the coordinates are `BeginX/Y`/`EndX/Y`: `_WALKGLUE(BegTrigger,EndTrigger,WalkPreference)` (or the End form) for dynamic, and `PAR(PNT(SheetN!Connections.Xk,SheetN!Connections.Yk))` for a point.
 - **When any end is dynamic,** the connector-level `GlueType=2`, `ObjType=2`, `ConFixedCode=6` follow.
 - **Routing:**
   - dynamic glue starts from `ShapeRouteStyle=0`, `ConLineRouteExt=0`;
-  - point glue starts from nothing, so the straight donor's `ShapeRouteStyle=16` and `ConLineRouteExt=1` stand, as today;
+  - point glue starts from the straight donor's own `ShapeRouteStyle=16`, `ConLineRouteExt=1`, `ConFixedCode=6`, written out so that options replace a retargeted connector's routing rather than adding to it (Codex on #401);
   - `STRAIGHT`, `RIGHT_ANGLE` and `CURVED` then override. `CURVED` also sets `ConFixedCode=0`: s03's generator set only `ShapeRouteStyle` and `ConLineRouteExt`, and Visio changed `ConFixedCode` from 6 to 0 itself. The engine writes 6 today, so the COM oracle fails on `curved`.
 - **Record order is the End record, then the Begin record, as today.** `FromPart` is 9 or 12; `ToPart` is 3 for `PinX`, or `99 + k` for `Connections.Xk`.
 - **The sheet reference keeps its current undotted form.** Visio writes `Sheet.N!`, but changing that touches the remap, the validator and a dozen assertions, so it is #400.
