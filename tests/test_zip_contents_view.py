@@ -95,3 +95,34 @@ def test_delitem_with_invalid_part_name_raises_key_error(view):
     """Deleting a key with an invalid part name must raise KeyError, not ValueError."""
     with pytest.raises(KeyError):
         del view[f"{DIRECTORY}/visio/../escape.xml"]
+
+
+def test_mutations_through_returned_buffer_update_the_store(view, store):
+    """Mutations to the returned buffer (seek, write, truncate) must update the store (backwards compatibility)."""
+    key = f"{DIRECTORY}/visio/document.xml"
+    buf = view[key]
+    buf.seek(0)
+    buf.write(b"<Changed/>")
+    buf.truncate()
+    assert store.read_bytes("/visio/document.xml") == b"<Changed/>"
+
+
+def test_reading_returned_buffer_does_not_replace_promoted_part(view, store):
+    """Reading a returned buffer must not replace a promoted XmlPart in the store."""
+    tree = store.require_xml("/visio/pages/page1.xml")
+    root = tree.getroot()
+    assert root is not None
+    original_part = store.part("/visio/pages/page1.xml")
+    buf = view[f"{DIRECTORY}/visio/pages/page1.xml"]
+    buf.read()
+    assert store.part("/visio/pages/page1.xml") is original_part
+
+
+def test_writelines_writes_through(view, store):
+    """writelines on the returned buffer must write through to the store."""
+    key = f"{DIRECTORY}/visio/document.xml"
+    buf = view[key]
+    buf.seek(0)
+    buf.truncate()
+    buf.writelines([b"<", b"New", b"/>"])
+    assert store.read_bytes("/visio/document.xml") == b"<New/>"

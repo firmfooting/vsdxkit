@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import io
 import sys
-from collections.abc import Iterator, MutableMapping
+from collections.abc import Iterable, Iterator, MutableMapping
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -18,6 +18,45 @@ else:
     from typing_extensions import override
 
 from .package import PackageStore
+
+
+class _WriteThroughBuffer(io.BytesIO):
+    """A BytesIO that writes mutations back to the package store.
+
+    The old zip_file_contents dict handed out its own BytesIO objects, so
+    mutating one changed the package immediately. When those buffers are no
+    longer backed by the dict, mutations are silent losses. This buffer
+    restores that behaviour by writing back to the store when the buffer
+    is mutated, ensuring that buf.write(...); buf.truncate() changes the
+    package the way it did before.
+
+    A write through the buffer replaces the part with bytes, detaching any
+    promoted tree (the same way __setitem__ does), so a caller who holds the
+    buffer and a removed tree keeps a working, detached tree.
+    """
+
+    def __init__(self, store: PackageStore, name: str, initial_bytes: bytes) -> None:
+        super().__init__(initial_bytes)
+        self._store = store
+        self._name = name
+
+    @override
+    def write(self, __s):  # type: ignore[override]
+        result = super().write(__s)
+        self._store.write_bytes(self._name, self.getvalue())
+        return result
+
+    @override
+    def writelines(self, __lines: Iterable[bytes]) -> None:  # type: ignore[override]
+        result = super().writelines(__lines)
+        self._store.write_bytes(self._name, self.getvalue())
+        return result
+
+    @override
+    def truncate(self, __size: int | None = None) -> int:  # type: ignore[override]
+        result = super().truncate(__size)
+        self._store.write_bytes(self._name, self.getvalue())
+        return result
 
 
 def part_name_for_path(directory: str, path: str) -> str | None:
@@ -47,7 +86,8 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
             data = None
         if data is None:
             raise KeyError(key)
-        return io.BytesIO(data)
+        assert name is not None  # name is guaranteed non-None if data is not None
+        return _WriteThroughBuffer(self._store, name, data)
 
     @override
     def __setitem__(self, key: str, value: io.BytesIO) -> None:
