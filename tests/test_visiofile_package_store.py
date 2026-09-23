@@ -221,6 +221,25 @@ def test_a_copied_page_brings_its_rels_part_into_the_store(vsdx_copy):
         assert isinstance(held, XmlPart) and held.tree is copy.rels_xml
 
 
+def test_a_copied_page_still_writes_its_rels_past_an_orphan_at_the_next_name(vsdx_copy):
+    """Fails if `_unused_page_part_name` checks only whether pageN.xml exists.
+
+    An orphan `pages/_rels/pageN.xml.rels` at the name a new page is about to
+    take makes the store already hold a part there before the copied page's
+    `rels_xml` is ever assigned. `Page._rels_attached()` then finds a rels
+    part that is not this page's own tree and refuses to write over it, so
+    the assignment silently never reaches the store.
+    """
+    with VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
+        source = next(p for p in vis.pages if p.rels_xml is not None)
+        candidate = vis._unused_page_part_name()
+        orphan_name = vis._part_name(f"{vis.directory}/visio/pages/_rels/{candidate}.rels")
+        vis._package.write_xml(orphan_name, ET.ElementTree(ET.Element("Relationships")))
+        copy = vis.copy_page(source)
+        held = vis._package.part(vis._part_name(copy.rels_xml_filename))
+        assert isinstance(held, XmlPart) and held.tree is copy.rels_xml
+
+
 def test_importing_a_master_keeps_masters_parts_as_the_stores_trees(vsdx_copy):
     """#366 and the eager-write removal: masters.xml(.rels) are trees in the
     store, not bytes. Fails if the imported master's relationship is appended

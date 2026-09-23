@@ -615,13 +615,23 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         could target the same part. Members currently in the package and
         relationships still declared in pages.xml.rels are both treated as
         taken, so the chosen name is unused by either.
+
+        A name is taken when either ``pageN.xml`` or its rels part
+        ``_rels/pageN.xml.rels`` exists. An orphan rels part with no page part
+        of its own is otherwise invisible to this check -- it sits at a
+        different member name than the one being tested -- so a new page
+        reusing ``pageN.xml`` would find the store already holding a part at
+        its rels name. `Page._rels_attached()` treats that as not the page's
+        own tree and refuses to write over it, so the new page's `rels_xml`
+        assignment becomes a silent no-op.
         """
         page_dir = f"{self.directory}/visio/pages/"
+        rel_dir = f"{self.directory}/visio/pages/_rels/"
         taken = set(self.zip_file_contents)
         rels_root = self._part_root(self.pages_xml_rels, "pages.xml.rels")
         taken.update(f"{page_dir}{rel.attrib['Target']}" for rel in rels_root)
         counter = 1
-        while f"{page_dir}page{counter}.xml" in taken:
+        while f"{page_dir}page{counter}.xml" in taken or f"{rel_dir}page{counter}.xml.rels" in taken:
             counter += 1
         return f"page{counter}.xml"
 
