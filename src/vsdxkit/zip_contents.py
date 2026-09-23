@@ -291,7 +291,9 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
     has been parsed (an `XmlPart`) is read as a fresh snapshot every time,
     because its tree is authoritative and can change without the view seeing
     it. Two holders of such a part's buffers are back to one snapshot each,
-    both stay bound, and the second write-through wins. An assignment or
+    both stay bound, and the second write-through wins -- unless one of them
+    holds bytes back because they do not parse: those are written at sync or
+    close, so they win over a later valid write from the other. An assignment or
     delete through the view does detach both, as it would have detached a
     dict value. Likewise `view[key] = buf` stores the bytes of `buf` rather
     than `buf` itself, so a later read does not return the object assigned,

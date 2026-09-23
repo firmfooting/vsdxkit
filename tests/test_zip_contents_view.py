@@ -604,6 +604,7 @@ def test_a_later_parseable_write_clears_the_pending_bytes(view, store):
     held = store.part(PAGE1)
     assert isinstance(held, XmlPart)
     assert held.tree is tree
+    assert tree.getroot() is root, "sync wrote the held-back bytes over the tree after a later write parsed"
     assert root.get("EditedAfter") == "1"
 
 
