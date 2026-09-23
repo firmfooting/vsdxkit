@@ -538,7 +538,7 @@ class PackageStore:
         """Replace a part with these bytes, discarding any tree it had."""
         self._parts[_checked(name)] = BytesPart(data)
 
-    def write_bytes_keeping_tree(self, name: str, data: bytes) -> None:
+    def write_bytes_keeping_tree(self, name: str, data: bytes, *, refuse_unparseable: bool = False) -> bool:
         """Replace a part's content with these bytes, into the tree it already has if it has one.
 
         `write_bytes` is right for a caller that means to replace a part; this
@@ -558,23 +558,35 @@ class PackageStore:
         `write_bytes` would -- there is no tree they could be.
 
         A part that has not been parsed, or is not there, is written as bytes.
+
+        `refuse_unparseable` is for a writer whose bytes may be a step on the
+        way rather than its last word: a `zip_file_contents` buffer mid-way
+        through `seek(0); write(shorter); truncate()` holds the new XML with
+        the old tail behind it. Replacing the part with that would detach the
+        tree for good, so with the flag set a parsed part is left exactly as
+        it is, and the False returned says the bytes were not taken; the
+        caller keeps them and writes them again once it knows they are final.
+        Every other write returns True.
         """
         checked = _checked(name)
         held = self._parts.get(checked)
         if not isinstance(held, XmlPart):
             self._parts[checked] = BytesPart(data)
-            return
+            return True
         try:
             written = parse_part(data)
         except ET.ParseError:
+            if refuse_unparseable:
+                return False
             self._parts[checked] = BytesPart(data)
-            return
+            return True
         if canonical_hash(written) == canonical_hash(held.tree):
-            return
+            return True
         new_root = written.getroot()
         # parse_part always yields a root; the assert only tells the type checker so
         assert new_root is not None
         held.tree._setroot(new_root)
+        return True
 
     def read_xml(self, name: str) -> ET.ElementTree[ET.Element] | None:
         """This part's tree, promoting it on first ask, or None if it is absent."""

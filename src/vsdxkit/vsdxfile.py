@@ -1372,6 +1372,19 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         self._check_destination_kind(self.filename)
         return self.filename
 
+    def _write_back(self, tree: ET.ElementTree[ET.Element], path: str) -> None:
+        """Write one document tree into the package at save, unless bytes a caller left stand in its place.
+
+        `zip_file_contents.sync()` runs first, and writes the bytes a buffer
+        was left holding that do not parse over the part they were meant for.
+        The document's tree for that part is then the stale one those bytes
+        replaced, and writing it back would undo what the caller left.
+        """
+        contents = self.zip_file_contents
+        if isinstance(contents, ZipFileContentsView) and contents.holds_bytes_over(path, tree):
+            return
+        xml_to_file(tree, path, contents)
+
     def save_vsdx(self, new_filename: str | None = None) -> None:
         """save the VisioFile object as new vsdx file
 
@@ -1398,46 +1411,41 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             self.zip_file_contents.sync()
 
         # write pages.xml.rels
-        xml_to_file(
+        self._write_back(
             self._part_tree(self.pages_xml_rels, "pages.xml.rels"),
             f"{self.directory}/visio/pages/_rels/pages.xml.rels",
-            self.zip_file_contents,
         )
 
         # write pages.xml file - in case pages added removed
-        xml_to_file(self._part_tree(self.pages_xml, "pages.xml"), self._pages_filename(), self.zip_file_contents)
+        self._write_back(self._part_tree(self.pages_xml, "pages.xml"), self._pages_filename())
 
         # write the master pages to file
         for page in self.master_pages:  # type: Page
-            xml_to_file(page.xml, page.filename, self.zip_file_contents)
+            self._write_back(page.xml, page.filename)
 
         # write the pages to file
         for page in self.pages:  # type: Page
-            xml_to_file(page.xml, page.filename, self.zip_file_contents)
+            self._write_back(page.xml, page.filename)
             if page.rels_xml_filename is not None:
-                xml_to_file(require_tree(page.rels_xml, "page rels"), page.rels_xml_filename, self.zip_file_contents)
+                self._write_back(require_tree(page.rels_xml, "page rels"), page.rels_xml_filename)
 
         # write [content_Types].xml
-        xml_to_file(
+        self._write_back(
             self._part_tree(self.content_types_xml, "[Content_Types].xml"),
             f"{self.directory}/[Content_Types].xml",
-            self.zip_file_contents,
         )
 
         # write app.xml
         if self.app_xml is not None:
-            xml_to_file(self.app_xml, f"{self.directory}/docProps/app.xml", self.zip_file_contents)
+            self._write_back(self.app_xml, f"{self.directory}/docProps/app.xml")
 
         # write document.xml
-        xml_to_file(
-            self._part_tree(self.document_xml, "document.xml"), f"{self.directory}/visio/document.xml", self.zip_file_contents
-        )
+        self._write_back(self._part_tree(self.document_xml, "document.xml"), f"{self.directory}/visio/document.xml")
 
         # write document.xml.rels
-        xml_to_file(
+        self._write_back(
             self._part_tree(self.document_xml_rels, "document.xml.rels"),
             f"{self.directory}/visio/_rels/document.xml.rels",
-            self.zip_file_contents,
         )
 
         # an in-place save writes back over the absolute source `PackageStore`

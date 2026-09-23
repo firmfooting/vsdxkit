@@ -21,6 +21,8 @@ else:
     from typing_extensions import override
 
 if TYPE_CHECKING:
+    import xml.etree.ElementTree as ET
+
     # annotations only: typing_extensions grew Buffer in 4.6, and the declared
     # floor is 4.4, so importing it at runtime would break an install the
     # package metadata allows
@@ -44,10 +46,23 @@ class _WriteThroughBuffer(io.BytesIO):
 
     A write through the buffer goes to the store the way `__setitem__` does,
     through `PackageStore.write_bytes_keeping_tree`: a parsed part keeps the
-    tree the document is editing, and only bytes that do not parse replace
-    it. Replacing it on every write would detach that tree, and the document's
-    later edits would go into a tree nothing saves; a buffer read and
-    truncated at its end would be enough to do it.
+    tree the document is editing. Replacing it on every write would detach
+    that tree, and the document's later edits would go into a tree nothing
+    saves; a buffer read and truncated at its end would be enough to do it.
+
+    Bytes that do not parse are held back rather than written over a parsed
+    part. They are usually a step on the way: `seek(0); write(new);
+    truncate()` with new XML shorter than the old calls `write()` while the
+    buffer holds the new head with the old tail behind it, and writing that
+    would turn the part into bytes, leaving the `truncate()` to put valid XML
+    into a part the document's tree is no longer. So the buffer registers as
+    pending with its view instead, and the store keeps the tree; until then a
+    read of the member sees the tree, not these bytes. The next write from
+    this buffer that parses lands in the tree as usual and clears it. If none
+    comes, the bytes are the caller's last word, and they replace the part
+    when the buffer is closed or at `ZipFileContentsView.sync()`, which
+    `VisioFile.save_vsdx` runs before it writes anything, so the package
+    saves what the caller left, as it did before the store.
 
     `getbuffer()` is the one mutation this cannot see: a write through the
     memoryview it returns lands in the buffer's memory without calling any
@@ -86,6 +101,8 @@ class _WriteThroughBuffer(io.BytesIO):
         initial_bytes: bytes,
         exports: dict[int, _WriteThroughBuffer],
         live: dict[str, _WriteThroughBuffer],
+        pending: dict[int, _WriteThroughBuffer],
+        superseded: dict[str, tuple[BytesPart, ET.ElementTree[ET.Element]]],
     ) -> None:
         super().__init__(initial_bytes)
         self._store = store
@@ -94,6 +111,8 @@ class _WriteThroughBuffer(io.BytesIO):
         self._bound: PartValue | None = part
         self._exports = exports
         self._live = live
+        self._pending = pending
+        self._superseded = superseded
         # what the store last agreed this buffer held, set on first export;
         # None means no memoryview has ever been handed out
         self._baseline: bytes | None = None
@@ -114,30 +133,44 @@ class _WriteThroughBuffer(io.BytesIO):
             self._bound = held
             return True
         self._bound = None
-        # a detached buffer has nothing left to sync, and must not be handed
-        # out as the member's buffer again
+        # a detached buffer has nothing left to sync or settle, and must not
+        # be handed out as the member's buffer again
         self._exports.pop(id(self), None)
+        self._pending.pop(id(self), None)
         if self._live.get(self._name) is self:
             del self._live[self._name]
         return False
 
-    def _store_value(self, value: bytes) -> None:
-        self._store.write_bytes_keeping_tree(self._name, value)
+    def _store_value(self, value: bytes, *, final: bool) -> bool:
+        """Write `value` as this buffer's part, or hold it back and return False.
+
+        Only bytes that do not parse, bound for a parsed part, are held back,
+        and only while more writes may follow (`final` is False).
+        """
+        replaced = self._bound
+        if not self._store.write_bytes_keeping_tree(self._name, value, refuse_unparseable=not final):
+            self._pending[id(self)] = self
+            return False
+        self._pending.pop(id(self), None)
         part = self._store.part(self._name)
         self._bound = part
+        if isinstance(replaced, XmlPart) and isinstance(part, BytesPart):
+            # the document still holds the tree these bytes replaced; say so,
+            # so a save that writes trees back does not write it over them
+            self._superseded[self._name] = (part, replaced.tree)
         if isinstance(part, BytesPart):
             self._live[self._name] = self
         else:
             # a parsed part kept its tree, which is authoritative and is read
             # as a fresh snapshot every time, so no buffer is live for it
             self._live.pop(self._name, None)
+        return True
 
-    def _write_through(self) -> None:
+    def _write_through(self, *, final: bool = False) -> None:
         if not self._attached():
             return
         value = self.getvalue()
-        self._store_value(value)
-        if self._baseline is not None:
+        if self._store_value(value, final=final) and self._baseline is not None:
             # the store has these bytes now, so a later sync has nothing of
             # this buffer's to write and must not write them over whatever the
             # store is given after this
@@ -160,6 +193,14 @@ class _WriteThroughBuffer(io.BytesIO):
         result = super().truncate(size)
         self._write_through()
         return result
+
+    @override
+    def close(self) -> None:
+        # a closed buffer can be neither written nor read again, so bytes it
+        # held back are as final as they will ever be
+        if not self.closed and id(self) in self._pending:
+            self._write_through(final=True)
+        super().close()
 
     @override
     def getbuffer(self) -> memoryview:
@@ -187,7 +228,17 @@ class _WriteThroughBuffer(io.BytesIO):
         if value == self._baseline:
             return
         self._baseline = value
-        self._store_value(value)
+        self._store_value(value, final=True)
+
+    def settle(self) -> None:
+        """Write bytes held back because they did not parse, if this buffer is still bound.
+
+        Called by the view's sync, when no later write can come before the
+        save: the bytes are the caller's last word, so they replace the part
+        even though that detaches its tree.
+        """
+        if id(self) in self._pending:
+            self._write_through(final=True)
 
 
 def part_name_for_path(directory: str, path: str) -> str | None:
@@ -227,7 +278,10 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
     bytes of `buf` rather than `buf` itself, so a later read does not return
     the object assigned, and a later write to `buf` does not reach the store.
     New XML written to a parsed part replaces its tree's root, so an element
-    a caller took from the old root belongs to no part any more.
+    a caller took from the old root belongs to no part any more. Bytes that
+    do not parse, written through a buffer of a parsed part, reach the store
+    only when the buffer is closed or synced, so a read in between sees the
+    tree (see `_WriteThroughBuffer`).
     """
 
     def __init__(self, store: PackageStore, directory: str) -> None:
@@ -246,6 +300,13 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
         # the part the store holds is stale and is replaced on the next read
         # of that member.
         self._live: dict[str, _WriteThroughBuffer] = {}
+        # buffers holding back bytes that do not parse from a parsed part, by
+        # id. Held strongly for the reason exports are: `view[k].write(...)`
+        # leaves nothing else holding the buffer whose bytes sync must write.
+        self._pending: dict[int, _WriteThroughBuffer] = {}
+        # parts whose tree a buffer's final bytes replaced, by part name: the
+        # bytes part written, and the tree it replaced (see `holds_bytes_over`)
+        self._superseded: dict[str, tuple[BytesPart, ET.ElementTree[ET.Element]]] = {}
 
     def sync(self) -> None:
         """Write to the store every change made through a `getbuffer()` memoryview.
@@ -258,14 +319,46 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
         store write to the same part made after the edit, where the old dict
         would have kept whichever came last. A buffer detached since it was
         exported is not written: its member has been deleted or replaced.
+
+        It also writes the bytes any buffer held back because they did not
+        parse (see `_WriteThroughBuffer`): nothing more can arrive before the
+        save, so what the buffer holds is what the caller left the member as.
         """
-        # a snapshot, because a closed buffer is dropped while iterating: it
-        # can take no more edits, and its bytes can no longer be read
+        # snapshots, because entries are dropped while iterating: a closed
+        # buffer can take no more edits and can no longer be read, and a
+        # buffer that syncs or settles leaves the pending registry
         for key, buffer in list(self._exports.items()):
             if buffer.closed:
-                del self._exports[key]
+                self._exports.pop(key, None)
             else:
                 buffer.sync()
+        for key, buffer in list(self._pending.items()):
+            if buffer.closed:
+                self._pending.pop(key, None)
+            else:
+                buffer.settle()
+
+    def holds_bytes_over(self, key: str, tree: ET.ElementTree[ET.Element]) -> bool:
+        """Whether a buffer's final bytes replaced `tree` as this member's part and are still there.
+
+        For `VisioFile.save_vsdx`, which writes every document tree back
+        through this view after `sync()`: a page whose buffer was left
+        holding bytes that do not parse is, after the sync, those bytes, and
+        the page's tree is the stale one they replaced. Writing it back would
+        undo what the caller left. A tree the caller has put in place since
+        is not the one replaced, so it is still written.
+        """
+        name = self._name(key)
+        entry = None if name is None else self._superseded.get(name)
+        if entry is None:
+            return False
+        assert name is not None  # entry is None whenever name is
+        written, replaced = entry
+        if self._store.part(name) is not written:
+            # something has written the part since, so the record is stale
+            del self._superseded[name]
+            return False
+        return replaced is tree
 
     def _name(self, key: object) -> str | None:
         return part_name_for_path(self._directory, key) if isinstance(key, str) else None
@@ -294,7 +387,7 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
         return buffer
 
     def _new_buffer(self, name: str, part: PartValue, data: bytes) -> _WriteThroughBuffer:
-        return _WriteThroughBuffer(self._store, name, part, data, self._exports, self._live)
+        return _WriteThroughBuffer(self._store, name, part, data, self._exports, self._live, self._pending, self._superseded)
 
     @override
     def __setitem__(self, key: str, value: io.BytesIO) -> None:

@@ -474,3 +474,191 @@ def test_promotion_does_not_detach_a_buffer(view, store):
     assert isinstance(held, XmlPart)
     assert held.tree is tree
     assert tree.getroot().tag == "Rewritten"
+
+
+PAGE1 = "/visio/pages/page1.xml"
+MARKER = b"VsdxkitMarker='1'"
+
+
+def _shorter_replacement(original: bytes) -> bytes:
+    """The same page with one attribute added, and shorter than `original`.
+
+    Shorter because the partial-rewrite idiom only leaves unparseable bytes
+    behind when the new XML does not cover the old: dropping the XML
+    declaration pays for the attribute. The idiom's intermediate state --
+    the replacement followed by the old tail -- is checked not to parse, since
+    a test of what happens to those bytes means nothing if they do.
+    """
+    declaration, _, rest = original.partition(b"\r\n")
+    assert declaration.startswith(b"<?xml")
+    replacement = rest.replace(b"<PageContents ", b"<PageContents " + MARKER + b" ", 1)
+    assert len(replacement) < len(original)
+    with pytest.raises(ET.ParseError):
+        ET.fromstring(replacement + original[len(replacement) :])
+    return replacement
+
+
+def _partial_rewrite(buf: io.BytesIO, replacement: bytes) -> None:
+    buf.seek(0)
+    buf.write(replacement)
+    buf.truncate()
+
+
+def _canonical(data: bytes) -> str:
+    return ET.canonicalize(xml_data=data, with_comments=True, strip_text=False)
+
+
+def test_a_partial_rewrite_keeps_the_parsed_tree(view, store):
+    """Fails if a buffer's write-through of bytes that do not parse replaces a parsed part with those bytes.
+
+    Between its `write()` and its `truncate()` the idiom holds the new XML
+    followed by the old tail. Writing that as the part would detach the tree
+    the document edits, and the `truncate()` would then put valid XML into a
+    part that is only bytes.
+    """
+    tree = store.require_xml(PAGE1)
+    part = store.part(PAGE1)
+    buf = view[f"{DIRECTORY}{PAGE1}"]
+    _partial_rewrite(buf, _shorter_replacement(buf.getvalue()))
+    assert store.part(PAGE1) is part
+    root = tree.getroot()
+    assert root is not None
+    assert root.get("VsdxkitMarker") == "1"
+
+
+def test_a_partial_rewrite_and_a_later_object_model_edit_both_reach_disk(vsdx_copy, tmp_path):
+    """Fails if the partial-rewrite idiom detaches the page's tree, so either the rewrite or the later edit is lost."""
+    target = str(tmp_path / "saved.vsdx")
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        page = vis.pages[0]
+        buf = vis.zip_file_contents[page.filename]
+        _partial_rewrite(buf, _shorter_replacement(buf.getvalue()))
+        shape = page.find_shape_by_id("1")
+        assert shape is not None
+        shape.text = "Edited after the rewrite"
+        vis.save_vsdx(target)
+    with VisioFile(target) as saved:
+        page = saved.pages[0]
+        assert page.xml.getroot().get("VsdxkitMarker") == "1"
+        shape = page.find_shape_by_id("1")
+        assert shape is not None
+        assert shape.text == "Edited after the rewrite"
+
+
+def test_a_partial_rewrite_alone_reaches_disk(vsdx_copy, tmp_path):
+    """Fails if the partial-rewrite idiom leaves the page's old tree in the package for the save to write."""
+    target = str(tmp_path / "saved.vsdx")
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        buf = vis.zip_file_contents[f"{vis.directory}{PAGE1}"]
+        replacement = _shorter_replacement(buf.getvalue())
+        _partial_rewrite(buf, replacement)
+        vis.save_vsdx(target)
+    with zipfile.ZipFile(target) as archive:
+        assert _canonical(archive.read(PAGE1[1:])) == _canonical(replacement)
+
+
+def test_bytes_that_do_not_parse_are_held_until_sync(view, store):
+    """Fails if sync() does not write a buffer still holding bytes that do not parse, or if nothing holds that buffer.
+
+    The write is made through a buffer nobody keeps, so only the view's own
+    reference can carry its bytes to the sync.
+    """
+    store.require_xml(PAGE1)
+    key = f"{DIRECTORY}{PAGE1}"
+    original = view[key].getvalue()
+    view[key].write(b"not xml")
+    assert isinstance(store.part(PAGE1), XmlPart)
+    view.sync()
+    assert store.read_bytes(PAGE1) == b"not xml" + original[len(b"not xml") :]
+
+
+def test_bytes_that_do_not_parse_are_written_when_the_buffer_is_closed(view, store):
+    """Fails if close() drops a buffer still holding bytes that do not parse, so a `with` block's last write is lost."""
+    store.require_xml(PAGE1)
+    with view[f"{DIRECTORY}{PAGE1}"] as buf:
+        buf.seek(0)
+        buf.write(b"not xml")
+        buf.truncate()
+    assert store.read_bytes(PAGE1) == b"not xml"
+
+
+def test_a_pending_buffer_detached_before_sync_is_not_written(view, store):
+    """Fails if sync() writes a buffer's unparseable bytes after its member was deleted."""
+    store.require_xml(PAGE1)
+    key = f"{DIRECTORY}{PAGE1}"
+    view[key].write(b"not xml")
+    del view[key]
+    view.sync()
+    assert store.part(PAGE1) is None
+
+
+def test_a_later_parseable_write_clears_the_pending_bytes(view, store):
+    """Fails if a buffer that went on to write XML that parses is still written at sync as the bytes before it."""
+    tree = store.require_xml(PAGE1)
+    buf = view[f"{DIRECTORY}{PAGE1}"]
+    _partial_rewrite(buf, _shorter_replacement(buf.getvalue()))
+    root = tree.getroot()
+    assert root is not None
+    root.set("EditedAfter", "1")
+    view.sync()
+    held = store.part(PAGE1)
+    assert isinstance(held, XmlPart)
+    assert held.tree is tree
+    assert root.get("EditedAfter") == "1"
+
+
+@pytest.mark.allow_invalid_package("unreadable-part")
+def test_unparseable_bytes_left_in_a_buffer_reach_disk_as_they_are(vsdx_copy, tmp_path):
+    """Fails if bytes that do not parse, still in a page's buffer at save, are dropped or written over by the page's tree.
+
+    Deliberately writes a broken page, which is the point: the caller's
+    final bytes are what the package holds, as they were before the store.
+    """
+    target = str(tmp_path / "saved.vsdx")
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        buf = vis.zip_file_contents[f"{vis.directory}{PAGE1}"]
+        buf.seek(0)
+        buf.write(b"not xml")
+        expected = buf.getvalue()
+        vis.save_vsdx(target)
+    with zipfile.ZipFile(target) as archive:
+        assert archive.read(PAGE1[1:]) == expected
+
+
+@pytest.mark.allow_invalid_package("unreadable-part")
+def test_unparseable_bytes_flushed_at_one_save_survive_the_next(vsdx_copy, tmp_path):
+    """Fails if a second save writes the page's old tree over the bytes the first save's sync put in its place."""
+    first = str(tmp_path / "first.vsdx")
+    second = str(tmp_path / "second.vsdx")
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        buf = vis.zip_file_contents[f"{vis.directory}{PAGE1}"]
+        buf.seek(0)
+        buf.write(b"not xml")
+        expected = buf.getvalue()
+        vis.save_vsdx(first)
+        vis.save_vsdx(second)
+    with zipfile.ZipFile(second) as archive:
+        assert archive.read(PAGE1[1:]) == expected
+
+
+def test_a_tree_assigned_after_unparseable_bytes_were_flushed_is_saved(vsdx_copy, tmp_path):
+    """Fails if the save skips a page whose part a buffer's bytes replaced, even when the page has a new tree since.
+
+    Only the tree those bytes replaced is stale. A tree the caller assigns
+    afterwards is their later word, and it is what the page must save as.
+    """
+    target = str(tmp_path / "saved.vsdx")
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        page = vis.pages[0]
+        replacement = copy.deepcopy(page.xml)
+        root = replacement.getroot()
+        assert root is not None
+        root.set("VsdxkitMarker", "1")
+        buf = vis.zip_file_contents[page.filename]
+        buf.seek(0)
+        buf.write(b"not xml")
+        vis.zip_file_contents.sync()
+        page.xml = replacement
+        vis.save_vsdx(target)
+    with VisioFile(target) as saved:
+        assert saved.pages[0].xml.getroot().get("VsdxkitMarker") == "1"
