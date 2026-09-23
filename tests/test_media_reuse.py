@@ -11,7 +11,8 @@ from collections import Counter
 
 import pytest
 
-from vsdxkit import Media, VisioFile, VisioFileNotOpen
+from vsdxkit import Connect, Media, VisioFile, VisioFileNotOpen
+from vsdxkit.zip_contents import ZipFileContentsView
 
 BASE = "test8_simple_connector.vsdx"
 
@@ -120,3 +121,29 @@ def test_close_vsdx_is_idempotent(vsdx_copy):
     vis.close_vsdx()
     assert vis.file_open is False
     assert vis._media is None
+
+
+def test_provisioning_masters_reads_only_the_donors_master_parts(vsdx_copy, monkeypatch):
+    """Fails if copying the donor's masters reads every donor member rather than the ones it copies.
+
+    `zip_file_contents` is a view now, and reading a member of it serialises
+    the part if the donor has parsed it -- every page of the donor, for a
+    copy that wants none of them. Only the masters folder is copied, so only
+    the masters folder may be read.
+    """
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        page = vis.pages[0]
+        donor = vis._shared_media().media
+        read: list[str] = []
+        original = ZipFileContentsView.__getitem__
+
+        def spy(self, key):
+            if self is donor.zip_file_contents:
+                read.append(key)
+            return original(self, key)
+
+        monkeypatch.setattr(ZipFileContentsView, "__getitem__", spy)
+        shapes = page.child_shapes
+        Connect.create(page=page, from_shape=shapes[0], to_shape=shapes[1])
+    assert read, "the donor's masters were not copied through zip_file_contents; the test has gone stale"
+    assert [key for key in read if not key.startswith(donor._masters_folder)] == []

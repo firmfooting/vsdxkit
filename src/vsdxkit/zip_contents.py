@@ -21,8 +21,6 @@ else:
     from typing_extensions import override
 
 if TYPE_CHECKING:
-    import xml.etree.ElementTree as ET
-
     # annotations only: typing_extensions grew Buffer in 4.6, and the declared
     # floor is 4.4, so importing it at runtime would break an install the
     # package metadata allows
@@ -109,7 +107,6 @@ class _WriteThroughBuffer(io.BytesIO):
         exports: dict[int, _WriteThroughBuffer],
         live: dict[str, _WriteThroughBuffer],
         pending: dict[int, _WriteThroughBuffer],
-        superseded: dict[str, tuple[BytesPart, ET.ElementTree[ET.Element]]],
         generations: dict[str, int],
     ) -> None:
         super().__init__(initial_bytes)
@@ -120,7 +117,6 @@ class _WriteThroughBuffer(io.BytesIO):
         self._exports = exports
         self._live = live
         self._pending = pending
-        self._superseded = superseded
         self._generations = generations
         # the view's generation for the name when this buffer was bound; a
         # different one means the member was rebound or deleted through the
@@ -161,7 +157,6 @@ class _WriteThroughBuffer(io.BytesIO):
         Only bytes that do not parse, bound for a parsed part, are held back,
         and only while more writes may follow (`final` is False).
         """
-        replaced = self._bound
         if not self._store.write_bytes_keeping_tree(self._name, value, refuse_unparseable=not final):
             self._pending[id(self)] = self
             return False
@@ -171,10 +166,6 @@ class _WriteThroughBuffer(io.BytesIO):
         # a write of this buffer's own does not bump the generation, so this
         # changes nothing today; it keeps the buffer bound if that ever changes
         self._generation = self._generations.get(self._name, 0)
-        if isinstance(replaced, XmlPart) and isinstance(part, BytesPart):
-            # the document still holds the tree these bytes replaced; say so,
-            # so a save that writes trees back does not write it over them
-            self._superseded[self._name] = (part, replaced.tree)
         if isinstance(part, BytesPart):
             self._live[self._name] = self
         else:
@@ -331,9 +322,6 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
         # tell a buffer read before the assignment that it no longer speaks
         # for the member
         self._generations: dict[str, int] = {}
-        # parts whose tree a buffer's final bytes replaced, by part name: the
-        # bytes part written, and the tree it replaced (see `holds_bytes_over`)
-        self._superseded: dict[str, tuple[BytesPart, ET.ElementTree[ET.Element]]] = {}
 
     def sync(self) -> None:
         """Write to the store every change made through a `getbuffer()` memoryview.
@@ -364,28 +352,6 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
                 self._pending.pop(key, None)
             else:
                 buffer.settle()
-
-    def holds_bytes_over(self, key: str, tree: ET.ElementTree[ET.Element]) -> bool:
-        """Whether a buffer's final bytes replaced `tree` as this member's part and are still there.
-
-        For `VisioFile.save_vsdx`, which writes every document tree back
-        through this view after `sync()`: a page whose buffer was left
-        holding bytes that do not parse is, after the sync, those bytes, and
-        the page's tree is the stale one they replaced. Writing it back would
-        undo what the caller left. A tree the caller has put in place since
-        is not the one replaced, so it is still written.
-        """
-        name = self._name(key)
-        entry = None if name is None else self._superseded.get(name)
-        if entry is None:
-            return False
-        assert name is not None  # entry is None whenever name is
-        written, replaced = entry
-        if self._store.part(name) is not written:
-            # something has written the part since, so the record is stale
-            del self._superseded[name]
-            return False
-        return replaced is tree
 
     def copy(self) -> dict[str, io.BytesIO]:
         """A plain dict of every member and the buffer a read of it returns now.
@@ -425,9 +391,7 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
         return buffer
 
     def _new_buffer(self, name: str, part: PartValue, data: bytes) -> _WriteThroughBuffer:
-        return _WriteThroughBuffer(
-            self._store, name, part, data, self._exports, self._live, self._pending, self._superseded, self._generations
-        )
+        return _WriteThroughBuffer(self._store, name, part, data, self._exports, self._live, self._pending, self._generations)
 
     @override
     def __setitem__(self, key: str, value: io.BytesIO) -> None:

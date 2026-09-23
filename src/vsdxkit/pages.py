@@ -12,13 +12,12 @@ import xml.etree.ElementTree as ET
 import deprecation
 
 import vsdxkit
-
-# from .vsdxfile import file_to_xml  # todo: refactor this away - defined in set_name() to break circular imports
 from vsdxkit import namespace
 
 from .connectors import Connect
+from .package import BytesPart, XmlPart
 from .shapes import Shape, parent_of
-from .xmlio import require_element, xml_to_file, xml_value
+from .xmlio import require_element, xml_value
 
 # the two places a Connect record names a shape: the connector it leads from,
 # and the shape that connector is glued to
@@ -84,7 +83,7 @@ class Page:
         self.master_unique_id: str | None = None
         self.master_base_id: str | None = None
         self.rels_xml_filename: str | None = None
-        self.rels_xml: ET.ElementTree[ET.Element] | None = None
+        self._rels_xml: ET.ElementTree[ET.Element] | None = None
         self.vis = vis
         self._max_id = 0  # ID high-water mark, maintained by VisioFile's ID allocator
         # todo: add page id - from pages_xml - PageSheet[ID]
@@ -104,20 +103,10 @@ class Page:
     )
     def set_name(self, value: str) -> None:
         self.vis._require_open("Page.set_name()")
-        from .vsdxfile import file_to_xml  # to break circular imports - is this really needed?
-
-        pages_filename = self.vis._pages_filename()  # pages contains Page name, width, height, mapped to Id
-        pages = file_to_xml(
-            pages_filename, self.vis.zip_file_contents
-        )  # this contains a list of pages with rel_id and filename
-        if pages is None:
-            raise ValueError(f"no pages.xml part found at {pages_filename}")
-        pages_root = require_element(pages.getroot(), "Pages root")
-        page = pages_root.find(f"{namespace}Page[{self._index() + 1}]")
-        if page:
-            page.attrib["Name"] = value
-            self.name = value
-            self.vis.pages_xml = pages
+        # the `name` setter edits the store's own pages.xml tree, Name and NameU
+        # both; this used to go on to overwrite that tree with a fresh parse
+        # carrying only Name, which left NameU with the old name
+        self.name = value
 
     @property
     def name(self) -> str:
@@ -230,9 +219,82 @@ class Page:
         return self._xml
 
     @xml.setter
-    def xml(self, value: ET.ElementTree[ET.Element]) -> None:
+    def xml(self, value: ET.ElementTree[ET.Element] | None) -> None:
         self.vis._require_open("Setting Page.xml")
+        if value is None:
+            raise ValueError(
+                f"Page.xml cannot be set to None: {self.filename} cannot be removed through "
+                f"this property, because pages.xml, pages.xml.rels and the content-type "
+                f"override would still name it"
+            )
+        attached = self._attached()
         self._xml = value
+        if attached:
+            self.vis._set_part_xml(self.vis._part_name(self.filename), value)
+
+    def _holds(self, filename: str, tree: ET.ElementTree[ET.Element] | None) -> bool:
+        """Whether the package's part at `filename` is `tree` itself."""
+        held = self.vis._package.part(self.vis._part_name(filename))
+        return isinstance(held, XmlPart) and held.tree is tree
+
+    def _attached(self) -> bool:
+        """Whether this page's own part is still in its document's package.
+
+        A caller may keep holding a `Page` after it has been removed from the
+        document (`VisioFile.remove_page_by_index`); a later assignment to its
+        `xml` must not resurrect the part it was removed from. Nor may it
+        write over the part of the page added after it: removal frees the part
+        name, and the next page takes it. So this asks whether the part at the
+        page's name is this page's own tree, not merely whether there is one.
+
+        A page's part can also be plain bytes, which is how
+        `zip_file_contents` writes bytes that do not parse, or be gone, deleted
+        through that mapping. No page holds such a part, so it is this page's
+        own exactly when this page is still one of the document's -- a removed
+        page is not -- and a tree assigned afterwards must replace the bytes
+        or bring the part back, since pages.xml still names it.
+        """
+        if self._holds(self.filename, self._xml):
+            return True
+        held = self.vis._package.part(self.vis._part_name(self.filename))
+        if held is not None and not isinstance(held, BytesPart):
+            return False
+        return any(page is self for page in (*self.vis.pages, *self.vis.master_pages))
+
+    def _rels_attached(self) -> bool:
+        """Whether an assignment to `rels_xml` may write this page's relationship part.
+
+        Only while the page itself is attached, and only over the relationship
+        part the page holds -- or where the package holds no rels part there,
+        which is how one is first created, or holds only plain bytes.
+        A removed page's rels name is freed along with its page's, and the
+        page that takes the name must not be given the removed page's
+        relationships.
+        """
+        if self.rels_xml_filename is None or not self._attached():
+            return False
+        # the page itself is attached, so no removed page and no page that took
+        # its name can be in play: a rels part that is gone, or that
+        # `zip_file_contents` wrote as plain bytes, is this page's to replace
+        held = self.vis._package.part(self.vis._part_name(self.rels_xml_filename))
+        if held is None or isinstance(held, BytesPart):
+            return True
+        return held.tree is self._rels_xml
+
+    @property
+    def rels_xml(self) -> ET.ElementTree[ET.Element] | None:
+        return self._rels_xml
+
+    @rels_xml.setter
+    def rels_xml(self, value: ET.ElementTree[ET.Element] | None) -> None:
+        # None takes the rels part out of the package as well: the save writes
+        # whatever the store holds, so a part left behind would reach the file
+        self.vis._require_open("Setting Page.rels_xml")
+        attached = self._rels_attached()
+        self._rels_xml = value
+        if attached:
+            assert self.rels_xml_filename is not None  # _rels_attached() says so
+            self.vis._set_part_xml(self.vis._part_name(self.rels_xml_filename), value)
 
     @property
     def _shapes(self) -> list[Shape]:
@@ -322,15 +384,17 @@ class Page:
 
         Visio writes a per-page relationship to each master used by shapes on
         that page (Target '../masters/masterN.xml'). The rels part is created
-        on demand; the filename is registered so save_vsdx persists it.
+        on demand; assigning it writes it into the package.
         """
-        if self.rels_xml is None:
+        rels_xml: ET.ElementTree[ET.Element] | None = self.rels_xml
+        if rels_xml is None:
             rels_filename = self.filename.replace("visio/pages/", "visio/pages/_rels/") + ".rels"
             self.rels_xml_filename = rels_filename
-            self.rels_xml = ET.ElementTree(
+            rels_xml = ET.ElementTree(
                 ET.fromstring('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
             )
-        rels_root = self.rels_xml.getroot()
+            self.rels_xml = rels_xml
+        rels_root = rels_xml.getroot()
         assert rels_root is not None
         existing = {r.attrib.get("Target") for r in rels_root}
         target = f"../masters/{master_part_name}"
@@ -342,13 +406,6 @@ class Page:
             f'Id="{master_rel_id}" Target="{target}"/>'
         )
         rels_root.append(rel_element)
-        # persist into the zip contents so save picks it up even for pages
-        # that never had a rels part before. Through `xml_to_file` rather than
-        # `ET.tostring`: this part is in the package-relationships namespace,
-        # which does not hold the process-wide default prefix, so serialising
-        # it outside the per-part prefix map wrote `<ns0:Relationships>` (#360).
-        if self.rels_xml_filename:
-            xml_to_file(self.rels_xml, self.rels_xml_filename, self.vis.zip_file_contents)
 
     def get_connects(self) -> list[Connect]:
         elements = self.xml.findall(f".//{namespace}Connect")  # search recursively

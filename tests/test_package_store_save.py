@@ -332,24 +332,24 @@ def test_save_rejects_package_exceeding_total_size_limit(source, tmp_path):
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits are not meaningful on Windows")
 def test_save_mode_uses_fchmod_when_available(source, tmp_path, monkeypatch):
-    """Fails if mode copying is not done via fchmod on platforms that support it.
+    """Fails if save() stops applying the mode through `os.fchmod` on the open descriptor.
 
-    When the descriptor is still open, mode changes via fchmod are atomic with
-    respect to the file. Using the path-based copymode after closing exposes a
-    race where a symlink can be swapped in and get the file's permissions.
+    Applied through the descriptor, the mode lands on the file actually
+    written. Applied by path after the close, it lands on whatever the
+    temporary entry has been swapped for by then, and the identity check that
+    follows can refuse the rename but cannot undo the chmod.
     """
     if not hasattr(os, "fchmod"):
         pytest.skip("This platform does not have os.fchmod")
 
-    # Track whether copymode was called on the path (it shouldn't be if fchmod exists)
-    copymode_called = []
-    original_copymode = shutil.copymode
+    calls: list[tuple[int, int]] = []
+    original_fchmod = os.fchmod
 
-    def copymode_wrapper(*args, **kwargs):
-        copymode_called.append(args)
-        return original_copymode(*args, **kwargs)
+    def fchmod_spy(fd: int, mode: int) -> None:
+        calls.append((fd, mode))
+        original_fchmod(fd, mode)
 
-    monkeypatch.setattr(shutil, "copymode", copymode_wrapper)
+    monkeypatch.setattr(os, "fchmod", fchmod_spy)
 
     source.chmod(0o640)
     store = PackageStore.open(source)
@@ -357,21 +357,19 @@ def test_save_mode_uses_fchmod_when_available(source, tmp_path, monkeypatch):
     target = tmp_path / "out.vsdx"
     store.save(target)
 
-    # On platforms with fchmod, copymode should not have been called
-    assert len(copymode_called) == 0, f"copymode was called {len(copymode_called)} times when fchmod is available"
-    # The mode should still have been preserved
+    assert [mode for _fd, mode in calls] == [0o640]
     assert target.stat().st_mode & 0o777 == 0o640
 
 
-def test_save_rejects_nul_in_part_name(source):
-    """Fails if save() allows NUL characters in part names at write time.
+def test_write_bytes_rejects_nul_in_part_name(source):
+    """Fails if `write_bytes` accepts a part name with a NUL in it.
 
-    NUL characters are rejected at _checked time, which is when any part name
-    is validated. This test verifies the rejection happens when writing bytes
-    (not just when writing XML).
+    Every part name is checked when it is written, by the same rule whichever
+    method writes it; this pins the rule on `write_bytes`, the path the
+    `zip_file_contents` view writes through. A NUL would otherwise reach the
+    archive writer, where zipfile truncates the name at it.
     """
     store = PackageStore.open(source)
-    # Attempt to write a part with NUL in the name
     with pytest.raises(ValueError, match="cannot contain"):
         store.write_bytes("/visio/bad\x00.xml", b"data")
 

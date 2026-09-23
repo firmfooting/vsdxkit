@@ -20,7 +20,6 @@ from .logging_support import get_logger
 from .package import PackageStore
 from .pages import Page
 from .shapes import Shape
-from .xmlio import xml_to_file
 
 if TYPE_CHECKING:
     from .vsdxfile import VisioFile
@@ -43,6 +42,7 @@ class MastersImportMixin:
     def _add_document_rel(self, rel_type: str, target: str) -> None: ...
     def load_master_pages(self) -> None: ...
     def _read_part_xml(self, path: str) -> ET.ElementTree[ET.Element] | None: ...
+    def _part_name(self, path: str) -> str: ...
     def _ensure_masters_for_shape(self, source_shape: Shape) -> str:
         """Ensure this document contains the master that source_shape uses.
 
@@ -81,10 +81,30 @@ class MastersImportMixin:
             return existing.page_id
 
         source_master_page = src_vis.get_master_page_by_id(master_ref)
-        if source_master_page is None or source_master_page.filename not in src_vis.zip_file_contents:
+        if source_master_page is None or src_vis._package.part(src_vis._part_name(source_master_page.filename)) is None:
             return ""
+        # read before anything here is changed, so a failure leaves this
+        # package as it was. The check above says the part is there, so None
+        # is a source store contradicting itself; writing empty bytes in its
+        # place would make a master part no reader can parse.
+        source_part_name = src_vis._part_name(source_master_page.filename)
+        master_bytes = src_vis._package.read_bytes(source_part_name)
+        if master_bytes is None:
+            raise ValueError(f"source master part {source_part_name} could not be read, though the package lists it")
 
-        # 1. copy the master part bytes under the next free filename
+        # 1. ensure this document has a masters.xml (and rels) to append to,
+        # BEFORE resolving master_rels_path below. A masters relationship can
+        # be declared in document.xml.rels with the masters parts themselves
+        # missing (a crafted or partially-written package), so `masters_xml`
+        # being None here is reachable through the public API, not only from
+        # a freshly opened document. Bootstrapping after building a rels tree
+        # of our own would have `_bootstrap_masters` write a second, empty
+        # rels tree over the one just constructed, orphaning it and silently
+        # dropping the relationship appended to it below.
+        if self.masters_xml is None:
+            self._bootstrap_masters()
+
+        # 2. copy the master part bytes under the next free filename
         prefix = f"{self._masters_folder}/master"
         existing_numbers = [
             int(f[len(prefix) : -4])
@@ -92,10 +112,14 @@ class MastersImportMixin:
             if f.startswith(prefix) and f.endswith(".xml") and f[len(prefix) : -4].isdigit()
         ]
         master_rels_path = f"{self._masters_folder}/_rels/masters.xml.rels"
-        rels_tree = self._read_part_xml(master_rels_path)
-        rels_root = rels_tree.getroot() if rels_tree is not None else None
-        if rels_root is None:
-            rels_root = ET.fromstring('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
+        rels_tree: ET.ElementTree[ET.Element] | None = self._read_part_xml(master_rels_path)
+        if rels_tree is None:
+            rels_tree = ET.ElementTree(
+                ET.fromstring('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
+            )
+            self._package.write_xml(self._part_name(master_rels_path), rels_tree)
+        rels_root = rels_tree.getroot()
+        assert rels_root is not None  # freshly built above, or parsed from real bytes: always has a root
 
         # The part name is settled against the existing targets before the bytes
         # are written, and the rel id is allocated separately.
@@ -105,11 +129,7 @@ class MastersImportMixin:
             next_num += 1
         part_name = f"master{next_num}.xml"
         part_path = f"{self._masters_folder}/{part_name}"
-        self.zip_file_contents[part_path] = src_vis.zip_file_contents[source_master_page.filename]
-
-        # 2. ensure this document has a masters.xml to append to
-        if self.masters_xml is None:
-            self._bootstrap_masters()
+        self._package.write_bytes(self._part_name(part_path), master_bytes)
 
         # 3. append the Master element with a fresh logical ID
         assert self.masters_xml is not None  # bootstrap above guarantees it
@@ -130,9 +150,9 @@ class MastersImportMixin:
         if rel_el is not None:
             rel_el.attrib[f"{r_namespace}id"] = relationship.attrib["Id"]
         self.masters_xml.append(new_master_element)
-        # persist masters.xml (save_vsdx does not write it)
-        xml_to_file(ET.ElementTree(self.masters_xml), f"{self._masters_folder}/masters.xml", self.zip_file_contents)
-        xml_to_file(ET.ElementTree(rels_root), master_rels_path, self.zip_file_contents)
+        # masters.xml and its rels are the store's own trees (promoted above,
+        # or written by `_bootstrap_masters`), and appending to them mutates
+        # what the store already holds -- there is nothing left to persist.
 
         # 5. package wiring (helpers are idempotent); PartName paths are
         # archive-relative, never absolute
@@ -166,20 +186,33 @@ class MastersImportMixin:
         return str(new_id)
 
     def _bootstrap_masters(self):
-        """Create an empty masters part + wiring for documents without masters."""
+        """Create an empty masters part + wiring for documents without masters.
+
+        `masters.xml.rels` is written only when the package does not already
+        have one. A masters relationship can be declared in document.xml.rels
+        while only `masters.xml` itself is missing -- `masters_xml is None`
+        does not imply the rels part is absent too -- and replacing an
+        existing rels part here would discard whatever relationships it
+        already held (issue found in review: `_ensure_masters_for_shape`
+        calls this and then appends to a rels tree of its own; if this
+        overwrote it unconditionally, that append would be lost).
+        """
         masters_root = ET.fromstring(
             '<Masters xmlns="http://schemas.microsoft.com/office/visio/2012/main" '
             'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>'
         )
-        self.masters_xml = masters_root
-        # `ET.tostring` happens to spell this part correctly, because the Visio
-        # namespace is the one holding the process-wide default prefix. Written
-        # through `xml_to_file` so it does not depend on that (#360).
-        xml_to_file(ET.ElementTree(masters_root), f"{self._masters_folder}/masters.xml", self.zip_file_contents)
-        self.zip_file_contents[f"{self._masters_folder}/_rels/masters.xml.rels"] = io.BytesIO(
-            b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'
-            b'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>'
-        )
+        # written as trees, not `xml_to_file` bytes literals (#366): the store
+        # holds both from the moment this document gets masters, and
+        # `masters_xml`'s own getter reads the tree straight back from it.
+        self._package.write_xml(self._part_name(f"{self._masters_folder}/masters.xml"), ET.ElementTree(masters_root))
+        master_rels_path = self._part_name(f"{self._masters_folder}/_rels/masters.xml.rels")
+        if self._package.part(master_rels_path) is None:
+            self._package.write_xml(
+                master_rels_path,
+                ET.ElementTree(
+                    ET.fromstring('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
+                ),
+            )
         self._add_content_types_override(
             part_name_path="/visio/masters/masters.xml", content_type="application/vnd.ms-visio.masters+xml"
         )

@@ -14,8 +14,10 @@ is what puts ``Connect.create()`` on the import branch rather than the
 copy-the-whole-masters-folder branch.
 """
 
+import contextlib
 import os
 import re
+import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 from dataclasses import dataclass
@@ -251,3 +253,88 @@ def test_imported_master_survives_a_reopen(imported_master: ImportedMaster):
         assert master_page is not None, f"master {imported_master.master_id} did not survive the round trip"
         assert master_page.name == imported_master.master_name
         assert master_page.filename in vis.zip_file_contents
+
+
+def test_import_survives_masters_declared_with_no_masters_parts(vsdx_copy):
+    """A masters relationship in document.xml.rels with no masters parts behind
+    it takes `Connect.create()` down the "document already has masters" import
+    branch (`connectors.py` checks only that the relationship is declared, not
+    that `masters.xml`/`masters.xml.rels` exist), which reaches
+    `_ensure_masters_for_shape` with `masters_xml is None`.
+
+    Fails if that method resolves `masters.xml.rels` into a tree of its own
+    and only then calls `_bootstrap_masters()`: bootstrap writes a second,
+    empty rels tree into the store, orphaning the one already built, and the
+    relationship appended to the orphaned tree afterwards never reaches the
+    package. The saved file then has a master naming a relationship id that
+    masters.xml.rels does not declare, and reopening it raises `KeyError` in
+    `load_master_pages`.
+
+    The crafted source lives outside `tmp_path` (built from a `vsdx_copy`
+    that is itself never touched again) so the autouse package validator
+    never has to be told to excuse it: only the saved-and-reopened output,
+    which must be a fully valid package, ever lands in `tmp_path`.
+    """
+    valid_copy = vsdx_copy("test1.vsdx")
+    crafted_fd, crafted_path = tempfile.mkstemp(suffix=".vsdx")
+    os.close(crafted_fd)
+    try:
+        with zipfile.ZipFile(valid_copy) as zin, zipfile.ZipFile(crafted_path, "w", zipfile.ZIP_DEFLATED) as zout:
+            for info in zin.infolist():
+                data = zin.read(info.filename)
+                if info.filename == "visio/_rels/document.xml.rels":
+                    # test1.vsdx has no masters at all (asserted by
+                    # test_namespaces.py), so this relationship is the only
+                    # thing declaring one -- masters.xml itself stays absent
+                    data = data.replace(
+                        b"</Relationships>",
+                        b'<Relationship Id="rIdMasters" '
+                        b'Type="http://schemas.microsoft.com/visio/2010/relationships/masters" '
+                        b'Target="masters/masters.xml"/></Relationships>',
+                    )
+                zout.writestr(info, data)
+
+        with VisioFile(crafted_path) as vis:
+            page = vis.pages[0]
+            shapes = page.child_shapes
+            connector = Connect.create(page=page, from_shape=shapes[0], to_shape=shapes[1])
+            master_id = connector.xml.attrib["Master"]
+            document = os.path.join(os.path.dirname(crafted_path), "reopened.vsdx")
+            vis.save_vsdx(document)
+
+        # the reopen itself is the assertion the fixture's own KeyError made:
+        # a dangling relationship id there raises before this line returns
+        with VisioFile(document) as reopened:
+            masters_root = reopened.masters_xml
+            assert masters_root is not None
+            master = next(m for m in masters_root if m.attrib.get("ID") == master_id)
+            rel = master.find(f"{VISIO_NS}Rel")
+            assert rel is not None, f"master {master_id} has no Rel element"
+            rel_id = rel.attrib[f"{R_NS}id"]
+
+        master_rels = _master_relationships(document, "visio/masters/_rels/masters.xml.rels")
+        assert rel_id in master_rels, (
+            f"the imported master's relationship {rel_id!r} is missing from masters.xml.rels: {sorted(master_rels)}"
+        )
+    finally:
+        os.remove(crafted_path)
+        with contextlib.suppress(FileNotFoundError):
+            os.remove(os.path.join(os.path.dirname(crafted_path), "reopened.vsdx"))
+
+
+def test_a_source_master_that_cannot_be_read_fails_before_the_target_changes(vsdx_copy, monkeypatch):
+    """Fails if importing a master falls back to writing empty bytes when the source part reads as None.
+
+    The import checks that the source master part exists before it starts, so
+    a None from reading it is a store that contradicts itself. An empty master
+    part is not a master Visio can open, and falling back to one hides that
+    until the file is opened; the import has to stop, and stop before it has
+    changed the target package.
+    """
+    with VisioFile(vsdx_copy("test4_connectors.vsdx")) as source, VisioFile(vsdx_copy("test1.vsdx")) as target:
+        shape = next(shape for shape in source.pages[0].all_shapes if shape.xml.attrib.get("Master"))
+        before = target._package.names()
+        monkeypatch.setattr(source._package, "read_bytes", lambda name: None)
+        with pytest.raises(ValueError, match="could not be read"):
+            target._ensure_masters_for_shape(shape)
+        assert target._package.names() == before

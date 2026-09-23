@@ -110,10 +110,14 @@ class Connect:
             new_master_id = None
             if not masters_rel_present:
                 # document has no masters at all: copy the media masters folder
-                for file_name, file in media.media.zip_file_contents.items():
+                # by key, and only the matches read: reading a member of the
+                # view serialises it if the donor has parsed it, and the donor
+                # has parsed every page it holds
+                donor_contents = media.media.zip_file_contents
+                for file_name in donor_contents:
                     if file_name.startswith(media.media._masters_folder):
                         new_file_name = file_name.replace(media.media._masters_folder, page.vis._masters_folder)
-                        page.vis.zip_file_contents[new_file_name] = file
+                        page.vis.zip_file_contents[new_file_name] = donor_contents[file_name]
                 page.vis.load_master_pages()  # load copied master page files into VisioFile object
                 # document-level masters relationship
                 page.vis._add_document_rel(
@@ -126,8 +130,8 @@ class Connect:
                 page.vis._add_content_types_override(
                     content_type="application/vnd.ms-visio.master+xml", part_name_path="/visio/masters/master1.xml"
                 )
-                # per-page master relationship (creates + registers the page
-                # rels part so save_vsdx persists it)
+                # per-page master relationship (creates the page rels part and
+                # writes it into the package store, which is what a save writes)
                 page._ensure_page_master_rel("rId1", "master1.xml")
             else:
                 # document has masters: import the connector master (by name)
