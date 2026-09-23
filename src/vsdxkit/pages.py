@@ -12,12 +12,10 @@ import xml.etree.ElementTree as ET
 import deprecation
 
 import vsdxkit
-
-# from .vsdxfile import file_to_xml  # todo: refactor this away - defined in set_name() to break circular imports
 from vsdxkit import namespace
 
 from .connectors import Connect
-from .package import XmlPart
+from .package import BytesPart, XmlPart
 from .shapes import Shape, parent_of
 from .xmlio import require_element, xml_value
 
@@ -248,8 +246,16 @@ class Page:
         write over the part of the page added after it: removal frees the part
         name, and the next page takes it. So this asks whether the part at the
         page's name is this page's own tree, not merely whether there is one.
+
+        A page's part can also be plain bytes: `zip_file_contents` writes
+        bytes that do not parse that way. No page holds such a part, so it is
+        this page's own exactly when this page is still one of the document's,
+        and a tree assigned afterwards must replace those bytes.
         """
-        return self._holds(self.filename, self._xml)
+        if self._holds(self.filename, self._xml):
+            return True
+        held = self.vis._package.part(self.vis._part_name(self.filename))
+        return isinstance(held, BytesPart) and any(page is self for page in (*self.vis.pages, *self.vis.master_pages))
 
     def _rels_attached(self) -> bool:
         """Whether an assignment to `rels_xml` may write this page's relationship part.

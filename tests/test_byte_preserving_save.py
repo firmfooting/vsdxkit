@@ -228,3 +228,29 @@ def test_setting_a_pages_xml_to_none_is_refused(vsdx_copy):
         with pytest.raises(ValueError, match=r"Page\.xml"):
             page.xml = None
         assert vis._package.part(part_name) is not None
+
+
+def test_a_tree_assigned_after_a_pages_bytes_were_flushed_is_saved(vsdx_copy, tmp_path):
+    """Fails if `Page.xml` stops writing through once a buffer's bytes replaced the page's tree in the store.
+
+    Bytes written through `zip_file_contents` that do not parse land at
+    `sync()` as plain bytes, so the store no longer holds the page's tree. A
+    tree the caller assigns to the page afterwards is their later word; if
+    the setter took the bytes for another page's part and kept out, the save
+    would write the unparseable bytes and the file would not open again.
+    """
+    target = str(tmp_path / "saved.vsdx")
+    with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        page = vis.pages[0]
+        replacement = parse_part(serialise_part(page.xml))
+        root = replacement.getroot()
+        assert root is not None
+        root.set("VsdxkitMarker", "1")
+        buf = vis.zip_file_contents[page.filename]
+        buf.seek(0)
+        buf.write(b"not xml")
+        vis.zip_file_contents.sync()
+        page.xml = replacement
+        vis.save_vsdx(target)
+    with vsdxkit.VisioFile(target) as saved:
+        assert saved.pages[0].xml.getroot().get("VsdxkitMarker") == "1"
