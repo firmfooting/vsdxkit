@@ -68,10 +68,11 @@ DRAWING_CONTENT_TYPE = "application/vnd.ms-visio.drawing.main+xml"
 _SUFFIX_BY_CONTENT_TYPE = {MACRO_ENABLED_CONTENT_TYPE: ".vsdm", DRAWING_CONTENT_TYPE: ".vsdx"}
 
 # A ShapeSheet formula addresses another shape as `Sheet.5!Cell` or `Sheet5!Cell`.
-# Visio writes the dotted form in inherited cells and the undotted form in the
-# formulas it generates for connector glue -- `_XFTRIGGER(Sheet5!EventXFMod)`,
-# `PAR(PNT(Sheet5!Connections.X1,...))` -- where the reference is also nested
-# inside a function call rather than at the start of the formula.
+# Visio writes the dotted form. This library's connector glue has written the
+# undotted one -- `_XFTRIGGER(Sheet5!EventXFMod)`,
+# `PAR(PNT(Sheet5!Connections.X1,...))` -- and files it saved carry it (#400).
+# In both, the reference is nested inside a function call rather than at the
+# start of the formula.
 #
 # The lookbehind excludes the sheet of a cross-page reference: the `Sheet.5!` in
 # `Pages[Page-2]!Sheet.5!Width` is an id on the page named in front of it, and

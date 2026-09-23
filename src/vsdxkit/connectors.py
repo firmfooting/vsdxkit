@@ -1,34 +1,106 @@
 from __future__ import annotations
 
-import xml.etree.ElementTree as ET
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeAlias
 from xml.etree.ElementTree import Element
 
-import vsdxkit
 from vsdxkit.errors import InvalidOperationError, MalformedPackageError
+from vsdxkit.glue import (
+    CellWrite,
+    ConnectorOptions,
+    EndGlue,
+    Glue,
+    connection_records,
+    glue_cells,
+    record_element,
+    routing_cells,
+)
 
 if TYPE_CHECKING:
     from vsdxkit.pages import Page
     from vsdxkit.shapes import Shape
 
+    # One end of a connector as the engine plans it: the shape it glues to and
+    # its connection point, `None` for dynamic glue. A floating end is `None`.
+    _End: TypeAlias = "tuple[Shape, int | None] | None"
+
 namespace = "{http://schemas.microsoft.com/office/visio/2012/main}"
+
+# a Connect record's ToPart for connection point row n is 100 + n
+_FIRST_CONNECTION_POINT_PART = 100
+
+
+def _options(route: str | None, from_cp: int, to_cp: int, options: ConnectorOptions | None) -> ConnectorOptions | None:
+    """The one place the connector methods' arguments become options; `None` means keep what is there."""
+    if options is not None:
+        if route is not None or from_cp or to_cp:
+            raise ValueError("pass a route or options, not both")
+        return options
+    if route is not None:
+        return ConnectorOptions.from_route(route, from_cp, to_cp)
+    if from_cp or to_cp:
+        raise ValueError("from_cp and to_cp choose connection points, so they need a route")
+    return None
+
+
+def _connection_rows(shape: Shape) -> frozenset[int]:
+    """The rows of the shape's ``Connection`` section, its master's included.
+
+    An instance inherits every row its master has and overrides or deletes
+    them by ``IX``, so a flowchart shape that holds no section of its own
+    still has its master's four points.
+    """
+    master = shape.master_shape
+    rows: set[int] = set()
+    for element in (master.xml if master is not None else None, shape.xml):
+        if element is None:
+            continue
+        section = element.find(f"{namespace}Section[@N='Connection']")
+        if section is None:
+            continue
+        if section.attrib.get("Del") == "1":
+            rows.clear()
+            continue
+        for position, row in enumerate(section.findall(f"{namespace}Row")):
+            index = int(row.attrib.get("IX", position))
+            if row.attrib.get("Del") == "1":
+                rows.discard(index)
+            else:
+                rows.add(index)
+    return frozenset(rows)
+
+
+def _id(shape: Shape) -> str:
+    """The shape's id, which glue cannot name a shape without."""
+    shape_id = shape.ID
+    if shape_id is None:
+        raise MalformedPackageError("a Shape element has no ID attribute, so nothing can be glued to it")
+    return shape_id
+
+
+def _check_endpoint(page: Page, shape: Shape, connector: Shape | None) -> None:
+    if connector is not None and shape == connector:
+        raise InvalidOperationError(f"connector shape ID {connector.ID} cannot be glued to itself")
+    if page.shapes.by_id(_id(shape)) != shape:
+        raise InvalidOperationError(f"shape ID {shape.ID} is not on page {page.name!r}")
+
+
+def _check_point(end: _End) -> None:
+    if end is None or end[1] is None:
+        return
+    shape, point = end
+    rows = _connection_rows(shape)
+    if point not in rows:
+        raise InvalidOperationError(
+            f"Shape ID {shape.ID} has {len(rows)} connection point(s); cannot glue to connection point index {point}"
+        )
+
+
+def _end_glue(end: _End) -> EndGlue | None:
+    return None if end is None else EndGlue(_id(end[0]), end[1])
 
 
 class Connect:
     """Connect class to represent a connection between two `Shape` objects"""
-
-    @staticmethod
-    def _parse_route(route: str) -> tuple[bool, str | None]:
-        """Return point-glue and routing choices after validating route tokens."""
-        route_parts: list[str] = route.split("|") if route else []
-        allowed_parts = {"dynamic", "point", "straight", "rightangle", "curved"}
-        unknown_parts = set(route_parts) - allowed_parts
-        if unknown_parts:
-            raise ValueError(f"unknown connector route part(s): {', '.join(sorted(unknown_parts))}")
-        routing_parts = [part for part in route_parts if part in {"straight", "rightangle", "curved"}]
-        if len(routing_parts) > 1:
-            raise ValueError("connector route may specify only one routing behaviour")
-        return "point" in route_parts, routing_parts[0] if routing_parts else None
 
     def __init__(self, xml: Element | None = None, page: Page | None = None):
         if page is None:
@@ -75,18 +147,25 @@ class Connect:
         page: Page | None = None,
         from_shape: Shape | None = None,
         to_shape: Shape | None = None,
-        route: str = "dynamic",
+        route: str | None = None,
         from_cp: int = 0,
         to_cp: int = 0,
+        *,
+        options: ConnectorOptions | None = None,
     ) -> Shape:
-        """Create a new Connect object between from_shape and to_shape
+        """Create a connector glued from ``from_shape`` to ``to_shape``.
 
-        route: 'dynamic' (shape glue, default), 'point' (connection-point glue),
-        optionally combined routing behaviour via 'straight', 'rightangle' or
-        'curved'. When route='point', from_cp/to_cp give the 0-based connection
-        point row index on the from/to shapes respectively.
+        ``options`` says how it is glued and routed, and defaults to dynamic
+        glue with Visio's routing. ``route`` is the older spelling of the same
+        thing: 'dynamic' (shape glue) or 'point' (connection-point glue, with
+        ``from_cp``/``to_cp`` the 0-based point on each shape), optionally
+        joined with one of 'straight', 'rightangle' or 'curved', as in
+        'point|curved'. Pass one or the other.
 
-        :returns: a new Connect object
+        Everything is checked before anything is written: both shapes are on
+        ``page``, and each connection point exists.
+
+        :returns: the new connector
         :rtype: Shape
         """
         if page is None:
@@ -94,152 +173,69 @@ class Connect:
         if from_shape is None or to_shape is None:
             raise ValueError("Connect.create() requires both from_shape and to_shape")
         page.vis._require_open("Connect.create()")
-        Connect._parse_route(route)
-        # validate everything _apply_glue can reject BEFORE provisioning
-        # masters, copying shapes or appending records (issue #9 atomicity)
-        Connect._validate_point_glue(from_shape, to_shape, route, from_cp, to_cp)
-        if (
-            from_shape is not None and to_shape is not None
-        ):  # create new connector shape and connect items between this and the two shapes
-            # create new connect shape and get id
-            # vsdxkit.media opens its donors as VisioFiles, which import this
-            # module, so importing it at module level would be a cycle
-            from vsdxkit import media
+        chosen = _options(route, from_cp, to_cp, options) or ConnectorOptions()
+        begin = (from_shape, chosen.end_point(begin=True))
+        end = (to_shape, chosen.end_point(begin=False))
+        for shape in (from_shape, to_shape):
+            _check_endpoint(page, shape, None)
+        for glued in (begin, end):
+            _check_point(glued)
 
-            # the copy imports the connector's master, whether or not this
-            # document has masters yet, and relates the page to it (#375)
-            connector_shape = media.copy_connector(page)
-            connector_shape.text = ""  # clear text used to find shape
+        # vsdxkit.media opens its donors as VisioFiles, which import this
+        # module, so importing it at module level would be a cycle
+        from vsdxkit import media
 
-            # copy style used by new connector shape
-            master_shape = connector_shape.master_shape
-            line_style_id = master_shape.line_style_id if master_shape is not None else None
-            if line_style_id is not None and not isinstance(page.vis._get_style_by_id(line_style_id), Element):
-                # assume same if is ok, todo: use names for match and increment IDs
-                media_style = media.media_style(line_style_id)
-                if media_style is not None:
-                    page.vis._style_sheets().append(media_style)  # a copy of the donor's
+        # the copy imports the connector's master, whether or not this
+        # document has masters yet, and relates the page to it (#375)
+        connector_shape = media.copy_connector(page)
+        connector_shape.text = ""  # clear text used to find shape
 
-            # wire glue to the from/to shapes (Visio-faithful formulas, see
-            # tests/fixtures/com_reference/manifest.json for ground truth)
-            Connect._apply_glue(connector_shape, from_shape, to_shape, route=route, from_cp=from_cp, to_cp=to_cp)
+        # copy style used by new connector shape
+        master_shape = connector_shape.master_shape
+        line_style_id = master_shape.line_style_id if master_shape is not None else None
+        if line_style_id is not None and not isinstance(page.vis._get_style_by_id(line_style_id), Element):
+            # assume same if is ok, todo: use names for match and increment IDs
+            media_style = media.media_style(line_style_id)
+            if media_style is not None:
+                page.vis._style_sheets().append(media_style)  # a copy of the donor's
 
-            # initial endpoints so the file renders sensibly even before Visio recalculates
-            connector_shape.set_start_and_finish(from_shape.center_x_y, to_shape.center_x_y)
-            return connector_shape
-        raise ValueError("Connect.create() requires both from_shape and to_shape")
+        Connect._write(connector_shape, begin, end, routing_cells(chosen.routing, dynamic=chosen.glue is Glue.DYNAMIC))
+        # initial endpoints so the file renders sensibly even before Visio recalculates
+        connector_shape.set_start_and_finish(from_shape.center_x_y, to_shape.center_x_y)
+        return connector_shape
 
     @staticmethod
-    def _connection_point_count(shape: Shape) -> int:
-        sections = shape.xml.findall(f"{vsdxkit.namespace}Section")
-        for section in sections:
-            if section.attrib.get("N") == "Connection":
-                return len(section.findall(f"{vsdxkit.namespace}Row"))
-        return 0
-
-    @staticmethod
-    def _validate_point_glue(from_shape: Shape, to_shape: Shape, route: str, from_cp: int, to_cp: int) -> None:
-        """Validate route and point-glue indices before any package mutation.
-
-        Issue #9: Connect.create() provisioned masters and appended the
-        connector, and retarget() removed existing records, before
-        _apply_glue() rejected invalid indices — a caught ValueError left the
-        package half-changed. Everything _apply_glue can reject is checked
-        here so callers can fail before their first mutation.
-        """
-        point_glue, _routing = Connect._parse_route(route)
-        if not point_glue:
-            return
-        for shape, cp in ((from_shape, from_cp), (to_shape, to_cp)):
-            cp_count = Connect._connection_point_count(shape)
-            if cp < 0 or cp >= cp_count:
-                raise InvalidOperationError(
-                    f"Shape ID {shape.ID} has {cp_count} connection point(s); cannot glue to connection point index {cp}"
-                )
-
-    @staticmethod
-    def _apply_glue(
-        connector_shape: Shape, from_shape: Shape, to_shape: Shape, route: str = "dynamic", from_cp: int = 0, to_cp: int = 0
-    ):
-        """Apply Visio-faithful glue between connector and from/to shapes.
-
-        Shape glue (default): _WALKGLUE formulas + GlueType=2, matching what
-        Visio writes for a dynamic connector glued to shape PinX.
-        Point glue (route='point'): PAR(PNT(...)) formulas referencing
-        Connections.Xn/Yn rows; raises InvalidOperationError if the shape has too
-        few connection points.
-        route may also set routing behaviour: 'straight' (ShapeRouteStyle=16),
-        'rightangle' (ShapeRouteStyle=1), 'curved' (ShapeRouteStyle=17 +
-        ConLineRouteExt=2).
-        """
-        conn_id = connector_shape.ID
-        point_glue, routing = Connect._parse_route(route)
-
-        if point_glue:
-            ends = (("Begin", "EndX", from_shape, from_cp), ("End", "BeginX", to_shape, to_cp))
-            for prefix, _opposite_cell, shape, cp in ends:
-                cp_count = Connect._connection_point_count(shape)
-                if cp >= cp_count:
-                    raise InvalidOperationError(
-                        f"Shape ID {shape.ID} has {cp_count} connection point(s); cannot glue to connection point index {cp}"
-                    )
-                k = cp + 1
-                connector_shape.get_or_create_cell(f"{prefix}Trigger", f=f"_XFTRIGGER(Sheet{shape.ID}!EventXFMod)")
-                pnt = f"PAR(PNT(Sheet{shape.ID}!Connections.X{k},Sheet{shape.ID}!Connections.Y{k}))"
-                connector_shape.get_or_create_cell(f"{prefix}X", f=pnt)
-                connector_shape.get_or_create_cell(f"{prefix}Y", f=pnt)
-            beg_connect = (
-                f'<Connect xmlns="http://schemas.microsoft.com/office/visio/2012/main" '
-                f'FromSheet="{conn_id}" FromCell="BeginX" FromPart="9" '
-                f'ToSheet="{from_shape.ID}" ToCell="Connections.X{from_cp + 1}" '
-                f'ToPart="{99 + from_cp + 1}"/>'
-            )
-            end_connect = (
-                f'<Connect xmlns="http://schemas.microsoft.com/office/visio/2012/main" '
-                f'FromSheet="{conn_id}" FromCell="EndX" FromPart="12" '
-                f'ToSheet="{to_shape.ID}" ToCell="Connections.X{to_cp + 1}" '
-                f'ToPart="{99 + to_cp + 1}"/>'
-            )
-        else:
-            # shape glue - dynamic connector behaviour, formulas as written by Visio 16
-            connector_shape.get_or_create_cell("BegTrigger", f=f"_XFTRIGGER(Sheet{from_shape.ID}!EventXFMod)")
-            connector_shape.get_or_create_cell("EndTrigger", f=f"_XFTRIGGER(Sheet{to_shape.ID}!EventXFMod)")
-            walkglue_begin = "_WALKGLUE(BegTrigger,EndTrigger,WalkPreference)"
-            walkglue_end = "_WALKGLUE(EndTrigger,BegTrigger,WalkPreference)"
-            connector_shape.get_or_create_cell("BeginX", f=walkglue_begin)
-            connector_shape.get_or_create_cell("BeginY", f=walkglue_begin)
-            connector_shape.get_or_create_cell("EndX", f=walkglue_end)
-            connector_shape.get_or_create_cell("EndY", f=walkglue_end)
-            connector_shape.get_or_create_cell("GlueType", v="2")
-            connector_shape.get_or_create_cell("ObjType", v="2")
-            # explicit dynamic routing, as written by Visio 16; overrides the
-            # template connector's inherited ShapeRouteStyle=16 (straight)
-            connector_shape.get_or_create_cell("ShapeRouteStyle", v="0")
-            connector_shape.get_or_create_cell("ConLineRouteExt", v="0")
-            connector_shape.get_or_create_cell("ConFixedCode", v="6")
-            beg_connect = (
-                f'<Connect xmlns="http://schemas.microsoft.com/office/visio/2012/main" '
-                f'FromSheet="{conn_id}" FromCell="BeginX" FromPart="9" '
-                f'ToSheet="{from_shape.ID}" ToCell="PinX" ToPart="3"/>'
-            )
-            end_connect = (
-                f'<Connect xmlns="http://schemas.microsoft.com/office/visio/2012/main" '
-                f'FromSheet="{conn_id}" FromCell="EndX" FromPart="12" '
-                f'ToSheet="{to_shape.ID}" ToCell="PinX" ToPart="3"/>'
-            )
-
-        if routing == "straight":
-            connector_shape.get_or_create_cell("ShapeRouteStyle", v="16")
-        elif routing == "rightangle":
-            connector_shape.get_or_create_cell("ShapeRouteStyle", v="1")
-        elif routing == "curved":
-            connector_shape.get_or_create_cell("ShapeRouteStyle", v="17")
-            connector_shape.get_or_create_cell("ConLineRouteExt", v="2")
-
-        # Add these new connection relationships to the page
+    def _write(
+        connector_shape: Shape,
+        begin: _End,
+        end: _End,
+        routing: tuple[CellWrite, ...],
+    ) -> None:
+        """Glue the connector's ends as planned: its cells, then its records in place of the ones it had."""
+        connector_id = _id(connector_shape)
+        begin_glue, end_glue = _end_glue(begin), _end_glue(end)
+        for cell in (*glue_cells(begin_glue, end_glue), *routing):
+            connector_shape.get_or_create_cell(cell.name, v=cell.value, f=cell.formula)
         page = connector_shape.page
-        page.add_connect(Connect(xml=ET.fromstring(end_connect), page=page))
-        page.add_connect(Connect(xml=ET.fromstring(beg_connect), page=page))
+        page.remove_connect_records({connector_id})
+        for record in connection_records(connector_id, begin_glue, end_glue):
+            page.add_connect(Connect(xml=record_element(record), page=page))
+
+    @staticmethod
+    def _current_ends(page: Page, connector_shape: Shape) -> tuple[_End, _End]:
+        """Each end as the connector's records have it glued; `None` for an end no record names a shape for."""
+        ends: dict[str, tuple[Shape, int | None]] = {}
+        for connect in page.connects:
+            if connect.from_id != connector_shape.ID or connect.from_rel not in ("BeginX", "EndX"):
+                continue
+            shape = page.shapes.by_id(connect.to_id)
+            if shape is None:
+                continue
+            part = connect.xml.attrib.get("ToPart", "")
+            is_point = part.isdigit() and int(part) >= _FIRST_CONNECTION_POINT_PART
+            point = int(part) - _FIRST_CONNECTION_POINT_PART if is_point else None
+            ends[connect.from_rel] = (shape, point)
+        return ends.get("BeginX"), ends.get("EndX")
 
     @staticmethod
     def retarget(
@@ -247,61 +243,64 @@ class Connect:
         connector_shape: Shape,
         from_shape: Shape | None = None,
         to_shape: Shape | None = None,
-        route: str = "dynamic",
+        route: str | None = None,
         from_cp: int = 0,
         to_cp: int = 0,
+        *,
+        options: ConnectorOptions | None = None,
     ) -> Shape:
-        """Retarget an existing connector to new endpoints.
+        """Glue one or both ends of an existing connector to other shapes.
 
-        Only the ends provided are moved; the other end keeps its current
-        glue (resolved from the page's existing Connect records). Reuses
-        _apply_glue for cells and records — removal of the old records goes
-        through the page's single record-removal path.
+        With no ``options`` (and no ``route``) the connector keeps its glue and
+        routing: a moved end keeps the connection point it had, and one that
+        was floating or glued dynamically is glued dynamically. A connection
+        point the new shape does not have is refused, never dropped for
+        dynamic glue. ``options``, or ``route`` as in :meth:`create`, replace
+        the glue and routing of both ends. An end not named stays where it is,
+        floating if it was.
 
-        :returns: the connector Shape
+        Everything is checked before anything is written.
+
+        :returns: the connector
         """
-        # its own guard: the first write is page.remove_connect_records(), so
-        # without this the error names a method the caller never called
+        # its own guard: the first write is a cell, so without this the error
+        # names a method the caller never called
         page.vis._require_open("Connect.retarget()")
-        current_from = current_to = None
-        current_from_cp = current_to_cp = 0
-        for connect in page.connects:
-            if connect.from_id == str(connector_shape.ID):
-                # note: deliberately not named to_shape - that is the parameter
-                connected_shape = page.shapes.by_id(connect.to_id) if connect.to_id else None
-                if connect.from_rel == "BeginX":
-                    current_from = connected_shape
-                    if connect.to_rel and connect.to_rel.startswith("Connections"):
-                        current_from_cp = int(connect.to_rel.rsplit(".", 1)[1]) - 1
-                elif connect.from_rel == "EndX":
-                    current_to = connected_shape
-                    if connect.to_rel and connect.to_rel.startswith("Connections"):
-                        current_to_cp = int(connect.to_rel.rsplit(".", 1)[1]) - 1
-        new_from = from_shape if from_shape is not None else current_from
-        new_to = to_shape if to_shape is not None else current_to
-        if new_from is None or new_to is None:
-            raise InvalidOperationError("connector has no resolvable endpoints to keep")
+        if from_shape is None and to_shape is None:
+            raise InvalidOperationError("retargeting a connector needs at least one endpoint")
+        chosen = _options(route, from_cp, to_cp, options)
+        _check_endpoint(page, connector_shape, None)
+        for shape in (from_shape, to_shape):
+            if shape is not None:
+                _check_endpoint(page, shape, connector_shape)
+        current_begin, current_end = Connect._current_ends(page, connector_shape)
+        begin = Connect._next_end(current_begin, from_shape, chosen, begin=True)
+        end = Connect._next_end(current_end, to_shape, chosen, begin=False)
+        for glued in (begin, end):
+            _check_point(glued)
 
-        # validate everything _apply_glue can reject BEFORE removing the
-        # existing records (issue #9 atomicity)
-        Connect._validate_point_glue(
-            new_from,
-            new_to,
-            route,
-            from_cp if from_shape is not None else current_from_cp,
-            to_cp if to_shape is not None else current_to_cp,
-        )
-        page.remove_connect_records({str(connector_shape.ID)})
-        Connect._apply_glue(
-            connector_shape,
-            new_from,
-            new_to,
-            route=route,
-            from_cp=from_cp if from_shape is not None else current_from_cp,
-            to_cp=to_cp if to_shape is not None else current_to_cp,
-        )
-        connector_shape.set_start_and_finish(new_from.center_x_y, new_to.center_x_y)
+        routing = () if chosen is None else routing_cells(chosen.routing, dynamic=chosen.glue is Glue.DYNAMIC)
+        Connect._write(connector_shape, begin, end, routing)
+        start = begin[0].center_x_y if begin else (connector_shape.begin_x, connector_shape.begin_y)
+        finish = end[0].center_x_y if end else (connector_shape.end_x, connector_shape.end_y)
+        connector_shape.set_start_and_finish(start, finish)
         return connector_shape
+
+    @staticmethod
+    def _next_end(
+        current: _End,
+        replacement: Shape | None,
+        options: ConnectorOptions | None,
+        *,
+        begin: bool,
+    ) -> _End:
+        """Where one end goes: the shape named, or the one it has, glued as `options` say or as it was."""
+        shape = replacement if replacement is not None else (current[0] if current else None)
+        if shape is None:
+            return None
+        if options is not None:
+            return shape, options.end_point(begin=begin)
+        return shape, current[1] if current else None
 
     @property
     def shape_id(self) -> str | None:

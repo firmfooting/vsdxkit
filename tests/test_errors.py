@@ -757,7 +757,7 @@ def test_saving_a_drawing_under_a_vsdm_name_raises_invalid_operation(vsdx_copy, 
 
 
 def test_gluing_to_a_connection_point_a_shape_does_not_have_raises_invalid_operation(vsdx_copy):
-    """Fails if `Connect._validate_point_glue` refuses a connection-point index past the shape's last with anything but `InvalidOperationError`.
+    """Fails if `Connect.create` refuses a connection-point index past the shape's last with anything but `InvalidOperationError`.
 
     Whether the index is usable depends on how many connection points that
     shape has, so the refusal is about the document's state, not the index.
