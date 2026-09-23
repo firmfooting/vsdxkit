@@ -360,8 +360,11 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         if root is None:
             self._set_document_part_xml("masters_xml", _MASTERS_PART, None)  # raises: see there
             return
-        current = self._package.read_xml(_MASTERS_PART)
-        if current is not None and current.getroot() is root:
+        # asked of the part as held rather than through `read_xml`: whether the
+        # root is already the part's own needs no parse, and promoting the part
+        # here would make assigning over bytes that are not XML raise
+        held = self._package.part(_MASTERS_PART)
+        if isinstance(held, XmlPart) and held.tree.getroot() is root:
             return
         self._set_document_part_xml("masters_xml", _MASTERS_PART, ET.ElementTree(root))
 
@@ -435,7 +438,8 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         # moment the document opens, which is what lets a caller compare the
         # store's own identity for a part it has not yet touched (app.xml, in
         # particular, may simply be missing, and promoting a missing part is
-        # just None).
+        # just None), and a part that is not well-formed XML fails the open
+        # itself, with a `PartParseError`, rather than the first access to it.
         self._read_part_xml(f"{self.directory}/[Content_Types].xml")
         self._read_part_xml(f"{self.directory}/docProps/app.xml")
         self._read_part_xml(f"{self.directory}/visio/document.xml")

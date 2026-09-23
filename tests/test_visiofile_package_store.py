@@ -310,3 +310,45 @@ def test_setting_a_document_part_to_none_is_refused(vsdx_copy, attribute, name):
         with pytest.raises(ValueError, match=attribute):
             setattr(vis, attribute, None)
         assert vis._package.part(name) is before
+
+
+def test_assigning_masters_xml_over_a_malformed_part_does_not_parse_it(vsdx_copy):
+    """Fails if the `masters_xml` setter reads the current part through `read_xml`, which promotes it.
+
+    The setter only needs to know whether the root it is handed is already
+    the part's own. Asking that by promoting the part parses it, and a part
+    that is not XML -- bytes written through `zip_file_contents` -- then
+    makes an assignment that would replace it raise instead.
+    """
+    with VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
+        vis.zip_file_contents[f"{vis.directory}/visio/masters/masters.xml"] = io.BytesIO(b"<Masters")
+        root = ET.Element(f"{namespace}Masters")
+        vis.masters_xml = root
+        held = vis._package.part("/visio/masters/masters.xml")
+        assert isinstance(held, XmlPart) and held.tree.getroot() is root
+
+
+def test_assigning_masters_xml_writes_through_to_disk(vsdx_copy, tmp_path):
+    """Fails if the `masters_xml` setter stops putting the new root into the store, so the save never sees it."""
+    with VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
+        root = copy.deepcopy(vis.masters_xml)
+        assert root is not None
+        root.set("VsdxkitMarker", "1")
+        vis.masters_xml = root
+        assert vis.masters_xml is root
+        out = str(tmp_path / "test4_connectors-masters.vsdx")
+        vis.save_vsdx(out)
+    with zipfile.ZipFile(out) as archive:
+        assert b'VsdxkitMarker="1"' in archive.read("visio/masters/masters.xml")
+
+
+def test_page_set_name_writes_through_to_disk(vsdx_copy, tmp_path):
+    """Fails if `Page.set_name` edits a private copy of pages.xml that never reaches the store."""
+    with VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
+        with pytest.warns(DeprecationWarning):
+            vis.pages[1].set_name("VsdxkitRenamed")
+        out = str(tmp_path / "test4_connectors-renamed.vsdx")
+        vis.save_vsdx(out)
+    with zipfile.ZipFile(out) as archive:
+        pages = ET.fromstring(archive.read("visio/pages/pages.xml"))
+    assert [page.get("Name") for page in pages][1] == "VsdxkitRenamed"
