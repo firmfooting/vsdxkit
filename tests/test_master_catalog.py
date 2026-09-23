@@ -21,6 +21,7 @@ from vsdxkit.vsdxfile import VisioFile
 
 RELS_NS = "{http://schemas.openxmlformats.org/package/2006/relationships}"
 MASTER_RELATIONSHIP = "http://schemas.microsoft.com/visio/2010/relationships/master"
+MAIN_NS = "http://schemas.microsoft.com/office/visio/2012/main"
 
 
 def _master_parts(path: str) -> list[str]:
@@ -291,3 +292,111 @@ def test_the_catalog_answers_by_id_and_by_name(vsdx_copy):
             assert catalog.by_id(page.page_id) is page
             assert catalog.by_name(page.name) is page
         assert catalog.by_id("no-such-id") is None
+
+
+def _master_element(vis: VisioFile, name: str) -> ET.Element:
+    return next(master for master in vis._masters.root if master.attrib.get("NameU") == name)
+
+
+def test_a_same_name_master_is_imported_when_neither_unique_id_nor_match_by_name_says_it_is_the_same(vsdx_copy, tmp_path):
+    """Fails if masters match on name alone: Visio matches on UniqueID unless the document master sets MatchByName.
+
+    Two masters of one name can be different shapes, and an instance of the
+    one being copied must not be re-pointed at the other.
+    """
+    saved = str(tmp_path / "test_master_renamed.vsdx")
+    with VisioFile(vsdx_copy("test_master.vsdx")) as source, VisioFile(vsdx_copy("test_master.vsdx")) as target:
+        own = _master_element(target, "Test Master")
+        own.attrib["UniqueID"] = "{00000000-0000-0000-0000-000000000001}"
+        before = {page.page_id for page in target.master_pages}
+        instance = next(
+            shape for shape in source.pages[0].all_shapes if shape.master_page == source.master_index["Test Master"]
+        )
+        copied = instance.copy(target.pages[0])
+        assert copied.master_page_ID not in before
+        names = [page.name for page in target.master_pages]
+        assert len(names) == len(set(names)), names
+        target.save_vsdx(saved)
+
+
+def test_a_master_with_the_same_unique_id_is_reused(vsdx_copy):
+    """Fails if a copy of a master the target already holds, unchanged, is imported a second time."""
+    with VisioFile(vsdx_copy("test_master.vsdx")) as source, VisioFile(vsdx_copy("test_master.vsdx")) as target:
+        before = [page.page_id for page in target.master_pages]
+        instance = next(
+            shape for shape in source.pages[0].all_shapes if shape.master_page == source.master_index["Test Master"]
+        )
+        copied = instance.copy(target.pages[0])
+        assert [page.page_id for page in target.master_pages] == before
+        assert copied.master_page is target.master_index["Test Master"]
+
+
+def test_a_match_by_name_master_answers_for_its_name(vsdx_copy):
+    """Fails if the document's own Dynamic connector, which sets MatchByName, is not the one a copied connector uses."""
+    with (
+        VisioFile(vsdx_copy("fixtures/com_reference/s01_autoconnect_right.vsdx")) as source,
+        VisioFile(vsdx_copy("test4_connectors.vsdx")) as target,
+    ):
+        own = target.master_index["Dynamic connector"]
+        assert own.master_unique_id != source.master_index["Dynamic connector"].master_unique_id
+        before = len(target.master_pages)
+        connector = next(shape for shape in source.pages[0].all_shapes if shape.master_page_ID)
+        copied = connector.copy(target.pages[0])
+        assert copied.master_page is own
+        assert len(target.master_pages) == before
+
+
+def test_a_master_shape_the_reused_master_lacks_is_dropped(vsdx_copy, tmp_path):
+    """Fails if a copied sub-shape keeps a `MasterShape` naming a shape the reused master does not have.
+
+    A MatchByName master of the same name can be built differently, and a
+    reference into it that reaches nothing loses the shape's inheritance.
+    """
+    saved = str(tmp_path / "reused_master.vsdx")
+    fixture = "test_master_multiple_child_shapes.vsdx"
+    with VisioFile(vsdx_copy(fixture)) as source, VisioFile(vsdx_copy("test1.vsdx")) as target:
+        group = _master_instance(source)
+        first = group.copy(target.pages[0])
+        master = first.master_page
+        # the target's master becomes one that matches by name and lacks a member
+        element = target._masters.element_by_id(master.page_id)
+        element.attrib["MatchByName"] = "1"
+        element.attrib["UniqueID"] = "{00000000-0000-0000-0000-000000000002}"
+        member = next(child for child in group.child_shapes if child.master_shape_ID)
+        missing = member.master_shape_ID
+        master_shapes = master.xml.getroot().find(f"{{{MAIN_NS}}}Shapes")[0].find(f"{{{MAIN_NS}}}Shapes")
+        master_shapes.remove(next(s for s in master_shapes if s.attrib["ID"] == missing))
+        target.pages[0].delete_shape(first)
+
+        second = group.copy(target.pages[0])
+        assert second.master_page is master
+        references = [child.xml.attrib.get("MasterShape") for child in second.child_shapes]
+        assert missing not in references
+        assert any(references)
+        target.save_vsdx(saved)
+
+
+def test_a_master_shape_whose_master_cannot_be_resolved_is_dropped(vsdx_copy):
+    """Fails if a copied group whose own master is dangling leaves its members' `MasterShape` behind."""
+    with (
+        VisioFile(vsdx_copy("test_master_multiple_child_shapes.vsdx")) as source,
+        VisioFile(vsdx_copy("test1.vsdx")) as target,
+    ):
+        group = _master_instance(source)
+        group.xml.attrib["Master"] = "999"
+        copied = group.copy(target.pages[0])
+        assert [node.attrib for node in copied.xml.iter(f"{{{MAIN_NS}}}Shape") if "MasterShape" in node.attrib] == []
+        sub_shape = next(child for child in group.child_shapes if child.master_shape_ID)
+        copied_sub_shape = sub_shape.copy(target.pages[0])
+        assert "MasterShape" not in copied_sub_shape.xml.attrib
+
+
+def test_a_target_whose_app_xml_lists_no_titles_still_takes_a_copy(vsdx_copy):
+    """Fails if a copy into a document whose app.xml has no TitlesOfParts raises: the element is optional."""
+    with VisioFile(vsdx_copy("test_master.vsdx")) as source, VisioFile(vsdx_copy("test1.vsdx")) as target:
+        app = target.app_xml.getroot()
+        app.remove(app.find("{http://schemas.openxmlformats.org/officeDocument/2006/extended-properties}TitlesOfParts"))
+        plain = next(shape for shape in source.pages[0].all_shapes if not shape.master_page_ID)
+        plain.copy(target.pages[0])
+        _master_instance(source).copy(target.pages[0])
+        assert len(target.master_pages) == 1

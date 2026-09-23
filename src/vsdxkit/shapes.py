@@ -42,6 +42,33 @@ def parent_of(root: Element, element: Element) -> Element | None:
     return None
 
 
+def _shape_ids(master: Page) -> frozenset[str]:
+    """The IDs of every shape a master holds."""
+    return frozenset(shape_id for shape in master.xml.iter(f"{namespace}Shape") if (shape_id := shape.attrib.get("ID")))
+
+
+def _drop_unreachable_master_shapes(
+    element: Element, inherited: str | None, members: dict[str, frozenset[str]], *, root_names_inherited: bool
+) -> None:
+    """Drop every `MasterShape` below `element` that names no shape of the master it inherits from.
+
+    A shape's master is its own `Master`, else its group's. `MasterShape` on a
+    shape that names a master itself is left alone, as the package validator
+    leaves it: which master it reaches into is not settled. The exception is a
+    copy's root that was given its group's master, whose `MasterShape` reaches
+    into that master.
+    """
+    named = element.attrib.get("Master")
+    master = named or inherited
+    member = element.attrib.get("MasterShape")
+    checked = member is not None and (named is None or root_names_inherited)
+    if checked and (master is None or member not in members.get(master, frozenset())):
+        element.attrib.pop("MasterShape")
+    shapes = element.find(f"{namespace}Shapes")
+    for child in () if shapes is None else shapes.iterfind(f"{namespace}Shape"):
+        _drop_unreachable_master_shapes(child, master, members, root_names_inherited=False)
+
+
 def find_or_create_shapes_tag(parent: Element) -> Element:
     """Return the ``<Shapes>`` container inside ``parent``, creating it if absent.
 
@@ -642,6 +669,12 @@ class Shape(DocumentPart):
                 # drops the shape on open
                 node.attrib.pop("Master")
                 node.attrib.pop("MasterShape", None)
+        if cross_document:
+            # the master a copy now names may be built differently from the one
+            # it was copied under - a MatchByName master answers for its name
+            # alone - or may be gone altogether
+            members = {master.page_id: _shape_ids(master) for master in masters.values()}
+            _drop_unreachable_master_shapes(new_shape_xml, None, members, root_names_inherited=bool(inherited))
         # every page that shows an instance of a master relates to it, as Visio
         # writes it; a copy onto another page of this document adds one too
         for master in masters.values():

@@ -38,7 +38,13 @@ class MasterCatalog:
 
 - **No upward import.** `masters` never imports `vsdxkit.vsdxfile`: the document hands the catalog a factory for master pages. This is dependency inversion under the amended rules, so every public annotation on the catalog resolves at runtime.
 - **What `import_masters` does.**
-  - **Dedup.** It deduplicates by name (`NameU`, else `Name`), which is Visio's MatchByName. A master with neither name matches nothing and is always imported. Two masters of one name in the same batch are imported once.
+  - **Dedup.** A source master matches a target master by Visio's rule for a drop (`MasterCatalog.matching`):
+    - the same `UniqueID` is the same master;
+    - a target master that sets `MatchByName` answers for its name. Visio sets it on Dynamic connector, so every document keeps one;
+    - where neither master carries a `UniqueID`, as with Lucidchart's exports, the name is all there is to go on.
+
+    Anything else is imported, even with a name the target already uses, because two masters of one name can be different shapes. A colliding import is renamed `Name.ID` so name lookups stay unambiguous; this is not yet checked against Visio. Masters sharing a `UniqueID` in one batch are imported once.
+  - **Reach.** On a cross-document copy, a `MasterShape` that names no shape of its effective master is dropped. That covers a reused master built differently, and a dangling master inherited from a group.
   - **Atomic.** It reads every source part before changing anything, so one unreadable master leaves the target as it was.
   - **Writes.** It bootstraps if needed. It writes each part under the first unused `masterN.xml`, not `len + 1`, which collides after a gap. It allocates the master ID, allocates the relationship through `relationships.append_if_absent`, registers the content types and the document relationship, and records the new page.
   - **Result.** It is keyed by the source's master ID. An ID the source cannot resolve is left out.

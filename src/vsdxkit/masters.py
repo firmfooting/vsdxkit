@@ -86,6 +86,32 @@ class MasterCatalog:
                 return page
         return None
 
+    def matching(self, master: Element) -> Page | None:
+        """The master here that an instance of `master`, from another document, would use.
+
+        Visio's rule on a drop: the same `UniqueID` is the same master, and a
+        document master that sets `MatchByName` answers for any master of its
+        name. That flag is how every document shares one Dynamic connector.
+        Otherwise a master of the same name is a different master. Where
+        neither master carries a `UniqueID`, as some producers write them, the
+        name is all there is to go on.
+        """
+        unique_id = master.attrib.get("UniqueID")
+        name = _master_name(master)
+        for page in self._pages:
+            element = self.element_by_id(page.page_id)
+            if element is None:
+                continue
+            if unique_id and element.attrib.get("UniqueID") == unique_id:
+                return page
+            if not name or _master_name(element) != name:
+                continue
+            if element.attrib.get("MatchByName") in ("1", "true"):
+                return page
+            if not unique_id and not element.attrib.get("UniqueID"):
+                return page
+        return None
+
     def element_by_id(self, master_id: str) -> Element | None:
         """The `<Master>` element with this ID."""
         root = self.root
@@ -163,31 +189,32 @@ class MasterCatalog:
     def import_masters(self, source: MasterCatalog, master_ids: Iterable[str]) -> dict[str, Page]:
         """This package's copy of each master `source` holds under `master_ids`, importing any it lacks.
 
-        Keyed by the ID `source` uses. Masters match by name, as Visio's
-        MatchByName does: numeric master IDs are per-document and coincide
-        across documents by chance. A master with no name matches nothing and
-        is always imported. An ID `source` cannot resolve is left out: copying
-        it would name a master no package declares.
+        Keyed by the ID `source` uses. A master matches as `matching` decides:
+        numeric master IDs are per-document and coincide across documents by
+        chance. One that matches nothing is imported, under a name of its own
+        if this package already has a master of its name. An ID `source`
+        cannot resolve is left out: copying it would name a master no package
+        declares.
 
         Every source part is read before anything here changes, so a master
         that cannot be read leaves this package as it was.
         """
         found: dict[str, Page] = {}
         pending: list[tuple[str, Element, bytes]] = []
-        first_by_name: dict[str, str] = {}
+        first_by_unique_id: dict[str, str] = {}
         aliases: dict[str, str] = {}
         for master_id in dict.fromkeys(master_ids):
             element = source.element_by_id(master_id)
             source_page = source.by_id(master_id)
             if element is None or source_page is None:
                 continue
-            name = _master_name(element)
-            existing = self.by_name(name) if name else None
+            existing = self.matching(element)
             if existing is not None:
                 found[master_id] = existing
                 continue
-            if name in first_by_name:
-                aliases[master_id] = first_by_name[name]
+            unique_id = element.attrib.get("UniqueID")
+            if unique_id and unique_id in first_by_unique_id:
+                aliases[master_id] = first_by_unique_id[unique_id]
                 continue
             if source._store.part(source_page.filename) is None:
                 continue
@@ -200,8 +227,8 @@ class MasterCatalog:
                     f"source master part {source_page.filename} could not be read, though the package lists it"
                 )
             pending.append((master_id, element, master_bytes))
-            if name:
-                first_by_name[name] = master_id
+            if unique_id:
+                first_by_unique_id[unique_id] = master_id
 
         if pending:
             self.bootstrap()
@@ -227,6 +254,14 @@ class MasterCatalog:
         )
         element = copy.deepcopy(source_element)
         element.attrib["ID"] = new_id
+        taken = {_master_name(master) for master in masters_root}
+        if _master_name(element) in taken:
+            # Two masters of one name would leave a lookup by name answering
+            # for the wrong one. The `.ID` suffix is how Visio's own duplicate
+            # shape names read; what it does for masters is not yet checked.
+            for attribute in ("NameU", "Name"):
+                if attribute in element.attrib:
+                    element.attrib[attribute] = f"{element.attrib[attribute]}.{new_id}"
         rel = element.find(f"{namespace}Rel")
         if rel is not None:
             rel.attrib[f"{r_namespace}id"] = relationship.attrib["Id"]

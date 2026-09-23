@@ -354,16 +354,17 @@ class VisioFile(JinjaTemplatingMixin):
     def _masters_for(self, master_ids: list[str], source: VisioFile) -> dict[str, Page]:
         """This document's master for each of `master_ids`, as `source` numbers its masters.
 
-        From another document, a master this one lacks is imported by name,
-        and listed in app.xml's TitlesOfParts. A document without app.xml has no
-        titles to keep in step (#385). The section is resolved before anything
-        changes, so an app.xml it cannot be found in stops the import cleanly.
-        An ID `source` cannot resolve is left out.
+        From another document, a master this one lacks is imported, and listed
+        in app.xml's TitlesOfParts. A document without app.xml, or whose app.xml
+        lists no titles, has none to keep in step (#385): both are optional. The
+        section is resolved before anything changes, so an app.xml it cannot
+        be found in stops the import cleanly. An ID `source` cannot resolve is
+        left out.
         """
         self._require_open("importing a master")
         if source is self:
             return {master_id: master for master_id in master_ids if (master := self._masters.by_id(master_id)) is not None}
-        lists_titles = self.app_xml is not None
+        lists_titles = self._lists_titles()
         if lists_titles:
             self._titles_of_parts_section(self.MASTERS, self._page_titles())
         known = {page.page_id for page in self._masters.pages}
@@ -612,6 +613,13 @@ class VisioFile(JinjaTemplatingMixin):
         # return HeadingPairs element from app.xml
         root = self._part_root(self.app_xml, "docProps/app.xml")
         return require_element(root.find(f"{ext_prop_namespace}HeadingPairs"), "app.xml HeadingPairs")
+
+    def _lists_titles(self) -> bool:
+        """Whether app.xml lists this document's parts by title. Both it and its TitlesOfParts are optional."""
+        if self.app_xml is None:
+            return False
+        titles = self._part_root(self.app_xml, "docProps/app.xml").find(f"{ext_prop_namespace}TitlesOfParts")
+        return titles is not None and titles.find(f"{vt_namespace}vector") is not None
 
     def _titles_of_parts(self) -> Element:
         # return TitlesOfParts element from app.xml
