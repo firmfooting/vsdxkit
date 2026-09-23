@@ -7,6 +7,7 @@ and the one that matters more, is that the library actually raises these types.
 A hierarchy nobody raises documents a contract the code does not keep.
 """
 
+import os
 import pathlib
 import struct
 import xml.etree.ElementTree as ET
@@ -26,6 +27,8 @@ from vsdxkit.errors import (
     VisioFileNotOpen,
     VsdxError,
 )
+
+BASEDIR = os.path.dirname(os.path.realpath(__file__))
 
 PUBLIC_ERRORS = (
     InvalidOperationError,
@@ -204,6 +207,24 @@ def test_a_document_with_no_pages_part_raises_missing_part_error(vsdx_copy):
         vis._package.remove("/visio/pages/pages.xml")
         with pytest.raises(MissingPartError, match=r"pages\.xml"):
             page.name = "renamed"
+
+
+def test_a_required_part_the_store_lacks_is_a_missing_part():
+    """Fails if PackageStore.require_xml reports an absent part with a plain ValueError."""
+    from vsdxkit.package import PackageStore
+
+    store = PackageStore.open(os.path.join(BASEDIR, "test1.vsdx"))
+    with pytest.raises(vsdxkit.MissingPartError):
+        store.require_xml("/visio/no-such-part.xml")
+
+
+def test_a_source_master_listed_but_unreadable_is_a_missing_part(vsdx_copy, monkeypatch):
+    """Fails if master import reports a listed-but-unreadable donor part with a plain ValueError."""
+    with vsdxkit.VisioFile(vsdx_copy("test4_connectors.vsdx")) as source, vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as target:
+        shape = next(shape for shape in source.pages[0].all_shapes if shape.xml.attrib.get("Master"))
+        monkeypatch.setattr(source._package, "read_bytes", lambda name: None)
+        with pytest.raises(vsdxkit.MissingPartError, match="could not be read"):
+            target._ensure_masters_for_shape(shape)
 
 
 # --------------------------------------------------------------------------
@@ -604,6 +625,20 @@ def test_mutating_a_closed_document_still_raises_visio_file_not_open(vsdx_copy):
         page = vis.pages[0]
     with pytest.raises(VisioFileNotOpen):
         page.name = "renamed"
+
+
+def test_refusing_none_for_a_document_part_is_an_invalid_operation(vsdx_copy):
+    """Fails if VisioFile's document-part setters refuse None with a plain ValueError."""
+    with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        with pytest.raises(vsdxkit.InvalidOperationError):
+            vis.app_xml = None
+
+
+def test_refusing_none_for_a_page_part_is_an_invalid_operation(vsdx_copy):
+    """Fails if Page.xml refuses None with a plain ValueError."""
+    with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        with pytest.raises(vsdxkit.InvalidOperationError):
+            vis.pages[0].xml = None
 
 
 # --------------------------------------------------------------------------

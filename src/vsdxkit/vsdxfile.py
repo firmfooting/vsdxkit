@@ -293,7 +293,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         `_set_part_xml` directly.
         """
         if tree is None:
-            raise ValueError(
+            raise InvalidOperationError(
                 f"VisioFile.{attribute} cannot remove {name} through this property: this "
                 f"property does not also remove the relationship and content-type override "
                 f"that name a document part, so setting it to None would leave the package "

@@ -91,7 +91,7 @@ class MastersImportMixin:
         source_part_name = src_vis._part_name(source_master_page.filename)
         master_bytes = src_vis._package.read_bytes(source_part_name)
         if master_bytes is None:
-            raise ValueError(f"source master part {source_part_name} could not be read, though the package lists it")
+            raise MissingPartError(f"source master part {source_part_name} could not be read, though the package lists it")
 
         # 1. ensure this document has a masters.xml (and rels) to append to,
         # BEFORE resolving master_rels_path below. A masters relationship can

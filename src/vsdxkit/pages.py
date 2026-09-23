@@ -234,7 +234,7 @@ class Page:
     def xml(self, value: ET.ElementTree[ET.Element] | None) -> None:
         self.vis._require_open("Setting Page.xml")
         if value is None:
-            raise ValueError(
+            raise InvalidOperationError(
                 f"Page.xml cannot be set to None: {self.filename} cannot be removed through "
                 f"this property, because pages.xml, pages.xml.rels and the content-type "
                 f"override would still name it"
