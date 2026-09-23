@@ -9,6 +9,11 @@ from vsdxkit.vsdxfile import VisioFile
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
 
+def _first_shape_containing(shapes, text: str):
+    """The first shape whose text contains `text`, as the retired substring finder matched."""
+    return next((shape for shape in shapes if text in shape.text), None)
+
+
 def test_connect_create_writes_connection_records(vsdx_copy, tmp_path):
     """Connect.create() must produce persisted Connect records, not just run."""
     path = vsdx_copy("test8_simple_connector.vsdx")
@@ -69,12 +74,12 @@ def test_shape_end_arrow_false_writes_zero(vsdx_copy, tmp_path):
     output = os.path.join(str(tmp_path), "arrow_false.vsdx")
     with VisioFile(path) as vis:
         page = vis.pages[0]
-        shape = page.find_shape_by_text("Scenario:")
+        shape = _first_shape_containing(page.shapes, "Scenario:")
         shape.end_arrow = False
         assert shape.end_arrow == "0"  # pre-fix test asserted the truthy string "0"
         vis.save_vsdx(output)
     with VisioFile(output) as vis:
-        shape = vis.pages[0].find_shape_by_text("Scenario:")
+        shape = _first_shape_containing(vis.pages[0].shapes, "Scenario:")
         assert shape is not None
         assert shape.end_arrow == "0"
 
@@ -84,12 +89,12 @@ def test_shape_end_arrow_true_writes_13(vsdx_copy, tmp_path):
     output = os.path.join(str(tmp_path), "arrow_true.vsdx")
     with VisioFile(path) as vis:
         page = vis.pages[0]
-        shape = page.find_shape_by_text("Scenario:")
+        shape = _first_shape_containing(page.shapes, "Scenario:")
         shape.end_arrow = True
         assert shape.end_arrow == "13"
         vis.save_vsdx(output)
     with VisioFile(output) as vis:
-        shape = vis.pages[0].find_shape_by_text("Scenario:")
+        shape = _first_shape_containing(vis.pages[0].shapes, "Scenario:")
         assert shape is not None
         assert shape.end_arrow == "13"
 

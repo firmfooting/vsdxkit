@@ -781,8 +781,8 @@ def test_connecting_a_shape_with_no_pin_coordinates_raises_invalid_operation(vsd
     """
     with VisioFile(vsdx_copy("test8_simple_connector.vsdx")) as vis:
         page = vis.pages[0]
-        source = page.find_shape_by_text("Shape A")
-        target = page.find_shape_by_text("Shape B")
+        source = page.shapes.by_text("Shape A")
+        target = page.shapes.by_text("Shape B")
         assert source is not None and target is not None
         pin_x = source.cells.pop("PinX")
         source.xml.remove(pin_x.xml)

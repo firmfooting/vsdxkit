@@ -67,7 +67,7 @@ class Media:
         A missing sentinel means the bundled media.vsdx is wrong, so fail loudly
         rather than handing callers a None shape.
         """
-        shape = self.media.pages[0].find_shape_by_text(text)
+        shape = next((shape for shape in self.media.pages[0].shapes if text in shape.text), None)
         if shape is None:
             raise NotFoundError(f"media document has no shape with sentinel text {text!r}")
         return shape

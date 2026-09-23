@@ -23,7 +23,7 @@ from vsdxkit.vsdxfile import VisioFile
 )
 def test_coordinate_setters_reject_none(vsdx_copy, attribute):
     with VisioFile(vsdx_copy("test1.vsdx")) as vis:
-        shape = vis.pages[0].find_shape_by_text("Shape to copy")
+        shape = vis.pages[0].shapes.by_text("Shape to copy")
         assert shape is not None
 
         with pytest.raises(TypeError, match="coordinate value cannot be None"):
@@ -35,7 +35,7 @@ def test_coordinate_setters_reject_none(vsdx_copy, attribute):
 @pytest.mark.parametrize("attribute", ("line_weight", "end_arrow"))
 def test_scalar_setters_do_not_bypass_null_guard(vsdx_copy, attribute):
     with VisioFile(vsdx_copy("test1.vsdx")) as vis:
-        shape = vis.pages[0].find_shape_by_text("Shape to copy")
+        shape = vis.pages[0].shapes.by_text("Shape to copy")
         assert shape is not None
 
         with pytest.raises(TypeError, match="XML attribute value cannot be None"):
@@ -46,7 +46,7 @@ def test_scalar_setters_do_not_bypass_null_guard(vsdx_copy, attribute):
 
 def test_cell_value_rejects_none_without_mutation(vsdx_copy):
     with VisioFile(vsdx_copy("test2.vsdx")) as vis:
-        shape = vis.pages[0].find_shape_by_id("16")
+        shape = vis.pages[0].shapes.by_id("16")
         assert shape is not None
         cell = shape.cells["PinX"]
         before = dict(cell.xml.attrib)
@@ -59,7 +59,7 @@ def test_cell_value_rejects_none_without_mutation(vsdx_copy):
 
 def test_geometry_row_rejects_none(vsdx_copy):
     with VisioFile(vsdx_copy("test2.vsdx")) as vis:
-        shape = vis.pages[0].find_shape_by_id("16")
+        shape = vis.pages[0].shapes.by_id("16")
         assert shape is not None and shape.geometry is not None
         row = next(row for row in shape.geometry.rows.values() if str(row.row_type).lower() == "moveto")
         x_cell = row.cells.pop("X")
@@ -76,7 +76,7 @@ def test_geometry_row_rejects_none(vsdx_copy):
 
 def test_geometry_move_skips_missing_coordinates(vsdx_copy):
     with VisioFile(vsdx_copy("test2.vsdx")) as vis:
-        shape = vis.pages[0].find_shape_by_id("16")
+        shape = vis.pages[0].shapes.by_id("16")
         assert shape is not None and shape.geometry is not None
         row = next(row for row in shape.geometry.rows.values() if str(row.row_type).lower() == "moveto")
         x_cell = row.cells.pop("X")
@@ -92,8 +92,8 @@ def test_geometry_move_skips_missing_coordinates(vsdx_copy):
 def test_connector_coordinates_reject_none_before_mutation(vsdx_copy):
     with VisioFile(vsdx_copy("test8_simple_connector.vsdx")) as vis:
         page = vis.pages[0]
-        source = page.find_shape_by_text("Shape A")
-        target = page.find_shape_by_text("Shape B")
+        source = page.shapes.by_text("Shape A")
+        target = page.shapes.by_text("Shape B")
         assert source is not None and target is not None
         connector = page.connect_shapes(source, target)
         before = (connector.x, connector.y, connector.begin_x, connector.begin_y, connector.end_x, connector.end_y)

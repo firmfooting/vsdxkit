@@ -82,8 +82,8 @@ def test_create_with_valid_point_glue_still_works(vsdx_copy):
     path = vsdx_copy("fixtures/com_reference/s05_swimlanes_cfflow.vsdx")
     with VisioFile(path) as vis:
         page = vis.pages[0]
-        a = page.find_shape_by_id("90")
-        b = page.find_shape_by_id("97")
+        a = page.shapes.by_id("90")
+        b = page.shapes.by_id("97")
         assert a is not None and b is not None
         records_before = len(page.connects)
         connector = Connect.create(page=page, from_shape=a, to_shape=b, route="point")

@@ -41,7 +41,7 @@ def test_membership_is_geometric(vsdx_copy):
             for member in container.members(lane):
                 assert bottom <= member.y <= top
         # decision shape sits in the middle lane per the capture
-        decision = vis.pages[0].find_shape_by_text("Decision")
+        decision = vis.pages[0].shapes.by_text("Decision")
         assert container.lane_of(decision) is not None
 
 
@@ -50,10 +50,10 @@ def test_a_connector_whose_endpoints_come_from_its_master_is_not_a_member(vsdx_c
     with VisioFile(vsdx_copy(FIXTURE)) as vis:
         page = vis.pages[0]
         container = page.get_container()
-        connector = page.find_shape_by_id("57")
+        connector = page.shapes.require_id("57")
         assert connector.master_shape is not None and "BeginX" in connector.master_shape.cells
         connector.xml.remove(connector.cells["BeginX"].xml)
-        connector = page.find_shape_by_id("57")  # a Shape reads its cells when it is built
+        connector = page.shapes.require_id("57")  # a Shape reads its cells when it is built
         assert "BeginX" not in connector.cells
         lane = next(lane for lane in container.lanes if _in_band(container, lane, connector))
         assert "57" not in [member.ID for member in container.members(lane)]
@@ -89,7 +89,7 @@ def test_add_shape_to_lane_moves_geometry(vsdx_copy):
     with VisioFile(path) as vis:
         page = vis.pages[0]
         container = page.get_container()
-        decision = page.find_shape_by_text("Decision")
+        decision = page.shapes.by_text("Decision")
         original_y = decision.y
         target_lane = container.lanes[0]
         page.add_shape_to_lane(decision, target_lane)
@@ -99,7 +99,7 @@ def test_add_shape_to_lane_moves_geometry(vsdx_copy):
         vis.save_vsdx(path)
     with VisioFile(path) as vis2:
         container = vis2.pages[0].get_container()
-        decision = vis2.pages[0].find_shape_by_text("Decision")
+        decision = vis2.pages[0].shapes.by_text("Decision")
         assert container.lane_of(decision).ID == container.lanes[0].ID
 
 

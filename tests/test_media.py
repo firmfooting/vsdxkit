@@ -29,7 +29,7 @@ def test_media_curved_connector_returns_curved():
         assert curved.ID != straight.ID
         with VisioFile(str(MEDIA_DIR / "media.vsdx")) as vis:
             page = vis.pages[0]
-            expected_curved = page.find_shape_by_text("CURVED_CONNECTOR")
+            expected_curved = page.shapes.by_text("CURVED_CONNECTOR")
             assert expected_curved is not None
             assert curved.ID == expected_curved.ID
     finally:

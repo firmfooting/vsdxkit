@@ -64,7 +64,7 @@ from vsdxkit.vsdxfile import VisioFile
 
 with VisioFile("diagram.vsdx") as vis:
     page = vis.pages[0]
-    shape = page.find_shape_by_text("Shape to remove")
+    shape = page.shapes.by_text("Shape to remove")
 
     if shape is not None:
         shape.text = "Renamed shape"
@@ -138,7 +138,7 @@ with VisioFile("flow.vsdx") as vis:
     )
 
     # a connector is the shape a Connect record points from
-    connector = page.find_shape_by_id(page.connects[0].from_id)
+    connector = page.shapes.require_id(page.connects[0].from_id)
     page.reanchor_connector(connector, to_shape=store)
 
     vis.save_vsdx("reanchored.vsdx")

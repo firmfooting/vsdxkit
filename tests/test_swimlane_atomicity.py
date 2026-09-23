@@ -136,7 +136,7 @@ def test_set_lane_label_refuses_a_shape_that_was_never_a_lane(vsdx_copy):
     with VisioFile(vsdx_copy(CFF_FIXTURE)) as vis:
         page = vis.pages[0]
         container = page.get_container()
-        decision = page.find_shape_by_text("Decision")
+        decision = page.shapes.by_text("Decision")
         assert decision is not None
         before = ET.tostring(decision.xml)
 

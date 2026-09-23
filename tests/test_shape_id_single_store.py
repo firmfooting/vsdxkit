@@ -23,8 +23,8 @@ def test_glue_written_after_a_renumber_names_the_shape_that_is_there(vsdx_copy, 
     """Connect records are written from `Shape.ID`, so a stale one dangles."""
     with VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
         page = vis.pages[0]
-        shape = page.find_shape_by_id("2")
-        other = page.find_shape_by_id("5")
+        shape = page.shapes.require_id("2")
+        other = page.shapes.require_id("5")
 
         vis.increment_sub_shape_ids(shape, page)
         page.connect_shapes(shape, other)
@@ -37,7 +37,7 @@ def test_renumbering_moves_the_shape_object_with_its_element(vsdx_copy):
     """After a renumber, the id the object reports is the one the element carries."""
     with VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
         page = vis.pages[0]
-        shape = page.find_shape_by_id("2")
+        shape = page.shapes.require_id("2")
 
         vis.increment_sub_shape_ids(shape, page)
 
@@ -50,7 +50,7 @@ def test_a_renumbered_shape_still_finds_the_records_glued_to_it(vsdx_copy):
     """`Shape.connects` filters the page's records on this shape's id."""
     with VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
         page = vis.pages[0]
-        shape = page.find_shape_by_id("2")
+        shape = page.shapes.require_id("2")
         assert len(shape.connects) == 2
 
         vis.increment_sub_shape_ids(shape, page)
@@ -62,7 +62,7 @@ def test_a_connect_held_across_a_renumber_names_the_new_id(vsdx_copy):
     """`Connect` cached the same attributes `_remap_connect_records` rewrites."""
     with VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
         page = vis.pages[0]
-        shape = page.find_shape_by_id("2")
+        shape = page.shapes.require_id("2")
         record = next(c for c in page.connects if c.to_id == "2")
 
         new_id = str(vis.increment_sub_shape_ids(shape, page)["2"])
@@ -79,13 +79,13 @@ def test_deleting_a_renumbered_shape_takes_its_connectors_with_it(vsdx_copy, tmp
     """
     with VisioFile(vsdx_copy("test7_with_connector.vsdx")) as vis:
         page = vis.pages[0]
-        shape = page.find_shape_by_id("2")
+        shape = page.shapes.require_id("2")
         connector_id = next(from_id for from_id, to_id in _records(page) if to_id == "2")
 
         vis.increment_sub_shape_ids(shape, page)
         page.delete_shape(shape)
 
-        assert page.find_shape_by_id(connector_id) is None
+        assert page.shapes.by_id(connector_id) is None
         vis.save_vsdx(str(tmp_path / "deleted_after_renumber.vsdx"))
 
 
@@ -135,7 +135,7 @@ def test_a_sub_shape_inherits_the_master_of_whichever_group_holds_it(vsdx_copy):
         group.append_shape(loose)
 
         assert loose.master_page_ID == group.master_page_ID
-        assert loose.master_page_ID == page.find_shape_by_id(loose.ID).master_page_ID
+        assert loose.master_page_ID == page.shapes.require_id(loose.ID).master_page_ID
 
 
 def test_a_shape_cannot_be_appended_into_itself(vsdx_copy):
@@ -150,7 +150,7 @@ def test_a_shape_cannot_be_appended_into_itself(vsdx_copy):
 def test_the_identity_a_shape_reads_off_its_element_cannot_be_assigned(vsdx_copy):
     """Read-only, so nothing can put the second store back by accident."""
     with VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
-        shape = vis.pages[0].find_shape_by_id("2")
+        shape = vis.pages[0].shapes.require_id("2")
 
         for attribute in ("ID", "master_shape_ID", "shape_type", "shape_name", "tag"):
             with pytest.raises(AttributeError):

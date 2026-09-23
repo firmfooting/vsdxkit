@@ -60,7 +60,7 @@ def test_bulk_creation_opens_each_donor_package_once(vsdx_copy, monkeypatch):
     with VisioFile(path) as reopened:
         reopened_page = reopened.pages[0]
         for i in range(50):
-            assert reopened_page.find_shape_by_text(f"S{i}") is not None
+            assert reopened_page.shapes.by_text(f"S{i}") is not None
 
 
 def test_each_visiofile_gets_its_own_media(vsdx_copy, monkeypatch):

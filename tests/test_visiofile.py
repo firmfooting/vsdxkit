@@ -544,7 +544,7 @@ def test_vis_copy_shape(filename: str, shape_name: str, tmp_path, basedir):
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.pages[0]  # type: Page
         # find and copy shape by name
-        s = page.find_shape_by_text(shape_name)  # type: Shape
+        s = page.shapes.by_text(shape_name)  # type: Shape
         assert s  # check shape found
         print(f"Found shape id:{s.ID}")
         max_id = max(int(existing.ID) for existing in page.all_shapes)
@@ -564,7 +564,7 @@ def test_vis_copy_shape(filename: str, shape_name: str, tmp_path, basedir):
     # re-open saved file and check it is changed as expected
     with VisioFile(out_file) as vis:
         page = vis.pages[0]
-        s = page.find_shape_by_id(new_shape_id)
+        s = page.shapes.by_id(new_shape_id)
         assert s
 
 
@@ -577,7 +577,7 @@ def test_copy_shape_other_page(filename: str, shape_name: str, tmp_path, basedir
         page2 = vis.pages[1]  # type: Page
         page3 = vis.pages[2]  # type: Page
         # find and copy shape by name
-        s = page.find_shape_by_text(shape_name)  # type: Shape
+        s = page.shapes.by_text(shape_name)  # type: Shape
         assert s  # check shape found
         shape_text = s.text
         print(f"Found shape id:{s.ID}")
@@ -598,11 +598,11 @@ def test_copy_shape_other_page(filename: str, shape_name: str, tmp_path, basedir
     # re-open saved file and check it is changed as expected
     with VisioFile(out_file) as vis:
         page2 = vis.pages[1]
-        s = page2.find_shape_by_id(page2_new_shape_id)
+        s = page2.shapes.by_id(page2_new_shape_id)
         assert s
         assert s.text == shape_text
         page3 = vis.pages[2]
-        s = page3.find_shape_by_id(page3_new_shape_id)
+        s = page3.shapes.by_id(page3_new_shape_id)
         assert s
         assert s.text == shape_text
 

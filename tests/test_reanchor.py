@@ -13,8 +13,8 @@ def test_retarget_both_ends(vsdx_copy):
     path = vsdx_copy(BASE)
     with VisioFile(path) as vis:
         page = vis.pages[0]
-        a = page.find_shape_by_text("Shape A")
-        b = page.find_shape_by_text("Shape B")
+        a = page.shapes.by_text("Shape A")
+        b = page.shapes.by_text("Shape B")
         connector = page.connect_shapes(a, b)
         # fresh shapes to retarget to
         c = vis.create_shape(page, "PALETTE_PROCESS", 7.0, 6.0, text="Target C")
@@ -38,8 +38,8 @@ def test_retarget_both_ends(vsdx_copy):
 def test_retarget_one_end_keeps_other(vsdx_copy):
     with VisioFile(vsdx_copy(BASE)) as vis:
         page = vis.pages[0]
-        a = page.find_shape_by_text("Shape A")
-        b = page.find_shape_by_text("Shape B")
+        a = page.shapes.by_text("Shape A")
+        b = page.shapes.by_text("Shape B")
         connector = page.connect_shapes(a, b)
         c = vis.create_shape(page, "PALETTE_PROCESS", 7.0, 6.0, text="Target C")
 
@@ -54,8 +54,8 @@ def test_retarget_one_end_keeps_other(vsdx_copy):
 def test_retarget_unconnected_connector_raises(vsdx_copy):
     with VisioFile(vsdx_copy(BASE)) as vis:
         page = vis.pages[0]
-        a = page.find_shape_by_text("Shape A")
-        b = page.find_shape_by_text("Shape B")
+        a = page.shapes.by_text("Shape A")
+        b = page.shapes.by_text("Shape B")
         connector = page.connect_shapes(a, b)
         for rc in list(page.connects):
             if rc.from_id == str(connector.ID):
@@ -68,8 +68,8 @@ def test_retarget_unconnected_connector_raises(vsdx_copy):
 def test_remove_connect_records_normalises_integer_ids(vsdx_copy):
     with VisioFile(vsdx_copy(BASE)) as vis:
         page = vis.pages[0]
-        a = page.find_shape_by_text("Shape A")
-        b = page.find_shape_by_text("Shape B")
+        a = page.shapes.by_text("Shape A")
+        b = page.shapes.by_text("Shape B")
         assert a is not None and b is not None
         connector = page.connect_shapes(a, b)
         connector_id = str(connector.ID)

@@ -270,7 +270,7 @@ class Connect:
         for connect in page.connects:
             if connect.from_id == str(connector_shape.ID):
                 # note: deliberately not named to_shape - that is the parameter
-                connected_shape = page.find_shape_by_id(connect.to_id) if connect.to_id else None
+                connected_shape = page.shapes.by_id(connect.to_id) if connect.to_id else None
                 if connect.from_rel == "BeginX":
                     current_from = connected_shape
                     if connect.to_rel and connect.to_rel.startswith("Connections"):
@@ -312,7 +312,7 @@ class Connect:
 
     @property
     def shape(self) -> Shape | None:
-        return self.page.find_shape_by_id(self.shape_id) if self.shape_id else None
+        return self.page.shapes.by_id(self.shape_id) if self.shape_id else None
 
     @property
     def connector_shape_id(self) -> str | None:
@@ -321,7 +321,7 @@ class Connect:
 
     @property
     def connector_shape(self) -> Shape | None:
-        return self.page.find_shape_by_id(self.connector_shape_id) if self.connector_shape_id else None
+        return self.page.shapes.by_id(self.connector_shape_id) if self.connector_shape_id else None
 
     def __repr__(self):
         return f"Connect: from={self.from_id} to={self.to_id} connector_id={self.connector_shape_id} shape_id={self.shape_id}"

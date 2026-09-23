@@ -108,7 +108,7 @@ def main() -> int:
                 vis.save_vsdx(document)
 
             with VisioFile(document) as reloaded:
-                found = reloaded.pages[0].find_shape_by_text("smoke")
+                found = reloaded.pages[0].shapes.by_text("smoke")
                 if found is None:
                     fail("saved document lost the created shape")
                 else:

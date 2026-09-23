@@ -18,14 +18,14 @@ else:
 import deprecation
 
 import vsdxkit
-from vsdxkit import namespace, relationships
+from vsdxkit import namespace, relationships, retired_finders
 from vsdxkit.connectors import Connect
 from vsdxkit.containers import Container
 from vsdxkit.errors import InvalidOperationError, MissingPartError, NotFoundError, PackageError
 from vsdxkit.package import XmlPart
 from vsdxkit.partnames import relationship_target, relationships_part_name
 from vsdxkit.shape_tree import iter_descendants
-from vsdxkit.shapes import Shape, ShapeCollection, is_connector, parent_of
+from vsdxkit.shapes import Shape, ShapeCollection, _wrap_children, _wrap_descendants, is_connector, parent_of
 from vsdxkit.xmlio import PartTree, require_element, to_float, xml_value
 
 # the two places a Connect record names a shape: the connector it leads from,
@@ -303,15 +303,6 @@ class Page:
             self.vis._set_part_xml(self.rels_xml_filename, value)
 
     @property
-    def _shapes(self) -> list[Shape]:
-        """Return a list of :class:`Shape` objects - for each 'Shapes'
-
-        Note: typically returns one :class:`Shape` object which itself contains :class:`Shape` objects
-
-        """
-        return [Shape(xml=shapes, parent=self, page=self) for shapes in self.xml.findall(f"{namespace}Shapes")]
-
-    @property
     def shapes(self) -> ShapeCollection:
         """Every shape on the page, at any depth, connectors included: depth first, parents first."""
         return ShapeCollection(lambda: self.all_shapes, self._scope)
@@ -340,17 +331,8 @@ class Page:
         :returns: list of `Shape` objects
         :rtype: List[Shape]
         """
-        top = self._top_shapes()
-        return top.child_shapes if top is not None else []
-
-    def _top_shapes(self) -> Shape | None:
-        """The page's `<Shapes>` element as a Shape, where every walk of the page starts.
-
-        Top-level shapes take it as their parent, which templating reads as the
-        element they sit in. #103 retires it.
-        """
-        shapes = self._shapes
-        return shapes[0] if shapes else None
+        root = self.xml.getroot()
+        return [] if root is None else _wrap_children(root, self, self)
 
     def _set_max_ids(self) -> None:
         """Raise this page's ID high-water mark to cover every shape now on it.
@@ -361,9 +343,10 @@ class Page:
         ones that forgot handed out IDs the page was already using. Monotonic
         and idempotent, so calling it again costs a scan and nothing else.
         """
-        top = self._top_shapes()
-        if top is not None:
-            self._max_id = max(self._max_id, top.get_max_id())
+        root = self.xml.getroot()
+        if root is not None:
+            ids = (int(shape_id) for element in iter_descendants(root) if (shape_id := element.attrib.get("ID")) is not None)
+            self._max_id = max(self._max_id, *ids, 0)
 
     def _next_shape_id(self) -> int:
         """Hand out the next shape ID. ``_set_max_ids()`` syncs the mark first."""
@@ -418,18 +401,22 @@ class Page:
     def get_connectors_between(
         self, shape_a_id: str = "", shape_a_text: str = "", shape_b_id: str = "", shape_b_text: str = ""
     ) -> set[Shape]:
-        shape_a = self.find_shape_by_id(shape_a_id) if shape_a_id else self.find_shape_by_text(shape_a_text)
-        shape_b = self.find_shape_by_id(shape_b_id) if shape_b_id else self.find_shape_by_text(shape_b_text)
+        shape_a = self.shapes.by_id(shape_a_id) if shape_a_id else self._first_containing(shape_a_text)
+        shape_b = self.shapes.by_id(shape_b_id) if shape_b_id else self._first_containing(shape_b_text)
         if shape_a is None or shape_b is None:
             raise NotFoundError("get_connectors_between() requires two shapes that exist on this page")
         connector_ids = {a.ID for a in shape_a.connected_shapes}.intersection({b.ID for b in shape_b.connected_shapes})
 
         connectors: set[Shape] = set()
         for connector_id in connector_ids:
-            found = self.find_shape_by_id(connector_id or "")
+            found = self.shapes.by_id(connector_id or "")
             if found is not None:
                 connectors.add(found)
         return connectors
+
+    def _first_containing(self, text: str) -> Shape | None:
+        """The first shape on the page whose text contains `text`, as ``get_connectors_between`` has always matched."""
+        return next((shape for shape in self.shapes if text in shape.text), None)
 
     def apply_text_context(self, context: dict[str, object]) -> None:
         self.vis._require_open("Page.apply_text_context()")
@@ -441,67 +428,86 @@ class Page:
         for shape in self.child_shapes:
             shape.find_replace(old, new)
 
-    def find_shape_by_id(self, shape_id: str) -> Shape | None:
-        top = self._top_shapes()
-        return top.find_shape_by_id(shape_id) if top is not None else None
-
-    def _find_shapes_by_id(self, shape_id: str) -> list[Shape]:
-        # return all shapes by ID - should only be used internally where ID is not unique (i.e. copying shapes)
-        top = self._top_shapes()
-        return top.find_shapes_by_id(shape_id) if top is not None else []
-
-    def find_shape_by_attr(self, attr: str, attr_value: str) -> Shape | None:
-        top = self._top_shapes()
-        return top.find_shape_by_attr(attr, attr_value) if top is not None else None
-
-    def find_shapes_with_same_master(self, shape: Shape) -> list[Shape]:
-        # return all shapes with master
-        return [
-            s
-            for s in self.all_shapes
-            if s.master_shape_ID == shape.master_shape_ID and s.master_page_ID == shape.master_page_ID
-        ]
-
-    def find_shape_by_text(self, text: str) -> Shape | None:
-        top = self._top_shapes()
-        return top.find_shape_by_text(text) if top is not None else None
-
-    def find_shapes_by_text(self, text: str) -> list[Shape]:
-        top = self._top_shapes()
-        return top.find_shapes_by_text(text) if top is not None else []
-
-    def find_shapes_by_regex(self, regex: str) -> list[Shape]:
-        """Search for shapes in this page's top shape by regex"""
-        top = self._top_shapes()
-        return top.find_shapes_by_regex(regex) if top is not None else []
-
     @property
     def all_shapes(self) -> list[Shape]:
         """Every shape on the page, at any depth, depth first and parents first."""
-        top = self._top_shapes()
-        return top.all_shapes if top is not None else []
+        root = self.xml.getroot()
+        return [] if root is None else _wrap_descendants(root, self, self)
+
+    def find_shape_by_id(self, shape_id: str) -> Shape | None:
+        """The first shape on the page with this ID, or None. Deprecated: use ``page.shapes.by_id(shape_id)``."""
+        retired_finders.warn("Page.find_shape_by_id", "page.shapes.by_id(shape_id)")
+        return retired_finders.first_by_id(self.shapes, shape_id)
+
+    def find_shapes_by_id(self, shape_id: str) -> list[Shape]:
+        """Every shape on the page with this ID. Deprecated: IDs are unique on a page, so use ``page.shapes.by_id(shape_id)``."""
+        retired_finders.warn("Page.find_shapes_by_id", "page.shapes.by_id(shape_id)")
+        return retired_finders.all_by_id(self.shapes, shape_id)
+
+    def find_shape_by_attr(self, attr: str, attr_value: str) -> Shape | None:
+        """The first shape on the page whose XML attribute `attr` is `attr_value`, or None. Deprecated."""
+        retired_finders.warn("Page.find_shape_by_attr", "a comprehension over page.shapes")
+        return retired_finders.first_by_attr(self.shapes, attr, attr_value)
+
+    def find_shape_by_text(self, text: str) -> Shape | None:
+        """The first shape on the page whose text contains `text`, or None.
+
+        Deprecated: ``page.shapes.by_text(text)`` matches the whole text and refuses
+        more than one match; for a substring, filter ``page.shapes`` directly.
+        """
+        retired_finders.warn("Page.find_shape_by_text", "page.shapes.by_text(text), which matches the whole text")
+        return retired_finders.first_by_text(self.shapes, text)
+
+    def find_shapes_by_text(self, text: str) -> list[Shape]:
+        """Every shape on the page whose text contains `text`.
+
+        Deprecated: ``page.shapes.matching_text(text)`` matches the whole text; for a
+        substring, filter ``page.shapes`` directly.
+        """
+        retired_finders.warn("Page.find_shapes_by_text", "page.shapes.matching_text(text), which matches the whole text")
+        return retired_finders.all_by_text(self.shapes, text)
+
+    def find_shapes_by_regex(self, regex: str) -> list[Shape]:
+        """Every shape on the page whose text `regex` matches. Deprecated: filter ``page.shapes`` directly."""
+        retired_finders.warn("Page.find_shapes_by_regex", "a comprehension over page.shapes")
+        return retired_finders.all_by_regex(self.shapes, regex)
 
     def find_shape_by_property_label(self, property_label: str) -> Shape | None:
-        """Search for shapes in this page's top shape by property label"""
-        # note: use label rather than name as label is more easily visible in diagram
-        top = self._top_shapes()
-        return top.find_shape_by_property_label(property_label) if top is not None else None
+        """The first shape on the page with this Shape Data label, or None. Deprecated: use ``page.shapes.by_property(label)``."""
+        retired_finders.warn("Page.find_shape_by_property_label", "page.shapes.by_property(label)")
+        return retired_finders.first_by_property(self.shapes, property_label)
 
-    def find_shapes_by_property_label(self, property_label: str) -> list[Shape]:
-        # return all matching shapes with property label
-        top = self._top_shapes()
-        return top.find_shapes_by_property_label(property_label) if top is not None else []
+    def find_shapes_by_property_label(self, property_label: str, shapes: list[Shape] | None = None) -> list[Shape]:
+        """Every shape on the page with this Shape Data label. Deprecated: use ``page.shapes.matching_property(label)``.
+
+        `shapes` was never read, and still is not.
+        """
+        retired_finders.warn("Page.find_shapes_by_property_label", "page.shapes.matching_property(label)")
+        return retired_finders.all_by_property(self.shapes, property_label)
 
     def find_shape_by_property_label_value(self, property_label: str, property_value: str) -> Shape | None:
-        # return first matching shape with label
-        # note: use label rather than name as label is more easily visible in diagram
-        top = self._top_shapes()
-        return top.find_shape_by_property_label_value(property_label, property_value) if top is not None else None
+        """The first shape on the page whose property `property_label` is `property_value`, or None.
 
-    def find_shapes_by_property_label_value(self, property_label: str, property_value: str) -> list[Shape]:
-        # return all matching shapes with property label and value
-        top = self._top_shapes()
-        return top.find_shapes_by_property_label_value(property_label, property_value) if top is not None else []
+        Deprecated: use ``page.shapes.by_property(label, value)``.
+        """
+        retired_finders.warn("Page.find_shape_by_property_label_value", "page.shapes.by_property(label, value)")
+        return retired_finders.first_by_property(self.shapes, property_label, property_value)
+
+    def find_shapes_by_property_label_value(
+        self, property_label: str, property_value: str, shapes: list[Shape] | None = None
+    ) -> list[Shape]:
+        """Every shape on the page whose property `property_label` is `property_value`.
+
+        Deprecated: use ``page.shapes.matching_property(label, value)``. `shapes` was
+        never read, and still is not.
+        """
+        retired_finders.warn("Page.find_shapes_by_property_label_value", "page.shapes.matching_property(label, value)")
+        return retired_finders.all_by_property(self.shapes, property_label, property_value)
+
+    def find_shapes_with_same_master(self, shape: Shape) -> list[Shape]:
+        """Every shape on the page instancing `shape`'s master shape. Deprecated: filter ``page.shapes`` directly."""
+        retired_finders.warn("Page.find_shapes_with_same_master", "a comprehension over page.shapes")
+        return retired_finders.all_by_master(self.shapes, shape.master_page_ID, shape.master_shape_ID)
 
     def connect_shapes(
         self, from_shape: Shape, to_shape: Shape, route: str = "dynamic", from_cp: int = 0, to_cp: int = 0

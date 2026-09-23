@@ -54,7 +54,7 @@ def _property_row_without_a_value_cell(shape):
 
 def test_reading_a_property_with_no_value_cell_returns_none_and_creates_nothing(vsdx_copy):
     with VisioFile(vsdx_copy("test6_shape_properties.vsdx")) as vis:
-        shape = vis.pages[0].find_shape_by_property_label("my_property_label")
+        shape = next(iter(vis.pages[0].shapes.matching_property("my_property_label")), None)
         assert shape is not None
         section = shape.xml.find(f'{namespace}Section[@N="Property"]')
         row = section.findall(f"{namespace}Row")[0]
@@ -72,7 +72,7 @@ def test_setting_a_property_with_no_value_cell_creates_it(vsdx_copy, tmp_path):
     """Upstream dave-howard/vsdx#79: setting a property that has no Value cell."""
     out = os.path.join(str(tmp_path), "out.vsdx")
     with VisioFile(vsdx_copy("test6_shape_properties.vsdx")) as vis:
-        shape = vis.pages[0].find_shape_by_property_label("my_property_label")
+        shape = next(iter(vis.pages[0].shapes.matching_property("my_property_label")), None)
         section = shape.xml.find(f'{namespace}Section[@N="Property"]')
         row = section.findall(f"{namespace}Row")[0]
         value_cell = row.find(f'{namespace}Cell[@N="Value"]')
@@ -86,7 +86,7 @@ def test_setting_a_property_with_no_value_cell_creates_it(vsdx_copy, tmp_path):
         vis.save_vsdx(out)
 
     with VisioFile(out) as vis:
-        shape = vis.pages[0].find_shape_by_property_label("my_property_label")
+        shape = next(iter(vis.pages[0].shapes.matching_property("my_property_label")), None)
         reloaded = next(p for p in shape.data_properties.values() if p.label == "my_property_label")
         assert reloaded.value == "set through the setter"
 
@@ -107,7 +107,7 @@ def _append_property_row(shape, label: str, value: str):
 def test_the_data_property_cache_follows_a_new_property_row(vsdx_copy):
     """A row added to the shape's XML after the first read must be visible."""
     with VisioFile(vsdx_copy("test6_shape_properties.vsdx")) as vis:
-        shape = vis.pages[0].find_shape_by_property_label("my_property_label")
+        shape = next(iter(vis.pages[0].shapes.matching_property("my_property_label")), None)
         before = set(shape.data_properties)
 
         _append_property_row(shape, "added_later", "42")
@@ -119,7 +119,7 @@ def test_the_data_property_cache_follows_a_new_property_row(vsdx_copy):
 def test_the_cache_follows_a_replaced_property_row(vsdx_copy):
     """Removing one row and adding another leaves the count unchanged."""
     with VisioFile(vsdx_copy("test6_shape_properties.vsdx")) as vis:
-        shape = vis.pages[0].find_shape_by_property_label("my_property_label")
+        shape = next(iter(vis.pages[0].shapes.matching_property("my_property_label")), None)
         assert "my_property_label" in shape.data_properties
 
         section = shape.xml.find(f'{namespace}Section[@N="Property"]')
@@ -138,7 +138,7 @@ def _value_cell(shape, label: str):
 def test_setting_a_value_keeps_a_declared_unit(vsdx_copy):
     """A date or numeric property must not be retyped as a string on write."""
     with VisioFile(vsdx_copy("test6_shape_properties.vsdx")) as vis:
-        shape = vis.pages[0].find_shape_by_property_label("my_property_label")
+        shape = next(iter(vis.pages[0].shapes.matching_property("my_property_label")), None)
         prop, cell = _value_cell(shape, "my_property_label")
         cell.attrib["U"] = "DATE"
         cell.attrib["F"] = "No Formula"
@@ -152,7 +152,7 @@ def test_setting_a_value_keeps_a_declared_unit(vsdx_copy):
 def test_setting_a_value_clears_no_formula_on_an_inner_text_row(vsdx_copy):
     """The inner-text row must get the same cleanup as the attribute row."""
     with VisioFile(vsdx_copy("test6_shape_properties.vsdx")) as vis:
-        shape = vis.pages[0].find_shape_by_property_label("my_property_label")
+        shape = next(iter(vis.pages[0].shapes.matching_property("my_property_label")), None)
         prop, cell = _value_cell(shape, "my_property_label")
         del cell.attrib["V"]
         cell.attrib["F"] = "No Formula"
@@ -167,7 +167,7 @@ def test_setting_a_value_clears_no_formula_on_an_inner_text_row(vsdx_copy):
 def test_creating_a_value_cell_does_not_assert_a_unit(vsdx_copy):
     """A cell created for a numeric property must not be declared a string."""
     with VisioFile(vsdx_copy("test6_shape_properties.vsdx")) as vis:
-        shape = vis.pages[0].find_shape_by_property_label("my_property_label")
+        shape = next(iter(vis.pages[0].shapes.matching_property("my_property_label")), None)
         prop, cell = _value_cell(shape, "my_property_label")
         prop.xml.remove(cell)
 
@@ -192,7 +192,7 @@ def _master_title_row(shape):
 
 def test_an_inherited_property_is_marked_inherited(vsdx_copy):
     with VisioFile(vsdx_copy(INHERITED)) as vis:
-        shape = vis.pages[0].find_shape_by_id("3")
+        shape = vis.pages[0].shapes.require_id("3")
 
         prop = shape.data_properties["title"]
 
@@ -209,7 +209,7 @@ def test_setting_an_inherited_value_overrides_it_on_the_instance(vsdx_copy, tmp_
     """
     out = os.path.join(str(tmp_path), "out.vsdx")
     with VisioFile(vsdx_copy(INHERITED)) as vis:
-        shape = vis.pages[0].find_shape_by_id("3")
+        shape = vis.pages[0].shapes.require_id("3")
         prop = shape.data_properties["title"]
         master_row = _master_title_row(shape)
         before = ElementTree.tostring(master_row)
@@ -224,7 +224,7 @@ def test_setting_an_inherited_value_overrides_it_on_the_instance(vsdx_copy, tmp_
         vis.save_vsdx(out)
 
     with VisioFile(out) as vis:
-        shape = vis.pages[0].find_shape_by_id("3")
+        shape = vis.pages[0].shapes.require_id("3")
         prop = shape.data_properties["title"]
         # the override still resolves its label, type and prompt from the master
         assert (prop.label, prop.value, prop.value_type) == ("title", "written through the instance", "0")
@@ -233,7 +233,7 @@ def test_setting_an_inherited_value_overrides_it_on_the_instance(vsdx_copy, tmp_
 
 def test_a_second_write_reuses_the_row_the_first_one_created(vsdx_copy):
     with VisioFile(vsdx_copy(INHERITED)) as vis:
-        shape = vis.pages[0].find_shape_by_id("3")
+        shape = vis.pages[0].shapes.require_id("3")
         prop = shape.data_properties["title"]
 
         prop.value = "first"
@@ -247,7 +247,7 @@ def test_a_second_write_reuses_the_row_the_first_one_created(vsdx_copy):
 def test_an_override_section_is_placed_before_the_shapes_text(vsdx_copy):
     """Visio rejects a Section that follows Text, so the new one goes ahead of it."""
     with VisioFile(vsdx_copy(INHERITED)) as vis:
-        shape = vis.pages[0].find_shape_by_id("3")
+        shape = vis.pages[0].shapes.require_id("3")
         shape.xml.append(ElementTree.fromstring(f'<Text xmlns="{namespace[1:-1]}">hello</Text>'))
 
         shape.data_properties["title"].value = "written through the instance"

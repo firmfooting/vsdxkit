@@ -176,7 +176,7 @@ def test_deleting_a_shape_belonging_to_another_page_is_refused(vsdx_copy):
     """
     with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         page1, page3 = vis.pages[0], vis.pages[2]
-        victim = page1.find_shape_by_id("1")
+        victim = page1.shapes.by_id("1")
         bystander_ids = [shape.ID for shape in page3.all_shapes]
         assert victim is not None and "1" in bystander_ids, "fixture must have colliding ids"
 
@@ -184,4 +184,4 @@ def test_deleting_a_shape_belonging_to_another_page_is_refused(vsdx_copy):
             page3.delete_shape(victim)
 
         assert [shape.ID for shape in page3.all_shapes] == bystander_ids
-        assert page1.find_shape_by_id("1") is not None
+        assert page1.shapes.by_id("1") is not None

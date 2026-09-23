@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 import html
-import re
 import sys
 import warnings
 import xml.etree.ElementTree as ET
@@ -18,7 +17,7 @@ else:
 import deprecation
 
 import vsdxkit
-from vsdxkit import namespace
+from vsdxkit import namespace, retired_finders
 from vsdxkit.connectors import Connect
 from vsdxkit.document_part import DocumentPart, GuardedDocument
 from vsdxkit.errors import InvalidOperationError, NotFoundError, PackageError
@@ -451,6 +450,34 @@ class DataProperty(InheritedRow, DocumentPart):
         return element
 
 
+def _wrap_children(element: Element, parent: Page | Shape, page: Page) -> list[Shape]:
+    """A Shape for each shape directly inside `element`, a page's contents root or a group."""
+    children = []
+    for slot, child in enumerate(iter_children(element)):
+        shape = Shape(xml=child, parent=parent, page=page)
+        shape._slot = slot  # where the walk found it, for is_attached to try first
+        children.append(shape)
+    return children
+
+
+def _wrap_descendants(element: Element, parent: Page | Shape, page: Page) -> list[Shape]:
+    """A Shape for every shape inside `element`, at any depth, depth first and parents first.
+
+    Each is given the wrapper of the shape it sits in as its parent, and
+    `parent` for those directly inside `element`.
+    """
+    wrappers: dict[Element, Page | Shape] = {element: parent}
+    slots: dict[Element, int] = {}
+    shapes: list[Shape] = []
+    for holder, child in iter_edges(element):
+        shape = Shape(xml=child, parent=wrappers[holder], page=page)
+        shape._slot = slots.get(holder, 0)
+        slots[holder] = shape._slot + 1
+        wrappers[child] = shape
+        shapes.append(shape)
+    return shapes
+
+
 class Shape(DocumentPart):
     """Represents a single shape, or a group shape containing other shapes"""
 
@@ -518,20 +545,25 @@ class Shape(DocumentPart):
         return self._held_by_parents() or self.xml in page.xml.getroot().iter(self.xml.tag)
 
     def _held_by_parents(self) -> bool:
-        root = self.page.xml.getroot()
         shape: Shape = self
         while True:
+            container = shape._container()
+            if container is None or not shape._held_by(container):
+                return False
             parent = shape.parent
             if not isinstance(parent, Shape):
-                shapes = root.find(f"{namespace}Shapes")
-                return shapes is not None and shape._held_by(shapes)
-            if parent.xml.tag == f"{namespace}Shapes":
-                # the page's own Shapes element, held as a Shape until #103
-                return shape._held_by(parent.xml) and parent.xml in root
-            shapes = parent.xml.find(f"{namespace}Shapes")
-            if shapes is None or not shape._held_by(shapes):
-                return False
+                return True  # the page's own Shapes element, found from its current root
             shape = parent
+
+    def _container(self) -> Element | None:
+        """The ``<Shapes>`` element this shape's parent keeps its shapes in, or ``None`` where it has none.
+
+        The page's, for a top-level shape; the group's, for a member. It is
+        where the shape's element sits, or sat before it was deleted.
+        """
+        parent = self.parent
+        holder = parent.xml if isinstance(parent, Shape) else self.page.xml.getroot()
+        return None if holder is None else holder.find(f"{namespace}Shapes")
 
     def _held_by(self, container: Element) -> bool:
         """Whether `container` holds this element among its children.
@@ -743,15 +775,9 @@ class Shape(DocumentPart):
         for master in masters.values():
             dst_page._ensure_page_master_rel(master.filename)
 
-        # parent decides where the new shape tag lands: the destination
-        # page's Shapes tag, or the source shape's own parent
-        parent: Page | Shape
-        if page is not None:
-            # copy_shape() above guarantees a Shapes tag exists on the page
-            page_shapes = page._shapes
-            parent = page_shapes[0] if page_shapes else page
-        else:
-            parent = self.parent
+        # the new shape sits at the destination page's top level, or beside
+        # the source shape
+        parent: Page | Shape = page if page is not None else self.parent
 
         return Shape(xml=new_shape_xml, parent=parent, page=dst_page)
 
@@ -803,8 +829,7 @@ class Shape(DocumentPart):
         master_shape = master_page.child_shapes[0]  # there's always a single master shape in a master page
 
         if self.master_shape_ID is not None:
-            master_sub_shape = master_shape.find_shape_by_id(self.master_shape_ID)
-            return master_sub_shape
+            return master_shape.descendants.by_id(self.master_shape_ID)
 
         return master_shape
 
@@ -1494,12 +1519,7 @@ class Shape(DocumentPart):
         :rtype: List[Shape]
         """
         self._require_attached("reading a shape's children")
-        children = []
-        for slot, child in enumerate(iter_children(self.xml)):
-            shape = Shape(xml=child, parent=self, page=self.page)
-            shape._slot = slot
-            children.append(shape)
-        return children
+        return _wrap_children(self.xml, self, self.page)
 
     @property
     def children(self) -> ShapeCollection:
@@ -1522,98 +1542,89 @@ class Shape(DocumentPart):
         sub-shape with no ``Master`` of its own instances its group's.
         """
         self._require_attached("reading a shape's descendants")
-        wrappers: dict[Element, Shape] = {self.xml: self}
-        slots: dict[Element, int] = {}
-        shapes: list[Shape] = []
-        for parent, child in iter_edges(self.xml):
-            shape = Shape(xml=child, parent=wrappers[parent], page=self.page)
-            # where the walk found it, for is_attached to try first
-            shape._slot = slots.get(parent, 0)
-            slots[parent] = shape._slot + 1
-            wrappers[child] = shape
-            shapes.append(shape)
-        return shapes
+        return _wrap_descendants(self.xml, self, self.page)
 
     def get_max_id(self) -> int:
         """The highest ID on this shape and every shape inside it, or 0 where none carries one."""
         elements = (self.xml, *iter_descendants(self.xml))
         return max((int(shape_id) for element in elements if (shape_id := element.attrib.get("ID")) is not None), default=0)
 
-    def find_shape_by_id(self, shape_id: str) -> Shape | None:  # returns Shape or None
-        """
-        Recursively search for a shape, based on a known shape_id, and return a single Shape
-
-        :param shape_id:
-        :return: vsdxkit.shapes.Shape
-        """
-        # recursively search for shapes by text and return first match
-        for shape in self.all_shapes:  # type: Shape
-            if shape_id == shape.ID:
-                return shape
+    def find_shape_by_id(self, shape_id: str) -> Shape | None:
+        """The first shape inside this one with this ID, or None. Deprecated: use ``shape.descendants.by_id(shape_id)``."""
+        retired_finders.warn("Shape.find_shape_by_id", "shape.descendants.by_id(shape_id)")
+        return retired_finders.first_by_id(self.descendants, shape_id)
 
     def find_shapes_by_id(self, shape_id: str) -> list[Shape]:
-        # recursively search for shapes by ID and return all matches
-        return [s for s in self.all_shapes if shape_id == s.ID]
+        """Every shape inside this one with this ID. Deprecated: IDs are unique on a page, so use ``shape.descendants.by_id(shape_id)``."""
+        retired_finders.warn("Shape.find_shapes_by_id", "shape.descendants.by_id(shape_id)")
+        return retired_finders.all_by_id(self.descendants, shape_id)
 
-    def find_shape_by_attr(self, attr: str, attr_value: str) -> Shape | None:  # returns Shape or None
+    def find_shape_by_attr(self, attr: str, attr_value: str) -> Shape | None:
+        """The first shape inside this one whose XML attribute `attr` is `attr_value`, or None. Deprecated."""
+        retired_finders.warn("Shape.find_shape_by_attr", "a comprehension over shape.descendants")
+        return retired_finders.first_by_attr(self.descendants, attr, attr_value)
+
+    def find_shape_by_text(self, text: str) -> Shape | None:
+        """The first shape inside this one whose text contains `text`, or None.
+
+        Deprecated: ``shape.descendants.by_text(text)`` matches the whole text and refuses
+        more than one match; for a substring, filter ``shape.descendants`` directly.
         """
-        Search for a shape, based on attribute name and value, and return a single Shape
-
-        :param attr:
-        :param attr_value:
-        :return: vsdxkit.shapes.Shape
-        """
-        #  xml.attrib.get('NameU') or xml.get('Name')
-        # recursively search for shapes by text and return first match
-        for shape in self.all_shapes:  # type: Shape
-            if str(shape.xml.attrib.get(attr)) == attr_value:
-                return shape
-
-    def find_shapes_by_master(self, master_page_ID: str, master_shape_ID: str) -> list[Shape]:
-        # recursively search for shapes by master ID and return all matches
-        return [s for s in self.all_shapes if s.master_shape_ID == master_shape_ID and s.master_page_ID == master_page_ID]
-
-    def find_shape_by_text(self, text: str) -> Shape | None:  # returns Shape or None
-        # recursively search for shapes by text and return first match
-        for shape in self.all_shapes:  # type: Shape
-            if text in shape.text:
-                return shape
+        retired_finders.warn("Shape.find_shape_by_text", "shape.descendants.by_text(text), which matches the whole text")
+        return retired_finders.first_by_text(self.descendants, text)
 
     def find_shapes_by_text(self, text: str) -> list[Shape]:
-        # recursively search for shapes by text and return all matches
-        return [s for s in self.all_shapes if text in s.text]
+        """Every shape inside this one whose text contains `text`.
+
+        Deprecated: ``shape.descendants.matching_text(text)`` matches the whole text; for a
+        substring, filter ``shape.descendants`` directly.
+        """
+        retired_finders.warn(
+            "Shape.find_shapes_by_text", "shape.descendants.matching_text(text), which matches the whole text"
+        )
+        return retired_finders.all_by_text(self.descendants, text)
 
     def find_shapes_by_regex(self, regex: str) -> list[Shape]:
-        # recursively search for shapes by regex and return all matches
-        return [shape for shape in self.all_shapes if re.search(regex, shape.text)]
+        """Every shape inside this one whose text `regex` matches. Deprecated: filter ``shape.descendants`` directly."""
+        retired_finders.warn("Shape.find_shapes_by_regex", "a comprehension over shape.descendants")
+        return retired_finders.all_by_regex(self.descendants, regex)
 
-    def find_shape_by_property_label(self, property_label: str) -> Shape | None:  # returns Shape or None
-        # recursively search for shapes by property name and return first match
-        for shape in self.all_shapes:  # type: Shape
-            if property_label in shape.data_properties:
-                return shape
+    def find_shape_by_property_label(self, property_label: str) -> Shape | None:
+        """The first shape inside this one with this Shape Data label, or None. Deprecated: use ``shape.descendants.by_property(label)``."""
+        retired_finders.warn("Shape.find_shape_by_property_label", "shape.descendants.by_property(label)")
+        return retired_finders.first_by_property(self.descendants, property_label)
 
     def find_shapes_by_property_label(self, property_label: str, shapes: list[Shape] | None = None) -> list[Shape]:
-        # recursively search for shapes by property label and return all matches
-        return [s for s in self.all_shapes if property_label in s.data_properties]
+        """Every shape inside this one with this Shape Data label. Deprecated: use ``shape.descendants.matching_property(label)``.
 
-    def find_shape_by_property_label_value(
-        self, property_label: str, property_value: str
-    ) -> Shape | None:  # returns Shape or None
-        # recursively search for shapes by property label and value, and return first match
-        for shape in self.all_shapes:  # type: Shape
-            if property_label in shape.data_properties and str(shape.data_properties[property_label].value) == property_value:
-                return shape
+        `shapes` was never read, and still is not.
+        """
+        retired_finders.warn("Shape.find_shapes_by_property_label", "shape.descendants.matching_property(label)")
+        return retired_finders.all_by_property(self.descendants, property_label)
+
+    def find_shape_by_property_label_value(self, property_label: str, property_value: str) -> Shape | None:
+        """The first shape inside this one whose property `property_label` is `property_value`, or None.
+
+        Deprecated: use ``shape.descendants.by_property(label, value)``.
+        """
+        retired_finders.warn("Shape.find_shape_by_property_label_value", "shape.descendants.by_property(label, value)")
+        return retired_finders.first_by_property(self.descendants, property_label, property_value)
 
     def find_shapes_by_property_label_value(
         self, property_label: str, property_value: str, shapes: list[Shape] | None = None
     ) -> list[Shape]:
-        # recursively search for shapes by property label and return all matches
-        return [
-            s
-            for s in self.all_shapes
-            if property_label in s.data_properties and str(s.data_properties[property_label].value) == property_value
-        ]
+        """Every shape inside this one whose property `property_label` is `property_value`.
+
+        Deprecated: use ``shape.descendants.matching_property(label, value)``. `shapes` was
+        never read, and still is not.
+        """
+        retired_finders.warn("Shape.find_shapes_by_property_label_value", "shape.descendants.matching_property(label, value)")
+        return retired_finders.all_by_property(self.descendants, property_label, property_value)
+
+    def find_shapes_by_master(self, master_page_ID: str, master_shape_ID: str) -> list[Shape]:
+        """Every shape inside this one instancing this master shape. Deprecated: filter ``shape.descendants`` directly."""
+        retired_finders.warn("Shape.find_shapes_by_master", "a comprehension over shape.descendants")
+        return retired_finders.all_by_master(self.descendants, master_page_ID, master_shape_ID)
 
     def apply_text_filter(self, context: dict[str, object]) -> None:
         """Substitute `context` into the text of this shape and every shape inside it."""
@@ -1672,10 +1683,6 @@ class Shape(DocumentPart):
         the schema does not allow and which this library's own traversal cannot
         see, neither through ``child_shapes`` nor through ``Page.all_shapes``.
 
-        A ``Shape`` may also wrap a ``<Shapes>`` element rather than a
-        ``<Shape>`` (``Page._shapes`` yields those); such a container takes the
-        child directly.
-
         This places a shape, it does not move one. An element already in a page
         gains a second parent rather than changing parent, because
         ElementTree's elements have no parent to change; the page would then
@@ -1687,8 +1694,7 @@ class Shape(DocumentPart):
         # to the page, so moving a shape already on it edited a closed document
         # and returned (issue #329)
         self._require_open("Shape.append_shape()")
-        wraps_shapes_tag = self.tag == f"{namespace}Shapes"
-        if not wraps_shapes_tag and self.shape_type != "Group":
+        if self.shape_type != "Group":
             raise InvalidOperationError(
                 f"shape ID={self.ID} has type {self.shape_type!r} and cannot contain shapes; "
                 "only a group shape holds sub-shapes"
@@ -1724,7 +1730,7 @@ class Shape(DocumentPart):
         # last, because it creates the <Shapes> element an empty group lacks:
         # running it ahead of the id allocation left that element behind when
         # the allocation refused the call
-        container = self.xml if wraps_shapes_tag else find_or_create_shapes_tag(self.xml)
+        container = find_or_create_shapes_tag(self.xml)
         container.append(append_shape.xml)
         # The ID follows the element on its own; the parent is the Shape
         # object's own state and nothing else updates it.
@@ -1755,11 +1761,11 @@ class Shape(DocumentPart):
         shapes: list[Shape] = []
         for c in self.connects:
             if c.connector_shape_id != self.ID:
-                found = self.page.find_shape_by_id(c.connector_shape_id or "")
+                found = self.page.shapes.by_id(c.connector_shape_id or "")
                 if found is not None:
                     shapes.append(found)
             if c.shape_id != self.ID:
-                found = self.page.find_shape_by_id(c.shape_id or "")
+                found = self.page.shapes.by_id(c.shape_id or "")
                 if found is not None:
                     shapes.append(found)
         return shapes

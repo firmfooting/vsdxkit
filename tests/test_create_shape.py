@@ -19,7 +19,7 @@ def test_create_shape_from_palette(vsdx_copy):
         assert abs(shape.width - 1.5) < 0.001
         vis.save_vsdx(path)
     with VisioFile(path) as vis2:
-        assert vis2.pages[0].find_shape_by_text("Choose") is not None
+        assert vis2.pages[0].shapes.by_text("Choose") is not None
 
 
 def test_create_shape_clears_sentinel_when_no_text(vsdx_copy):
@@ -27,7 +27,7 @@ def test_create_shape_clears_sentinel_when_no_text(vsdx_copy):
         page = vis.pages[0]
         shape = vis.create_shape(page, "PALETTE_PROCESS", 6.0, 6.0)
         assert shape.text == ""
-        assert page.find_shape_by_text("PALETTE_PROCESS") is None
+        assert page.shapes.by_text("PALETTE_PROCESS") is None
 
 
 def test_create_shape_unknown_palette_name(vsdx_copy):

@@ -51,7 +51,7 @@ editing it.
 
    with VisioFile("diagram.vsdx") as vis:
        page = vis.pages[0]
-       shape = page.find_shape_by_text("Draft")
+       shape = page.shapes.by_text("Draft")
 
        if shape is not None:
            shape.text = "Approved"
