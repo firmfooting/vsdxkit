@@ -103,11 +103,13 @@ class Connect:
             from_shape is not None and to_shape is not None
         ):  # create new connector shape and connect items between this and the two shapes
             # create new connect shape and get id
-            media = page.vis._shared_media()
-            media_shape = media.straight_connector
+            # vsdxkit.media opens its donors as VisioFiles, which import this
+            # module, so importing it at module level would be a cycle
+            from vsdxkit import media
+
             # the copy imports the connector's master, whether or not this
             # document has masters yet, and relates the page to it (#375)
-            connector_shape = media_shape.copy(page)  # default to straight connector
+            connector_shape = media.connector_shape().copy(page)
             connector_shape.text = ""  # clear text used to find shape
 
             # copy style used by new connector shape
@@ -115,7 +117,7 @@ class Connect:
             line_style_id = master_shape.line_style_id if master_shape is not None else None
             if line_style_id is not None and not isinstance(page.vis._get_style_by_id(line_style_id), Element):
                 # assume same if is ok, todo: use names for match and increment IDs
-                media_style = media.media._get_style_by_id(line_style_id)
+                media_style = media.media_style(line_style_id)
                 if media_style is not None:
                     # copy, not alias: the donor document now outlives this
                     # call, so appending its live element would leave the two

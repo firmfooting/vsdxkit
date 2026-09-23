@@ -1,26 +1,36 @@
-"""The bundled donor packages are opened once per VisioFile, not per call.
+"""The bundled donor packages are opened once per process, and never written (#104).
 
-`create_shape` and `Connect.create` both need the bundled media/palette
-documents. Constructing a `Media` per call re-parsed both packages on every
-shape and connector; these tests pin the shared, lazily created instance.
+`create_shape` and `Connect.create` both copy out of the bundled media and
+palette documents. Opening them per call re-parsed both packages on every
+shape and connector (#65); holding them per document made every document
+responsible for closing them, and the leak was the document that did not
+(#242). Now each is opened once, closed to writes at once, and shared.
 """
 
 import os
 import re
+import xml.etree.ElementTree as ET
 import zipfile
 from collections import Counter
 
 import pytest
 
+from vsdxkit import media
 from vsdxkit.connectors import Connect
-from vsdxkit.errors import VisioFileNotOpen
-from vsdxkit.media import Media
 from vsdxkit.package import PackageStore
 from vsdxkit.vsdxfile import VisioFile
 
 BASE = "test8_simple_connector.vsdx"
 
-DONORS = ("media.vsdx", "palette_extended.vsdx")
+DONORS = (media.MEDIA, media.PALETTE)
+
+
+@pytest.fixture
+def fresh_donors():
+    """An empty donor cache for the test, and another after it, so no test sees a donor another loaded."""
+    media.donor.cache_clear()
+    yield
+    media.donor.cache_clear()
 
 
 def count_package_opens(monkeypatch) -> Counter:
@@ -38,7 +48,8 @@ def count_package_opens(monkeypatch) -> Counter:
     return opens
 
 
-def test_bulk_creation_opens_each_donor_package_once(vsdx_copy, monkeypatch):
+def test_each_donor_is_opened_once_across_documents(vsdx_copy, monkeypatch, fresh_donors):
+    """Fails if a donor is opened per call or per document, or if closing a document takes it away."""
     opens = count_package_opens(monkeypatch)
     path = vsdx_copy(BASE)
 
@@ -46,76 +57,47 @@ def test_bulk_creation_opens_each_donor_package_once(vsdx_copy, monkeypatch):
         page = vis.pages[0]
         shapes = [vis.create_shape(page, "PALETTE_PROCESS", 1.0 + i * 0.01, 1.0, text=f"S{i}") for i in range(50)]
         for i in range(50):
-            connector = page.connect_shapes(shapes[i], shapes[(i + 1) % 50])
-            assert connector is not None
+            assert page.connect_shapes(shapes[i], shapes[(i + 1) % 50]) is not None
         vis.save_vsdx(path)
+    with VisioFile(vsdx_copy("test1.vsdx")) as second:
+        a = second.create_shape(second.pages[0], "PALETTE_DECISION", 1.0, 1.0, text="A")
+        b = second.create_shape(second.pages[0], "PALETTE_DATABASE", 2.0, 1.0, text="B")
+        second.pages[0].connect_shapes(a, b)
 
     for donor in DONORS:
         assert opens[donor] == 1, f"{donor} opened {opens[donor]} times, expected 1"
 
-    # sharing one donor across 100 calls must not corrupt what those calls
+    # sharing one donor across every call must not corrupt what those calls
     # copy out of it: the saved package still reopens with every shape intact
     monkeypatch.undo()
     assert zipfile.ZipFile(path).testzip() is None
     with VisioFile(path) as reopened:
-        reopened_page = reopened.pages[0]
         for i in range(50):
-            assert reopened_page.shapes.by_text(f"S{i}") is not None
+            assert reopened.pages[0].shapes.by_text(f"S{i}") is not None
 
 
-def test_each_visiofile_gets_its_own_media(vsdx_copy, monkeypatch):
-    """Caching is per document, so a second VisioFile still loads the donors."""
-    opens = count_package_opens(monkeypatch)
-
-    for _ in range(2):
-        with VisioFile(vsdx_copy(BASE)) as vis:
-            vis.create_shape(vis.pages[0], "PALETTE_PROCESS", 1.0, 1.0, text="A")
-
-    assert opens["palette_extended.vsdx"] == 2
-
-
-def test_close_vsdx_releases_the_shared_media(vsdx_copy):
-    """close_vsdx closes the donors and drops the reference it cached."""
-    vis = VisioFile(vsdx_copy(BASE))
-    vis.create_shape(vis.pages[0], "PALETTE_PROCESS", 1.0, 1.0, text="A")
-    cached = vis._media
-    assert cached is not None
-
-    vis.close_vsdx()
-
-    assert vis._media is None
-    assert cached._media_vsdx is None
-    assert cached._palette_vsdx is None
+def _donor_xml() -> dict[str, bytes]:
+    """Every part of both donors as its store holds it, parsed parts serialised."""
+    parts = {}
+    for filename in DONORS:
+        store = media.donor(filename)._package
+        for name in store.names():
+            parts[f"{filename}{name}"] = store.read_bytes(name)
+    for filename in DONORS:
+        for page in media.donor(filename).pages:
+            parts[f"{filename}:{page.name}"] = ET.tostring(page.xml.getroot())
+    return parts
 
 
-def test_closed_document_refuses_to_rebuild_the_shared_media(vsdx_copy):
-    """Rebuilding on demand was itself the leak (issue #242).
-
-    This used to hand a closed document a fresh donor pair; `close_vsdx` had
-    already released the pair it owned, so nothing left could close the new one.
-    """
-    vis = VisioFile(vsdx_copy(BASE))
-    first = vis._shared_media()
-    assert vis._shared_media() is first  # same instance while the file is open
-
-    vis.close_vsdx()
-
-    with pytest.raises(VisioFileNotOpen):
-        vis._shared_media()
-    assert vis._media is None
-
-
-def test_a_closed_media_refuses_to_reopen_its_donors():
-    """Same leak one layer down: Media used to reopen a donor after close()."""
-    media = Media()
-    assert media.palette.file_open
-
-    media.close()
-
-    with pytest.raises(VisioFileNotOpen):
-        _ = media.media
-    with pytest.raises(VisioFileNotOpen):
-        _ = media.palette
+def test_creation_leaves_the_donors_as_they_were(vsdx_copy, fresh_donors):
+    """Fails if copying a shape or connector out of a donor writes anything back into it."""
+    before = _donor_xml()
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        page = vis.pages[0]
+        a = vis.create_shape(page, "PALETTE_PROCESS", 1.0, 1.0, text="A")
+        b = vis.create_shape(page, "PALETTE_START_END", 3.0, 1.0)
+        page.connect_shapes(a, b, route="curved")
+    assert _donor_xml() == before
 
 
 def test_close_vsdx_is_idempotent(vsdx_copy):
@@ -124,10 +106,9 @@ def test_close_vsdx_is_idempotent(vsdx_copy):
     vis.close_vsdx()
     vis.close_vsdx()
     assert vis.file_open is False
-    assert vis._media is None
 
 
-def test_provisioning_masters_reads_only_the_donors_master_parts(vsdx_copy, monkeypatch):
+def test_provisioning_masters_reads_only_the_donors_master_parts(vsdx_copy, monkeypatch, fresh_donors):
     """Fails if copying the donor's masters reads any donor part outside `/visio/masters/`.
 
     Reading a part the donor has parsed serialises it, and the donor has parsed
@@ -135,7 +116,7 @@ def test_provisioning_masters_reads_only_the_donors_master_parts(vsdx_copy, monk
     """
     with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         page = vis.pages[0]
-        donor = vis._shared_media().media
+        donor = media.donor(media.MEDIA)
         read: list[str] = []
         original = PackageStore.read_bytes
 
@@ -156,7 +137,7 @@ def test_provisioning_masters_copies_the_donors_master_parts_byte_for_byte(vsdx_
     with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         assert not [n for n in vis._package.names() if n.startswith("/visio/masters/")]
         page = vis.pages[0]
-        donor = vis._shared_media().media
+        donor = media.donor(media.MEDIA)
         shapes = page.child_shapes
         Connect.create(page=page, from_shape=shapes[0], to_shape=shapes[1])
         donor_masters = {n: donor._package.read_bytes(n) for n in donor._package.names() if n.startswith("/visio/masters/")}
@@ -170,17 +151,18 @@ def test_provisioning_masters_copies_the_donors_master_parts_byte_for_byte(vsdx_
     assert {n: copied.get(n) for n in drawing} == {n: donor_masters[n] for n in drawing}
 
 
-def test_provisioning_masters_leaves_a_sibling_of_the_masters_folder_behind(vsdx_copy):
+def test_provisioning_masters_leaves_a_sibling_of_the_masters_folder_behind(vsdx_copy, fresh_donors):
     """Fails if the masters copy takes a donor part whose folder merely starts with `masters`.
 
     The copy selects parts by the part-name prefix `/visio/masters/`. Without
     its trailing slash that prefix also matches `/visio/masters-old/`, and the
-    target would gain a part nothing refers to.
+    target would gain a part nothing refers to. The part is planted in the
+    store directly, past the donor's closed guard, on a donor this test alone
+    loads.
     """
     with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         page = vis.pages[0]
-        donor = vis._shared_media().media
-        donor._package.write_bytes("/visio/masters-old/x.xml", b"<x/>")
+        media.donor(media.MEDIA)._package.write_bytes("/visio/masters-old/x.xml", b"<x/>")
         shapes = page.child_shapes
         Connect.create(page=page, from_shape=shapes[0], to_shape=shapes[1])
         assert vis._package.part("/visio/masters-old/x.xml") is None

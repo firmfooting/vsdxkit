@@ -727,7 +727,7 @@ def test_unknown_palette_name_raises_not_found_error(vsdx_copy):
     what `NotFoundError` is for. It is still a `ValueError`, as it was.
     """
     with VisioFile(vsdx_copy("test1.vsdx")) as vis:
-        with pytest.raises(NotFoundError, match="palette has no shape named"):
+        with pytest.raises(NotFoundError, match=r"has no shape named 'PALETTE_NOT_A_SHAPE'"):
             vis.create_shape(vis.pages[0], "PALETTE_NOT_A_SHAPE", 1.0, 1.0)
 
 

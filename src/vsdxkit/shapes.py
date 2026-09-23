@@ -738,7 +738,7 @@ class Shape(DocumentPart):
         # A sub-shape of a master instance names no master itself: it inherits
         # its group's. Copied onto a page it leaves that group, so the copy has
         # to name the master, or its MasterShape reaches into nothing.
-        inherited = self.master_page_ID if page is not None and not self.xml.attrib.get("Master") else None
+        inherited = self.master_page_ID if not self.xml.attrib.get("Master") else None
         if inherited:
             master_ids.insert(0, inherited)
         # resolved, and imported from another document, before the copy: the
@@ -775,11 +775,8 @@ class Shape(DocumentPart):
         for master in masters.values():
             dst_page._ensure_page_master_rel(master.filename)
 
-        # the new shape sits at the destination page's top level, or beside
-        # the source shape
-        parent: Page | Shape = page if page is not None else self.parent
-
-        return Shape(xml=new_shape_xml, parent=parent, page=dst_page)
+        # copy_shape put it at the page's top level, whatever the source sat in
+        return Shape(xml=new_shape_xml, parent=dst_page, page=dst_page)
 
     @property
     def master_shape(self) -> Shape | None:

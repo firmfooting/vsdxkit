@@ -1,93 +1,73 @@
+"""The bundled documents new shapes and connectors are copied from.
+
+Each donor is opened once per process, on first use, and closed at once. A
+closed ``VisioFile`` still reads, and a shape copies out of it as out of any
+other document, but every write to it raises ``VisioFileNotOpen``: nothing a
+caller does can change what the next creation copies. The package is read
+into memory with no file held, so there is nothing for a document that used a
+donor to release.
+
+Shapes are found by their sentinel text, matched whole.
+"""
+
 from __future__ import annotations
 
+import functools
 from pathlib import Path
+from xml.etree.ElementTree import Element
 
-from vsdxkit.errors import NotFoundError, VisioFileNotOpen
+from vsdxkit.errors import NotFoundError
 from vsdxkit.shapes import Shape
 from vsdxkit.vsdxfile import VisioFile
-from vsdxkit.xmlio import PartTree
+
+MEDIA = "media.vsdx"
+PALETTE = "palette_extended.vsdx"
+
+STRAIGHT_CONNECTOR = "STRAIGHT_CONNECTOR"
+CURVED_CONNECTOR = "CURVED_CONNECTOR"
 
 
-def _media_path(filename: str) -> str:
-    """Path to a bundled media vsdx in the module-adjacent 'media' folder."""
+def media_path(filename: str) -> str:
+    """Path to a bundled donor in the module-adjacent 'media' folder."""
     return str(Path(__file__).resolve().parent / "media" / filename)
 
 
-class Media:
-    straight_connector_text = "STRAIGHT_CONNECTOR"
-    curved_connector_text = "CURVED_CONNECTOR"
-    rectangle_text = "RECTANGLE"
-    circle_text = "CIRCLE"
+@functools.cache
+def donor(filename: str) -> VisioFile:
+    """The bundled document `filename`, opened once per process and closed to writes."""
+    document = VisioFile(media_path(filename))
+    document.close_vsdx()
+    return document
 
-    def __init__(self) -> None:
-        self._closed = False
-        self._media_vsdx: VisioFile | None = None
-        self._palette_vsdx: VisioFile | None = None
 
-    def _require_open(self) -> None:
-        """Refuse to reopen a donor once close() has run.
+def _sentinel(filename: str, text: str) -> Shape:
+    shapes = donor(filename).pages[0].shapes
+    shape = shapes.by_text(text)
+    if shape is None:
+        names = ", ".join(sorted(shape.text for shape in shapes if shape.text))
+        raise NotFoundError(f"{filename} has no shape named {text!r}; it has {names}")
+    return shape
 
-        Reopening on demand was the same leak `VisioFile._shared_media` used to
-        have one layer up: the owner has already let go, so nothing is left
-        holding the replacement to close it (issue #242).
-        """
-        if self._closed:
-            raise VisioFileNotOpen("the bundled media documents have been closed")
 
-    @property
-    def media(self) -> VisioFile:
-        """The sentinel media document."""
-        self._require_open()
-        if self._media_vsdx is None:
-            self._media_vsdx = VisioFile(_media_path("media.vsdx"))
-        return self._media_vsdx
+def palette_shape(name: str) -> Shape:
+    """The palette shape `name`.
 
-    @property
-    def palette(self) -> VisioFile:
-        """The extended shape palette (sentinel-text shapes: PALETTE_PROCESS,
-        PALETTE_DECISION, PALETTE_START_END, PALETTE_PARALLELOGRAM,
-        PALETTE_DATABASE)."""
-        self._require_open()
-        if self._palette_vsdx is None:
-            self._palette_vsdx = VisioFile(_media_path("palette_extended.vsdx"))
-        return self._palette_vsdx
+    One of ``PALETTE_PROCESS``, ``PALETTE_DECISION``, ``PALETTE_START_END``,
+    ``PALETTE_PARALLELOGRAM`` and ``PALETTE_DATABASE``.
+    """
+    return _sentinel(PALETTE, name)
 
-    def close(self) -> None:
-        self._closed = True
-        if self._media_vsdx is not None:
-            self._media_vsdx.close_vsdx()
-            self._media_vsdx = None
-        if self._palette_vsdx is not None:
-            self._palette_vsdx.close_vsdx()
-            self._palette_vsdx = None
 
-    def _sentinel(self, text: str) -> Shape:
-        """The media shape carrying a given sentinel text.
+def media_shape(sentinel: str) -> Shape:
+    """The media document's shape carrying `sentinel`, such as ``RECTANGLE`` or ``CIRCLE``."""
+    return _sentinel(MEDIA, sentinel)
 
-        A missing sentinel means the bundled media.vsdx is wrong, so fail loudly
-        rather than handing callers a None shape.
-        """
-        shape = next((shape for shape in self.media.pages[0].shapes if text in shape.text), None)
-        if shape is None:
-            raise NotFoundError(f"media document has no shape with sentinel text {text!r}")
-        return shape
 
-    @property
-    def rels_xml(self) -> PartTree | None:
-        return self.media.pages[0].rels_xml
+def connector_shape(curved: bool = False) -> Shape:
+    """The dynamic connector every new connector is copied from."""
+    return media_shape(CURVED_CONNECTOR if curved else STRAIGHT_CONNECTOR)
 
-    @property
-    def straight_connector(self) -> Shape:
-        return self._sentinel(Media.straight_connector_text)
 
-    @property
-    def curved_connector(self) -> Shape:
-        return self._sentinel(Media.curved_connector_text)
-
-    @property
-    def rectangle(self) -> Shape:
-        return self._sentinel(Media.rectangle_text)
-
-    @property
-    def circle(self) -> Shape:
-        return self._sentinel(Media.circle_text)
+def media_style(style_id: str) -> Element | None:
+    """The media document's StyleSheet with this ID, or None."""
+    return donor(MEDIA)._get_style_by_id(style_id)
