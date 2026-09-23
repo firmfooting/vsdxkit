@@ -48,7 +48,7 @@ from pathlib import Path
 from typing import Protocol
 
 from vsdxkit.errors import MalformedPackageError, MissingPartError, PackageLimitError
-from vsdxkit.xmlio import parse_part, serialise_part
+from vsdxkit.xmlio import PartTree, parse_part, serialise_part
 
 # --------------------------------------------------------------------------
 # load limits
@@ -436,7 +436,7 @@ def _canonical_hash_of(data: bytes) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def canonical_hash(tree: ET.ElementTree[ET.Element]) -> str:
+def canonical_hash(tree: PartTree) -> str:
     """The canonical hash of the bytes this tree would be written as.
 
     Comparable with `XmlPart.original_canonical_hash`, which is this same
@@ -468,7 +468,7 @@ class XmlPart:
     which has no earlier bytes to preserve and is therefore always serialised.
     """
 
-    tree: ET.ElementTree[ET.Element]
+    tree: PartTree
     original_bytes: bytes | None
     original_canonical_hash: str | None
     # the part this one was parsed from, so a holder of that part can tell a
@@ -551,7 +551,7 @@ class PackageStore:
         """Replace a part with these bytes, discarding any tree it had."""
         self._parts[_checked(name)] = BytesPart(data)
 
-    def read_xml(self, name: str) -> ET.ElementTree[ET.Element] | None:
+    def read_xml(self, name: str) -> PartTree | None:
         """This part's tree, promoting it on first ask, or None if it is absent."""
         checked = _checked(name)
         value = self._parts.get(checked)
@@ -563,14 +563,14 @@ class PackageStore:
         self._parts[checked] = promoted
         return promoted.tree
 
-    def require_xml(self, name: str) -> ET.ElementTree[ET.Element]:
+    def require_xml(self, name: str) -> PartTree:
         """This part's tree, or a MissingPartError naming the part that is not there."""
         tree = self.read_xml(name)
         if tree is None:
             raise MissingPartError(f"expected XML part not found: {name}")
         return tree
 
-    def write_xml(self, name: str, tree: ET.ElementTree[ET.Element]) -> None:
+    def write_xml(self, name: str, tree: PartTree) -> None:
         """Replace a part with this tree.
 
         A part written this way has no promotion baseline, so it is serialised
@@ -579,7 +579,7 @@ class PackageStore:
         """
         self._parts[_checked(name)] = XmlPart(tree=tree, original_bytes=None, original_canonical_hash=None)
 
-    def replace_tree(self, name: str, tree: ET.ElementTree[ET.Element]) -> None:
+    def replace_tree(self, name: str, tree: PartTree) -> None:
         """Make `tree` a part's tree, keeping the bytes the part arrived as to compare it against.
 
         `write_xml` is for a part that is new, or that the caller means to

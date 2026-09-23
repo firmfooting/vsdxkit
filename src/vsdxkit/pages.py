@@ -19,7 +19,7 @@ from vsdxkit.errors import InvalidOperationError, MissingPartError, NotFoundErro
 from vsdxkit.package import XmlPart
 from vsdxkit.partnames import relationship_target, relationships_part_name
 from vsdxkit.shapes import Shape, parent_of
-from vsdxkit.xmlio import require_element, to_float, xml_value
+from vsdxkit.xmlio import PartTree, require_element, to_float, xml_value
 
 # the two places a Connect record names a shape: the connector it leads from,
 # and the shape that connector is glued to
@@ -82,11 +82,9 @@ class Page:
 
     """
 
-    xml: ET.ElementTree[ET.Element]
+    xml: PartTree
 
-    def __init__(
-        self, xml: ET.ElementTree[ET.Element], filename: str, page_name: str, page_id: str, rel_id: str, vis: VisioFile
-    ):
+    def __init__(self, xml: PartTree, filename: str, page_name: str, page_id: str, rel_id: str, vis: VisioFile):
         self._xml = xml
         self.filename = filename
         self._name = page_name
@@ -96,7 +94,7 @@ class Page:
         self.master_unique_id: str | None = None
         self.master_base_id: str | None = None
         self.rels_xml_filename: str | None = None
-        self._rels_xml: ET.ElementTree[ET.Element] | None = None
+        self._rels_xml: PartTree | None = None
         self.vis = vis
         self._max_id = 0  # ID high-water mark, maintained by VisioFile's ID allocator
         # todo: add page id - from pages_xml - PageSheet[ID]
@@ -228,11 +226,11 @@ class Page:
         self._pagesheet_cell("PageHeight").attrib["V"] = _dimension_value(value)
 
     @property
-    def xml(self) -> ET.ElementTree[ET.Element]:
+    def xml(self) -> PartTree:
         return self._xml
 
     @xml.setter
-    def xml(self, value: ET.ElementTree[ET.Element] | None) -> None:
+    def xml(self, value: PartTree | None) -> None:
         self.vis._require_open("Setting Page.xml")
         if value is None:
             raise InvalidOperationError(
@@ -245,7 +243,7 @@ class Page:
         if attached:
             self.vis._set_part_xml(self.filename, value)
 
-    def _holds(self, filename: str, tree: ET.ElementTree[ET.Element] | None) -> bool:
+    def _holds(self, filename: str, tree: PartTree | None) -> bool:
         """Whether the package's part at `filename` is `tree` itself."""
         held = self.vis._package.part(filename)
         return isinstance(held, XmlPart) and held.tree is tree
@@ -287,11 +285,11 @@ class Page:
         return isinstance(held, XmlPart) and held.tree is self._rels_xml
 
     @property
-    def rels_xml(self) -> ET.ElementTree[ET.Element] | None:
+    def rels_xml(self) -> PartTree | None:
         return self._rels_xml
 
     @rels_xml.setter
-    def rels_xml(self, value: ET.ElementTree[ET.Element] | None) -> None:
+    def rels_xml(self, value: PartTree | None) -> None:
         # None takes the rels part out of the package as well: the save writes
         # whatever the store holds, so a part left behind would reach the file
         self.vis._require_open("Setting Page.rels_xml")
@@ -393,7 +391,7 @@ class Page:
         folder is reached there. The rels part is created on demand; assigning
         it writes it into the package.
         """
-        rels_xml: ET.ElementTree[ET.Element] | None = self.rels_xml
+        rels_xml: PartTree | None = self.rels_xml
         if rels_xml is None:
             self.rels_xml_filename = relationships_part_name(self.filename)
             rels_xml = ET.ElementTree(

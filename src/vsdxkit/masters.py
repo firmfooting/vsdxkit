@@ -18,6 +18,7 @@ from vsdxkit.package import PackageStore
 from vsdxkit.pages import Page
 from vsdxkit.partnames import MASTERS_PART, folder_of, relationships_part_name, target_part_name
 from vsdxkit.shapes import Shape
+from vsdxkit.xmlio import PartTree
 
 if TYPE_CHECKING:
     from vsdxkit.vsdxfile import VisioFile
@@ -105,7 +106,7 @@ class MastersImportMixin:
             if name.startswith(prefix) and name.endswith(".xml") and name[len(prefix) : -4].isdigit()
         ]
         master_rels_path = relationships_part_name(MASTERS_PART)
-        rels_tree: ET.ElementTree[ET.Element] | None = self._package.read_xml(master_rels_path)
+        rels_tree: PartTree | None = self._package.read_xml(master_rels_path)
         if rels_tree is None:
             rels_tree = ET.ElementTree(
                 ET.fromstring('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
