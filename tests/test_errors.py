@@ -348,6 +348,47 @@ def test_a_master_relationship_without_an_id_raises_malformed_package_error(vsdx
 
 @pytest.mark.allow_invalid_package
 @pytest.mark.parametrize(
+    ("source", "member", "old_target"),
+    [
+        ("test1.vsdx", "visio/pages/_rels/pages.xml.rels", b'Target="page1.xml"'),
+        ("test5_master.vsdx", "visio/masters/_rels/masters.xml.rels", b'Target="master1.xml"'),
+    ],
+    ids=["pages.xml.rels", "masters.xml.rels"],
+)
+@pytest.mark.parametrize(
+    "new_target",
+    [b"../x.xml", b"./page1.xml", b"http://x/y.xml", b"", b"sub/", b"/visio/pages/page1.xml"],
+    ids=["parent", "dot", "absolute-uri", "empty", "folder", "absolute-part-name"],
+)
+def test_a_relationship_target_that_is_not_a_part_name_raises_malformed_package_error(
+    vsdx_copy, tmp_path, source, member, old_target, new_target
+):
+    """Fails if the open path lets `_checked`'s plain `ValueError` escape for a relationship `Target`.
+
+    The `Target` of a page or master relationship is package content: joined
+    onto the pages or masters folder, it names the part to load, and a `Target`
+    that joins into something that is not an OPC part name was reported by the
+    store's argument check, as a plain `ValueError`. That missed
+    `except VsdxError`, which is the promise an open makes about a malformed
+    package. `load_pages` and `load_master_pages` translate that one check;
+    resolving such targets properly is a separate change.
+    """
+    destination = str(tmp_path / "bad-target.vsdx")
+    with zipfile.ZipFile(vsdx_copy(source)) as original:
+        data = original.read(member)
+    assert old_target in data, f"the fixture has changed: {old_target!r} is not in {member}"
+    _package_with_document(
+        vsdx_copy(source), destination, data.replace(old_target, b'Target="' + new_target + b'"', 1), member=member
+    )
+
+    with pytest.raises(MalformedPackageError, match="not a part name") as caught:
+        vsdxkit.VisioFile(destination)
+    assert isinstance(caught.value, ValueError)
+    assert isinstance(caught.value.__cause__, ValueError)
+
+
+@pytest.mark.allow_invalid_package
+@pytest.mark.parametrize(
     ("label", "payload"),
     [("not-a-zip", b"this is not a zip file"), ("truncated", None)],
 )

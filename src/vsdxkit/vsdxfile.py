@@ -21,10 +21,10 @@ else:
 import vsdxkit
 
 from . import relationships
-from .errors import InvalidOperationError, MissingPartError, NotFoundError, VisioFileNotOpen
+from .errors import InvalidOperationError, MalformedPackageError, MissingPartError, NotFoundError, VisioFileNotOpen
 from .logging_support import attach_debug_stream_handler, get_logger
 from .package import PackageLimitError as PackageLimitError
-from .package import PackageLimits, PackageStore, XmlPart
+from .package import PackageLimits, PackageStore, XmlPart, _checked
 from .zip_contents import ZipFileContentsView, part_name_for_path
 
 # TODO(#362): `PackageLimitError` is imported here only to keep
@@ -257,6 +257,24 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         """The store's own tree for a part, promoting it -- never a private copy."""
         return self._package.read_xml(self._part_name(path))
 
+    def _check_relationship_target(self, path: str, subject: str, target: str) -> None:
+        """Refuse a relationship whose `target`, joined into `path`, names no part.
+
+        The store checks every name it is handed and reports a bad one as a
+        plain `ValueError`, because a caller passing it one has made an
+        argument error. A relationship `Target` is not an argument: it is
+        package content, so a `Target` that joins into something that is not
+        a part name (`../page1.xml`, a URI, an empty string) makes the package
+        malformed, and opening it has to say so with `MalformedPackageError`.
+        Only this check is translated. The read that follows goes on raising
+        `MissingPartError` and `PartParseError` as themselves, which wrapping
+        it in `except ValueError` would have swallowed.
+        """
+        try:
+            _checked(self._part_name(path))
+        except ValueError as error:
+            raise MalformedPackageError(f"{subject} targets {target!r}, which is not a part name in this package") from error
+
     def _require_part_xml(self, path: str, description: str) -> ET.ElementTree[ET.Element]:
         """The store's own tree for a required part, or a MissingPartError naming it."""
         tree = self._read_part_xml(path)
@@ -419,6 +437,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             if page_file is None:
                 raise MissingPartError(f"no page part found for relationship {rel_id}")
             page_path = page_dir + page_file
+            self._check_relationship_target(page_path, f"pages.xml.rels Relationship {rel_id!r}", page_file)
             page_id = page.attrib.get("ID", "")
 
             new_page = Page(self._require_part_xml(page_path, "page part"), page_path, page_name, page_id, rel_id, self)
@@ -462,8 +481,8 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         if self.debug:
             logger.debug("Master Relationships(%s)\n%s", master_rel_path, master_rels)
 
-        # populate relid to master path
-        relid_to_path: dict[str, str] = {}
+        # populate relid to the master's relationship Target
+        relid_to_target: dict[str, str] = {}
         for rel in master_rels:
             # Skipping a relationship with no Id used to leave the master that
             # names it with no path, and the lookup below reported that as
@@ -471,7 +490,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             # part called "None".
             subject = "masters.xml.rels Relationship"
             target = require_attribute(rel, "Target", subject)
-            relid_to_path[require_attribute(rel, "Id", subject)] = f"{self.directory}/visio/masters/{target}"
+            relid_to_target[require_attribute(rel, "Id", subject)] = target
 
         # masters_xml is a store-backed property (contains more info about
         # master page, i.e. Name, Icon); reading it here promotes the part.
@@ -486,9 +505,11 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             master_unique_id = master.attrib.get("UniqueID")
             master_base_id = master.attrib.get("BaseID")
 
-            master_path = relid_to_path.get(rel_id)
-            if master_path is None:
+            master_target = relid_to_target.get(rel_id)
+            if master_target is None:
                 raise MissingPartError(f"no master part found for relationship {rel_id}")
+            master_path = f"{self.directory}/visio/masters/{master_target}"
+            self._check_relationship_target(master_path, f"masters.xml.rels Relationship {rel_id!r}", master_target)
 
             master_page = Page(
                 self._require_part_xml(master_path, "master part"),
