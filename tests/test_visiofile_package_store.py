@@ -253,3 +253,32 @@ def test_bootstrapping_masters_writes_trees(vsdx_copy):
         vis._bootstrap_masters()
         assert isinstance(vis._package.part("/visio/masters/masters.xml"), XmlPart)
         assert isinstance(vis._package.part("/visio/masters/_rels/masters.xml.rels"), XmlPart)
+
+
+def test_a_removed_page_does_not_clobber_a_page_that_reuses_its_part_name(vsdx_copy, tmp_path):
+    """Fails if `Page._attached()` asks only whether a part is at the page's name, not whether it is the page's tree.
+
+    Removing a page frees its part name, and the next page added takes it.
+    A caller still holding the removed page then finds "its" part present
+    again, and an assignment to its `xml` or `rels_xml` writes over the new
+    page's part -- or gives the new page a relationship part it never had.
+    """
+    with VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
+        removed = vis.pages[0]
+        vis.remove_page_by_index(0)
+        fresh = vis.add_page(name="Fresh")
+        assert fresh.filename == removed.filename  # the fixture has changed if this does not hold
+        name = vis._part_name(fresh.filename)
+        rels_name = vis._part_name(removed.rels_xml_filename)
+        removed.xml = ET.ElementTree(ET.Element(f"{namespace}PageContents"))
+        removed.rels_xml = ET.ElementTree(ET.Element("Relationships"))
+        held = vis._package.part(name)
+        assert isinstance(held, XmlPart) and held.tree is fresh.xml
+        assert vis._package.part(rels_name) is None
+        root = fresh.xml.getroot()
+        assert root is not None
+        root.set("VsdxkitMarker", "1")
+        out = str(tmp_path / "test4_connectors-fresh.vsdx")
+        vis.save_vsdx(out)
+    with zipfile.ZipFile(out) as archive:
+        assert b'VsdxkitMarker="1"' in archive.read("visio/pages/page1.xml")

@@ -17,6 +17,7 @@ import vsdxkit
 from vsdxkit import namespace
 
 from .connectors import Connect
+from .package import XmlPart
 from .shapes import Shape, parent_of
 from .xmlio import require_element, xml_value
 
@@ -237,14 +238,38 @@ class Page:
         if attached:
             self.vis._set_part_xml(self.vis._part_name(self.filename), value)
 
+    def _holds(self, filename: str, tree: ET.ElementTree[ET.Element] | None) -> bool:
+        """Whether the package's part at `filename` is `tree` itself."""
+        held = self.vis._package.part(self.vis._part_name(filename))
+        return isinstance(held, XmlPart) and held.tree is tree
+
     def _attached(self) -> bool:
         """Whether this page's own part is still in its document's package.
 
         A caller may keep holding a `Page` after it has been removed from the
         document (`VisioFile.remove_page_by_index`); a later assignment to its
-        `xml` must not resurrect the part it was removed from.
+        `xml` must not resurrect the part it was removed from. Nor may it
+        write over the part of the page added after it: removal frees the part
+        name, and the next page takes it. So this asks whether the part at the
+        page's name is this page's own tree, not merely whether there is one.
         """
-        return self.vis._package.part(self.vis._part_name(self.filename)) is not None
+        return self._holds(self.filename, self._xml)
+
+    def _rels_attached(self) -> bool:
+        """Whether an assignment to `rels_xml` may write this page's relationship part.
+
+        Only while the page itself is attached, and only over the relationship
+        part the page holds -- or, for a page that has none yet, where the
+        package has none either, which is how a rels part is first created.
+        A removed page's rels name is freed along with its page's, and the
+        page that takes the name must not be given the removed page's
+        relationships.
+        """
+        if self.rels_xml_filename is None or not self._attached():
+            return False
+        if self._rels_xml is None:
+            return self.vis._package.part(self.vis._part_name(self.rels_xml_filename)) is None
+        return self._holds(self.rels_xml_filename, self._rels_xml)
 
     @property
     def rels_xml(self) -> ET.ElementTree[ET.Element] | None:
@@ -255,9 +280,10 @@ class Page:
         # None takes the rels part out of the package as well: the save writes
         # whatever the store holds, so a part left behind would reach the file
         self.vis._require_open("Setting Page.rels_xml")
-        attached = self._attached()
+        attached = self._rels_attached()
         self._rels_xml = value
-        if self.rels_xml_filename is not None and attached:
+        if attached:
+            assert self.rels_xml_filename is not None  # _rels_attached() says so
             self.vis._set_part_xml(self.vis._part_name(self.rels_xml_filename), value)
 
     @property

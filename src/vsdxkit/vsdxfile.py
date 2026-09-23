@@ -967,8 +967,8 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         # id immediately (issue #7: they were blank until a reload)
         page_id = new_page_element.attrib["ID"]
         # written into the store before the Page is constructed, so `Page.xml`'s
-        # write-through guard (`_attached()`) already finds the part present for
-        # any later assignment, and because this call is what gets the new page
+        # write-through guard (`_attached()`) already finds the page's own tree
+        # at its part name for any later assignment, and because this call is what gets the new page
         # into the package at all: a save writes the store and nothing else
         self._package.write_xml(self._part_name(new_page_path), new_page_xml)
         new_page = Page(new_page_xml, new_page_path, page_name, page_id, new_page_relid, self)
@@ -976,8 +976,8 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             source_rels_root = require_element(source_page.rels_xml.getroot(), "source page relationships root")
             rel_dir = f"{self.directory}/visio/pages/_rels/"
             # the filename first: the `rels_xml` setter only writes through when
-            # `rels_xml_filename` is already set (and the page part, above, is
-            # already in the package)
+            # `rels_xml_filename` is already set (and the page's own tree, above,
+            # is already its part)
             new_page.rels_xml_filename = _page_relationship_path(rel_dir, new_page_path)
             new_page.rels_xml = ET.ElementTree(copy.deepcopy(source_rels_root))
 
