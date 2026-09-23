@@ -41,7 +41,7 @@ from collections import Counter
 from collections.abc import Callable, Iterable
 
 import pytest
-from helpers.package_manifest import PackageManifest, manifest_differences
+from helpers.package_manifest import BYTES, DECLARATION, NAMESPACES, PackageManifest, manifest_differences
 from helpers.visio_observation import (
     Observation,
     PageObservation,
@@ -193,6 +193,40 @@ def _assert_same_package(relation: str, package_path: str, expected: str, actual
     assert not differences, f"{relation} does not hold for {package_path}; these parts differ: " + ", ".join(
         f"{member} ({', '.join(kinds)})" for member, kinds in differences.items()
     )
+
+
+def _assert_same_package_as_respelled(relation: str, package_path: str, expected: str, actual: str, respelled_by: str) -> None:
+    """`_assert_same_package`, for a package whose history includes a save of an edit.
+
+    A save writes every part it did not change as the bytes it arrived as
+    (#89), so a part that an earlier session edited and saved is in vsdxkit's
+    own spelling from then on -- even after a later session undoes the edit,
+    because that session's baseline is the respelled part, not the fixture's.
+    `respelled_by` is the earlier session's output. The parts it changed may
+    differ from `expected` in spelling alone -- declaration, namespace
+    bindings, bytes -- never in canonical XML, and must be spelled exactly as
+    that session wrote them, so the undoing session did not respell them
+    again. Every other part must still be byte-identical.
+    """
+    expected_manifest, actual_manifest, respelled_manifest = (
+        PackageManifest.from_path(path) for path in (expected, actual, respelled_by)
+    )
+    rewritten = set(manifest_differences(expected_manifest, respelled_manifest))
+    spelling = {DECLARATION, NAMESPACES, BYTES}
+    differences = manifest_differences(expected_manifest, actual_manifest)
+    unexplained = {
+        member: kinds for member, kinds in differences.items() if member not in rewritten or not set(kinds) <= spelling
+    }
+    assert not unexplained, f"{relation} does not hold for {package_path}; these parts differ: " + ", ".join(
+        f"{member} ({', '.join(kinds)})" for member, kinds in unexplained.items()
+    )
+    actual_parts, respelled_parts = actual_manifest.by_name(), respelled_manifest.by_name()
+    for member in differences:
+        written, then = actual_parts[member], respelled_parts[member]
+        assert (written.declaration, written.namespaces) == (then.declaration, then.namespaces), (
+            f"{relation} does not hold for {package_path}: {member} is spelled neither as the fixture "
+            "nor as the session that edited it wrote it"
+        )
 
 
 def _descendants(page: PageObservation, shape_id: int) -> set[int]:
@@ -414,7 +448,9 @@ def test_deleting_a_copy_made_before_the_last_save_restores_the_package(package_
         observation_from_package(untouched, "before the copy"),
         observation_from_package(restored, "after deleting it"),
     )
-    _assert_same_package("deleting a copy from an earlier session is a no-op", package_path, untouched, restored)
+    _assert_same_package_as_respelled(
+        "deleting a copy from an earlier session is a no-op", package_path, untouched, restored, with_copy
+    )
 
     with vsdxkit.VisioFile(restored) as vis:
         next_id = int(vis.pages[0].child_shapes[0].copy().ID)

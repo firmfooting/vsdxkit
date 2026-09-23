@@ -1,17 +1,14 @@
 from __future__ import annotations
 
-import contextlib
 import copy
 import io
 import os
 import posixpath
 import re
-import shutil
 import sys
-import tempfile
 import xml.dom.minidom as minidom  # minidom used for prettyprint
 import xml.etree.ElementTree as ET
-import zipfile
+from collections.abc import MutableMapping
 from types import TracebackType
 from typing import NamedTuple
 from xml.etree.ElementTree import Element
@@ -25,13 +22,17 @@ import vsdxkit
 
 from . import relationships
 from .logging_support import attach_debug_stream_handler, get_logger
-from .package import PackageLimitError, PackageLimits, read_archive_members  # noqa: F401
+from .package import PackageLimitError as PackageLimitError
+from .package import PackageLimits, PackageStore
+from .zip_contents import ZipFileContentsView, part_name_for_path
 
 # TODO(#362): `PackageLimitError` is imported here only to keep
 # `vsdxkit.vsdxfile.PackageLimitError` working -- it moved to `vsdxkit.package`
-# and `docs/classes.rst` had named the old path. The `noqa` on that import is the
-# ugly part; it wants a deprecation shim, or removal once the old path is no
-# longer published. Tested by tests/test_package_limit_error_import.py.
+# and `docs/classes.rst` had named the old path. It is spelled as an explicit
+# re-export (`X as X`) rather than under a `noqa: F401`, because a `noqa` on the
+# shared import line also hid imports that really were unused. It wants a
+# deprecation shim, or removal once the old path is no longer published.
+# Tested by tests/test_package_limit_error_import.py.
 logger = get_logger(__name__)
 
 from . import (  # noqa: E402
@@ -46,14 +47,18 @@ from .masters import MastersImportMixin  # noqa: E402
 from .pages import Page, PagePosition  # noqa: E402
 from .shapes import Shape, find_or_create_shapes_tag  # noqa: E402
 from .templating import JinjaTemplatingMixin  # noqa: E402
+
+# `file_to_xml` is not called directly in this module any more -- every read
+# here goes through `_read_part_xml`/`_require_part_xml`, which promote the
+# store's own tree instead of parsing a private copy. It stays importable as
+# `vsdxkit.vsdxfile.file_to_xml`: `Page.set_name` imports it from here to avoid
+# a circular import, and tests/test_visiofile.py imports it the same way.
 from .xmlio import (  # noqa: E402
     adopt_prefixes,
-    file_to_xml,
+    file_to_xml,  # noqa: F401
     register_namespaces,
     require_element,
-    require_root,
     require_tree,
-    require_xml_tree,
     xml_to_file,
 )
 
@@ -170,7 +175,11 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         self.master_index: dict[str, Page] = {}  # master page info by item name e.g. 'Dynamic Connector'
         self.master_pages: list[Page] = []  # populated by open_vsdx_file()
         self.file_open = False
-        self.zip_file_contents: dict[str, io.BytesIO] = {}  # file contents by file_path
+        # populated by _load_zip_file_contents_to_memory(), called from
+        # open_vsdx_file() below; declared here so an attribute assigned
+        # outside __init__ still has a home for pyrefly to check it against
+        self._package: PackageStore
+        self.zip_file_contents: MutableMapping[str, io.BytesIO]
         # the bundled donor packages are expensive to parse, so one Media is
         # shared by every create/connect call on this document (issue #65)
         self._media: vsdxkit.Media | None = None
@@ -220,37 +229,32 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         return minidom.parseString(ET.tostring(xml)).toprettyxml()
 
     def _load_zip_file_contents_to_memory(self) -> None:
-        """Read the package into memory, keyed by `self.directory` + member name.
+        """Open the package as a `PackageStore`, the one copy of it held from now on.
 
-        That key is a path no file was ever at; `vsdxkit.package` says why it
-        is going away. #91 is what retires it.
+        `zip_file_contents` survives as a view over the store, keyed the old
+        way, until #91 retires it.
         """
-        for name, content in read_archive_members(self.filename, self.limits):
-            self.zip_file_contents[f"{self.directory}/{name}"] = io.BytesIO(content)
+        self._package = PackageStore.open(self.filename, limits=self.limits)
+        self.zip_file_contents = ZipFileContentsView(self._package, self.directory)
 
-    def _save_zip_file_contents_to_disk(self, save_filename: str) -> None:
-        """Atomically save the in-memory package to a .vsdx file."""
-        target = os.path.abspath(save_filename)
-        target_dir = os.path.dirname(target)
-        os.makedirs(target_dir, exist_ok=True)
-        fd, temporary = tempfile.mkstemp(prefix=f".{os.path.basename(target)}.", suffix=".tmp", dir=target_dir)
-        os.close(fd)
-        try:
-            with zipfile.ZipFile(temporary, "w") as zipf:
-                for file_path, file_content in self.zip_file_contents.items():
-                    file_path_in_zip = file_path.replace(self.directory + "/", "")
-                    content = file_content.getvalue()
-                    if file_path_in_zip.endswith(".xml") or file_path_in_zip.endswith(".rels"):
-                        zipf.writestr(file_path_in_zip, content.decode("utf-8"))
-                    else:
-                        zipf.writestr(file_path_in_zip, content)
-            mode_source = target if os.path.exists(target) else os.path.abspath(self.filename)
-            if os.path.exists(mode_source):
-                shutil.copymode(mode_source, temporary)
-            os.replace(temporary, target)
-        finally:
-            with contextlib.suppress(FileNotFoundError):
-                os.unlink(temporary)
+    def _part_name(self, path: str) -> str:
+        """The OPC part name for one of this document's `{directory}/...` paths."""
+        name = part_name_for_path(self.directory, path)
+        if name is None:
+            raise ValueError(f"{path!r} is not a part of this document")
+        return name
+
+    @override
+    def _read_part_xml(self, path: str) -> ET.ElementTree[ET.Element] | None:
+        """The store's own tree for a part, promoting it -- never a private copy."""
+        return self._package.read_xml(self._part_name(path))
+
+    def _require_part_xml(self, path: str, description: str) -> ET.ElementTree[ET.Element]:
+        """The store's own tree for a required part, or a ValueError naming it."""
+        tree = self._read_part_xml(path)
+        if tree is None:
+            raise ValueError(f"expected XML part not found: {description} ({path})")
+        return tree
 
     def open_vsdx_file(self) -> None:
         self._load_zip_file_contents_to_memory()
@@ -275,10 +279,8 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         page_dir = f"{self.directory}/visio/pages/"
 
         rel_filename = rel_dir + "pages.xml.rels"
-        rels = require_root(rel_filename, self.zip_file_contents, "pages.xml.rels")
-        self.pages_xml_rels = file_to_xml(
-            rel_filename, self.zip_file_contents
-        )  # store pages.xml.rels so pages can be added or removed
+        self.pages_xml_rels = self._require_part_xml(rel_filename, "pages.xml.rels")
+        rels = require_element(self.pages_xml_rels.getroot(), "pages.xml.rels")
         if self.debug:
             logger.debug("Relationships(%s)\n%s", rel_filename, VisioFile.pretty_print_element(rels))
         relid_page_dict = {}
@@ -289,8 +291,8 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             relid_page_dict[rel_id] = page_file
 
         pages_filename = self._pages_filename()  # pages contains Page name, width, height, mapped to Id
-        pages = require_root(pages_filename, self.zip_file_contents, "pages.xml")
-        self.pages_xml = file_to_xml(pages_filename, self.zip_file_contents)  # store xml so pages can be removed
+        self.pages_xml = self._require_part_xml(pages_filename, "pages.xml")
+        pages = require_element(self.pages_xml.getroot(), "pages.xml")
         if self.debug:
             logger.debug("Pages(%s)\n%s", pages_filename, VisioFile.pretty_print_element(pages))
 
@@ -304,36 +306,32 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             page_path = page_dir + page_file
             page_id = page.attrib.get("ID", "")
 
-            new_page = Page(
-                require_xml_tree(page_path, self.zip_file_contents, "page part"), page_path, page_name, page_id, rel_id, self
-            )
+            new_page = Page(self._require_part_xml(page_path, "page part"), page_path, page_name, page_id, rel_id, self)
             # look for visio/pages/_rels/page3.xml.rels
             page_rels_path = _page_relationship_path(rel_dir, page_path)
 
             if page_rels_path in self.zip_file_contents:
                 new_page.rels_xml_filename = page_rels_path
-                new_page.rels_xml = file_to_xml(page_rels_path, self.zip_file_contents)
+                new_page.rels_xml = self._read_part_xml(page_rels_path)
             self.pages.append(new_page)
 
             if self.debug:
                 logger.debug("Page(%s)\n%s", new_page.filename, VisioFile.pretty_print_element(new_page.xml))
 
-        self.content_types_xml = file_to_xml(f"{self.directory}/[Content_Types].xml", self.zip_file_contents)
+        self.content_types_xml = self._read_part_xml(f"{self.directory}/[Content_Types].xml")
         # TODO: add correctness cross-check. Or maybe the other way round, start from [Content_Types].xml
         #       to get page_dir and other paths...
 
-        self.app_xml = file_to_xml(
-            f"{self.directory}/docProps/app.xml", self.zip_file_contents
-        )  # note: files in docProps may be missing
-        self.document_xml = file_to_xml(f"{self.directory}/visio/document.xml", self.zip_file_contents)
-        self.document_xml_rels = file_to_xml(f"{self.directory}/visio/_rels/document.xml.rels", self.zip_file_contents)
+        self.app_xml = self._read_part_xml(f"{self.directory}/docProps/app.xml")  # note: files in docProps may be missing
+        self.document_xml = self._read_part_xml(f"{self.directory}/visio/document.xml")
+        self.document_xml_rels = self._read_part_xml(f"{self.directory}/visio/_rels/document.xml.rels")
 
     @override
     def load_master_pages(self) -> None:
         # get data from /visio/masters folder
         master_rel_path = f"{self.directory}/visio/masters/_rels/masters.xml.rels"
 
-        master_rels_data = file_to_xml(master_rel_path, self.zip_file_contents)
+        master_rels_data = self._read_part_xml(master_rel_path)
         # a document with no masters has no rels part: iterate an empty list
         master_rels: list[Element] = list(master_rels_data.getroot()) if master_rels_data is not None else []
         if self.debug:
@@ -349,9 +347,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
 
         # load masters.xml file
         masters_path = f"{self.directory}/visio/masters/masters.xml"
-        masters_xml = file_to_xml(
-            masters_path, self.zip_file_contents
-        )  # contains more info about master page (i.e. Name, Icon)
+        masters_xml = self._read_part_xml(masters_path)  # contains more info about master page (i.e. Name, Icon)
         self.masters_xml = masters_xml.getroot() if masters_xml is not None else None
 
         # for each master page, create the Page object
@@ -365,7 +361,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             master_path = relid_to_path[rel_id]
 
             master_page = Page(
-                require_xml_tree(master_path, self.zip_file_contents, "master part"),
+                self._require_part_xml(master_path, "master part"),
                 master_path,
                 master_name,
                 master_id,
@@ -449,10 +445,10 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
 
                 # remove the page's own rels part if one exists
                 if page.rels_xml_filename and page.rels_xml_filename in self.zip_file_contents:
-                    self.zip_file_contents.pop(page.rels_xml_filename)
+                    self._package.remove(self._part_name(page.rels_xml_filename))
 
                 # remove page<index>.xml file
-                self.zip_file_contents.pop(self.pages[index].filename)
+                self._package.remove(self._part_name(self.pages[index].filename))
                 del self.pages[index]
 
     def remove_page_by_name(self, page_name: str) -> None:
@@ -1376,6 +1372,19 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         self._check_destination_kind(self.filename)
         return self.filename
 
+    def _write_back(self, tree: ET.ElementTree[ET.Element], path: str) -> None:
+        """Write one document tree into the package at save, unless bytes a caller left stand in its place.
+
+        `zip_file_contents.sync()` runs first, and writes the bytes a buffer
+        was left holding that do not parse over the part they were meant for.
+        The document's tree for that part is then the stale one those bytes
+        replaced, and writing it back would undo what the caller left.
+        """
+        contents = self.zip_file_contents
+        if isinstance(contents, ZipFileContentsView) and contents.holds_bytes_over(path, tree):
+            return
+        xml_to_file(tree, path, contents)
+
     def save_vsdx(self, new_filename: str | None = None) -> None:
         """save the VisioFile object as new vsdx file
 
@@ -1388,54 +1397,58 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
 
         """
         self._require_open("VisioFile.save_vsdx()")
-        if not self.zip_file_contents:
+        if not self._package.names():
             raise ValueError("cannot save an empty package")
 
         # resolve the destination before re-serialising anything, so a refused
         # extension leaves the in-memory package untouched
         target = self._in_place_filename() if new_filename is None else self._destination_filename(new_filename)
 
+        # sync edits made through a `getbuffer()` memoryview on a buffer the
+        # view handed out, which no write-through method could see; done after
+        # the destination check, so a refused save still changes nothing
+        if isinstance(self.zip_file_contents, ZipFileContentsView):
+            self.zip_file_contents.sync()
+
         # write pages.xml.rels
-        xml_to_file(
+        self._write_back(
             self._part_tree(self.pages_xml_rels, "pages.xml.rels"),
             f"{self.directory}/visio/pages/_rels/pages.xml.rels",
-            self.zip_file_contents,
         )
 
         # write pages.xml file - in case pages added removed
-        xml_to_file(self._part_tree(self.pages_xml, "pages.xml"), self._pages_filename(), self.zip_file_contents)
+        self._write_back(self._part_tree(self.pages_xml, "pages.xml"), self._pages_filename())
 
         # write the master pages to file
         for page in self.master_pages:  # type: Page
-            xml_to_file(page.xml, page.filename, self.zip_file_contents)
+            self._write_back(page.xml, page.filename)
 
         # write the pages to file
         for page in self.pages:  # type: Page
-            xml_to_file(page.xml, page.filename, self.zip_file_contents)
+            self._write_back(page.xml, page.filename)
             if page.rels_xml_filename is not None:
-                xml_to_file(require_tree(page.rels_xml, "page rels"), page.rels_xml_filename, self.zip_file_contents)
+                self._write_back(require_tree(page.rels_xml, "page rels"), page.rels_xml_filename)
 
         # write [content_Types].xml
-        xml_to_file(
+        self._write_back(
             self._part_tree(self.content_types_xml, "[Content_Types].xml"),
             f"{self.directory}/[Content_Types].xml",
-            self.zip_file_contents,
         )
 
         # write app.xml
         if self.app_xml is not None:
-            xml_to_file(self.app_xml, f"{self.directory}/docProps/app.xml", self.zip_file_contents)
+            self._write_back(self.app_xml, f"{self.directory}/docProps/app.xml")
 
         # write document.xml
-        xml_to_file(
-            self._part_tree(self.document_xml, "document.xml"), f"{self.directory}/visio/document.xml", self.zip_file_contents
-        )
+        self._write_back(self._part_tree(self.document_xml, "document.xml"), f"{self.directory}/visio/document.xml")
 
         # write document.xml.rels
-        xml_to_file(
+        self._write_back(
             self._part_tree(self.document_xml_rels, "document.xml.rels"),
             f"{self.directory}/visio/_rels/document.xml.rels",
-            self.zip_file_contents,
         )
 
-        self._save_zip_file_contents_to_disk(target)
+        # an in-place save writes back over the absolute source `PackageStore`
+        # captured at open, not over `self.filename`, which may be relative and
+        # resolve against a different working directory by the time this runs
+        self._package.save(target if new_filename is not None else None)

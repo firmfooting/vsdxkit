@@ -43,7 +43,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 import zlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
@@ -54,6 +54,7 @@ __all__ = [
     "PackageLimitError",
     "PackageLimits",
     "PackageStore",
+    "PartParseError",
     "PartValue",
     "XmlPart",
     "canonical_hash",
@@ -436,6 +437,10 @@ class XmlPart:
     tree: ET.ElementTree[ET.Element]
     original_bytes: bytes | None
     original_canonical_hash: str | None
+    # the part this one was parsed from, so a holder of that part can tell a
+    # promotion, which changes how the store holds the part but not what it
+    # holds, from a write that replaced it. None for a part written as a tree
+    promoted_from: BytesPart | None = field(default=None, compare=False, repr=False)
 
     def current_bytes(self) -> bytes:
         data = serialise_part(self.tree)
@@ -447,12 +452,31 @@ class XmlPart:
 PartValue = BytesPart | XmlPart
 
 
-def _promoted(name: str, data: bytes) -> XmlPart:
+class PartParseError(ET.ParseError, ValueError):
+    """A part that is not well-formed XML, named, and catchable as either error it has been.
+
+    Before the store, a malformed part reached the caller as the bare
+    `ET.ParseError` the parser raised. The store rewrapped it as a `ValueError`
+    so the message could name the part. Both spellings are in callers' code
+    now, and a caller should not have to know which release it is running
+    against to catch a broken package, so this is both. The parser's
+    `position` and `code` are carried across, because they are what says where
+    in the part it broke.
+    """
+
+
+def _promoted(name: str, part: BytesPart) -> XmlPart:
+    data = part.data
     try:
         tree = parse_part(data)
     except ET.ParseError as error:
-        raise ValueError(f"package part {name} is not well-formed XML: {error}") from error
-    return XmlPart(tree=tree, original_bytes=data, original_canonical_hash=canonical_hash(tree))
+        raised = PartParseError(f"package part {name} is not well-formed XML: {error}")
+        # ParseError sets these on the instance rather than taking them in its
+        # constructor, so they are copied the same way
+        raised.position = error.position
+        raised.code = error.code
+        raise raised from error
+    return XmlPart(tree=tree, original_bytes=data, original_canonical_hash=canonical_hash(tree), promoted_from=part)
 
 
 # --------------------------------------------------------------------------
@@ -514,6 +538,56 @@ class PackageStore:
         """Replace a part with these bytes, discarding any tree it had."""
         self._parts[_checked(name)] = BytesPart(data)
 
+    def write_bytes_keeping_tree(self, name: str, data: bytes, *, refuse_unparseable: bool = False) -> bool:
+        """Replace a part's content with these bytes, into the tree it already has if it has one.
+
+        `write_bytes` is right for a caller that means to replace a part; this
+        is for the caller that only has bytes to say what a part now holds --
+        `zip_file_contents`, which predates the store and whose callers wrote
+        a page back with `xml_to_file(page.xml, ...)` as a matter of course.
+        Replacing the part there would detach the tree the document edits, and
+        every later object-model edit would go into a tree nothing saves.
+
+        So a parsed part keeps its tree. Bytes that mean what the tree already
+        means change nothing, and the part keeps its baseline, so a save still
+        writes the bytes it arrived as. Bytes that mean something else are
+        parsed and become the tree's root: the tree object is the one the
+        document holds, and the baseline stays the part's original bytes, so a
+        later save compares against what the package arrived with rather than
+        against this write. Only bytes that do not parse replace the part, as
+        `write_bytes` would -- there is no tree they could be.
+
+        A part that has not been parsed, or is not there, is written as bytes.
+
+        `refuse_unparseable` is for a writer whose bytes may be a step on the
+        way rather than its last word: a `zip_file_contents` buffer mid-way
+        through `seek(0); write(shorter); truncate()` holds the new XML with
+        the old tail behind it. Replacing the part with that would detach the
+        tree for good, so with the flag set a parsed part is left exactly as
+        it is, and the False returned says the bytes were not taken; the
+        caller keeps them and writes them again once it knows they are final.
+        Every other write returns True.
+        """
+        checked = _checked(name)
+        held = self._parts.get(checked)
+        if not isinstance(held, XmlPart):
+            self._parts[checked] = BytesPart(data)
+            return True
+        try:
+            written = parse_part(data)
+        except ET.ParseError:
+            if refuse_unparseable:
+                return False
+            self._parts[checked] = BytesPart(data)
+            return True
+        if canonical_hash(written) == canonical_hash(held.tree):
+            return True
+        new_root = written.getroot()
+        # parse_part always yields a root; the assert only tells the type checker so
+        assert new_root is not None
+        held.tree._setroot(new_root)
+        return True
+
     def read_xml(self, name: str) -> ET.ElementTree[ET.Element] | None:
         """This part's tree, promoting it on first ask, or None if it is absent."""
         checked = _checked(name)
@@ -522,7 +596,7 @@ class PackageStore:
             return None
         if isinstance(value, XmlPart):
             return value.tree
-        promoted = _promoted(checked, value.data)
+        promoted = _promoted(checked, value)
         self._parts[checked] = promoted
         return promoted.tree
 
