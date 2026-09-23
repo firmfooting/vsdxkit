@@ -19,16 +19,6 @@ from xml.etree.ElementTree import Element
 from vsdxkit import cont_types_namespace as CONTENT_TYPES_NS
 from vsdxkit import document_rels_namespace as RELATIONSHIPS_NS
 
-__all__ = [
-    "all_of",
-    "allocate_id",
-    "append_if_absent",
-    "ensure_override",
-    "find",
-    "remove",
-    "remove_override",
-]
-
 
 def all_of(rels: Element) -> list[Element]:
     """Every relationship in the tree.

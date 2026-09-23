@@ -11,11 +11,11 @@ import xml.etree.ElementTree as ET
 
 from jinja2.sandbox import SandboxedEnvironment
 
-from .errors import NotFoundError
-from .logging_support import get_logger
-from .pages import Page
-from .shapes import Shape
-from .xmlio import adopt_prefixes
+from vsdxkit.errors import NotFoundError
+from vsdxkit.logging_support import get_logger
+from vsdxkit.pages import Page
+from vsdxkit.shapes import Shape
+from vsdxkit.xmlio import adopt_prefixes
 
 logger = get_logger(__name__)
 

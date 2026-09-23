@@ -12,7 +12,6 @@ import zipfile
 import pytest
 from helpers.package_validator import describe_defects, validate_package
 
-import vsdxkit
 from vsdxkit.relationships import (
     allocate_id,
     append_if_absent,
@@ -21,6 +20,7 @@ from vsdxkit.relationships import (
     remove,
     remove_override,
 )
+from vsdxkit.vsdxfile import VisioFile
 
 RELS_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 CT_NS = "http://schemas.openxmlformats.org/package/2006/content-types"
@@ -258,7 +258,7 @@ class TestRemovingAPageThroughTheHelpers:
                 rewritten.writestr(entry, data)
 
         out = str(tmp_path / "removed.vsdx")
-        with vsdxkit.VisioFile(respelled) as document:
+        with VisioFile(respelled) as document:
             document.remove_page_by_index(0)
             document.save_vsdx(out)
 

@@ -10,16 +10,6 @@ they read, how they resolve a relationship, and what they do with one that will
 not resolve. None of that is here.
 """
 
-__all__ = [
-    "CONTENT_TYPES_PART",
-    "DOC_REL_NS",
-    "MAIN_NS",
-    "MASTERS_PART",
-    "MASTERS_RELS_PART",
-    "PAGES_PART",
-    "PAGES_RELS_PART",
-]
-
 # ElementTree spells a qualified name `{uri}local`, so the braces belong to the
 # constant.
 MAIN_NS = "{http://schemas.microsoft.com/office/visio/2012/main}"

@@ -4,7 +4,7 @@ import os
 import xml.etree.ElementTree as ET
 import zipfile
 
-from vsdxkit import VisioFile
+from vsdxkit.vsdxfile import VisioFile
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 RELS_NS = "{http://schemas.openxmlformats.org/package/2006/relationships}"

@@ -10,9 +10,10 @@ import zipfile
 import pytest
 from helpers.broken_package import rewritten
 
-import vsdxkit
-from vsdxkit import VisioFile, namespace, r_namespace
-from vsdxkit.package import PartParseError, XmlPart
+from vsdxkit import namespace, r_namespace
+from vsdxkit.errors import MalformedPackageError, PartParseError, VsdxError
+from vsdxkit.package import XmlPart
+from vsdxkit.vsdxfile import VisioFile
 from vsdxkit.xmlio import serialise_part
 
 
@@ -88,8 +89,8 @@ def test_malformed_xml_at_open_is_also_a_vsdx_error_with_its_position(basedir, t
     )
     try:
         VisioFile(path)
-    except vsdxkit.VsdxError as error:
-        assert isinstance(error, vsdxkit.MalformedPackageError)
+    except VsdxError as error:
+        assert isinstance(error, MalformedPackageError)
         assert "/visio/pages/page1.xml" in str(error)
         assert error.position == error.__cause__.position
         assert error.code == error.__cause__.code

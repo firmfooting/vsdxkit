@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 from collections.abc import Generator
 from contextlib import contextmanager
 
-from .errors import MalformedPackageError, MissingPartError, PartParseError
+from vsdxkit.errors import MalformedPackageError, MissingPartError, PartParseError
 
 # Prefixes Visio itself writes. ElementTree invents `ns0:`, `ns1:`, ... for any
 # namespace it has no prefix for, and consumers stricter than Visio -- libvisio
@@ -348,3 +348,19 @@ def require_attribute(element: ET.Element, name: str, description: str) -> str:
     if value is None:
         raise MalformedPackageError(f"{description} has no {name} attribute")
     return value
+
+
+def to_float(val: str | None, cell: str | None = None) -> float | None:
+    """Convert a ShapeSheet value to float.
+
+    ``None`` input stays ``None``: an absent cell is distinct from a malformed
+    one. A malformed numeric value raises rather than masquerading as a real
+    zero coordinate; the message carries the cell name and raw value.
+    """
+    if val is None:
+        return None
+    try:
+        return float(val)
+    except ValueError as error:
+        label = f" for {cell}" if cell else ""
+        raise MalformedPackageError(f"malformed numeric ShapeSheet value{label}: {val!r}") from error

@@ -16,6 +16,10 @@ import zipfile
 import pytest
 
 import vsdxkit
+import vsdxkit.errors
+import vsdxkit.package
+import vsdxkit.vsdxfile
+import vsdxkit.xmlio
 from vsdxkit.errors import (
     InvalidOperationError,
     MalformedPackageError,
@@ -27,6 +31,8 @@ from vsdxkit.errors import (
     VisioFileNotOpen,
     VsdxError,
 )
+from vsdxkit.package import PackageLimits
+from vsdxkit.vsdxfile import VisioFile
 
 BASEDIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -173,33 +179,6 @@ def test_package_limit_error_keeps_its_reason_slug():
     assert str(error) == "too big"
 
 
-@pytest.mark.parametrize("name", [t.__name__ for t in PUBLIC_ERRORS] + ["VsdxError"])
-def test_errors_are_exported_from_the_package_root(name):
-    """Fails if an error drops out of `vsdxkit.__all__` or the root binds its name to a different class.
-
-    `vsdxkit.<Error>` is the documented spelling. It has to be the class the
-    library raises, or `except vsdxkit.<Error>` catches nothing.
-    """
-    assert name in vsdxkit.__all__
-    assert getattr(vsdxkit, name) is getattr(vsdxkit.errors, name)
-
-
-def test_package_limit_error_is_the_same_class_wherever_it_is_imported_from():
-    """It moved to errors.py; `vsdxkit.package.PackageLimitError` must not become a second class."""
-    assert vsdxkit.package.PackageLimitError is PackageLimitError
-    assert vsdxkit.PackageLimitError is PackageLimitError
-
-
-def test_visio_file_not_open_is_the_same_class_wherever_it_is_imported_from():
-    """Fails if vsdxfile.py defines its own `VisioFileNotOpen` rather than re-exporting the errors module's.
-
-    It moved to errors.py. Code that imports it from `vsdxkit.vsdxfile` has to
-    keep catching what the library raises, which needs a single class.
-    """
-    assert vsdxkit.vsdxfile.VisioFileNotOpen is VisioFileNotOpen
-    assert vsdxkit.VisioFileNotOpen is VisioFileNotOpen
-
-
 def test_part_parse_error_is_every_error_a_malformed_part_has_been():
     """Fails if PartParseError drops any base a caller may already catch a malformed part by."""
     import xml.etree.ElementTree as ET
@@ -208,14 +187,6 @@ def test_part_parse_error_is_every_error_a_malformed_part_has_been():
 
     for base in (errors.MalformedPackageError, errors.PackageError, errors.VsdxError, ET.ParseError, ValueError):
         assert issubclass(errors.PartParseError, base)
-
-
-def test_part_parse_error_is_the_same_class_on_every_import_path():
-    """Fails if package.py keeps its own PartParseError instead of re-exporting the errors module's."""
-    import vsdxkit
-    from vsdxkit import errors, package
-
-    assert package.PartParseError is errors.PartParseError is vsdxkit.PartParseError
 
 
 # --------------------------------------------------------------------------
@@ -263,7 +234,7 @@ def test_a_document_with_no_pages_part_raises_missing_part_error(vsdx_copy):
     is refused, because it would leave the relationship and content-type
     override that name the part behind.
     """
-    with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         page = vis.pages[0]
         vis._package.remove("/visio/pages/pages.xml")
         with pytest.raises(MissingPartError, match=r"pages\.xml"):
@@ -275,16 +246,16 @@ def test_a_required_part_the_store_lacks_is_a_missing_part():
     from vsdxkit.package import PackageStore
 
     store = PackageStore.open(os.path.join(BASEDIR, "test1.vsdx"))
-    with pytest.raises(vsdxkit.MissingPartError):
+    with pytest.raises(MissingPartError):
         store.require_xml("/visio/no-such-part.xml")
 
 
 def test_a_source_master_listed_but_unreadable_is_a_missing_part(vsdx_copy, monkeypatch):
     """Fails if master import reports a listed-but-unreadable donor part with a plain ValueError."""
-    with vsdxkit.VisioFile(vsdx_copy("test4_connectors.vsdx")) as source, vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as target:
+    with VisioFile(vsdx_copy("test4_connectors.vsdx")) as source, VisioFile(vsdx_copy("test1.vsdx")) as target:
         shape = next(shape for shape in source.pages[0].all_shapes if shape.xml.attrib.get("Master"))
         monkeypatch.setattr(source._package, "read_bytes", lambda name: None)
-        with pytest.raises(vsdxkit.MissingPartError, match="could not be read"):
+        with pytest.raises(MissingPartError, match="could not be read"):
             target._ensure_masters_for_shape(shape)
 
 
@@ -314,13 +285,13 @@ def test_opening_a_package_whose_xml_is_broken_raises_malformed_package_error(br
     the hierarchy entirely (#365 review).
     """
     with pytest.raises(MalformedPackageError, match="not well-formed XML"):
-        vsdxkit.VisioFile(broken_document_package)
+        VisioFile(broken_document_package)
 
 
 def test_the_parse_error_is_kept_as_the_cause(broken_document_package):
     """Chained, not swallowed: `ET.ParseError.position` is how a caller finds the byte."""
     with pytest.raises(MalformedPackageError) as caught:
-        vsdxkit.VisioFile(broken_document_package)
+        VisioFile(broken_document_package)
     assert isinstance(caught.value.__cause__, ET.ParseError)
 
 
@@ -351,7 +322,7 @@ def test_a_required_attribute_missing_on_open_raises_malformed_package_error(vsd
             rewritten.writestr(entry, data)
 
     with pytest.raises(MalformedPackageError, match=expected):
-        vsdxkit.VisioFile(destination)
+        VisioFile(destination)
 
 
 @pytest.mark.allow_invalid_package
@@ -372,7 +343,7 @@ def test_a_page_part_the_relationships_name_and_the_package_lacks_raises_missing
                 rewritten.writestr(entry, original.read(entry.filename))
 
     with pytest.raises(MissingPartError, match=r"page part"):
-        vsdxkit.VisioFile(destination)
+        VisioFile(destination)
 
 
 @pytest.mark.allow_invalid_package
@@ -390,7 +361,7 @@ def test_a_master_relationship_without_an_id_raises_malformed_package_error(vsdx
             rewritten.writestr(entry, data)
 
     with pytest.raises(MalformedPackageError, match="Id"):
-        vsdxkit.VisioFile(destination)
+        VisioFile(destination)
 
 
 @pytest.mark.allow_invalid_package
@@ -429,7 +400,7 @@ def test_a_relationship_target_that_is_not_a_part_name_raises_malformed_package_
     )
 
     with pytest.raises(MalformedPackageError, match="not a part name") as caught:
-        vsdxkit.VisioFile(destination)
+        VisioFile(destination)
     assert isinstance(caught.value, ValueError)
     assert isinstance(caught.value.__cause__, ValueError)
 
@@ -451,7 +422,7 @@ def test_a_file_that_is_not_a_readable_archive_raises_malformed_package_error(vs
     destination.write_bytes(payload)
 
     with pytest.raises(MalformedPackageError, match="not a readable package"):
-        vsdxkit.VisioFile(str(destination))
+        VisioFile(str(destination))
 
 
 def test_a_malformed_page_dimension_raises_malformed_package_error(vsdx_copy):
@@ -461,7 +432,7 @@ def test_a_malformed_page_dimension_raises_malformed_package_error(vsdx_copy):
     `MalformedPackageError`; `Page.width` and `Page.height` read the same kind
     of cell and raised a plain `ValueError` (#365 review).
     """
-    with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         page = vis.pages[0]
         page._pagesheet_cell("PageWidth").attrib["V"] = "not-a-number"
         with pytest.raises(MalformedPackageError, match="PageWidth"):
@@ -471,7 +442,7 @@ def test_a_malformed_page_dimension_raises_malformed_package_error(vsdx_copy):
 @pytest.mark.parametrize("coordinate", ["X", "Y"])
 def test_a_malformed_geometry_coordinate_raises_malformed_package_error(vsdx_copy, coordinate):
     """Geometry rows read the same ShapeSheet cells, and read them with a bare `float()`."""
-    with vsdxkit.VisioFile(vsdx_copy("test9_rect_and_line.vsdx")) as vis:
+    with VisioFile(vsdx_copy("test9_rect_and_line.vsdx")) as vis:
         row = next(
             row
             for shape in vis.pages[0].all_shapes
@@ -486,7 +457,7 @@ def test_a_malformed_geometry_coordinate_raises_malformed_package_error(vsdx_cop
 
 def test_a_connect_record_missing_its_sheet_attributes_raises_malformed_package_error(vsdx_copy):
     """Reading `page.connects` builds these from package XML, so it is content, not an argument."""
-    with vsdxkit.VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
+    with VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
         page = vis.pages[0]
         connect = page.connects[0]
         del connect.xml.attrib["FromSheet"]
@@ -515,7 +486,7 @@ def test_an_encrypted_member_raises_malformed_package_error(vsdx_copy, tmp_path)
     destination.write_bytes(bytes(raw))
 
     with pytest.raises(MalformedPackageError, match="cannot be read"):
-        vsdxkit.VisioFile(str(destination))
+        VisioFile(str(destination))
 
 
 @pytest.mark.allow_invalid_package
@@ -538,7 +509,7 @@ def test_a_member_needing_an_unsupported_zip_version_raises_malformed_package_er
     destination.write_bytes(bytes(raw))
 
     with pytest.raises(MalformedPackageError, match="not a readable package") as caught:
-        vsdxkit.VisioFile(str(destination))
+        VisioFile(str(destination))
     assert isinstance(caught.value.__cause__, NotImplementedError)
 
 
@@ -565,7 +536,7 @@ def test_a_member_whose_header_lies_before_the_archive_raises_malformed_package_
     destination.write_bytes(bytes(raw))
 
     with pytest.raises(MalformedPackageError, match="before the start of the archive"):
-        vsdxkit.VisioFile(str(destination))
+        VisioFile(str(destination))
 
 
 @pytest.mark.allow_invalid_package
@@ -585,7 +556,7 @@ def test_a_corrupt_compressed_stream_raises_malformed_package_error(vsdx_copy, t
     destination.write_bytes(bytes(raw))
 
     with pytest.raises(MalformedPackageError, match="cannot be read"):
-        vsdxkit.VisioFile(str(destination))
+        VisioFile(str(destination))
 
 
 @pytest.mark.allow_invalid_package
@@ -609,7 +580,7 @@ def test_a_corrupt_bzip2_member_raises_malformed_package_error(vsdx_copy, tmp_pa
     destination.write_bytes(bytes(raw))
 
     with pytest.raises(MalformedPackageError, match="cannot be read"):
-        vsdxkit.VisioFile(str(destination))
+        VisioFile(str(destination))
 
 
 @pytest.mark.allow_invalid_package
@@ -638,7 +609,7 @@ def test_a_corrupt_lzma_member_raises_malformed_package_error(vsdx_copy, tmp_pat
     destination.write_bytes(bytes(raw))
 
     with pytest.raises(MalformedPackageError, match="cannot be read"):
-        vsdxkit.VisioFile(str(destination))
+        VisioFile(str(destination))
 
 
 @pytest.mark.allow_invalid_package
@@ -664,7 +635,7 @@ def test_a_member_name_that_is_not_utf_8_raises_malformed_package_error(vsdx_cop
     destination.write_bytes(bytes(raw))
 
     with pytest.raises(MalformedPackageError, match="not a readable package"):
-        vsdxkit.VisioFile(str(destination))
+        VisioFile(str(destination))
 
 
 @pytest.mark.allow_invalid_package
@@ -679,7 +650,7 @@ def test_a_package_limit_is_not_reported_as_a_malformed_member(tmp_path):
         archive.writestr("visio/document.xml", b"x" * 4096)
 
     with pytest.raises(PackageLimitError) as caught:
-        vsdxkit.package.read_archive_members(str(package), vsdxkit.PackageLimits(max_member_size=16))
+        vsdxkit.package.read_archive_members(str(package), PackageLimits(max_member_size=16))
     assert caught.value.reason == "member_size"
 
 
@@ -701,14 +672,14 @@ def test_a_part_declaring_an_unknown_encoding_raises_malformed_package_error(bad
     both load paths go through (#365 review).
     """
     with pytest.raises(MalformedPackageError, match="encoding"):
-        vsdxkit.VisioFile(bad_encoding_package)
+        VisioFile(bad_encoding_package)
 
 
 def test_a_part_in_a_multibyte_encoding_the_parser_refuses_is_malformed():
     """Fails if parse_part lets expat's "multi-byte encodings are not supported" ValueError escape untranslated."""
     from vsdxkit import xmlio
 
-    with pytest.raises(vsdxkit.MalformedPackageError, match="encoding"):
+    with pytest.raises(MalformedPackageError, match="encoding"):
         xmlio.parse_part(REFUSED_MULTIBYTE_PART, "/visio/pages/page1.xml")
 
 
@@ -716,7 +687,7 @@ def test_a_part_in_a_multibyte_encoding_the_parser_refuses_is_malformed():
 def test_opening_a_package_with_a_refused_multibyte_page_encoding_raises_malformed_package_error(multibyte_page_package):
     """The public open path must translate this ValueError too, not just the direct `parse_part` call above."""
     with pytest.raises(MalformedPackageError, match="encoding"):
-        vsdxkit.VisioFile(multibyte_page_package)
+        VisioFile(multibyte_page_package)
 
 
 def test_memory_exhausted_while_reading_a_member_is_not_blamed_on_the_package(monkeypatch, tmp_path):
@@ -732,12 +703,12 @@ def test_memory_exhausted_while_reading_a_member_is_not_blamed_on_the_package(mo
 
 
 def test_malformed_shapesheet_number_raises_malformed_package_error(vsdx_copy):
-    """Fails if `shapes.to_float` reports a cell that is not a number with a plain `ValueError`.
+    """Fails if `xmlio.to_float` reports a cell that is not a number with a plain `ValueError`.
 
     The value comes from the document, not from the caller, so a cell that does
     not hold the number it has to is a malformed package.
     """
-    with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         shape = vis.pages[0].all_shapes[0]
         shape.set_cell_value("PinX", "not-a-number")
         with pytest.raises(MalformedPackageError, match="malformed numeric ShapeSheet value"):
@@ -755,7 +726,7 @@ def test_unknown_palette_name_raises_not_found_error(vsdx_copy):
     The name is a lookup in the palette, and a lookup that finds nothing is
     what `NotFoundError` is for. It is still a `ValueError`, as it was.
     """
-    with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         with pytest.raises(NotFoundError, match="palette has no shape named"):
             vis.create_shape(vis.pages[0], "PALETTE_NOT_A_SHAPE", 1.0, 1.0)
 
@@ -766,8 +737,8 @@ def test_deleting_a_shape_that_is_not_on_the_page_raises_not_found_error(vsdx_co
     The shape is looked up on this page and is not found there, which is a
     missing thing rather than a refused operation.
     """
-    with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
-        with vsdxkit.VisioFile(vsdx_copy("test2.vsdx")) as other:
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        with VisioFile(vsdx_copy("test2.vsdx")) as other:
             stranger = other.pages[0].all_shapes[0]
             with pytest.raises(NotFoundError, match="is not on page"):
                 vis.pages[0].delete_shape(stranger)
@@ -780,7 +751,7 @@ def test_deleting_a_shape_that_is_not_on_the_page_raises_not_found_error(vsdx_co
 
 def test_saving_a_drawing_under_a_vsdm_name_raises_invalid_operation(vsdx_copy, tmp_path):
     """#90 needs exactly this type for a package kind / suffix mismatch."""
-    with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         with pytest.raises(InvalidOperationError, match="macro-enabled"):
             vis.save_vsdx(str(tmp_path / "out.vsdm"))
 
@@ -791,7 +762,7 @@ def test_gluing_to_a_connection_point_a_shape_does_not_have_raises_invalid_opera
     Whether the index is usable depends on how many connection points that
     shape has, so the refusal is about the document's state, not the index.
     """
-    with vsdxkit.VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
+    with VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
         page = vis.pages[0]
         a, b = page.child_shapes[0], page.child_shapes[1]
         with pytest.raises(InvalidOperationError, match="connection point"):
@@ -808,7 +779,7 @@ def test_connecting_a_shape_with_no_pin_coordinates_raises_invalid_operation(vsd
     position a few lines further on already reported the same None that way.
     It stays a `ValueError`, so code catching the old type still catches it.
     """
-    with vsdxkit.VisioFile(vsdx_copy("test8_simple_connector.vsdx")) as vis:
+    with VisioFile(vsdx_copy("test8_simple_connector.vsdx")) as vis:
         page = vis.pages[0]
         source = page.find_shape_by_text("Shape A")
         target = page.find_shape_by_text("Shape B")
@@ -828,7 +799,7 @@ def test_a_page_with_no_container_raises_invalid_operation(vsdx_copy):
     A swimlane needs a container to go into. The call is valid on a page that
     has one, so this page's state is what refuses it.
     """
-    with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         with pytest.raises(InvalidOperationError, match="no CFF Container"):
             vis.pages[0].add_swimlane("Lane")
 
@@ -839,7 +810,7 @@ def test_appending_a_shape_to_a_non_group_raises_invalid_operation(vsdx_copy):
     Only a group can hold shapes, and whether the host is one is the document's
     state rather than something wrong with the shape passed in.
     """
-    with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         page = vis.pages[0]
         host, guest = page.child_shapes[0], page.child_shapes[1]
         with pytest.raises(InvalidOperationError, match="cannot contain shapes"):
@@ -852,7 +823,7 @@ def test_a_duplicate_geometry_row_index_raises_invalid_operation(vsdx_copy):
     The same index is fine in a section that does not use it yet, so the
     refusal comes from what the section already holds.
     """
-    with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         shape = vis.pages[0].all_shapes[0]
         geometry = shape.geometry
         assert geometry is not None
@@ -867,7 +838,7 @@ def test_saving_an_empty_package_raises_invalid_operation(vsdx_copy, tmp_path):
     Nothing is wrong with the destination path. The document has been emptied,
     and that state is why there is nothing to save.
     """
-    with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         for name in vis._package.names():
             vis._package.remove(name)
         with pytest.raises(InvalidOperationError, match="empty package"):
@@ -876,7 +847,7 @@ def test_saving_an_empty_package_raises_invalid_operation(vsdx_copy, tmp_path):
 
 def test_mutating_a_closed_document_still_raises_visio_file_not_open(vsdx_copy):
     """Reparenting `VisioFileNotOpen` must not change which operations raise it."""
-    with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         page = vis.pages[0]
     with pytest.raises(VisioFileNotOpen):
         page.name = "renamed"
@@ -884,15 +855,15 @@ def test_mutating_a_closed_document_still_raises_visio_file_not_open(vsdx_copy):
 
 def test_refusing_none_for_a_document_part_is_an_invalid_operation(vsdx_copy):
     """Fails if VisioFile's document-part setters refuse None with a plain ValueError."""
-    with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
-        with pytest.raises(vsdxkit.InvalidOperationError):
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        with pytest.raises(InvalidOperationError):
             vis.app_xml = None
 
 
 def test_refusing_none_for_a_page_part_is_an_invalid_operation(vsdx_copy):
     """Fails if Page.xml refuses None with a plain ValueError."""
-    with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
-        with pytest.raises(vsdxkit.InvalidOperationError):
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        with pytest.raises(InvalidOperationError):
             vis.pages[0].xml = None
 
 

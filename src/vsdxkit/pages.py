@@ -6,20 +6,20 @@ from enum import IntEnum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .vsdxfile import VisioFile
+    from vsdxkit.vsdxfile import VisioFile
 import xml.etree.ElementTree as ET
 
 import deprecation
 
 import vsdxkit
 from vsdxkit import namespace
-
-from .connectors import Connect
-from .errors import InvalidOperationError, MissingPartError, NotFoundError
-from .package import XmlPart
-from .partnames import relationship_target, relationships_part_name
-from .shapes import Shape, parent_of, to_float
-from .xmlio import require_element, xml_value
+from vsdxkit.connectors import Connect
+from vsdxkit.containers import Container
+from vsdxkit.errors import InvalidOperationError, MissingPartError, NotFoundError
+from vsdxkit.package import XmlPart
+from vsdxkit.partnames import relationship_target, relationships_part_name
+from vsdxkit.shapes import Shape, parent_of
+from vsdxkit.xmlio import require_element, to_float, xml_value
 
 # the two places a Connect record names a shape: the connector it leads from,
 # and the shape that connector is glued to
@@ -542,13 +542,11 @@ class Page:
         :rtype: Shape
         """
         self.vis._require_open("Page.connect_shapes()")
-        return vsdxkit.Connect.create(
-            page=self, from_shape=from_shape, to_shape=to_shape, route=route, from_cp=from_cp, to_cp=to_cp
-        )
+        return Connect.create(page=self, from_shape=from_shape, to_shape=to_shape, route=route, from_cp=from_cp, to_cp=to_cp)
 
-    def get_container(self) -> vsdxkit.Container | None:
+    def get_container(self) -> Container | None:
         """Return the page's CFF Container (swimlane diagram root), or None."""
-        return vsdxkit.Container.find(self)
+        return Container.find(self)
 
     def add_swimlane(self, label: str | None = None) -> Shape:
         """Add a swimlane to this page's CFF Container by cloning its top lane.
@@ -584,7 +582,7 @@ class Page:
         :returns: the connector Shape
         """
         self.vis._require_open("Page.reanchor_connector()")
-        return vsdxkit.Connect.retarget(
+        return Connect.retarget(
             page=self,
             connector_shape=connector_shape,
             from_shape=from_shape,

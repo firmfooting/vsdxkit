@@ -45,20 +45,6 @@ from types import MappingProxyType
 
 from helpers.opc import CONTENT_TYPES_PART
 
-__all__ = [
-    "CANONICALIZE_OPTIONS",
-    "CHANGE_KINDS",
-    "DRAWING_CONTENT_TYPE",
-    "MACRO_ENABLED_CONTENT_TYPE",
-    "MAIN_DOCUMENT_PART",
-    "PackageManifest",
-    "PartManifest",
-    "XmlDeclaration",
-    "assert_manifest_equal",
-    "manifest_differences",
-    "member_matches",
-]
-
 # Options passed to `ET.canonicalize` for every XML part. Each is a decision
 # about what counts as "the same part", so `test_canonicalisation_options_are_pinned`
 # asserts this exact mapping: changing it changes what the whole suite lets

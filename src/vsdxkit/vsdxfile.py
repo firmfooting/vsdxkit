@@ -7,7 +7,7 @@ import sys
 import xml.dom.minidom as minidom  # minidom used for prettyprint
 import xml.etree.ElementTree as ET
 from types import TracebackType
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 from xml.etree.ElementTree import Element
 
 if sys.version_info >= (3, 12):
@@ -15,14 +15,21 @@ if sys.version_info >= (3, 12):
 else:
     from typing_extensions import override
 
-import vsdxkit
-
-from . import relationships
-from .errors import InvalidOperationError, MalformedPackageError, MissingPartError, NotFoundError, VisioFileNotOpen
-from .logging_support import attach_debug_stream_handler, get_logger
-from .package import PackageLimitError as PackageLimitError
-from .package import PackageLimits, PackageStore, XmlPart, _checked
-from .partnames import (
+from vsdxkit import (
+    cont_types_namespace,
+    document_rels_namespace,
+    ext_prop_namespace,
+    namespace,
+    r_namespace,
+    relationships,
+    vt_namespace,
+)
+from vsdxkit.errors import InvalidOperationError, MalformedPackageError, MissingPartError, NotFoundError, VisioFileNotOpen
+from vsdxkit.logging_support import attach_debug_stream_handler, get_logger
+from vsdxkit.masters import MastersImportMixin
+from vsdxkit.package import PackageLimits, PackageStore, XmlPart, _checked
+from vsdxkit.pages import Page, PagePosition
+from vsdxkit.partnames import (
     APP_PART,
     CONTENT_TYPES_PART,
     DOCUMENT_PART,
@@ -31,36 +38,14 @@ from .partnames import (
     relationships_part_name,
     target_part_name,
 )
+from vsdxkit.shapes import Shape, _text_runs_of, _write_text, find_or_create_shapes_tag, substitute
+from vsdxkit.templating import JinjaTemplatingMixin
+from vsdxkit.xmlio import adopt_prefixes, register_namespaces, require_attribute, require_element, require_tree
 
-# TODO(#362): `PackageLimitError` is imported here only to keep
-# `vsdxkit.vsdxfile.PackageLimitError` working -- it moved to `vsdxkit.package`,
-# then to `vsdxkit.errors`, and `docs/classes.rst` had named the old path. It is
-# spelled as an explicit re-export (`X as X`) rather than under a `noqa: F401`,
-# because a `noqa` on the shared import line also hid imports that really were
-# unused. It wants a
-# deprecation shim, or removal once the old path is no longer published.
-# Tested by tests/test_package_limit_error_import.py.
+if TYPE_CHECKING:
+    from vsdxkit.media import Media
+
 logger = get_logger(__name__)
-
-from . import (  # noqa: E402
-    cont_types_namespace,
-    document_rels_namespace,
-    ext_prop_namespace,
-    namespace,
-    r_namespace,
-    vt_namespace,
-)
-from .masters import MastersImportMixin  # noqa: E402
-from .pages import Page, PagePosition  # noqa: E402
-from .shapes import Shape, find_or_create_shapes_tag  # noqa: E402
-from .templating import JinjaTemplatingMixin  # noqa: E402
-from .xmlio import (  # noqa: E402
-    adopt_prefixes,
-    register_namespaces,
-    require_attribute,
-    require_element,
-    require_tree,
-)
 
 register_namespaces()
 
@@ -173,7 +158,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         self._opened_filename: str
         # the bundled donor packages are expensive to parse, so one Media is
         # shared by every create/connect call on this document (issue #65)
-        self._media: vsdxkit.Media | None = None
+        self._media: Media | None = None
         self.open_vsdx_file()
 
     def __enter__(self) -> VisioFile:
@@ -1180,18 +1165,18 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         `Page.apply_text_context` is the route that resolves it.
         """
         for shape in shapes.iter(f"{namespace}Shape"):
-            prefix, text, suffix, trailing = vsdxkit.shapes._text_runs_of(shape.find(f"{namespace}Text"))
-            substituted = vsdxkit.shapes.substitute(text, context)
+            prefix, text, suffix, trailing = _text_runs_of(shape.find(f"{namespace}Text"))
+            substituted = substitute(text, context)
             # see Shape.apply_text_filter: visiting a shape that needs no
             # substitution is not free, so do not write one back unchanged
             if substituted != text:
-                vsdxkit.shapes._write_text(shape, substituted, prefix=prefix, suffix=suffix, trailing=trailing)
+                _write_text(shape, substituted, prefix=prefix, suffix=suffix, trailing=trailing)
 
     @staticmethod
     def get_shape_id(shape: Element) -> str:
         return shape.attrib["ID"]
 
-    def _shared_media(self) -> vsdxkit.Media:
+    def _shared_media(self) -> Media:
         """The bundled media/palette documents for this VisioFile.
 
         Created on first use and reused for every subsequent create/connect
@@ -1202,7 +1187,11 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         """
         self._require_open("building a shape or connector")
         if self._media is None:
-            self._media = vsdxkit.Media()
+            # vsdxkit.media opens bundled documents as VisioFiles, so importing it
+            # at module level would be a cycle
+            from vsdxkit.media import Media
+
+            self._media = Media()
         return self._media
 
     def create_shape(

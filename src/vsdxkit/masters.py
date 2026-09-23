@@ -11,18 +11,16 @@ import copy as copy_module
 import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING, cast
 
-from vsdxkit import namespace, r_namespace
-
-from . import relationships
-from .errors import MissingPartError
-from .logging_support import get_logger
-from .package import PackageStore
-from .pages import Page
-from .partnames import MASTERS_PART, folder_of, relationships_part_name, target_part_name
-from .shapes import Shape
+from vsdxkit import namespace, r_namespace, relationships
+from vsdxkit.errors import MissingPartError
+from vsdxkit.logging_support import get_logger
+from vsdxkit.package import PackageStore
+from vsdxkit.pages import Page
+from vsdxkit.partnames import MASTERS_PART, folder_of, relationships_part_name, target_part_name
+from vsdxkit.shapes import Shape
 
 if TYPE_CHECKING:
-    from .vsdxfile import VisioFile
+    from vsdxkit.vsdxfile import VisioFile
 
 logger = get_logger(__name__)
 

@@ -2,7 +2,7 @@ vsdxkit documentation
 =====================
 
 ``vsdxkit`` creates, edits and analyses Microsoft Visio ``.vsdx`` files with
-Python. The distribution is called ``vsdxkit``; code imports it as ``vsdx``.
+Python. The distribution and the import package are both called ``vsdxkit``.
 Microsoft Visio is not required at runtime.
 
 .. warning::
@@ -55,7 +55,7 @@ Visio document from an empty file. A macro-enabled ``.vsdm`` can be edited and
 saved, but only back to a ``.vsdm`` destination: the package kind is decided by
 the content type of ``visio/document.xml``, not by the filename, so saving one
 as ``.vsdx`` (or a plain drawing as ``.vsdm``) raises
-``vsdxkit.InvalidOperationError`` rather than writing a file Visio reports as
+``vsdxkit.errors.InvalidOperationError`` rather than writing a file Visio reports as
 corrupt. Stripping macros to convert a ``.vsdm`` into a ``.vsdx`` is not
 supported.
 

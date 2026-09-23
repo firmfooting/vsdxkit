@@ -10,7 +10,8 @@ import os
 
 import pytest
 
-from vsdxkit import Connect, VisioFile
+from vsdxkit.connectors import Connect
+from vsdxkit.vsdxfile import VisioFile
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 

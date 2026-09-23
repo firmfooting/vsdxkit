@@ -10,7 +10,7 @@ Find the container
 
 .. code-block:: python
 
-   from vsdxkit import VisioFile
+   from vsdxkit.vsdxfile import VisioFile
 
    with VisioFile("cross-functional-flow.vsdx") as vis:
        page = vis.pages[0]

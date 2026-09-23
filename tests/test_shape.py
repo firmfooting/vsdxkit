@@ -5,12 +5,9 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
-from vsdxkit import (
-    DataProperty,
-    Shape,
-    VisioFile,
-    namespace,
-)
+from vsdxkit import namespace
+from vsdxkit.shapes import DataProperty, Shape
+from vsdxkit.vsdxfile import VisioFile
 
 
 @pytest.mark.parametrize(

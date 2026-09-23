@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import copy
 import xml.etree.ElementTree as ET
+from typing import TYPE_CHECKING
 from xml.etree.ElementTree import Element
 
 import vsdxkit
+from vsdxkit.errors import InvalidOperationError, MalformedPackageError
+from vsdxkit.partnames import MASTERS_PART, folder_of, target_part_name
 
-from .errors import InvalidOperationError, MalformedPackageError
-from .partnames import MASTERS_PART, folder_of, target_part_name
-from .shapes import Shape
+if TYPE_CHECKING:
+    from vsdxkit.pages import Page
+    from vsdxkit.shapes import Shape
 
 namespace = "{http://schemas.microsoft.com/office/visio/2012/main}"
 
@@ -29,7 +32,7 @@ class Connect:
             raise ValueError("connector route may specify only one routing behaviour")
         return "point" in route_parts, routing_parts[0] if routing_parts else None
 
-    def __init__(self, xml: Element | None = None, page: vsdxkit.Page | None = None):
+    def __init__(self, xml: Element | None = None, page: Page | None = None):
         if page is None:
             raise ValueError("Connect requires the page containing the connection")
         if xml is None:
@@ -71,7 +74,7 @@ class Connect:
 
     @staticmethod
     def create(
-        page: vsdxkit.Page | None = None,
+        page: Page | None = None,
         from_shape: Shape | None = None,
         to_shape: Shape | None = None,
         route: str = "dynamic",
@@ -301,7 +304,7 @@ class Connect:
 
     @staticmethod
     def retarget(
-        page: vsdxkit.Page,
+        page: Page,
         connector_shape: Shape,
         from_shape: Shape | None = None,
         to_shape: Shape | None = None,

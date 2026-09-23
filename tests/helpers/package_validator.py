@@ -45,8 +45,6 @@ from helpers.opc import (
     PAGES_RELS_PART,
 )
 
-__all__ = ["Defect", "describe_defects", "validate_package"]
-
 
 @dataclass(frozen=True)
 class Defect:
