@@ -298,3 +298,25 @@ def test_none_assigned_to_rels_after_the_view_wrote_bytes_over_them_removes_the_
         vis.save_vsdx(target)
     with zipfile.ZipFile(target) as archive:
         assert member not in archive.namelist()
+
+
+def test_a_tree_assigned_after_the_view_deleted_a_pages_part_is_saved(vsdx_copy, tmp_path):
+    """Fails if `Page.xml` keeps out when the page's part is gone rather than someone else's.
+
+    Deleting the member through `zip_file_contents` leaves the page in the
+    document, and pages.xml, its relationship and the content-type override
+    still name the part. A tree the caller assigns afterwards must bring the
+    part back, or the saved package names a part it does not hold.
+    """
+    target = str(tmp_path / "saved.vsdx")
+    with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        page = vis.pages[0]
+        replacement = parse_part(serialise_part(page.xml))
+        root = replacement.getroot()
+        assert root is not None
+        root.set("VsdxkitMarker", "1")
+        del vis.zip_file_contents[page.filename]
+        page.xml = replacement
+        vis.save_vsdx(target)
+    with vsdxkit.VisioFile(target) as saved:
+        assert saved.pages[0].xml.getroot().get("VsdxkitMarker") == "1"

@@ -247,15 +247,19 @@ class Page:
         name, and the next page takes it. So this asks whether the part at the
         page's name is this page's own tree, not merely whether there is one.
 
-        A page's part can also be plain bytes: `zip_file_contents` writes
-        bytes that do not parse that way. No page holds such a part, so it is
-        this page's own exactly when this page is still one of the document's,
-        and a tree assigned afterwards must replace those bytes.
+        A page's part can also be plain bytes, which is how
+        `zip_file_contents` writes bytes that do not parse, or be gone, deleted
+        through that mapping. No page holds such a part, so it is this page's
+        own exactly when this page is still one of the document's -- a removed
+        page is not -- and a tree assigned afterwards must replace the bytes
+        or bring the part back, since pages.xml still names it.
         """
         if self._holds(self.filename, self._xml):
             return True
         held = self.vis._package.part(self.vis._part_name(self.filename))
-        return isinstance(held, BytesPart) and any(page is self for page in (*self.vis.pages, *self.vis.master_pages))
+        if held is not None and not isinstance(held, BytesPart):
+            return False
+        return any(page is self for page in (*self.vis.pages, *self.vis.master_pages))
 
     def _rels_attached(self) -> bool:
         """Whether an assignment to `rels_xml` may write this page's relationship part.
