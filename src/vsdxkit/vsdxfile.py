@@ -186,6 +186,8 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         # open_vsdx_file() below; declared here so an attribute assigned
         # outside __init__ still has a home for pyrefly to check it against
         self._package: PackageStore
+        # `filename` as the store was opened from it; see save_vsdx
+        self._opened_filename: str
         self.zip_file_contents: MutableMapping[str, io.BytesIO]
         # the bundled donor packages are expensive to parse, so one Media is
         # shared by every create/connect call on this document (issue #65)
@@ -242,6 +244,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         way, until #91 retires it.
         """
         self._package = PackageStore.open(self.filename, limits=self.limits)
+        self._opened_filename = self.filename
         self.zip_file_contents = ZipFileContentsView(self._package, self.directory)
 
     @override
@@ -1496,7 +1499,8 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         :param new_filename: path to save vsdx file. A `.vsdx` or `.vsdm`
             extension must match the package's own kind; any other name gets the
             matching extension appended. Omit it to save over the source file,
-            which is checked the same way but never renamed.
+            or over `filename` if that has been reassigned since the document
+            was opened; that name is checked the same way but never renamed.
         :type new_filename: str
         :raises ValueError: if the extension contradicts the package kind
 
@@ -1518,5 +1522,10 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         # are the store's own -- so saving is writing it, once, member by member.
         # An in-place save writes back over the absolute source `PackageStore`
         # captured at open, not over `self.filename`, which may be relative and
-        # resolve against a different working directory by the time this runs
-        self._package.save(target if new_filename is not None else None)
+        # resolve against a different working directory by the time this runs.
+        # The exception is a `filename` the caller has reassigned since open:
+        # a plain save went to `self.filename` before the store existed, so a
+        # new one is where the caller means the save to go. It goes there as an
+        # explicit target, which leaves the store's source where it was.
+        redirected = new_filename is None and self.filename != self._opened_filename
+        self._package.save(target if new_filename is not None or redirected else None)

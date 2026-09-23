@@ -79,6 +79,31 @@ def test_save_as_then_save_writes_the_original(vsdx_copy, tmp_path):
         assert vis.pages[0].find_shape_by_text("In place") is None
 
 
+def test_reassigning_filename_redirects_an_in_place_save(vsdx_copy, tmp_path):
+    """Fails if an in-place save writes to the path the store was opened from when `vis.filename` has changed since.
+
+    Before the store, `save_vsdx()` with no argument wrote to `self.filename`,
+    so assigning it was how a caller pointed the next plain save somewhere
+    else. The store remembers the absolute path it was opened from, which is
+    what an unchanged `filename` means; a changed one is still the caller's
+    destination. The source must be left as it was.
+    """
+    source = vsdx_copy("test8_simple_connector.vsdx")
+    with open(source, "rb") as handle:
+        original = handle.read()
+    other = str(tmp_path / "other.vsdx")
+    with vsdxkit.VisioFile(source) as vis:
+        shape = vis.pages[0].find_shape_by_text("Shape A")
+        assert shape is not None
+        shape.text = "Redirected"
+        vis.filename = other
+        vis.save_vsdx()
+    with vsdxkit.VisioFile(other) as vis:
+        assert vis.pages[0].find_shape_by_text("Redirected") is not None
+    with open(source, "rb") as handle:
+        assert handle.read() == original
+
+
 def test_a_rendered_template_reaches_disk(vsdx_copy, tmp_path):
     """Jinja replaces each page's tree wholesale; nothing rewrites it at save any more."""
     source = vsdx_copy("test_jinja.vsdx")
