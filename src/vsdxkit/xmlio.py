@@ -6,6 +6,7 @@ import io
 import re
 import threading
 import weakref
+import xml.dom.minidom as minidom
 import xml.etree.ElementTree as ET
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -83,6 +84,18 @@ def register_namespaces() -> None:
         for uri, prefix in _GLOBAL_PREFIXES.items():
             ET.register_namespace(prefix, uri)
         _registered = True
+
+
+def pretty_print_element(xml: ET.Element | ET.ElementTree[ET.Element]) -> str:
+    """An element, or a tree's root, as indented XML for reading.
+
+    Registers the prefixes first, so the output spells namespaces the way Visio
+    does whichever module the caller happened to import before this one.
+    """
+    register_namespaces()
+    if isinstance(xml, ET.ElementTree):
+        xml = require_element(xml.getroot(), "element")
+    return minidom.parseString(ET.tostring(xml)).toprettyxml()
 
 
 def _namespaces_in(root: ET.Element) -> set[str]:

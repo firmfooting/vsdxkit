@@ -11,12 +11,11 @@ if sys.version_info >= (3, 12):
 else:
     from typing_extensions import override
 
-import vsdxkit
 from vsdxkit.document_part import DocumentPart
 from vsdxkit.errors import InvalidOperationError
 from vsdxkit.inheritance import InheritedRow
 from vsdxkit.logging_support import get_logger
-from vsdxkit.xmlio import make_cell_element, to_float, xml_value
+from vsdxkit.xmlio import make_cell_element, pretty_print_element, to_float, xml_value
 
 if TYPE_CHECKING:
     from vsdxkit.shapes import Shape
@@ -168,7 +167,7 @@ class Geometry(DocumentPart):
 
     def __repr__(self):
         s = f"Geometry: {self.cells} {[(r.row_type, r.index, r.x, r.y) for r in self.rows.values()]}"
-        s += f"\nGeometry: {vsdxkit.pretty_print_element(self.xml)}"
+        s += f"\nGeometry: {pretty_print_element(self.xml)}"
         return s
 
 

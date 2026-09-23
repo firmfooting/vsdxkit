@@ -9,6 +9,8 @@ dave-howard/vsdx#90 and #35.
 import io
 import os
 import re
+import subprocess
+import sys
 import zipfile
 from xml.etree import ElementTree
 
@@ -388,3 +390,19 @@ def test_no_operation_leaves_a_generated_prefix_in_the_package(filename, mutate,
         written = {name for name in vis._package.names() if before.get(name) != vis._package.read_bytes(name)}
         assert written, "the operation wrote no part into the package, so it cannot fail this check"
         assert _in_memory_offenders(vis) == {}
+
+
+def test_pretty_printing_spells_visio_prefixes_without_a_document_loaded():
+    """Fails if `xmlio.pretty_print_element` depends on some other module having registered the prefixes.
+
+    Registration is process-wide, so the check runs in a fresh interpreter that
+    imports `xmlio` and nothing that opens a document.
+    """
+    script = (
+        "import xml.etree.ElementTree as ET\n"
+        "from vsdxkit import namespace, xmlio\n"
+        "print(xmlio.pretty_print_element(ET.Element(namespace + 'Shape')))\n"
+    )
+    result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, check=True)
+    assert "ns0" not in result.stdout
+    assert 'xmlns="http://schemas.microsoft.com/office/visio/2012/main"' in result.stdout

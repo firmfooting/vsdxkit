@@ -4,7 +4,6 @@ import copy
 import posixpath
 import re
 import sys
-import xml.dom.minidom as minidom  # minidom used for prettyprint
 import xml.etree.ElementTree as ET
 from types import TracebackType
 from typing import TYPE_CHECKING, NamedTuple
@@ -23,6 +22,7 @@ from vsdxkit import (
     r_namespace,
     relationships,
     vt_namespace,
+    xmlio,
 )
 from vsdxkit.errors import InvalidOperationError, MalformedPackageError, MissingPartError, NotFoundError, VisioFileNotOpen
 from vsdxkit.logging_support import attach_debug_stream_handler, get_logger
@@ -200,9 +200,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
 
     @staticmethod
     def pretty_print_element(xml: Element | ET.ElementTree[ET.Element]) -> str:
-        if isinstance(xml, ET.ElementTree):
-            return minidom.parseString(ET.tostring(require_element(xml.getroot(), "element"))).toprettyxml()
-        return minidom.parseString(ET.tostring(xml)).toprettyxml()
+        return xmlio.pretty_print_element(xml)
 
     def _check_relationship_target(self, name: str, subject: str, target: str) -> None:
         """Refuse a relationship whose `target`, joined into `name`, names no part.
