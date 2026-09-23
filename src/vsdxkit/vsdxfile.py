@@ -1,18 +1,16 @@
 from __future__ import annotations
 
-import contextlib
 import copy
 import io
 import os
 import posixpath
 import re
-import shutil
 import sys
-import tempfile
 import xml.dom.minidom as minidom  # minidom used for prettyprint
 import xml.etree.ElementTree as ET
-import zipfile
+from collections.abc import MutableMapping
 from types import TracebackType
+from typing import NamedTuple
 from xml.etree.ElementTree import Element
 
 if sys.version_info >= (3, 12):
@@ -25,8 +23,18 @@ import vsdxkit
 from . import relationships
 from .errors import InvalidOperationError, MissingPartError, NotFoundError, VisioFileNotOpen
 from .logging_support import attach_debug_stream_handler, get_logger
-from .package import PackageLimits, read_archive_members
+from .package import PackageLimitError as PackageLimitError
+from .package import PackageLimits, PackageStore, XmlPart
+from .zip_contents import ZipFileContentsView, part_name_for_path
 
+# TODO(#362): `PackageLimitError` is imported here only to keep
+# `vsdxkit.vsdxfile.PackageLimitError` working -- it moved to `vsdxkit.package`,
+# then to `vsdxkit.errors`, and `docs/classes.rst` had named the old path. It is
+# spelled as an explicit re-export (`X as X`) rather than under a `noqa: F401`,
+# because a `noqa` on the shared import line also hid imports that really were
+# unused. It wants a
+# deprecation shim, or removal once the old path is no longer published.
+# Tested by tests/test_package_limit_error_import.py.
 logger = get_logger(__name__)
 
 from . import (  # noqa: E402
@@ -41,16 +49,19 @@ from .masters import MastersImportMixin  # noqa: E402
 from .pages import Page, PagePosition  # noqa: E402
 from .shapes import Shape, find_or_create_shapes_tag  # noqa: E402
 from .templating import JinjaTemplatingMixin  # noqa: E402
+
+# `file_to_xml` is not called directly in this module any more -- every read
+# here goes through `_read_part_xml`/`_require_part_xml`, which promote the
+# store's own tree instead of parsing a private copy. It stays importable as
+# `vsdxkit.vsdxfile.file_to_xml`: `Page.set_name` imports it from here to avoid
+# a circular import, and tests/test_visiofile.py imports it the same way.
 from .xmlio import (  # noqa: E402
     adopt_prefixes,
-    file_to_xml,
+    file_to_xml,  # noqa: F401
     register_namespaces,
     require_attribute,
     require_element,
-    require_root,
     require_tree,
-    require_xml_tree,
-    xml_to_file,
 )
 
 register_namespaces()
@@ -74,6 +85,17 @@ def _normalise_page_path(path: str) -> str:
 MACRO_ENABLED_CONTENT_TYPE = "application/vnd.ms-visio.drawing.macroEnabled.main+xml"
 DRAWING_CONTENT_TYPE = "application/vnd.ms-visio.drawing.main+xml"
 _SUFFIX_BY_CONTENT_TYPE = {MACRO_ENABLED_CONTENT_TYPE: ".vsdm", DRAWING_CONTENT_TYPE: ".vsdx"}
+
+# OPC part names for the document-level parts `VisioFile` exposes as
+# properties. Fixed, unlike a page's part name, because there is only ever one
+# of each in a package.
+_PAGES_PART = "/visio/pages/pages.xml"
+_PAGES_RELS_PART = "/visio/pages/_rels/pages.xml.rels"
+_CONTENT_TYPES_PART = "/[Content_Types].xml"
+_APP_PART = "/docProps/app.xml"
+_DOCUMENT_PART = "/visio/document.xml"
+_DOCUMENT_RELS_PART = "/visio/_rels/document.xml.rels"
+_MASTERS_PART = "/visio/masters/masters.xml"
 
 # A ShapeSheet formula addresses another shape as `Sheet.5!Cell` or `Sheet5!Cell`.
 # Visio writes the dotted form in inherited cells and the undotted form in the
@@ -149,18 +171,21 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         self.limits = limits if limits is not None else PackageLimits()
 
         self.directory = os.path.abspath(filename)[:-5]
-        self.pages_xml: ET.ElementTree[ET.Element] | None = None
-        self.pages_xml_rels: ET.ElementTree[ET.Element] | None = None
-        self.content_types_xml: ET.ElementTree[ET.Element] | None = None
-        self.app_xml: ET.ElementTree[ET.Element] | None = None
-        self.document_xml: ET.ElementTree[ET.Element] | None = None
-        self.document_xml_rels: ET.ElementTree[ET.Element] | None = None
+        # pages_xml, pages_xml_rels, content_types_xml, app_xml, document_xml,
+        # document_xml_rels and masters_xml are store-backed properties, defined
+        # below -- there is nothing to initialise here, since the store itself
+        # is the state.
         self.pages: list[Page] = []  # populated by open_vsdx_file()
-        self.masters_xml: ET.Element | None = None  # <Masters> root element
         self.master_index: dict[str, Page] = {}  # master page info by item name e.g. 'Dynamic Connector'
         self.master_pages: list[Page] = []  # populated by open_vsdx_file()
         self.file_open = False
-        self.zip_file_contents: dict[str, io.BytesIO] = {}  # file contents by file_path
+        # populated by _load_zip_file_contents_to_memory(), called from
+        # open_vsdx_file() below; declared here so an attribute assigned
+        # outside __init__ still has a home for pyrefly to check it against
+        self._package: PackageStore
+        # `filename` as the store was opened from it; see save_vsdx
+        self._opened_filename: str
+        self.zip_file_contents: MutableMapping[str, io.BytesIO]
         # the bundled donor packages are expensive to parse, so one Media is
         # shared by every create/connect call on this document (issue #65)
         self._media: vsdxkit.Media | None = None
@@ -210,37 +235,140 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         return minidom.parseString(ET.tostring(xml)).toprettyxml()
 
     def _load_zip_file_contents_to_memory(self) -> None:
-        """Read the package into memory, keyed by `self.directory` + member name.
+        """Open the package as a `PackageStore`, the one copy of it held from now on.
 
-        That key is a path no file was ever at; `vsdxkit.package` says why it
-        is going away. #91 is what retires it.
+        `zip_file_contents` survives as a view over the store, keyed the old
+        way, until #91 retires it.
         """
-        for name, content in read_archive_members(self.filename, self.limits):
-            self.zip_file_contents[f"{self.directory}/{name}"] = io.BytesIO(content)
+        self._package = PackageStore.open(self.filename, limits=self.limits)
+        self._opened_filename = self.filename
+        self.zip_file_contents = ZipFileContentsView(self._package, self.directory)
 
-    def _save_zip_file_contents_to_disk(self, save_filename: str) -> None:
-        """Atomically save the in-memory package to a .vsdx file."""
-        target = os.path.abspath(save_filename)
-        target_dir = os.path.dirname(target)
-        os.makedirs(target_dir, exist_ok=True)
-        fd, temporary = tempfile.mkstemp(prefix=f".{os.path.basename(target)}.", suffix=".tmp", dir=target_dir)
-        os.close(fd)
-        try:
-            with zipfile.ZipFile(temporary, "w") as zipf:
-                for file_path, file_content in self.zip_file_contents.items():
-                    file_path_in_zip = file_path.replace(self.directory + "/", "")
-                    content = file_content.getvalue()
-                    if file_path_in_zip.endswith(".xml") or file_path_in_zip.endswith(".rels"):
-                        zipf.writestr(file_path_in_zip, content.decode("utf-8"))
-                    else:
-                        zipf.writestr(file_path_in_zip, content)
-            mode_source = target if os.path.exists(target) else os.path.abspath(self.filename)
-            if os.path.exists(mode_source):
-                shutil.copymode(mode_source, temporary)
-            os.replace(temporary, target)
-        finally:
-            with contextlib.suppress(FileNotFoundError):
-                os.unlink(temporary)
+    @override
+    def _part_name(self, path: str) -> str:
+        """The OPC part name for one of this document's `{directory}/...` paths."""
+        name = part_name_for_path(self.directory, path)
+        if name is None:
+            raise ValueError(f"{path!r} is not a part of this document")
+        return name
+
+    @override
+    def _read_part_xml(self, path: str) -> ET.ElementTree[ET.Element] | None:
+        """The store's own tree for a part, promoting it -- never a private copy."""
+        return self._package.read_xml(self._part_name(path))
+
+    def _require_part_xml(self, path: str, description: str) -> ET.ElementTree[ET.Element]:
+        """The store's own tree for a required part, or a MissingPartError naming it."""
+        tree = self._read_part_xml(path)
+        if tree is None:
+            raise MissingPartError(f"expected XML part not found: {description} ({path})")
+        return tree
+
+    def _set_part_xml(self, name: str, tree: ET.ElementTree[ET.Element] | None) -> None:
+        """Make `tree` the part called `name`, or take the part out for None.
+
+        Handing back the tree the store already holds is not a change, and
+        writing it would throw away the baseline that lets an untouched part
+        save as the bytes it arrived as.
+        """
+        held = self._package.part(name)
+        if tree is None:
+            if held is not None:
+                self._package.remove(name)
+            return
+        if isinstance(held, XmlPart) and held.tree is tree:
+            return
+        # a replacement keeps the part's arrival baseline, so one that means
+        # what the part already meant still saves as the bytes it arrived as
+        self._package.replace_tree(name, tree)
+
+    def _set_document_part_xml(self, attribute: str, name: str, tree: ET.ElementTree[ET.Element] | None) -> None:
+        """`_set_part_xml` for a part the document itself is wired to, which None may not remove.
+
+        `app.xml`, `document.xml`, `pages.xml` and the rest are each named by a
+        relationship and described by a content-type override. Taking one out
+        of the store leaves both behind, and the saved package promises a part
+        it does not hold. A page's rels part is different -- nothing points at
+        it -- so `Page.rels_xml = None` still removes it, through
+        `_set_part_xml` directly.
+        """
+        if tree is None:
+            raise ValueError(
+                f"VisioFile.{attribute} cannot remove {name} through this property: this "
+                f"property does not also remove the relationship and content-type override "
+                f"that name a document part, so setting it to None would leave the package "
+                f"inconsistent"
+            )
+        self._set_part_xml(name, tree)
+
+    @property
+    def pages_xml(self) -> ET.ElementTree[ET.Element] | None:
+        return self._package.read_xml(_PAGES_PART)
+
+    @pages_xml.setter
+    def pages_xml(self, tree: ET.ElementTree[ET.Element] | None) -> None:
+        self._set_document_part_xml("pages_xml", _PAGES_PART, tree)
+
+    @property
+    def pages_xml_rels(self) -> ET.ElementTree[ET.Element] | None:
+        return self._package.read_xml(_PAGES_RELS_PART)
+
+    @pages_xml_rels.setter
+    def pages_xml_rels(self, tree: ET.ElementTree[ET.Element] | None) -> None:
+        self._set_document_part_xml("pages_xml_rels", _PAGES_RELS_PART, tree)
+
+    @property
+    def content_types_xml(self) -> ET.ElementTree[ET.Element] | None:
+        return self._package.read_xml(_CONTENT_TYPES_PART)
+
+    @content_types_xml.setter
+    def content_types_xml(self, tree: ET.ElementTree[ET.Element] | None) -> None:
+        self._set_document_part_xml("content_types_xml", _CONTENT_TYPES_PART, tree)
+
+    @property
+    def app_xml(self) -> ET.ElementTree[ET.Element] | None:
+        return self._package.read_xml(_APP_PART)
+
+    @app_xml.setter
+    def app_xml(self, tree: ET.ElementTree[ET.Element] | None) -> None:
+        self._set_document_part_xml("app_xml", _APP_PART, tree)
+
+    @property
+    def document_xml(self) -> ET.ElementTree[ET.Element] | None:
+        return self._package.read_xml(_DOCUMENT_PART)
+
+    @document_xml.setter
+    def document_xml(self, tree: ET.ElementTree[ET.Element] | None) -> None:
+        self._set_document_part_xml("document_xml", _DOCUMENT_PART, tree)
+
+    @property
+    def document_xml_rels(self) -> ET.ElementTree[ET.Element] | None:
+        return self._package.read_xml(_DOCUMENT_RELS_PART)
+
+    @document_xml_rels.setter
+    def document_xml_rels(self, tree: ET.ElementTree[ET.Element] | None) -> None:
+        self._set_document_part_xml("document_xml_rels", _DOCUMENT_RELS_PART, tree)
+
+    @property
+    @override
+    def masters_xml(self) -> ET.Element | None:
+        """The `<Masters>` root, read from the store so it can never be a stale copy."""
+        tree = self._package.read_xml(_MASTERS_PART)
+        return None if tree is None else tree.getroot()
+
+    @masters_xml.setter
+    @override
+    def masters_xml(self, root: ET.Element | None) -> None:
+        if root is None:
+            self._set_document_part_xml("masters_xml", _MASTERS_PART, None)  # raises: see there
+            return
+        # asked of the part as held rather than through `read_xml`: whether the
+        # root is already the part's own needs no parse, and promoting the part
+        # here would make assigning over bytes that are not XML raise
+        held = self._package.part(_MASTERS_PART)
+        if isinstance(held, XmlPart) and held.tree.getroot() is root:
+            return
+        self._set_document_part_xml("masters_xml", _MASTERS_PART, ET.ElementTree(root))
 
     def open_vsdx_file(self) -> None:
         self._load_zip_file_contents_to_memory()
@@ -251,9 +379,8 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         self.file_open = True
 
     def _pages_filename(self):
-        page_dir = f"{self.directory}/visio/pages/"
-        pages_filename = page_dir + "pages.xml"  # pages.xml contains Page name, width, height, mapped to Id
-        return pages_filename
+        # pages.xml contains Page name, width, height, mapped to Id
+        return f"{self.directory}{_PAGES_PART}"
 
     @property
     @override
@@ -265,10 +392,8 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         page_dir = f"{self.directory}/visio/pages/"
 
         rel_filename = rel_dir + "pages.xml.rels"
-        rels = require_root(rel_filename, self.zip_file_contents, "pages.xml.rels")
-        self.pages_xml_rels = file_to_xml(
-            rel_filename, self.zip_file_contents
-        )  # store pages.xml.rels so pages can be added or removed
+        pages_xml_rels = self._require_part_xml(rel_filename, "pages.xml.rels")
+        rels = require_element(pages_xml_rels.getroot(), "pages.xml.rels")
         if self.debug:
             logger.debug("Relationships(%s)\n%s", rel_filename, VisioFile.pretty_print_element(rels))
         relid_page_dict = {}
@@ -279,8 +404,8 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             relid_page_dict[rel_id] = page_file
 
         pages_filename = self._pages_filename()  # pages contains Page name, width, height, mapped to Id
-        pages = require_root(pages_filename, self.zip_file_contents, "pages.xml")
-        self.pages_xml = file_to_xml(pages_filename, self.zip_file_contents)  # store xml so pages can be removed
+        pages_xml = self._require_part_xml(pages_filename, "pages.xml")
+        pages = require_element(pages_xml.getroot(), "pages.xml")
         if self.debug:
             logger.debug("Pages(%s)\n%s", pages_filename, VisioFile.pretty_print_element(pages))
 
@@ -296,36 +421,42 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             page_path = page_dir + page_file
             page_id = page.attrib.get("ID", "")
 
-            new_page = Page(
-                require_xml_tree(page_path, self.zip_file_contents, "page part"), page_path, page_name, page_id, rel_id, self
-            )
+            new_page = Page(self._require_part_xml(page_path, "page part"), page_path, page_name, page_id, rel_id, self)
             # look for visio/pages/_rels/page3.xml.rels
             page_rels_path = _page_relationship_path(rel_dir, page_path)
 
             if page_rels_path in self.zip_file_contents:
                 new_page.rels_xml_filename = page_rels_path
-                new_page.rels_xml = file_to_xml(page_rels_path, self.zip_file_contents)
+                # past the setter: the document is not open yet, which the
+                # setter refuses, and the tree is the store's own, so there is
+                # nothing for it to write through
+                new_page._rels_xml = self._read_part_xml(page_rels_path)
             self.pages.append(new_page)
 
             if self.debug:
                 logger.debug("Page(%s)\n%s", new_page.filename, VisioFile.pretty_print_element(new_page.xml))
 
-        self.content_types_xml = file_to_xml(f"{self.directory}/[Content_Types].xml", self.zip_file_contents)
+        # content_types_xml, app_xml, document_xml and document_xml_rels are
+        # store-backed properties, but promoted here rather than left to the
+        # first later access: a part promoted at load is an `XmlPart` from the
+        # moment the document opens, which is what lets a caller compare the
+        # store's own identity for a part it has not yet touched (app.xml, in
+        # particular, may simply be missing, and promoting a missing part is
+        # just None), and a part that is not well-formed XML fails the open
+        # itself, with a `PartParseError`, rather than the first access to it.
+        self._read_part_xml(f"{self.directory}/[Content_Types].xml")
+        self._read_part_xml(f"{self.directory}/docProps/app.xml")
+        self._read_part_xml(f"{self.directory}/visio/document.xml")
+        self._read_part_xml(f"{self.directory}/visio/_rels/document.xml.rels")
         # TODO: add correctness cross-check. Or maybe the other way round, start from [Content_Types].xml
         #       to get page_dir and other paths...
-
-        self.app_xml = file_to_xml(
-            f"{self.directory}/docProps/app.xml", self.zip_file_contents
-        )  # note: files in docProps may be missing
-        self.document_xml = file_to_xml(f"{self.directory}/visio/document.xml", self.zip_file_contents)
-        self.document_xml_rels = file_to_xml(f"{self.directory}/visio/_rels/document.xml.rels", self.zip_file_contents)
 
     @override
     def load_master_pages(self) -> None:
         # get data from /visio/masters folder
         master_rel_path = f"{self.directory}/visio/masters/_rels/masters.xml.rels"
 
-        master_rels_data = file_to_xml(master_rel_path, self.zip_file_contents)
+        master_rels_data = self._read_part_xml(master_rel_path)
         # a document with no masters has no rels part: iterate an empty list
         master_rels: list[Element] = list(master_rels_data.getroot()) if master_rels_data is not None else []
         if self.debug:
@@ -342,12 +473,8 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             target = require_attribute(rel, "Target", subject)
             relid_to_path[require_attribute(rel, "Id", subject)] = f"{self.directory}/visio/masters/{target}"
 
-        # load masters.xml file
-        masters_path = f"{self.directory}/visio/masters/masters.xml"
-        masters_xml = file_to_xml(
-            masters_path, self.zip_file_contents
-        )  # contains more info about master page (i.e. Name, Icon)
-        self.masters_xml = masters_xml.getroot() if masters_xml is not None else None
+        # masters_xml is a store-backed property (contains more info about
+        # master page, i.e. Name, Icon); reading it here promotes the part.
 
         # for each master page, create the Page object
         for master in self.masters_xml if self.masters_xml is not None else []:
@@ -364,7 +491,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
                 raise MissingPartError(f"no master part found for relationship {rel_id}")
 
             master_page = Page(
-                require_xml_tree(master_path, self.zip_file_contents, "master part"),
+                self._require_part_xml(master_path, "master part"),
                 master_path,
                 master_name,
                 master_id,
@@ -448,10 +575,10 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
 
                 # remove the page's own rels part if one exists
                 if page.rels_xml_filename and page.rels_xml_filename in self.zip_file_contents:
-                    self.zip_file_contents.pop(page.rels_xml_filename)
+                    self._package.remove(self._part_name(page.rels_xml_filename))
 
                 # remove page<index>.xml file
-                self.zip_file_contents.pop(self.pages[index].filename)
+                self._package.remove(self._part_name(self.pages[index].filename))
                 del self.pages[index]
 
     def remove_page_by_name(self, page_name: str) -> None:
@@ -499,13 +626,23 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         could target the same part. Members currently in the package and
         relationships still declared in pages.xml.rels are both treated as
         taken, so the chosen name is unused by either.
+
+        A name is taken when either ``pageN.xml`` or its rels part
+        ``_rels/pageN.xml.rels`` exists. An orphan rels part with no page part
+        of its own is otherwise invisible to this check -- it sits at a
+        different member name than the one being tested -- so a new page
+        reusing ``pageN.xml`` would find the store already holding a part at
+        its rels name. `Page._rels_attached()` treats that as not the page's
+        own tree and refuses to write over it, so the new page's `rels_xml`
+        assignment becomes a silent no-op.
         """
         page_dir = f"{self.directory}/visio/pages/"
+        rel_dir = f"{self.directory}/visio/pages/_rels/"
         taken = set(self.zip_file_contents)
         rels_root = self._part_root(self.pages_xml_rels, "pages.xml.rels")
         taken.update(f"{page_dir}{rel.attrib['Target']}" for rel in rels_root)
         counter = 1
-        while f"{page_dir}page{counter}.xml" in taken:
+        while f"{page_dir}page{counter}.xml" in taken or f"{rel_dir}page{counter}.xml.rels" in taken:
             counter += 1
         return f"page{counter}.xml"
 
@@ -576,6 +713,25 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         root = self._part_root(self.app_xml, "docProps/app.xml")
         return require_element(root.find(f"{ext_prop_namespace}TitlesOfParts"), "app.xml TitlesOfParts")
 
+    class _Section(NamedTuple):
+        """One section of TitlesOfParts.
+
+        `label` is what Visio writes in English, and what we write when the
+        section has to be created. It cannot be the only handle: HeadingPairs
+        names are display strings chosen by the producer and Office localises
+        them -- a German Excel writes `Arbeitsblätter` for `Worksheets` -- so a
+        German file says `Seiten` and matching "Pages" finds nothing.
+
+        `is_pages` says which section this is in terms the file cannot
+        translate, which is what `_resolve_section` falls back on.
+        """
+
+        label: str
+        is_pages: bool
+
+    PAGES = _Section("Pages", is_pages=True)
+    MASTERS = _Section("Masters", is_pages=False)
+
     def _heading_pairs_list(self) -> list[tuple[str, Element]]:
         """Each section HeadingPairs names, as (name, the element holding its count).
 
@@ -600,7 +756,71 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
                 pairs.append((name.text or "", count))
         return pairs
 
-    def _titles_of_parts_section(self, section: str) -> tuple[Element, int, int]:
+    def _resolve_section(self, section: _Section, page_titles: set[str]) -> int | None:
+        """Which HeadingPairs entry is `section`, or None if the file has no such entry.
+
+        By name first, so a document that writes its sections in an unusual
+        order is still read correctly.
+
+        When the name misses, position is not a safe answer. A document naming
+        only Masters has it at position 0, and a localised document names it
+        something we would not recognise either -- so "the first section" would
+        claim the masters and put page titles among them, which is worse than
+        reporting the section missing, since that at least gets one created.
+
+        What the producer cannot translate is the titles themselves. The pages
+        section is the one naming this document's pages, so it is found by
+        asking which section's titles those are. The masters section is then
+        whatever the other one is, where there are two.
+        """
+        pairs = self._heading_pairs_list()
+        for index, (name, _) in enumerate(pairs):
+            if name == section.label:
+                return index
+        pages_index = self._section_naming_the_pages(pairs, page_titles)
+        if section.is_pages:
+            return pages_index
+        if len(pairs) == 2 and pages_index is not None:
+            return 1 - pages_index
+        return None
+
+    def _page_titles(self) -> set[str]:
+        """The titles app.xml should be holding for this document's pages right now."""
+        return {page.name for page in self.pages}
+
+    def _section_naming_the_pages(self, pairs: list[tuple[str, Element]], page_titles: set[str]) -> int | None:
+        """Which section's titles are this document's page names, or None if none are.
+
+        Overlap rather than equality, because a caller is usually part-way
+        through changing one of them: an added page is not in app.xml yet, and a
+        renamed one is still there under its old title. A caller that knows
+        which title is in flight passes the titles app.xml should be holding,
+        rather than letting that difference count as a miss.
+
+        A tie is not an answer. A master may be called what a page is called, so
+        on a one-page document a masters section can score exactly what the
+        pages section scores, and taking the first is how a page title ends up
+        among the masters. Nothing here can tell those apart, so nothing here
+        pretends to: the section reports missing and the caller creates one,
+        which is recoverable in a way that writing into the wrong section is
+        not.
+        """
+        vector = self._titles_of_parts().find(f"{vt_namespace}vector")
+        if vector is None or not page_titles:
+            return None
+        scores: list[int] = []
+        start = 0
+        for _, count in pairs:
+            titles_here = int(count.text or 0)
+            stop = min(start + titles_here, len(vector))
+            scores.append(sum(1 for at in range(min(start, len(vector)), stop) if vector[at].text in page_titles))
+            start += titles_here
+        best = max(scores, default=0)
+        if best == 0 or scores.count(best) > 1:
+            return None
+        return scores.index(best)
+
+    def _titles_of_parts_section(self, section: _Section, page_titles: set[str]) -> tuple[Element, int, int]:
         """The TitlesOfParts vector, and the ``[start, stop)`` slice of it `section` owns.
 
         A section HeadingPairs does not mention owns the empty slice at the end
@@ -614,15 +834,18 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         """
         vector = require_element(self._titles_of_parts().find(f"{vt_namespace}vector"), "TitlesOfParts vector")
         total = len(vector)
+        wanted = self._resolve_section(section, page_titles)
+        if wanted is None:
+            return vector, total, total
         start = 0
-        for name, count in self._heading_pairs_list():
+        for index, (_, count) in enumerate(self._heading_pairs_list()):
             titles_here = int(count.text or 0)
-            if name == section:
+            if index == wanted:
                 return vector, min(start, total), min(start + titles_here, total)
             start += titles_here
         return vector, total, total
 
-    def _section_count(self, section: str, change: int) -> None:
+    def _section_count(self, section: _Section, change: int, page_titles: set[str]) -> None:
         """Add `change` to `section`'s count in HeadingPairs, creating the pair if needed.
 
         The stored count is what moves, not the length of the slice it turned
@@ -630,9 +853,14 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         still knows how many parts it has, and re-deriving the number from
         where the titles ended up would throw that away.
         """
-        self._set_app_xml_value(section, str(int(self._get_app_xml_value(section) or 0) + change))
+        index = self._resolve_section(section, page_titles)
+        if index is None:
+            self._set_app_xml_value(section.label, str(change))
+            return
+        count = self._heading_pairs_list()[index][1]
+        count.text = str(int(count.text or 0) + change)
 
-    def _titles_of_parts_insert(self, title: str, section: str) -> None:
+    def _titles_of_parts_insert(self, title: str, section: _Section, page_titles: set[str] | None = None) -> None:
         """Name a part in TitlesOfParts under `section`, and count it there.
 
         The title goes at the end of its own section rather than the end of the
@@ -645,38 +873,40 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         rather than this section's, so a page called the same thing as the
         master being added stopped the master being listed at all.
         """
-        vector, start, stop = self._titles_of_parts_section(section)
+        titles = self._page_titles() if page_titles is None else page_titles
+        vector, start, stop = self._titles_of_parts_section(section, titles)
         if any(vector[position].text == title for position in range(start, stop)):
             return
         entry = Element(f"{vt_namespace}lpstr")
         entry.text = title
         vector.insert(stop, entry)
         vector.attrib["size"] = str(len(vector))
-        self._section_count(section, 1)
+        self._section_count(section, 1, titles)
 
-    def _titles_of_parts_remove(self, title: str, section: str) -> None:
+    def _titles_of_parts_remove(self, title: str, section: _Section, page_titles: set[str] | None = None) -> None:
         """Drop `section`'s entry for `title`, and stop counting it.
 
         The count moves only when an entry does, and only this section's
         entries are candidates: a page and a master can be called the same
         thing, and the one being removed is the one in this section.
         """
-        vector, start, stop = self._titles_of_parts_section(section)
+        titles = self._page_titles() if page_titles is None else page_titles
+        vector, start, stop = self._titles_of_parts_section(section, titles)
         for position in range(start, stop):
             if vector[position].text == title:
                 del vector[position]
                 vector.attrib["size"] = str(len(vector))
-                self._section_count(section, -1)
+                self._section_count(section, -1, titles)
                 return
 
-    def _titles_of_parts_rename(self, old_title: str, new_title: str, section: str) -> None:
+    def _titles_of_parts_rename(self, old_title: str, new_title: str, section: _Section, page_titles: set[str]) -> None:
         """Rewrite `section`'s entry for `old_title` in place.
 
         In place rather than a removal and an insertion: nothing joins or
         leaves the section, so neither its count nor the order of its titles
         has any business changing.
         """
-        vector, start, stop = self._titles_of_parts_section(section)
+        vector, start, stop = self._titles_of_parts_section(section, page_titles)
         for position in range(start, stop):
             if vector[position].text == old_title:
                 vector[position].text = new_title
@@ -712,12 +942,12 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         vector.attrib["size"] = str(int(vector.attrib.get("size", 0)) + 2)
 
     def _add_page_to_app_xml(self, new_page_name: str) -> None:
-        self._titles_of_parts_insert(new_page_name, "Pages")
+        self._titles_of_parts_insert(new_page_name, VisioFile.PAGES)
 
     def _remove_page_from_app_xml(self, page_name: str) -> None:
         if self.app_xml is not None:
             logger.debug("_remove_page_from_app_xml()")
-            self._titles_of_parts_remove(page_name, "Pages")
+            self._titles_of_parts_remove(page_name, VisioFile.PAGES)
 
     def _rename_page_in_app_xml(self, old_page_name: str, new_page_name: str) -> None:
         """Keep app.xml's list of page names in step with a page that was renamed.
@@ -734,7 +964,11 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             return
         if root.find(f"{ext_prop_namespace}TitlesOfParts") is None:
             return
-        self._titles_of_parts_rename(old_page_name, new_page_name, "Pages")
+        # app.xml still lists the old title and the page already carries the new
+        # one, so the titles to look for are today's with that swap undone. On a
+        # one-page document nothing else identifies the section.
+        expected = (self._page_titles() - {new_page_name}) | {old_page_name}
+        self._titles_of_parts_rename(old_page_name, new_page_name, VisioFile.PAGES, expected)
 
     def _create_page(
         self,
@@ -779,12 +1013,21 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         # Update VisioFile object; the page carries its real ID and relationship
         # id immediately (issue #7: they were blank until a reload)
         page_id = new_page_element.attrib["ID"]
+        # written into the store before the Page is constructed, so `Page.xml`'s
+        # write-through guard (`_attached()`) already finds the page's own tree
+        # at its part name for any later assignment, and because this call is
+        # what gets the new page into the package at all: a save writes the
+        # store and nothing else
+        self._package.write_xml(self._part_name(new_page_path), new_page_xml)
         new_page = Page(new_page_xml, new_page_path, page_name, page_id, new_page_relid, self)
         if source_page is not None and source_page.rels_xml is not None:
             source_rels_root = require_element(source_page.rels_xml.getroot(), "source page relationships root")
-            new_page.rels_xml = ET.ElementTree(copy.deepcopy(source_rels_root))
             rel_dir = f"{self.directory}/visio/pages/_rels/"
+            # the filename first: the `rels_xml` setter only writes through when
+            # `rels_xml_filename` is already set (and the page's own tree, above,
+            # is already its part)
             new_page.rels_xml_filename = _page_relationship_path(rel_dir, new_page_path)
+            new_page.rels_xml = ET.ElementTree(copy.deepcopy(source_rels_root))
 
         self.pages.insert(index, new_page)  # insert new page at defined index
 
@@ -1284,60 +1527,33 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         :param new_filename: path to save vsdx file. A `.vsdx` or `.vsdm`
             extension must match the package's own kind; any other name gets the
             matching extension appended. Omit it to save over the source file,
-            which is checked the same way but never renamed.
+            or over `filename` if that has been reassigned since the document
+            was opened; that name is checked the same way but never renamed.
         :type new_filename: str
         :raises InvalidOperationError: if the extension contradicts the package kind
 
         """
         self._require_open("VisioFile.save_vsdx()")
-        if not self.zip_file_contents:
+        if not self._package.names():
             raise InvalidOperationError("cannot save an empty package")
 
-        # resolve the destination before re-serialising anything, so a refused
-        # extension leaves the in-memory package untouched
+        # resolve the destination first, so a refused extension writes nothing
         target = self._in_place_filename() if new_filename is None else self._destination_filename(new_filename)
 
-        # write pages.xml.rels
-        xml_to_file(
-            self._part_tree(self.pages_xml_rels, "pages.xml.rels"),
-            f"{self.directory}/visio/pages/_rels/pages.xml.rels",
-            self.zip_file_contents,
-        )
+        # sync edits made through a `getbuffer()` memoryview on a buffer the
+        # view handed out, which no write-through method could see; done after
+        # the destination check, so a refused save still changes nothing
+        if isinstance(self.zip_file_contents, ZipFileContentsView):
+            self.zip_file_contents.sync()
 
-        # write pages.xml file - in case pages added removed
-        xml_to_file(self._part_tree(self.pages_xml, "pages.xml"), self._pages_filename(), self.zip_file_contents)
-
-        # write the master pages to file
-        for page in self.master_pages:  # type: Page
-            xml_to_file(page.xml, page.filename, self.zip_file_contents)
-
-        # write the pages to file
-        for page in self.pages:  # type: Page
-            xml_to_file(page.xml, page.filename, self.zip_file_contents)
-            if page.rels_xml_filename is not None:
-                xml_to_file(require_tree(page.rels_xml, "page rels"), page.rels_xml_filename, self.zip_file_contents)
-
-        # write [content_Types].xml
-        xml_to_file(
-            self._part_tree(self.content_types_xml, "[Content_Types].xml"),
-            f"{self.directory}/[Content_Types].xml",
-            self.zip_file_contents,
-        )
-
-        # write app.xml
-        if self.app_xml is not None:
-            xml_to_file(self.app_xml, f"{self.directory}/docProps/app.xml", self.zip_file_contents)
-
-        # write document.xml
-        xml_to_file(
-            self._part_tree(self.document_xml, "document.xml"), f"{self.directory}/visio/document.xml", self.zip_file_contents
-        )
-
-        # write document.xml.rels
-        xml_to_file(
-            self._part_tree(self.document_xml_rels, "document.xml.rels"),
-            f"{self.directory}/visio/_rels/document.xml.rels",
-            self.zip_file_contents,
-        )
-
-        self._save_zip_file_contents_to_disk(target)
+        # every change is already in the store -- the trees this document edits
+        # are the store's own -- so saving is writing it, once, member by member.
+        # An in-place save writes back over the absolute source `PackageStore`
+        # captured at open, not over `self.filename`, which may be relative and
+        # resolve against a different working directory by the time this runs.
+        # The exception is a `filename` the caller has reassigned since open:
+        # a plain save went to `self.filename` before the store existed, so a
+        # new one is where the caller means the save to go. It goes there as an
+        # explicit target, which leaves the store's source where it was.
+        redirected = new_filename is None and self.filename != self._opened_filename
+        self._package.save(target if new_filename is not None or redirected else None)

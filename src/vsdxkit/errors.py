@@ -24,6 +24,8 @@ is separate work.
 
 from __future__ import annotations
 
+import xml.etree.ElementTree as ET
+
 
 class VsdxError(Exception):
     """Base class for every error this library raises itself."""
@@ -62,6 +64,18 @@ class MalformedPackageError(PackageError, ValueError):
 
     Bytes that are not well-formed XML, or a ShapeSheet cell holding something
     that is not the number its cell has to be.
+    """
+
+
+class PartParseError(MalformedPackageError, ET.ParseError):
+    """A part that is not well-formed XML, named, and catchable as every error it has been.
+
+    Before the package store a malformed part reached the caller as the bare
+    `ET.ParseError` the parser raised; 0.9 callers catch it as `ValueError`,
+    and the hierarchy's callers as `MalformedPackageError` or `VsdxError`.
+    A caller should not have to know which release it runs against to catch a
+    broken package, so this is all of them. It carries the parser's
+    `position` and `code`, which say where in the part it broke.
     """
 
 

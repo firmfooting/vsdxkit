@@ -3,13 +3,13 @@
 Two jobs live here. The first half tests `tests/helpers/package_manifest.py`
 itself -- an oracle nobody has checked is an oracle nobody should believe. The
 second half points it at every fixture in the suite and asserts that opening a
-package and saving it without changing anything moves nothing beyond the drift
-recorded in `tests/fixtures/package_manifests/KNOWN_DRIFT.md`.
+package and saving it without changing anything moves nothing at all.
 
 That second half is the behaviour freeze the 1.0 package rewrite is measured
 against: `PackageStore` and `MasterCatalog` may reorganise how parts are held in
-memory, but the bytes that reach disk must not move except where this file says
-they already do.
+memory, but the bytes that reach disk must not move. Until #89 a no-op save
+re-serialised every part it held as a tree, and the drift that caused is
+recorded in `tests/fixtures/package_manifests/KNOWN_DRIFT.md`.
 """
 
 import io
@@ -388,47 +388,13 @@ def test_a_changed_package_kind_is_reported_whatever_is_allowed():
 # round-trip fidelity: the behaviour freeze
 # --------------------------------------------------------------------------
 
-# `save_vsdx` re-serialises every part it holds as an ElementTree, and
-# ElementTree writes its own XML declaration, its own attribute quoting and
-# `<Cell />` where Visio wrote `<Cell/>`. None of that changes the XML, so it
-# shows up as a declaration and a bytes difference with the canonical hash
-# intact. Issue #89 is what drives this to nothing.
-RESERIALISATION_DRIFT = ("declaration", "bytes")
-
-# ElementTree emits only the namespace declarations a part actually uses, and
-# Visio puts `xmlns:r` on the root of every content part whether it needs it or
-# not. Allowed only on the parts where it has been measured: the character
-# classes keep `masters.xml` and `pages.xml`, which declare nothing they do not
-# use, outside the waiver.
-UNUSED_NAMESPACE_DECLARATIONS = {
-    "visio/document.xml": ("namespaces",),
-    "visio/masters/master[0-9]*.xml": ("namespaces",),
-    "visio/pages/page[0-9]*.xml": ("namespaces",),
-}
-
-# The parts `save_vsdx` writes back, and so the only ones that may differ at
-# all. Everything else -- the theme, the thumbnail, `windows.xml`,
-# `masters.xml`, the images, `vbaProject.bin` -- is copied out of the source
-# archive and has to arrive byte for byte.
-REWRITTEN_PARTS = (
-    "[Content_Types].xml",
-    "docProps/app.xml",
-    "visio/document.xml",
-    "visio/_rels/document.xml.rels",
-    "visio/pages/pages.xml",
-    "visio/pages/_rels/pages.xml.rels",
-    "visio/pages/_rels/page[0-9]*.xml.rels",
-    "visio/pages/page[0-9]*.xml",
-    "visio/masters/master[0-9]*.xml",
-)
-
 
 @pytest.fixture(scope="session")
 def round_trip(tmp_path_factory):
     """Open a fixture and save it unchanged; return the manifests either side.
 
-    Session-scoped and memoised because the save is the expensive part and more
-    than one test asks about the same package.
+    Session-scoped and memoised because the save is the expensive part, so a
+    further test asking about the same package does not pay for it again.
     """
     saved: dict[str, tuple[PackageManifest, PackageManifest]] = {}
 
@@ -454,29 +420,15 @@ def test_the_fixture_corpus_is_not_empty():
 
 
 @pytest.mark.parametrize("package_path", FIXTURE_PACKAGES)
-def test_a_round_trip_stays_within_the_known_drift(package_path, round_trip):
-    """Open, save, change nothing: the package that comes back must be the same one.
+def test_a_round_trip_changes_nothing(package_path, round_trip):
+    """Open, save, change nothing: the package that comes back is the same archive.
 
-    "The same" is defined by `tests/fixtures/package_manifests/KNOWN_DRIFT.md`,
-    which lists what does move today and why. Anything else -- a part added,
-    removed or reordered, a canonical form changed at all -- fails here, which
-    is the point: the package rewrites in v1.0.0-alpha have to leave the bytes
-    where they are.
+    Fails if the save writes any part it did not change -- a part added,
+    removed or reordered, or one respelled, even with its canonical form
+    intact. Until #89 every part the library held as a tree drifted here, and
+    `tests/fixtures/package_manifests/KNOWN_DRIFT.md` records how; a save now
+    writes an unchanged part as the bytes it arrived as, so no allowance is
+    left to make.
     """
     before, after = round_trip(package_path)
-    allowed: dict[str, tuple[str, ...]] = {"*": RESERIALISATION_DRIFT, **UNUSED_NAMESPACE_DECLARATIONS}
-    assert_manifest_equal(before, after, allowed_changes=allowed)
-
-
-@pytest.mark.parametrize("package_path", FIXTURE_PACKAGES)
-def test_only_the_parts_the_library_rewrites_drift_at_all(package_path, round_trip):
-    """A part that starts drifting is a part the save path has started touching.
-
-    Worth its own failure rather than folding into the allowances above, because
-    what matters here is that the part was written at all, whatever changed
-    inside it.
-    """
-    before, after = round_trip(package_path)
-    drifted = sorted(manifest_differences(before, after))
-    unexpected = [name for name in drifted if not any(member_matches(name, pattern) for pattern in REWRITTEN_PARTS)]
-    assert unexpected == [], f"{package_path}: these parts used to be copied through unchanged"
+    assert_manifest_equal(before, after)

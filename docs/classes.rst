@@ -98,6 +98,7 @@ raised that builtin before the hierarchy existed::
    |   +-- MissingPartError
    +-- PackageError
        +-- MalformedPackageError (ValueError)
+       |   +-- PartParseError (xml.etree.ElementTree.ParseError)
        +-- PackageLimitError (OSError)
 
 .. autoclass:: vsdxkit.errors.VsdxError
@@ -113,5 +114,10 @@ raised that builtin before the hierarchy existed::
 .. autoclass:: vsdxkit.errors.PackageError
 
 .. autoclass:: vsdxkit.errors.MalformedPackageError
+
+.. autoclass:: vsdxkit.errors.PartParseError
+
+It is also an ``xml.etree.ElementTree.ParseError``, so code that caught what
+the parser raised for a malformed part still catches it, ``position`` and all.
 
 .. autoclass:: vsdxkit.errors.PackageLimitError

@@ -45,6 +45,7 @@ from .errors import (  # noqa: E402
     NotFoundError,
     PackageError,
     PackageLimitError,
+    PartParseError,
     VisioFileNotOpen,
     VsdxError,
 )
@@ -77,6 +78,7 @@ __all__ = [
     "PackageLimits",
     "Page",
     "PagePosition",
+    "PartParseError",
     "Shape",
     "VisioFile",
     "VisioFileNotOpen",

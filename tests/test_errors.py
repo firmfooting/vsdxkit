@@ -22,6 +22,7 @@ from vsdxkit.errors import (
     NotFoundError,
     PackageError,
     PackageLimitError,
+    PartParseError,
     VisioFileNotOpen,
     VsdxError,
 )
@@ -33,6 +34,7 @@ PUBLIC_ERRORS = (
     NotFoundError,
     PackageError,
     PackageLimitError,
+    PartParseError,
     VisioFileNotOpen,
 )
 
@@ -146,6 +148,24 @@ def test_visio_file_not_open_is_the_same_class_wherever_it_is_imported_from():
     assert vsdxkit.VisioFileNotOpen is VisioFileNotOpen
 
 
+def test_part_parse_error_is_every_error_a_malformed_part_has_been():
+    """Fails if PartParseError drops any base a caller may already catch a malformed part by."""
+    import xml.etree.ElementTree as ET
+
+    from vsdxkit import errors
+
+    for base in (errors.MalformedPackageError, errors.PackageError, errors.VsdxError, ET.ParseError, ValueError):
+        assert issubclass(errors.PartParseError, base)
+
+
+def test_part_parse_error_is_the_same_class_on_every_import_path():
+    """Fails if package.py keeps its own PartParseError instead of re-exporting the errors module's."""
+    import vsdxkit
+    from vsdxkit import errors, package
+
+    assert package.PartParseError is errors.PartParseError is vsdxkit.PartParseError
+
+
 # --------------------------------------------------------------------------
 # required parts and elements
 # --------------------------------------------------------------------------
@@ -173,10 +193,15 @@ def test_store_require_xml_raises_missing_part_error(tmp_path):
 
 
 def test_a_document_with_no_pages_part_raises_missing_part_error(vsdx_copy):
-    """A document missing pages.xml is incomplete, not a caller passing a bad argument."""
+    """A document missing pages.xml is incomplete, not a caller passing a bad argument.
+
+    The part is taken out of the store directly: since #373, `pages_xml = None`
+    is refused, because it would leave the relationship and content-type
+    override that name the part behind.
+    """
     with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
         page = vis.pages[0]
-        vis.pages_xml = None
+        vis._package.remove("/visio/pages/pages.xml")
         with pytest.raises(MissingPartError, match=r"pages\.xml"):
             page.name = "renamed"
 
@@ -239,6 +264,27 @@ def test_a_required_attribute_missing_on_open_raises_malformed_package_error(vsd
             rewritten.writestr(entry, data)
 
     with pytest.raises(MalformedPackageError, match=expected):
+        vsdxkit.VisioFile(destination)
+
+
+@pytest.mark.allow_invalid_package
+def test_a_page_part_the_relationships_name_and_the_package_lacks_raises_missing_part_error(vsdx_copy, tmp_path):
+    """Fails if `VisioFile._require_part_xml` reports a required part that is not there as a plain `ValueError`.
+
+    #365 made `xmlio.require_xml_tree` raise `MissingPartError`, and the open
+    path read every required part through it. #371 moved the open path onto the
+    store, through `_require_part_xml`, which kept the old `ValueError`; the
+    merge has to carry the type across to the helper that replaced it.
+    """
+    source = vsdx_copy("test1.vsdx")
+    destination = str(tmp_path / "no-page-part.vsdx")
+    with zipfile.ZipFile(source) as original, zipfile.ZipFile(destination, "w") as rewritten:
+        assert "visio/pages/page1.xml" in original.namelist(), "the fixture has changed: no visio/pages/page1.xml"
+        for entry in original.infolist():
+            if entry.filename != "visio/pages/page1.xml":
+                rewritten.writestr(entry, original.read(entry.filename))
+
+    with pytest.raises(MissingPartError, match=r"page part"):
         vsdxkit.VisioFile(destination)
 
 

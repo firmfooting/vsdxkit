@@ -7,10 +7,10 @@ import re
 import threading
 import weakref
 import xml.etree.ElementTree as ET
-from collections.abc import Generator
+from collections.abc import Generator, Mapping, MutableMapping
 from contextlib import contextmanager
 
-from .errors import MalformedPackageError, MissingPartError
+from .errors import MalformedPackageError, MissingPartError, PartParseError
 
 # Prefixes Visio itself writes. ElementTree invents `ns0:`, `ns1:`, ... for any
 # namespace it has no prefix for, and consumers stricter than Visio -- libvisio
@@ -228,8 +228,10 @@ def parse_part(data: bytes, name: str = "") -> ET.ElementTree[ET.Element]:
     Both routes into the parser -- `file_to_xml`, which is how a document is
     opened, and `PackageStore`'s promotion -- come through this function, so a
     translation at one of them would leave the other raising whatever
-    ElementTree raised. The original stays as the cause: `ET.ParseError` holds
-    the `position` a caller needs to find the byte that broke.
+    ElementTree raised. A part that is not well-formed is a `PartParseError`,
+    which is still an `ET.ParseError` and carries the parser's `position` and
+    `code`, so code written to catch what the parser raised keeps working; the
+    original stays as the cause.
     """
     subject = f"package part {name}" if name else "package part"
     root: ET.Element | None = None
@@ -249,7 +251,12 @@ def parse_part(data: bytes, name: str = "") -> ET.ElementTree[ET.Element]:
             elif root is None:
                 root = payload
     except ET.ParseError as error:
-        raise MalformedPackageError(f"{subject} is not well-formed XML: {error}") from error
+        raised = PartParseError(f"{subject} is not well-formed XML: {error}")
+        # ParseError sets these on the instance rather than taking them in its
+        # constructor, so they are copied the same way
+        raised.position = error.position
+        raised.code = error.code
+        raise raised from error
     except LookupError as error:
         # A part may name any encoding it likes in its declaration, and one
         # nothing can decode arrives as LookupError rather than ParseError.
@@ -275,7 +282,7 @@ def adopt_prefixes(root: ET.Element, source: ET.Element) -> None:
         _declared_prefixes[root] = declared
 
 
-def file_to_xml(filename: str, zip_file_contents: dict[str, io.BytesIO]) -> ET.ElementTree[ET.Element] | None:
+def file_to_xml(filename: str, zip_file_contents: Mapping[str, io.BytesIO]) -> ET.ElementTree[ET.Element] | None:
     """Import a file as an ElementTree."""
     if filename in zip_file_contents:
         return parse_part(zip_file_contents[filename].getvalue(), filename)
@@ -289,10 +296,11 @@ def serialise_part(xml: ET.ElementTree[ET.Element]) -> bytes:
     and one written through `xml_to_file` cannot disagree about the
     declaration, the encoding or the per-part prefix map.
 
-    Two parts are still written without coming through here: `masters.py` and
-    `pages.py` each build a tree and hand it straight to `ET.tostring`, which
-    resolves prefixes from whatever the global table happens to hold. Both are
-    on #91's list.
+    Every tree that becomes an archive member goes through here. The two that
+    did not -- `masters.py` and `pages.py` each handed a tree straight to
+    `ET.tostring`, which resolves prefixes from whatever the global table
+    happens to hold, and so wrote the page rels part as `<ns0:Relationships>`
+    -- were routed back through it in #360.
     """
     root = xml.getroot()
     file: io.BytesIO = io.BytesIO()
@@ -304,7 +312,7 @@ def serialise_part(xml: ET.ElementTree[ET.Element]) -> bytes:
     return file.getvalue()
 
 
-def xml_to_file(xml: ET.ElementTree[ET.Element], filename: str, zip_file_contents: dict[str, io.BytesIO]) -> None:
+def xml_to_file(xml: ET.ElementTree[ET.Element], filename: str, zip_file_contents: MutableMapping[str, io.BytesIO]) -> None:
     """Save an ElementTree to zip_file_contents, prefixed the way Visio writes it."""
     zip_file_contents[filename] = io.BytesIO(serialise_part(xml))
 
@@ -323,7 +331,9 @@ def require_tree(tree: ET.ElementTree[ET.Element] | None, description: str) -> E
     return tree
 
 
-def require_xml_tree(filename: str, zip_file_contents: dict[str, io.BytesIO], description: str) -> ET.ElementTree[ET.Element]:
+def require_xml_tree(
+    filename: str, zip_file_contents: Mapping[str, io.BytesIO], description: str
+) -> ET.ElementTree[ET.Element]:
     """Parse a required XML part from the zip and return its ElementTree."""
     tree = file_to_xml(filename, zip_file_contents)
     if tree is None:
@@ -331,7 +341,7 @@ def require_xml_tree(filename: str, zip_file_contents: dict[str, io.BytesIO], de
     return tree
 
 
-def require_root(filename: str, zip_file_contents: dict[str, io.BytesIO], description: str) -> ET.Element:
+def require_root(filename: str, zip_file_contents: Mapping[str, io.BytesIO], description: str) -> ET.Element:
     """Parse a required XML part from the zip and return its root element."""
     return require_element(require_xml_tree(filename, zip_file_contents, description).getroot(), description)
 

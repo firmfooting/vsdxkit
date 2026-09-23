@@ -33,17 +33,21 @@ which is the one thing this is here to avoid.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import math
 import os
+import stat
+import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
-from dataclasses import dataclass
+import zlib
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
-from .errors import MalformedPackageError, MissingPartError, PackageLimitError
+from .errors import MalformedPackageError, MissingPartError, PackageLimitError, PartParseError
 from .xmlio import parse_part, serialise_part
 
 __all__ = [
@@ -51,6 +55,7 @@ __all__ = [
     "PackageLimitError",
     "PackageLimits",
     "PackageStore",
+    "PartParseError",
     "PartValue",
     "XmlPart",
     "canonical_hash",
@@ -381,8 +386,8 @@ def _checked(name: str) -> str:
         raise ValueError(f"{name!r} is not an OPC part name: a part name begins with '/'")
     if name.endswith("/"):
         raise ValueError(f"{name!r} is not an OPC part name: a part name does not end with '/'")
-    if "\\" in name or ":" in name:
-        raise ValueError(f"{name!r} is not an OPC part name: a part name cannot contain '\\' or ':'")
+    if "\\" in name or ":" in name or "\x00" in name:
+        raise ValueError(f"{name!r} is not an OPC part name: a part name cannot contain '\\', ':', or NUL")
     for segment in name[1:].split("/"):
         if segment in _REJECTED_SEGMENTS:
             raise ValueError(f"{name!r} is not an OPC part name: {segment!r} is not a usable segment")
@@ -464,6 +469,10 @@ class XmlPart:
     tree: ET.ElementTree[ET.Element]
     original_bytes: bytes | None
     original_canonical_hash: str | None
+    # the part this one was parsed from, so a holder of that part can tell a
+    # promotion, which changes how the store holds the part but not what it
+    # holds, from a write that replaced it. None for a part written as a tree
+    promoted_from: BytesPart | None = field(default=None, compare=False, repr=False)
 
     def current_bytes(self) -> bytes:
         data = serialise_part(self.tree)
@@ -475,11 +484,9 @@ class XmlPart:
 PartValue = BytesPart | XmlPart
 
 
-def _promoted(name: str, data: bytes) -> XmlPart:
-    # `parse_part` reports a part that will not parse, and names it from the
-    # argument below: one translation for both routes into the parser.
-    tree = parse_part(data, name)
-    return XmlPart(tree=tree, original_bytes=data, original_canonical_hash=canonical_hash(tree))
+def _promoted(name: str, part: BytesPart) -> XmlPart:
+    tree = parse_part(part.data, name)
+    return XmlPart(tree=tree, original_bytes=part.data, original_canonical_hash=canonical_hash(tree), promoted_from=part)
 
 
 # --------------------------------------------------------------------------
@@ -490,18 +497,27 @@ def _promoted(name: str, data: bytes) -> XmlPart:
 class PackageStore:
     """The parts of one package, in archive order, addressed by part name."""
 
-    def __init__(self, source: Path) -> None:
+    def __init__(self, source: Path, limits: PackageLimits | None = None) -> None:
         # The one copy of where this package came from. It is only knowable at
-        # open, and #89's `save(target=None)` writes back over it.
+        # open, and #89's `save(target=None)` writes back over it. Kept as
+        # given: `open()` is what makes it absolute, so a store built there is
+        # unaffected by later working-directory changes, and one constructed
+        # directly with a relative path resolves it at each save.
         self.source = source
+        # The limits this package was opened with, used during save to ensure
+        # written members satisfy the compression ratio constraints.
+        self._limits = limits if limits is not None else PackageLimits()
         self._parts: dict[str, PartValue] = {}
 
     @classmethod
     def open(cls, source: str | os.PathLike[str], *, limits: PackageLimits | None = None) -> PackageStore:
         """Read a package off disk. Nothing is parsed as XML here."""
-        path = Path(source)
-        store = cls(path)
-        for member, data in read_archive_members(path, limits if limits is not None else PackageLimits()):
+        # Store the absolute path so that save() calls are not affected by
+        # working directory changes.
+        path = Path(os.path.abspath(source))
+        limits_obj = limits if limits is not None else PackageLimits()
+        store = cls(path, limits_obj)
+        for member, data in read_archive_members(path, limits_obj):
             store._parts[_part_name_for_member(member)] = BytesPart(data)
         return store
 
@@ -533,6 +549,56 @@ class PackageStore:
         """Replace a part with these bytes, discarding any tree it had."""
         self._parts[_checked(name)] = BytesPart(data)
 
+    def write_bytes_keeping_tree(self, name: str, data: bytes, *, refuse_unparseable: bool = False) -> bool:
+        """Replace a part's content with these bytes, into the tree it already has if it has one.
+
+        `write_bytes` is right for a caller that means to replace a part; this
+        is for the caller that only has bytes to say what a part now holds --
+        `zip_file_contents`, which predates the store and whose callers wrote
+        a page back with `xml_to_file(page.xml, ...)` as a matter of course.
+        Replacing the part there would detach the tree the document edits, and
+        every later object-model edit would go into a tree nothing saves.
+
+        So a parsed part keeps its tree. Bytes that mean what the tree already
+        means change nothing, and the part keeps its baseline, so a save still
+        writes the bytes it arrived as. Bytes that mean something else are
+        parsed and become the tree's root: the tree object is the one the
+        document holds, and the baseline stays the part's original bytes, so a
+        later save compares against what the package arrived with rather than
+        against this write. Only bytes that do not parse replace the part, as
+        `write_bytes` would -- there is no tree they could be.
+
+        A part that has not been parsed, or is not there, is written as bytes.
+
+        `refuse_unparseable` is for a writer whose bytes may be a step on the
+        way rather than its last word: a `zip_file_contents` buffer mid-way
+        through `seek(0); write(shorter); truncate()` holds the new XML with
+        the old tail behind it. Replacing the part with that would detach the
+        tree for good, so with the flag set a parsed part is left exactly as
+        it is, and the False returned says the bytes were not taken; the
+        caller keeps them and writes them again once it knows they are final.
+        Every other write returns True.
+        """
+        checked = _checked(name)
+        held = self._parts.get(checked)
+        if not isinstance(held, XmlPart):
+            self._parts[checked] = BytesPart(data)
+            return True
+        try:
+            written = parse_part(data)
+        except ET.ParseError:
+            if refuse_unparseable:
+                return False
+            self._parts[checked] = BytesPart(data)
+            return True
+        if canonical_hash(written) == canonical_hash(held.tree):
+            return True
+        new_root = written.getroot()
+        # parse_part always yields a root; the assert only tells the type checker so
+        assert new_root is not None
+        held.tree._setroot(new_root)
+        return True
+
     def read_xml(self, name: str) -> ET.ElementTree[ET.Element] | None:
         """This part's tree, promoting it on first ask, or None if it is absent."""
         checked = _checked(name)
@@ -541,7 +607,7 @@ class PackageStore:
             return None
         if isinstance(value, XmlPart):
             return value.tree
-        promoted = _promoted(checked, value.data)
+        promoted = _promoted(checked, value)
         self._parts[checked] = promoted
         return promoted.tree
 
@@ -560,3 +626,190 @@ class PackageStore:
         is telling the store the part changed.
         """
         self._parts[_checked(name)] = XmlPart(tree=tree, original_bytes=None, original_canonical_hash=None)
+
+    def replace_tree(self, name: str, tree: ET.ElementTree[ET.Element]) -> None:
+        """Make `tree` a part's tree, keeping the bytes the part arrived as to compare it against.
+
+        `write_xml` is for a part that is new, or that the caller means to
+        rewrite. This is for a part rebuilt wholesale -- a rendered template, a
+        page assigned through `Page.xml` -- where the rebuild may mean exactly
+        what the part already meant. Carrying the held part's baseline across
+        lets the save ask the one question it asks of every part: if the new
+        tree canonicalises to what the part arrived as, the part is written as
+        those bytes, and a rebuild that changed nothing changes nothing on disk.
+
+        A part with no baseline -- absent, never parsed, or itself written as
+        a tree -- is written the way `write_xml` writes it.
+        """
+        checked = _checked(name)
+        held = self._parts.get(checked)
+        if isinstance(held, XmlPart):
+            self._parts[checked] = XmlPart(
+                tree=tree, original_bytes=held.original_bytes, original_canonical_hash=held.original_canonical_hash
+            )
+        else:
+            self._parts[checked] = XmlPart(tree=tree, original_bytes=None, original_canonical_hash=None)
+
+    def remove(self, name: str) -> None:
+        """Take a part out of the package, or raise KeyError if it is not in it.
+
+        A KeyError rather than a quiet no-op: the callers are removing a page
+        or a relationship part they believe is there, and one that is not is a
+        package the caller has misread.
+        """
+        checked = _checked(name)
+        if checked not in self._parts:
+            raise KeyError(name)
+        del self._parts[checked]
+
+    def save(self, target: str | os.PathLike[str] | None = None) -> Path:
+        """Write the package to `target`, or back over the source, and say where.
+
+        The only archive writer. Every part goes out once, in `names()` order,
+        as `read_bytes` gives it -- which is the original bytes for any part
+        nothing changed, promoted or not. The archive is built beside the
+        target and moved over it, so a failure part-way leaves the target as
+        it was; the temporary file takes the target's mode, or the source's
+        when the target is new, wherever the platform can set it through the
+        open descriptor (see below).
+
+        Saving elsewhere does not make elsewhere the source. A later `save()`
+        with no target still writes where the package was opened from.
+
+        Each member is written with ZIP_DEFLATED compression unless deflating it
+        would exceed the compression ratio limit, in which case it is stored
+        uncompressed. This ensures that the written package satisfies the same
+        limits that `open()` enforces on arrival, so the writer's output can be
+        read back without rejection.
+
+        The package is validated against the limits it was opened with before
+        any file is created or modified. A member's name is checked against
+        zipfile's own transformations to ensure the written archive can be read
+        back as written.
+
+        The temporary file goes through a fixed sequence. `mkstemp` creates it
+        and the archive is written through that descriptor, never by reopening
+        the path. While the descriptor is still open its identity is taken with
+        `fstat`, and the mode is applied with `fchmod` where the platform has
+        it. The descriptor is then closed, because Windows will not rename a
+        file while any handle to it is open. Only then is the path checked with
+        `lstat` against the identity taken through the descriptor, so a
+        temporary entry swapped for a symlink or another file after creation
+        is refused rather than moved over the target. The rename follows the
+        check directly.
+
+        Where there is no `fchmod` (Windows before Python 3.13) the mode is not
+        copied at all. Applying it by path after the close would change
+        whatever the temporary entry had been swapped for, and the identity
+        check can refuse the rename but cannot undo that chmod. On those
+        platforms the only mode bit that means anything is read-only, so what
+        is given up is small: a new target there is created with default
+        permissions instead of inheriting the source's read-only bit.
+
+        A window remains between that check and the rename: someone with write
+        access to the directory can swap the temporary entry in that interval,
+        and nothing short of `renameat2` (which checks and renames in one step)
+        closes it. The mode is decided before anything is written, from the
+        destination as it stood before the save, so the rename cannot make the
+        destination its own mode source.
+        """
+        # Use self.source directly (already absolute from open()) when target is None,
+        # avoiding working-directory-dependent behavior.
+        destination = Path(self.source if target is None else os.path.abspath(target))
+
+        # Gather all member bytes and validate against load limits before creating any files.
+        # This prevents leaving the destination or directory in an inconsistent state.
+        members_bytes: list[tuple[str, bytes]] = []
+        total_uncompressed = 0
+        for name in self.names():
+            data = self.read_bytes(name)
+            assert data is not None  # names() lists only parts that are present
+            members_bytes.append((name, data))
+            total_uncompressed += len(data)
+
+        # The limit messages below mirror read_archive_members word for word on
+        # purpose: a limit is one rule whichever side of the archive trips it, and
+        # a caller matching on the message should not have to know which did.
+        # The member names are the archive spelling for the same reason.
+        if len(members_bytes) > self._limits.max_members:
+            raise PackageLimitError(
+                "member_count",
+                f"package has {len(members_bytes)} entries (including directories); max_members={self._limits.max_members}",
+            )
+        for name, data in members_bytes:
+            if len(data) > self._limits.max_member_size:
+                raise PackageLimitError(
+                    "member_size",
+                    f"package member '{name[1:]}' declares {len(data)} bytes; max_member_size={self._limits.max_member_size}",
+                )
+        if total_uncompressed > self._limits.max_total_uncompressed:
+            raise PackageLimitError(
+                "total_size",
+                f"package declares {total_uncompressed} uncompressed bytes;"
+                f" max_total_uncompressed={self._limits.max_total_uncompressed}",
+            )
+
+        # Check that zipfile will not transform any member names.
+        for name, _data in members_bytes:
+            archive_name = name[1:]  # Remove leading slash for archive spelling
+            if zipfile.ZipInfo(archive_name).filename != archive_name:
+                raise ValueError(
+                    f"part name {name!r} would be transformed by zipfile to {zipfile.ZipInfo(archive_name).filename!r}"
+                )
+
+        # Decide the mode before anything is written. Once the rename has run the
+        # destination always exists, so asking afterwards would read the new
+        # file's own mode back and a new target would lose the source's.
+        #
+        # The mode goes on only through the open descriptor, so it is decided only
+        # where fchmod exists. Without it (Windows before Python 3.13) the mode is
+        # not copied: a chmod by path could land on whatever the temporary entry
+        # has been swapped for, and the identity check below can refuse the rename
+        # but cannot undo that side effect. Read-only is the only mode bit that
+        # means anything there, so a new target just misses the source's read-only.
+        mode: int | None = None
+        if hasattr(os, "fchmod"):
+            mode_source = destination if destination.exists() else self.source
+            if mode_source.exists():
+                mode = stat.S_IMODE(os.stat(mode_source).st_mode)
+
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        fd, temporary = tempfile.mkstemp(prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent)
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                # The ratio a member is stored at is the stricter of the opened limit
+                # and the default one, unlike the size and count checks above. A ratio
+                # violation is always avoidable -- storing a member makes its ratio 1 --
+                # so the writer defers to the strictest reader likely to open the file,
+                # and a store opened with a permissive max_ratio still writes a package
+                # a default reader accepts. A size violation cannot be avoided short of
+                # refusing to save, so for those the caller's own raised limits stand.
+                store_above = min(self._limits.max_ratio, PackageLimits().max_ratio)
+                with zipfile.ZipFile(handle, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                    for name, data in members_bytes:
+                        # Measure deflated size the way zipfile does: zlib with window=-15
+                        # to skip the zlib header/trailer. If the ratio would exceed the
+                        # limit, store the member uncompressed instead.
+                        compressor = zlib.compressobj(zlib.Z_DEFAULT_COMPRESSION, zlib.DEFLATED, -15)
+                        compressed = compressor.compress(data) + compressor.flush()
+                        ratio = len(data) / max(len(compressed), 1)
+                        if ratio > store_above:
+                            archive.writestr(name[1:], data, compress_type=zipfile.ZIP_STORED)
+                        else:
+                            archive.writestr(name[1:], data)
+                # The identity of the file actually written, taken through the
+                # descriptor so no path lookup can substitute another file.
+                kept = os.fstat(handle.fileno())
+                # mode is only ever set where fchmod exists; hasattr repeats that
+                # so type checkers targeting Windows before 3.13 accept the call.
+                if mode is not None and hasattr(os, "fchmod"):
+                    os.fchmod(handle.fileno(), mode)
+            # The handle is closed from here on: Windows refuses to rename a file
+            # that has an open handle, and mkstemp does not share delete access.
+            if not os.path.samestat(kept, os.lstat(temporary)):
+                raise OSError(f"{temporary} was replaced while the package was being written to it")
+            os.replace(temporary, destination)
+        finally:
+            with contextlib.suppress(FileNotFoundError):
+                os.unlink(temporary)
+        return destination
