@@ -49,6 +49,19 @@ def _master_name(master: Element) -> str:
     return master.attrib.get("NameU") or master.attrib.get("Name") or ""
 
 
+def _identity(master: Element) -> str | None:
+    """What makes two masters of one batch the same master, as `MasterCatalog.matching` would decide it.
+
+    The `UniqueID` where there is one, else the name; a master with neither
+    is like no other.
+    """
+    unique_id = master.attrib.get("UniqueID")
+    if unique_id:
+        return f"U{unique_id}"
+    name = _master_name(master)
+    return f"N{name}" if name else None
+
+
 def _page_name(master: Element) -> str:
     """The name a master's page carries. A page cannot be nameless: `Page.name` would go looking in pages.xml."""
     return _master_name(master) or "Unknown"
@@ -192,7 +205,8 @@ class MasterCatalog:
         Keyed by the ID `source` uses. A master matches as `matching` decides:
         numeric master IDs are per-document and coincide across documents by
         chance. One that matches nothing is imported, under a name of its own
-        if this package already has a master of its name. An ID `source`
+        if this package already has a master of its name. Within one batch,
+        masters `matching` would treat as one are imported once. An ID `source`
         cannot resolve is left out: copying it would name a master no package
         declares.
 
@@ -201,7 +215,7 @@ class MasterCatalog:
         """
         found: dict[str, Page] = {}
         pending: list[tuple[str, Element, bytes]] = []
-        first_by_unique_id: dict[str, str] = {}
+        first_by_identity: dict[str, str] = {}
         aliases: dict[str, str] = {}
         for master_id in dict.fromkeys(master_ids):
             element = source.element_by_id(master_id)
@@ -212,9 +226,9 @@ class MasterCatalog:
             if existing is not None:
                 found[master_id] = existing
                 continue
-            unique_id = element.attrib.get("UniqueID")
-            if unique_id and unique_id in first_by_unique_id:
-                aliases[master_id] = first_by_unique_id[unique_id]
+            identity = _identity(element)
+            if identity is not None and identity in first_by_identity:
+                aliases[master_id] = first_by_identity[identity]
                 continue
             if source._store.part(source_page.filename) is None:
                 continue
@@ -227,8 +241,8 @@ class MasterCatalog:
                     f"source master part {source_page.filename} could not be read, though the package lists it"
                 )
             pending.append((master_id, element, master_bytes))
-            if unique_id:
-                first_by_unique_id[unique_id] = master_id
+            if identity is not None:
+                first_by_identity[identity] = master_id
 
         if pending:
             self.bootstrap()
@@ -254,14 +268,23 @@ class MasterCatalog:
         )
         element = copy.deepcopy(source_element)
         element.attrib["ID"] = new_id
-        taken = {_master_name(master) for master in masters_root}
+        taken = {
+            master.attrib[attribute]
+            for master in masters_root
+            for attribute in ("NameU", "Name")
+            if attribute in master.attrib
+        }
         if _master_name(element) in taken:
             # Two masters of one name would leave a lookup by name answering
             # for the wrong one. The `.ID` suffix is how Visio's own duplicate
             # shape names read; what it does for masters is not yet checked.
-            for attribute in ("NameU", "Name"):
-                if attribute in element.attrib:
-                    element.attrib[attribute] = f"{element.attrib[attribute]}.{new_id}"
+            # Counting up from the new ID finds a suffix no name already has.
+            names = {attribute: element.attrib[attribute] for attribute in ("NameU", "Name") if attribute in element.attrib}
+            suffix = int(new_id)
+            while any(f"{name}.{suffix}" in taken for name in names.values()):
+                suffix += 1
+            for attribute, name in names.items():
+                element.attrib[attribute] = f"{name}.{suffix}"
         rel = element.find(f"{namespace}Rel")
         if rel is not None:
             rel.attrib[f"{r_namespace}id"] = relationship.attrib["Id"]

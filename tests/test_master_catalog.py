@@ -411,3 +411,33 @@ def test_a_target_whose_app_xml_lists_no_titles_still_takes_a_copy(vsdx_copy):
         plain.copy(target.pages[0])
         _master_instance(source).copy(target.pages[0])
         assert len(target.master_pages) == 1
+
+
+def test_same_name_masters_without_unique_ids_in_one_batch_import_once(vsdx_copy):
+    """Fails if a batch imports two masters that copying them one at a time would treat as one."""
+    with VisioFile(vsdx_copy("test_master.vsdx")) as source, VisioFile(vsdx_copy("test1.vsdx")) as target:
+        for master in source._masters.root:
+            master.attrib.pop("UniqueID", None)
+            master.attrib["NameU"] = master.attrib["Name"] = "Shared"
+        ids = [page.page_id for page in source.master_pages]
+        assert len(ids) == 2
+        found = target._masters.import_masters(source._masters, ids)
+        assert found[ids[0]] is found[ids[1]]
+        assert len(target.master_pages) == 1
+
+
+def test_a_colliding_import_takes_a_name_no_master_already_has(vsdx_copy):
+    """Fails if the `Name.ID` a colliding import is given is itself taken, leaving a lookup by name ambiguous."""
+    with VisioFile(vsdx_copy("test_master.vsdx")) as source, VisioFile(vsdx_copy("test_master.vsdx")) as target:
+        own = _master_element(target, "Test Master")
+        own.attrib["UniqueID"] = "{00000000-0000-0000-0000-000000000003}"
+        next_id = max(int(master.attrib["ID"]) for master in target._masters.root) + 1
+        other = _master_element(target, "Test Master 2")
+        other.attrib["NameU"] = other.attrib["Name"] = f"Test Master.{next_id}"
+        target.load_master_pages()
+        instance = next(
+            shape for shape in source.pages[0].all_shapes if shape.master_page == source.master_index["Test Master"]
+        )
+        instance.copy(target.pages[0])
+        names = [master.attrib["NameU"] for master in target._masters.root]
+        assert len(names) == len(set(names)), names
