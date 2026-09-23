@@ -279,12 +279,15 @@ def read_archive_members(path: str | os.PathLike[str], limits: PackageLimits) ->
     _preflight_eocd(source, limits)
     try:
         return _members_within(source, limits)
-    except (zipfile.BadZipFile, UnicodeDecodeError) as error:
+    except (zipfile.BadZipFile, UnicodeDecodeError, NotImplementedError) as error:
         # A file that is not an archive, one whose members do not read back as
         # they were declared, or one whose central directory claims a member
         # name is UTF-8 and then is not, is a malformed package rather than a
         # zipfile problem the caller of this library asked for. The name is
-        # decoded by the `ZipFile` constructor, before `infolist()` runs.
+        # decoded by the `ZipFile` constructor, before `infolist()` runs. So is
+        # a central directory record that needs a zip version above 6.3: the
+        # constructor refuses it with `NotImplementedError`, but the version is
+        # the package's own claim about itself, not a gap in this library.
         raise MalformedPackageError(f"{source} is not a readable package: {error}") from error
 
 
@@ -344,7 +347,15 @@ def _member_bytes(archive: zipfile.ZipFile, info: zipfile.ZipInfo, limits: Packa
     from the operating system - the disk the archive is on - where saying the
     package is malformed would be a lie about a file that is fine; a codec's
     `OSError` carries no `errno`.
+
+    That claim holds only once a member that lies before the archive is
+    refused. `ZipFile` places each header by adding the gap between where the
+    central directory is and where the end record says it is, so an end record
+    that overstates the directory's offset puts a header before byte zero, and
+    seeking there raises `OSError(EINVAL)` about a disk that is fine.
     """
+    if info.header_offset < 0:
+        raise MalformedPackageError(f"package member {info.filename!r} lies before the start of the archive")
     try:
         with archive.open(info, "r") as member_reader:
             return _read_bounded(member_reader, info.file_size, info.filename, limits)

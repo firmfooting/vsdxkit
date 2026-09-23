@@ -472,6 +472,56 @@ def test_an_encrypted_member_raises_malformed_package_error(vsdx_copy, tmp_path)
 
 
 @pytest.mark.allow_invalid_package
+def test_a_member_needing_an_unsupported_zip_version_raises_malformed_package_error(vsdx_copy, tmp_path):
+    """Fails if `read_archive_members` stops translating the `ZipFile` constructor's `NotImplementedError`.
+
+    CPython reads the central directory in the constructor, and refuses a
+    record whose "version needed to extract" is above 63 with
+    `NotImplementedError("zip file version ...")`. That is a claim the package
+    makes about itself, so it is a malformed package, and it escaped
+    `except VsdxError` until the constructor's handler named it.
+    """
+    raw = bytearray(pathlib.Path(vsdx_copy("test1.vsdx")).read_bytes())
+    # central directory record: signature (4), version made by (2), then the
+    # version needed to extract, whose low byte is the version itself
+    record = raw.find(b"PK\x01\x02")
+    assert record != -1, "the fixture has changed: no central directory record"
+    raw[record + 6] = 64
+    destination = tmp_path / "zip-version-64.vsdx"
+    destination.write_bytes(bytes(raw))
+
+    with pytest.raises(MalformedPackageError, match="not a readable package") as caught:
+        vsdxkit.VisioFile(str(destination))
+    assert isinstance(caught.value.__cause__, NotImplementedError)
+
+
+@pytest.mark.allow_invalid_package
+def test_a_member_whose_header_lies_before_the_archive_raises_malformed_package_error(vsdx_copy, tmp_path):
+    """Fails if `_member_bytes` stops refusing a negative `header_offset` before it seeks.
+
+    `ZipFile` places each member by adding the gap between where the central
+    directory is and where the end record says it is. An end record that
+    overstates the directory's offset makes that gap negative, and the first
+    member's header then lies before byte zero. Seeking there raised
+    `OSError(EINVAL)`, which `_member_bytes` hands back untranslated because an
+    errno normally means the disk failed; here the disk is fine and the
+    package lies, so it has to be `MalformedPackageError`.
+    """
+    raw = bytearray(pathlib.Path(vsdx_copy("test1.vsdx")).read_bytes())
+    # end of central directory record: the directory's offset is the 4 bytes
+    # at offset 16 from the signature
+    end_record = raw.rfind(b"PK\x05\x06")
+    assert end_record != -1, "the fixture has changed: no end of central directory record"
+    (directory_offset,) = struct.unpack_from("<I", raw, end_record + 16)
+    struct.pack_into("<I", raw, end_record + 16, directory_offset + 100)
+    destination = tmp_path / "negative-header-offset.vsdx"
+    destination.write_bytes(bytes(raw))
+
+    with pytest.raises(MalformedPackageError, match="before the start of the archive"):
+        vsdxkit.VisioFile(str(destination))
+
+
+@pytest.mark.allow_invalid_package
 def test_a_corrupt_compressed_stream_raises_malformed_package_error(vsdx_copy, tmp_path):
     """A deflate stream the decompressor rejects arrives as `zlib.error`, not `BadZipFile`."""
     source = vsdx_copy("test1.vsdx")
