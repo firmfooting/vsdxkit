@@ -11,7 +11,7 @@ import zipfile
 import pytest
 from helpers.broken_package import rewritten
 
-from vsdxkit import VisioFile
+from vsdxkit import VisioFile, namespace, r_namespace
 from vsdxkit.package import PartParseError, XmlPart
 from vsdxkit.xmlio import serialise_part, xml_to_file
 
@@ -200,9 +200,9 @@ def test_reassigning_the_same_tree_keeps_the_promotion_baseline(vsdx_copy):
 
 
 def test_an_added_page_is_in_the_store_before_any_save(vsdx_copy):
-    """Fails if `_create_page` constructs the `Page` before the new page part
-    is written into the store, so an added page reaches disk only through
-    save_vsdx's rewrite rather than at the moment it is created."""
+    """Fails if `_create_page` never writes the new page part into the store,
+    so an added page reaches disk only through save_vsdx's rewrite rather than
+    at the moment it is created."""
     with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         page = vis.add_page("Added")
         held = vis._package.part(vis._part_name(page.filename))
@@ -222,7 +222,12 @@ def test_a_copied_page_brings_its_rels_part_into_the_store(vsdx_copy):
 
 
 def test_importing_a_master_keeps_masters_parts_as_the_stores_trees(vsdx_copy):
-    """#366 and the eager-write removal: masters.xml(.rels) are trees in the store, not bytes."""
+    """#366 and the eager-write removal: masters.xml(.rels) are trees in the
+    store, not bytes. Fails if the imported master's relationship is appended
+    to a rels tree the store no longer holds -- `isinstance(rels, XmlPart)`
+    alone would still pass with an orphaned tree, so this also asserts the
+    imported `<Master>`'s own `r:id` is actually present in the stored
+    masters.xml.rels."""
     with VisioFile(vsdx_copy("test3_house.vsdx")) as vis:
         page = vis.pages[0]
         page.connect_shapes(page.find_shape_by_id("1"), page.find_shape_by_id("5"))
@@ -230,6 +235,15 @@ def test_importing_a_master_keeps_masters_parts_as_the_stores_trees(vsdx_copy):
         rels = vis._package.part("/visio/masters/_rels/masters.xml.rels")
         assert isinstance(masters, XmlPart) and masters.tree.getroot() is vis.masters_xml
         assert isinstance(rels, XmlPart)
+        masters_root = vis.masters_xml
+        assert masters_root is not None
+        imported_master = max(masters_root, key=lambda m: int(m.attrib["ID"]))
+        imported_rel = imported_master.find(f"{namespace}Rel")
+        assert imported_rel is not None
+        imported_rel_id = imported_rel.attrib[f"{r_namespace}id"]
+        stored_rels = vis._package.read_xml("/visio/masters/_rels/masters.xml.rels")
+        assert stored_rels is not None
+        assert imported_rel_id in {r.attrib["Id"] for r in stored_rels.getroot()}
 
 
 def test_bootstrapping_masters_writes_trees(vsdx_copy):

@@ -84,7 +84,19 @@ class MastersImportMixin:
         if source_master_page is None or src_vis._package.part(src_vis._part_name(source_master_page.filename)) is None:
             return ""
 
-        # 1. copy the master part bytes under the next free filename
+        # 1. ensure this document has a masters.xml (and rels) to append to,
+        # BEFORE resolving master_rels_path below. A masters relationship can
+        # be declared in document.xml.rels with the masters parts themselves
+        # missing (a crafted or partially-written package), so `masters_xml`
+        # being None here is reachable through the public API, not only from
+        # a freshly opened document. Bootstrapping after building a rels tree
+        # of our own would have `_bootstrap_masters` write a second, empty
+        # rels tree over the one just constructed, orphaning it and silently
+        # dropping the relationship appended to it below.
+        if self.masters_xml is None:
+            self._bootstrap_masters()
+
+        # 2. copy the master part bytes under the next free filename
         prefix = f"{self._masters_folder}/master"
         existing_numbers = [
             int(f[len(prefix) : -4])
@@ -112,10 +124,6 @@ class MastersImportMixin:
         self._package.write_bytes(
             self._part_name(part_path), src_vis._package.read_bytes(src_vis._part_name(source_master_page.filename)) or b""
         )
-
-        # 2. ensure this document has a masters.xml to append to
-        if self.masters_xml is None:
-            self._bootstrap_masters()
 
         # 3. append the Master element with a fresh logical ID
         assert self.masters_xml is not None  # bootstrap above guarantees it
@@ -172,7 +180,17 @@ class MastersImportMixin:
         return str(new_id)
 
     def _bootstrap_masters(self):
-        """Create an empty masters part + wiring for documents without masters."""
+        """Create an empty masters part + wiring for documents without masters.
+
+        `masters.xml.rels` is written only when the package does not already
+        have one. A masters relationship can be declared in document.xml.rels
+        while only `masters.xml` itself is missing -- `masters_xml is None`
+        does not imply the rels part is absent too -- and replacing an
+        existing rels part here would discard whatever relationships it
+        already held (issue found in review: `_ensure_masters_for_shape`
+        calls this and then appends to a rels tree of its own; if this
+        overwrote it unconditionally, that append would be lost).
+        """
         masters_root = ET.fromstring(
             '<Masters xmlns="http://schemas.microsoft.com/office/visio/2012/main" '
             'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>'
@@ -181,12 +199,14 @@ class MastersImportMixin:
         # holds both from the moment this document gets masters, and
         # `masters_xml`'s own getter reads the tree straight back from it.
         self._package.write_xml(self._part_name(f"{self._masters_folder}/masters.xml"), ET.ElementTree(masters_root))
-        self._package.write_xml(
-            self._part_name(f"{self._masters_folder}/_rels/masters.xml.rels"),
-            ET.ElementTree(
-                ET.fromstring('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
-            ),
-        )
+        master_rels_path = self._part_name(f"{self._masters_folder}/_rels/masters.xml.rels")
+        if self._package.part(master_rels_path) is None:
+            self._package.write_xml(
+                master_rels_path,
+                ET.ElementTree(
+                    ET.fromstring('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
+                ),
+            )
         self._add_content_types_override(
             part_name_path="/visio/masters/masters.xml", content_type="application/vnd.ms-visio.masters+xml"
         )
