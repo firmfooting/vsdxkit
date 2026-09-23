@@ -365,9 +365,9 @@ def test_write_bytes_rejects_nul_in_part_name(source):
     """Fails if `write_bytes` accepts a part name with a NUL in it.
 
     Every part name is checked when it is written, by the same rule whichever
-    method writes it; this pins the rule on `write_bytes`, the path the
-    `zip_file_contents` view writes through. A NUL would otherwise reach the
-    archive writer, where zipfile truncates the name at it.
+    method writes it; this pins the rule on `write_bytes`. A NUL would
+    otherwise reach the archive writer, where zipfile truncates the name
+    at it.
     """
     store = PackageStore.open(source)
     with pytest.raises(ValueError, match="cannot contain"):

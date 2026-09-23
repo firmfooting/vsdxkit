@@ -1,6 +1,5 @@
 """Pytest Tests for VisioFile class"""
 
-import io
 import os
 import xml.etree.ElementTree as ET
 import zipfile
@@ -10,7 +9,6 @@ from xml.etree.ElementTree import Element
 import pytest
 
 from vsdxkit import Media, PagePosition, VisioFile, ext_prop_namespace, namespace, vt_namespace
-from vsdxkit.vsdxfile import file_to_xml
 
 
 def _media_filename() -> str:
@@ -606,17 +604,10 @@ def test_copy_shape_other_page(filename: str, shape_name: str, tmp_path, basedir
         assert s.text == shape_text
 
 
-def test_load_zip_file_contents(basedir):
+def test_every_xml_part_of_an_opened_document_parses(basedir):
+    """Fails if a part named `.xml` or `.rels` cannot be promoted to a tree."""
     with VisioFile(os.path.join(basedir, "test1.vsdx")) as vis:
-        assert vis.zip_file_contents
-        assert len(vis.zip_file_contents) > 0
-        for file_path, file_content in vis.zip_file_contents.items():
-            print(f"file_path:{file_path} file_content:{type(file_content)}")
-            assert file_content
-            assert isinstance(file_content, io.BytesIO)
-
-            # validate we can load xml
-            if file_path.endswith(".xml"):
-                xml = file_to_xml(file_path, vis.zip_file_contents)
-                print(f"xml={type(xml)}")
-                assert isinstance(xml, ET.ElementTree)
+        assert vis._package.names()
+        for name in vis._package.names():
+            if name.endswith((".xml", ".rels")):
+                assert vis._package.read_xml(name) is not None

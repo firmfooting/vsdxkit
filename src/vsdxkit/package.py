@@ -564,59 +564,6 @@ class PackageStore:
         """Replace a part with these bytes, discarding any tree it had."""
         self._parts[_checked(name)] = BytesPart(data)
 
-    def write_bytes_keeping_tree(self, name: str, data: bytes, *, refuse_unparseable: bool = False) -> bool:
-        """Replace a part's content with these bytes, into the tree it already has if it has one.
-
-        `write_bytes` is right for a caller that means to replace a part; this
-        is for the caller that only has bytes to say what a part now holds --
-        `zip_file_contents`, which predates the store and whose callers wrote
-        a page back with `xml_to_file(page.xml, ...)` as a matter of course.
-        Replacing the part there would detach the tree the document edits, and
-        every later object-model edit would go into a tree nothing saves.
-
-        So a parsed part keeps its tree. Bytes that mean what the tree already
-        means change nothing, and the part keeps its baseline, so a save still
-        writes the bytes it arrived as. Bytes that mean something else are
-        parsed and become the tree's root: the tree object is the one the
-        document holds, and the baseline stays the part's original bytes, so a
-        later save compares against what the package arrived with rather than
-        against this write. Only bytes that do not parse replace the part, as
-        `write_bytes` would -- there is no tree they could be.
-
-        A part that has not been parsed, or is not there, is written as bytes.
-
-        `refuse_unparseable` is for a writer whose bytes may be a step on the
-        way rather than its last word: a `zip_file_contents` buffer mid-way
-        through `seek(0); write(shorter); truncate()` holds the new XML with
-        the old tail behind it. Replacing the part with that would detach the
-        tree for good, so with the flag set a parsed part is left exactly as
-        it is, and the False returned says the bytes were not taken; the
-        caller keeps them and writes them again once it knows they are final.
-        Every other write returns True.
-        """
-        checked = _checked(name)
-        held = self._parts.get(checked)
-        if not isinstance(held, XmlPart):
-            self._parts[checked] = BytesPart(data)
-            return True
-        try:
-            written = parse_part(data)
-        except MalformedPackageError:
-            # not only a well-formedness fault: bytes declaring an encoding
-            # nothing can decode do not parse either, and are held back or
-            # stored as bytes the same way rather than escaping the write
-            if refuse_unparseable:
-                return False
-            self._parts[checked] = BytesPart(data)
-            return True
-        if canonical_hash(written) == canonical_hash(held.tree):
-            return True
-        new_root = written.getroot()
-        # parse_part always yields a root; the assert only tells the type checker so
-        assert new_root is not None
-        held.tree._setroot(new_root)
-        return True
-
     def read_xml(self, name: str) -> ET.ElementTree[ET.Element] | None:
         """This part's tree, promoting it on first ask, or None if it is absent."""
         checked = _checked(name)

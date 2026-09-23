@@ -876,7 +876,8 @@ def test_saving_an_empty_package_raises_invalid_operation(vsdx_copy, tmp_path):
     and that state is why there is nothing to save.
     """
     with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
-        vis.zip_file_contents.clear()
+        for name in vis._package.names():
+            vis._package.remove(name)
         with pytest.raises(InvalidOperationError, match="empty package"):
             vis.save_vsdx(str(tmp_path / "out.vsdx"))
 

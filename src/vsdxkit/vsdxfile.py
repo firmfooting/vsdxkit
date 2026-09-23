@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 import copy
-import io
-import os
 import posixpath
 import re
 import sys
 import xml.dom.minidom as minidom  # minidom used for prettyprint
 import xml.etree.ElementTree as ET
-from collections.abc import MutableMapping
 from types import TracebackType
 from typing import NamedTuple
 from xml.etree.ElementTree import Element
@@ -34,7 +31,6 @@ from .partnames import (
     relationships_part_name,
     target_part_name,
 )
-from .zip_contents import ZipFileContentsView
 
 # TODO(#362): `PackageLimitError` is imported here only to keep
 # `vsdxkit.vsdxfile.PackageLimitError` working -- it moved to `vsdxkit.package`,
@@ -169,7 +165,6 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             limits = PackageLimits.from_json_file(limits_path)
         self.limits = limits if limits is not None else PackageLimits()
 
-        self.directory = os.path.abspath(filename)[:-5]
         # pages_xml, pages_xml_rels, content_types_xml, app_xml, document_xml,
         # document_xml_rels and masters_xml are store-backed properties, defined
         # below -- there is nothing to initialise here, since the store itself
@@ -178,13 +173,12 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         self.master_index: dict[str, Page] = {}  # master page info by item name e.g. 'Dynamic Connector'
         self.master_pages: list[Page] = []  # populated by open_vsdx_file()
         self.file_open = False
-        # populated by _load_zip_file_contents_to_memory(), called from
-        # open_vsdx_file() below; declared here so an attribute assigned
-        # outside __init__ still has a home for pyrefly to check it against
+        # populated by open_vsdx_file() below; declared here so an attribute
+        # assigned outside __init__ still has a home for pyrefly to check it
+        # against
         self._package: PackageStore
         # `filename` as the store was opened from it; see save_vsdx
         self._opened_filename: str
-        self.zip_file_contents: MutableMapping[str, io.BytesIO]
         # the bundled donor packages are expensive to parse, so one Media is
         # shared by every create/connect call on this document (issue #65)
         self._media: vsdxkit.Media | None = None
@@ -232,16 +226,6 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         if isinstance(xml, ET.ElementTree):
             return minidom.parseString(ET.tostring(require_element(xml.getroot(), "element"))).toprettyxml()
         return minidom.parseString(ET.tostring(xml)).toprettyxml()
-
-    def _load_zip_file_contents_to_memory(self) -> None:
-        """Open the package as a `PackageStore`, the one copy of it held from now on.
-
-        `zip_file_contents` survives as a view over the store, keyed the old
-        way, until #91 retires it.
-        """
-        self._package = PackageStore.open(self.filename, limits=self.limits)
-        self._opened_filename = self.filename
-        self.zip_file_contents = ZipFileContentsView(self._package, self.directory)
 
     def _check_relationship_target(self, name: str, subject: str, target: str) -> None:
         """Refuse a relationship whose `target`, joined into `name`, names no part.
@@ -375,7 +359,8 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         self._set_document_part_xml("masters_xml", MASTERS_PART, ET.ElementTree(root))
 
     def open_vsdx_file(self) -> None:
-        self._load_zip_file_contents_to_memory()
+        self._package = PackageStore.open(self.filename, limits=self.limits)
+        self._opened_filename = self.filename
 
         # load each page file into an ElementTree object
         self.load_pages()
@@ -1537,12 +1522,6 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
 
         # resolve the destination first, so a refused extension writes nothing
         target = self._in_place_filename() if new_filename is None else self._destination_filename(new_filename)
-
-        # sync edits made through a `getbuffer()` memoryview on a buffer the
-        # view handed out, which no write-through method could see; done after
-        # the destination check, so a refused save still changes nothing
-        if isinstance(self.zip_file_contents, ZipFileContentsView):
-            self.zip_file_contents.sync()
 
         # every change is already in the store -- the trees this document edits
         # are the store's own -- so saving is writing it, once, member by member.

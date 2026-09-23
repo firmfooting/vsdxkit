@@ -60,7 +60,8 @@ def test_save_vsdx_refuses_an_empty_package(vsdx_copy, tmp_path):
     destination = tmp_path / "empty.vsdx"
 
     with VisioFile(src) as vis:
-        vis.zip_file_contents.clear()
+        for name in vis._package.names():
+            vis._package.remove(name)
         with pytest.raises(ValueError, match="empty package"):
             vis.save_vsdx(str(destination))
 

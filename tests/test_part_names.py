@@ -168,3 +168,10 @@ def test_a_connector_reaches_a_master_kept_in_a_subfolder_of_the_masters_folder(
         resolved = {t: posixpath.normpath(posixpath.join(posixpath.dirname(page.filename), t)) for t in targets}
         assert {t: name for t, name in resolved.items() if vis._package.part(name) is None} == {}
         vis.save_vsdx(str(tmp_path / "out.vsdx"))
+
+
+def test_a_document_has_no_zip_file_contents_or_directory(vsdx_copy):
+    """Fails if the pre-store view or its pseudo-path root is still on `VisioFile` (#91)."""
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        assert not hasattr(vis, "zip_file_contents")
+        assert not hasattr(vis, "directory")

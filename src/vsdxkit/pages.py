@@ -260,12 +260,12 @@ class Page:
         name, and the next page takes it. So this asks whether the part at the
         page's name is this page's own tree, not merely whether there is one.
 
-        A page's part can also be plain bytes, which is how
-        `zip_file_contents` writes bytes that do not parse, or be gone, deleted
-        through that mapping. No page holds such a part, so it is this page's
-        own exactly when this page is still one of the document's -- a removed
-        page is not -- and a tree assigned afterwards must replace the bytes
-        or bring the part back, since pages.xml still names it.
+        A page's part can also be plain bytes -- written directly through the
+        store rather than as a tree -- or be gone, removed from the store.
+        No page holds such a part, so it is this page's own exactly when this
+        page is still one of the document's -- a removed page is not -- and a
+        tree assigned afterwards must replace the bytes or bring the part
+        back, since pages.xml still names it.
         """
         if self._holds(self.filename, self._xml):
             return True
@@ -287,8 +287,8 @@ class Page:
         if self.rels_xml_filename is None or not self._attached():
             return False
         # the page itself is attached, so no removed page and no page that took
-        # its name can be in play: a rels part that is gone, or that
-        # `zip_file_contents` wrote as plain bytes, is this page's to replace
+        # its name can be in play: a rels part that is gone, or that was
+        # written directly as plain bytes, is this page's to replace
         held = self.vis._package.part(self.rels_xml_filename)
         if held is None or isinstance(held, BytesPart):
             return True

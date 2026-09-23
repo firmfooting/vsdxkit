@@ -306,7 +306,7 @@ PACKAGE_RELATIONSHIPS = "http://schemas.openxmlformats.org/package/2006/relation
 def _in_memory_offenders(vis) -> dict[str, str]:
     """Parts sitting in the open package that carry a generated prefix.
 
-    Read from `zip_file_contents` rather than from a saved file, so the check
+    Read from the package store rather than from a saved file, so the check
     covers a part as the open document holds it. Before #89, `save_vsdx`
     re-serialised every page, its rels and the document-level parts on the way
     out, so a part written with a generated prefix when it was built was
@@ -315,9 +315,9 @@ def _in_memory_offenders(vis) -> dict[str, str]:
     are also the bytes a save would write.
     """
     return {
-        name: part.getvalue()[:160].decode("utf-8", "replace")
-        for name, part in vis.zip_file_contents.items()
-        if name.endswith((".xml", ".rels")) and GENERATED_PREFIX_RE.search(part.getvalue())
+        name: part[:160].decode("utf-8", "replace")
+        for name, part in ((name, vis._package.read_bytes(name)) for name in vis._package.names())
+        if name.endswith((".xml", ".rels")) and GENERATED_PREFIX_RE.search(part)
     }
 
 
@@ -333,8 +333,7 @@ def test_connecting_shapes_writes_the_page_rels_in_the_default_namespace(vsdx_co
     with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
         page = vis.pages[0]
         page.connect_shapes(page.child_shapes[0], page.child_shapes[1])
-        rels_member = f"{vis.directory}/visio/pages/_rels/page1.xml.rels"
-        in_memory = vis.zip_file_contents[rels_member].getvalue()
+        in_memory = vis._package.read_bytes("/visio/pages/_rels/page1.xml.rels")
         vis.save_vsdx(out)
 
     assert f'<Relationships xmlns="{PACKAGE_RELATIONSHIPS}"'.encode() in in_memory
@@ -353,7 +352,7 @@ def test_bootstrapping_masters_writes_the_visio_default_namespace(vsdx_copy):
     with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
         assert vis.masters_xml is None, "fixture is expected to have no masters part"
         vis._bootstrap_masters()
-        written = vis.zip_file_contents[f"{vis.directory}/visio/masters/masters.xml"].getvalue()
+        written = vis._package.read_bytes("/visio/masters/masters.xml")
 
     assert f'<Masters xmlns="{namespace[1:-1]}"'.encode() in written
     assert not GENERATED_PREFIX_RE.search(written)
@@ -393,8 +392,8 @@ def test_no_operation_leaves_a_generated_prefix_in_the_package(filename, mutate,
     be found by a LibreOffice import failure rather than by this suite.
     """
     with vsdxkit.VisioFile(vsdx_copy(filename)) as vis:
-        before = {name: part.getvalue() for name, part in vis.zip_file_contents.items()}
+        before = {name: vis._package.read_bytes(name) for name in vis._package.names()}
         mutate(vis)
-        written = {name for name, part in vis.zip_file_contents.items() if before.get(name) != part.getvalue()}
+        written = {name for name in vis._package.names() if before.get(name) != vis._package.read_bytes(name)}
         assert written, "the operation wrote no part into the package, so it cannot fail this check"
         assert _in_memory_offenders(vis) == {}
