@@ -26,6 +26,18 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 
+__all__ = [
+    "InvalidOperationError",
+    "MalformedPackageError",
+    "MissingPartError",
+    "NotFoundError",
+    "PackageError",
+    "PackageLimitError",
+    "PartParseError",
+    "VisioFileNotOpen",
+    "VsdxError",
+]
+
 
 class VsdxError(Exception):
     """Base class for every error this library raises itself."""
@@ -71,8 +83,9 @@ class PartParseError(MalformedPackageError, ET.ParseError):
     """A part that is not well-formed XML, named, and catchable as every error it has been.
 
     Before the package store a malformed part reached the caller as the bare
-    `ET.ParseError` the parser raised; 0.9 callers catch it as `ValueError`,
-    and the hierarchy's callers as `MalformedPackageError` or `VsdxError`.
+    `ET.ParseError` the parser raised; callers of the package store's first
+    cut catch it as `ValueError`, and the hierarchy's callers as
+    `MalformedPackageError` or `VsdxError`.
     A caller should not have to know which release it runs against to catch a
     broken package, so this is all of them. It carries the parser's
     `position` and `code`, which say where in the part it broke.

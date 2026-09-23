@@ -15,7 +15,8 @@ def test_package_limit_error_is_importable_from_its_documented_module():
     assert PackageLimitError.__module__ == "vsdxkit.errors"
 
 
-def test_the_two_paths_are_the_same_class_not_a_lookalike():
+def test_the_three_paths_are_the_same_class_not_a_lookalike():
+    """Fails if package.py or vsdxfile.py defines its own PackageLimitError instead of re-exporting the errors module's."""
     from vsdxkit.errors import PackageLimitError as defined
     from vsdxkit.package import PackageLimitError as moved
     from vsdxkit.vsdxfile import PackageLimitError as documented
