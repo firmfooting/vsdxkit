@@ -586,7 +586,10 @@ class PackageStore:
             return True
         try:
             written = parse_part(data)
-        except ET.ParseError:
+        except MalformedPackageError:
+            # not only a well-formedness fault: bytes declaring an encoding
+            # nothing can decode do not parse either, and are held back or
+            # stored as bytes the same way rather than escaping the write
             if refuse_unparseable:
                 return False
             self._parts[checked] = BytesPart(data)

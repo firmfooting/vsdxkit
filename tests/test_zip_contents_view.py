@@ -572,6 +572,16 @@ def test_bytes_that_do_not_parse_are_held_until_sync(view, store):
     assert store.read_bytes(PAGE1) == b"not xml" + original[len(b"not xml") :]
 
 
+def test_bytes_declaring_an_undecodable_encoding_are_held_back_like_unparseable_bytes(view, store):
+    """Fails if write_bytes_keeping_tree catches only ET.ParseError, so a LookupError-shaped failure escapes buf.write()."""
+    tree = store.require_xml(PAGE1)
+    buf = view[f"{DIRECTORY}{PAGE1}"]
+    buf.seek(0)
+    buf.write(b'<?xml version="1.0" encoding="x-no-such-codec"?><a/>')
+    held = store.part(PAGE1)
+    assert isinstance(held, XmlPart) and held.tree is tree
+
+
 def test_bytes_that_do_not_parse_are_written_when_the_buffer_is_closed(view, store):
     """Fails if close() drops a buffer still holding bytes that do not parse, so a `with` block's last write is lost."""
     store.require_xml(PAGE1)
