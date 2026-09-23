@@ -4,6 +4,7 @@ from datetime import datetime
 
 import pytest
 
+from vsdxkit import namespace
 from vsdxkit.connectors import Connect
 from vsdxkit.formulae import calc_value
 from vsdxkit.shapes import Shape
@@ -179,6 +180,23 @@ def test_apply_context(filename: str, tmp_path, basedir):
         page = vis.get_page(0)  # type: Page
         updated_shape = page.find_shape_by_text(date_str)  # type: Shape
         assert updated_shape.ID == original_shape.ID
+
+
+def test_find_replace_writes_only_the_text_it_changes(vsdx_copy):
+    """Fails if find_replace writes a Text element into the page's Shapes element, or into a shape it did not change.
+
+    `Shapes` holds only `Shape` elements. A shape with no text of its own
+    shows its master's, and an empty `Text` written onto it hides that.
+    """
+    with VisioFile(vsdx_copy("test3_house.vsdx")) as vis:
+        page = vis.pages[0]
+        textless = [s.xml for s in page.all_shapes if s.xml.find(f"{namespace}Text") is None]
+        assert textless, "fixture is expected to have shapes with no text of their own"
+        page.find_replace("no such text", "anything")
+        shapes = page.xml.find(f"{namespace}Shapes")
+        assert shapes is not None
+        assert {child.tag for child in shapes} == {f"{namespace}Shape"}
+        assert [element for element in textless if element.find(f"{namespace}Text") is not None] == []
 
 
 @pytest.mark.parametrize("filename", ["test1.vsdx", "test2.vsdx", "test3_house.vsdx"])

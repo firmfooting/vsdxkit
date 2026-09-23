@@ -6,6 +6,7 @@ import re
 import sys
 import warnings
 import xml.etree.ElementTree as ET
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 from xml.etree.ElementTree import Element
 
@@ -25,6 +26,7 @@ from vsdxkit.formulae import calc_value
 from vsdxkit.geometry import Geometry, GeometryCell
 from vsdxkit.inheritance import InheritedRow
 from vsdxkit.logging_support import get_logger
+from vsdxkit.shape_tree import is_connector_element, iter_children, iter_descendants, iter_edges
 from vsdxkit.xmlio import make_cell_element, to_float, xml_value
 
 if TYPE_CHECKING:
@@ -42,20 +44,21 @@ def parent_of(root: Element, element: Element) -> Element | None:
     return None
 
 
+def is_connector(shape: Shape) -> bool:
+    """Whether `shape` is 1-D, reading the master it inherits from as well as its own cells."""
+    master = shape.master_shape
+    return is_connector_element(shape.xml, None if master is None else master.xml)
+
+
 def _shape_ids(master: Page) -> frozenset[str]:
     """The IDs of every shape a master holds."""
     return frozenset(shape_id for shape in master.xml.iter(f"{namespace}Shape") if (shape_id := shape.attrib.get("ID")))
 
 
 def _drop_unreachable_master_shapes(
-    element: Element,
-    inherited: str | None,
-    members: dict[str, frozenset[str]],
-    dropped: set[Element],
-    *,
-    root_names_inherited: bool,
+    root: Element, members: dict[str, frozenset[str]], dropped: set[Element], *, root_names_inherited: bool
 ) -> None:
-    """Drop every `MasterShape` below `element` that names no shape of the master it inherits from.
+    """Drop every `MasterShape` in `root`'s subtree that names no shape of the master it inherits from.
 
     A shape's master is its own `Master`, else its group's. A shape in
     `dropped` had a master that could not be resolved, and has none now: it
@@ -65,15 +68,18 @@ def _drop_unreachable_master_shapes(
     The exception is a copy's root that was given its group's master, whose
     `MasterShape` reaches into that master.
     """
-    named = element.attrib.get("Master")
-    master = None if element in dropped else named or inherited
-    member = element.attrib.get("MasterShape")
-    checked = member is not None and (named is None or root_names_inherited)
-    if checked and (master is None or member not in members.get(master, frozenset())):
-        element.attrib.pop("MasterShape")
-    shapes = element.find(f"{namespace}Shapes")
-    for child in () if shapes is None else shapes.iterfind(f"{namespace}Shape"):
-        _drop_unreachable_master_shapes(child, master, members, dropped, root_names_inherited=False)
+
+    def check(element: Element, master: str | None, *, own_counts: bool) -> None:
+        member = element.attrib.get("MasterShape")
+        checked = member is not None and (element.attrib.get("Master") is None or own_counts)
+        if checked and (master is None or member not in members.get(master, frozenset())):
+            element.attrib.pop("MasterShape")
+
+    masters: dict[Element, str | None] = {root: None if root in dropped else root.attrib.get("Master")}
+    check(root, masters[root], own_counts=root_names_inherited)
+    for parent, child in iter_edges(root):
+        masters[child] = None if child in dropped else child.attrib.get("Master") or masters[parent]
+        check(child, masters[child], own_counts=False)
 
 
 def find_or_create_shapes_tag(parent: Element) -> Element:
@@ -685,7 +691,7 @@ class Shape(DocumentPart):
             # it was copied under - a MatchByName master answers for its name
             # alone - or may be gone altogether
             members = {master.page_id: _shape_ids(master) for master in masters.values()}
-            _drop_unreachable_master_shapes(new_shape_xml, None, members, dropped, root_names_inherited=bool(inherited))
+            _drop_unreachable_master_shapes(new_shape_xml, members, dropped, root_names_inherited=bool(inherited))
         # every page that shows an instance of a master relates to it, as Visio
         # writes it; a copy onto another page of this document adds one too
         for master in masters.values():
@@ -1398,50 +1404,32 @@ class Shape(DocumentPart):
 
     @property
     def child_shapes(self) -> list[Shape]:
-        """Get child/sub shapes contained by a Shape
+        """The shapes directly inside this one: a group's members, or none.
 
         :returns: list of Shape objects
         :rtype: List[Shape]
         """
-        shapes = list()
-        # for each shapes tag, look for Shape objects
-        # self can be either a Shapes or a Shape
-        # a Shapes has a list of Shape
-        # a Shape can have 0 or 1 Shapes (1 if type is Group)
-
-        parent_element = self.xml.find(f"{namespace}Shapes") if self.shape_type == "Group" else self.xml
-
-        shapes: list[Shape] = []
-        if isinstance(parent_element, Element):
-            shapes = [Shape(xml=shape, parent=self, page=self.page) for shape in parent_element.findall(f"{namespace}Shape")]
-
-        return shapes
+        return [Shape(xml=child, parent=self, page=self.page) for child in iter_children(self.xml)]
 
     @property
     def all_shapes(self) -> list[Shape]:
-        # return all shapes within another shape, recursively
-        return self._all_shapes()
+        """Every shape inside this one, at any depth, depth first and parents first.
 
-    def _all_shapes(self, shapes: list[Shape] | None = None) -> list[Shape]:
-        # recursively search for shapes and return all found
-        if not shapes:
-            shapes = list()
-        for shape in self.child_shapes:  # type: Shape
+        Each is given the wrapper of the shape it sits in as its parent: a
+        sub-shape with no ``Master`` of its own instances its group's.
+        """
+        wrappers: dict[Element, Shape] = {self.xml: self}
+        shapes: list[Shape] = []
+        for parent, child in iter_edges(self.xml):
+            shape = Shape(xml=child, parent=wrappers[parent], page=self.page)
+            wrappers[child] = shape
             shapes.append(shape)
-            if shape.shape_type == "Group":
-                found = shape.all_shapes
-                if found:
-                    shapes.extend(found)
         return shapes
 
     def get_max_id(self) -> int:
-        max_id = int(self.ID) if self.ID is not None else 0
-        if self.shape_type == "Group":
-            for shape in self.child_shapes:
-                new_max = shape.get_max_id()
-                if new_max > max_id:
-                    max_id = new_max
-        return max_id
+        """The highest ID on this shape and every shape inside it, or 0 where none carries one."""
+        elements = (self.xml, *iter_descendants(self.xml))
+        return max((int(shape_id) for element in elements if (shape_id := element.attrib.get("ID")) is not None), default=0)
 
     def find_shape_by_id(self, shape_id: str) -> Shape | None:  # returns Shape or None
         """
@@ -1520,27 +1508,30 @@ class Shape(DocumentPart):
         ]
 
     def apply_text_filter(self, context: dict[str, object]) -> None:
+        """Substitute `context` into the text of this shape and every shape inside it."""
         # a shape whose text has nothing to substitute never reaches the text
         # setter, so its guard alone would let this one through
         self._require_open("Shape.apply_text_filter()")
-        text = self.text
-        substituted = substitute(text, context)
-        # Writing back text that did not change is not free: a run between two
-        # pieces of content does not survive the round trip (#317), so a shape
-        # with nothing to substitute would be corrupted by being visited.
-        if substituted != text:
-            self.text = substituted
-
-        for s in self.child_shapes:
-            s.apply_text_filter(context)
+        self._rewrite_texts(lambda text: substitute(text, context))
 
     def find_replace(self, old: str, new: str) -> None:
-        # find and replace text in this shape and sub shapes
-        text = self.text
-        self.text = text.replace(old, new)
+        """Replace `old` with `new` in the text of this shape and every shape inside it."""
+        self._require_open("Shape.find_replace()")
+        self._rewrite_texts(lambda text: text.replace(old, new))
 
-        for s in self.child_shapes:
-            s.find_replace(old, new)
+    def _rewrite_texts(self, rewrite: Callable[[str], str]) -> None:
+        """Pass the text of this shape and every shape inside it through `rewrite`, writing back only what changed.
+
+        Writing back text that did not change is not free. A run between two
+        pieces of content does not survive the round trip (#317), and a shape
+        showing its master's text would gain a copy of it as its own. So a shape
+        with nothing to change must not be altered by being visited.
+        """
+        for shape in (self, *self.all_shapes):
+            text = shape.text
+            rewritten = rewrite(text)
+            if rewritten != text:
+                shape.text = rewritten
 
     def remove(self) -> None:
         """Remove this shape from its page or group.

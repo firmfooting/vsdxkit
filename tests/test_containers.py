@@ -45,6 +45,25 @@ def test_membership_is_geometric(vsdx_copy):
         assert container.lane_of(decision) is not None
 
 
+def test_a_connector_whose_endpoints_come_from_its_master_is_not_a_member(vsdx_copy):
+    """Fails if lane membership looks for BeginX only on the shape, not on the master it inherits from."""
+    with VisioFile(vsdx_copy(FIXTURE)) as vis:
+        page = vis.pages[0]
+        container = page.get_container()
+        connector = page.find_shape_by_id("57")
+        assert connector.master_shape is not None and "BeginX" in connector.master_shape.cells
+        connector.xml.remove(connector.cells["BeginX"].xml)
+        connector = page.find_shape_by_id("57")  # a Shape reads its cells when it is built
+        assert "BeginX" not in connector.cells
+        lane = next(lane for lane in container.lanes if _in_band(container, lane, connector))
+        assert "57" not in [member.ID for member in container.members(lane)]
+
+
+def _in_band(container, lane, shape) -> bool:
+    bottom, top = container.lane_band(lane)
+    return bottom <= shape.y <= top
+
+
 def test_add_swimlane_clones_and_labels(vsdx_copy):
     path = vsdx_copy(FIXTURE)
     with VisioFile(path) as vis:
