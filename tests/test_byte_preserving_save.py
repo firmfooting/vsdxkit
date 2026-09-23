@@ -254,3 +254,47 @@ def test_a_tree_assigned_after_a_pages_bytes_were_flushed_is_saved(vsdx_copy, tm
         vis.save_vsdx(target)
     with vsdxkit.VisioFile(target) as saved:
         assert saved.pages[0].xml.getroot().get("VsdxkitMarker") == "1"
+
+
+def test_a_rels_tree_assigned_after_the_view_deleted_the_part_is_saved(vsdx_copy, tmp_path):
+    """Fails if `Page.rels_xml` writes through only over the page's own rels tree, not where the part is gone.
+
+    Deleting the member through `zip_file_contents` leaves the page attached
+    and still holding its old rels tree. A tree the caller assigns afterwards
+    is their later word and must bring the part back, or the save would leave
+    the page's master and image relationships out of the file.
+    """
+    target = str(tmp_path / "saved.vsdx")
+    with vsdxkit.VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
+        page = next(p for p in vis.pages if p.rels_xml is not None)
+        assert page.rels_xml_filename is not None
+        replacement = parse_part(serialise_part(page.rels_xml))
+        del vis.zip_file_contents[page.rels_xml_filename]
+        page.rels_xml = replacement
+        member = page.rels_xml_filename.removeprefix(f"{vis.directory}/")
+        vis.save_vsdx(target)
+    with zipfile.ZipFile(target) as archive:
+        assert member in archive.namelist()
+
+
+@pytest.mark.allow_invalid_package("unreadable-part")
+def test_none_assigned_to_rels_after_the_view_wrote_bytes_over_them_removes_the_part(vsdx_copy, tmp_path):
+    """Fails if `Page.rels_xml = None` keeps out when the page's rels part is bytes, not the page's tree.
+
+    Bytes that do not parse, written through `zip_file_contents`, land at
+    `sync()` as plain bytes. Assigning None afterwards must still take the
+    part out, or the save writes the unparseable bytes.
+    """
+    target = str(tmp_path / "saved.vsdx")
+    with vsdxkit.VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
+        page = next(p for p in vis.pages if p.rels_xml is not None)
+        assert page.rels_xml_filename is not None
+        buf = vis.zip_file_contents[page.rels_xml_filename]
+        buf.seek(0)
+        buf.write(b"not xml")
+        vis.zip_file_contents.sync()
+        page.rels_xml = None
+        member = page.rels_xml_filename.removeprefix(f"{vis.directory}/")
+        vis.save_vsdx(target)
+    with zipfile.ZipFile(target) as archive:
+        assert member not in archive.namelist()

@@ -261,17 +261,21 @@ class Page:
         """Whether an assignment to `rels_xml` may write this page's relationship part.
 
         Only while the page itself is attached, and only over the relationship
-        part the page holds -- or, for a page that has none yet, where the
-        package has none either, which is how a rels part is first created.
+        part the page holds -- or where the package holds no rels part there,
+        which is how one is first created, or holds only plain bytes.
         A removed page's rels name is freed along with its page's, and the
         page that takes the name must not be given the removed page's
         relationships.
         """
         if self.rels_xml_filename is None or not self._attached():
             return False
-        if self._rels_xml is None:
-            return self.vis._package.part(self.vis._part_name(self.rels_xml_filename)) is None
-        return self._holds(self.rels_xml_filename, self._rels_xml)
+        # the page itself is attached, so no removed page and no page that took
+        # its name can be in play: a rels part that is gone, or that
+        # `zip_file_contents` wrote as plain bytes, is this page's to replace
+        held = self.vis._package.part(self.vis._part_name(self.rels_xml_filename))
+        if held is None or isinstance(held, BytesPart):
+            return True
+        return held.tree is self._rels_xml
 
     @property
     def rels_xml(self) -> ET.ElementTree[ET.Element] | None:
