@@ -151,3 +151,43 @@ def test_truncating_a_read_buffer_of_a_parsed_page_keeps_the_tree_attached(vsdx_
         buffer.read()
         buffer.truncate()
         assert _held_tree(vis, page) is page.xml
+
+
+def test_assigning_a_document_part_replaces_it_in_the_store(vsdx_copy):
+    """`vis.app_xml = tree` has to reach disk once save stops rewriting (Review Focus 1)."""
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        replacement = ET.ElementTree(ET.fromstring(serialise_part(vis.app_xml)))
+        root = replacement.getroot()
+        assert root is not None
+        root.set("VsdxkitMarker", "1")
+        vis.app_xml = replacement
+        assert vis.app_xml is replacement
+        assert b"VsdxkitMarker" in (vis._package.read_bytes("/docProps/app.xml") or b"")
+
+
+def test_assigning_page_xml_replaces_the_page_part(vsdx_copy):
+    """What Jinja rendering does to every page it renders (Review Focus 1)."""
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        page = vis.pages[0]
+        replacement = ET.ElementTree(ET.fromstring(serialise_part(page.xml)))
+        replacement.getroot().set("VsdxkitMarker", "1")
+        page.xml = replacement
+        assert b"VsdxkitMarker" in (vis._package.read_bytes(vis._part_name(page.filename)) or b"")
+
+
+def test_a_removed_page_does_not_write_its_part_back(vsdx_copy):
+    """A caller still holding a removed Page must not resurrect an orphan part (Review Focus 2)."""
+    with VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
+        page = vis.pages[1]
+        name = vis._part_name(page.filename)
+        vis.remove_page_by_index(1)
+        page.xml = ET.ElementTree(ET.Element("PageContents"))
+        assert vis._package.part(name) is None
+
+
+def test_reassigning_the_same_tree_keeps_the_promotion_baseline(vsdx_copy):
+    """Identity is not a change: the part must still save as its original bytes."""
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        before = vis._package.part("/docProps/app.xml")
+        vis.app_xml = vis.app_xml
+        assert vis._package.part("/docProps/app.xml") is before

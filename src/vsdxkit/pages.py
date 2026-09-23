@@ -84,7 +84,7 @@ class Page:
         self.master_unique_id: str | None = None
         self.master_base_id: str | None = None
         self.rels_xml_filename: str | None = None
-        self.rels_xml: ET.ElementTree[ET.Element] | None = None
+        self._rels_xml: ET.ElementTree[ET.Element] | None = None
         self.vis = vis
         self._max_id = 0  # ID high-water mark, maintained by VisioFile's ID allocator
         # todo: add page id - from pages_xml - PageSheet[ID]
@@ -232,7 +232,29 @@ class Page:
     @xml.setter
     def xml(self, value: ET.ElementTree[ET.Element]) -> None:
         self.vis._require_open("Setting Page.xml")
+        attached = self._attached()
         self._xml = value
+        if attached:
+            self.vis._set_part_xml(self.vis._part_name(self.filename), value)
+
+    def _attached(self) -> bool:
+        """Whether this page's own part is still in its document's package.
+
+        A caller may keep holding a `Page` after it has been removed from the
+        document (`VisioFile.remove_page_by_index`); a later assignment to its
+        `xml` must not resurrect the part it was removed from.
+        """
+        return self.vis._package.part(self.vis._part_name(self.filename)) is not None
+
+    @property
+    def rels_xml(self) -> ET.ElementTree[ET.Element] | None:
+        return self._rels_xml
+
+    @rels_xml.setter
+    def rels_xml(self, value: ET.ElementTree[ET.Element] | None) -> None:
+        self._rels_xml = value
+        if value is not None and self.rels_xml_filename is not None and self._attached():
+            self.vis._set_part_xml(self.vis._part_name(self.rels_xml_filename), value)
 
     @property
     def _shapes(self) -> list[Shape]:
@@ -324,13 +346,15 @@ class Page:
         that page (Target '../masters/masterN.xml'). The rels part is created
         on demand; the filename is registered so save_vsdx persists it.
         """
-        if self.rels_xml is None:
+        rels_xml: ET.ElementTree[ET.Element] | None = self.rels_xml
+        if rels_xml is None:
             rels_filename = self.filename.replace("visio/pages/", "visio/pages/_rels/") + ".rels"
             self.rels_xml_filename = rels_filename
-            self.rels_xml = ET.ElementTree(
+            rels_xml = ET.ElementTree(
                 ET.fromstring('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
             )
-        rels_root = self.rels_xml.getroot()
+            self.rels_xml = rels_xml
+        rels_root = rels_xml.getroot()
         assert rels_root is not None
         existing = {r.attrib.get("Target") for r in rels_root}
         target = f"../masters/{master_part_name}"
@@ -348,7 +372,7 @@ class Page:
         # which does not hold the process-wide default prefix, so serialising
         # it outside the per-part prefix map wrote `<ns0:Relationships>` (#360).
         if self.rels_xml_filename:
-            xml_to_file(self.rels_xml, self.rels_xml_filename, self.vis.zip_file_contents)
+            xml_to_file(rels_xml, self.rels_xml_filename, self.vis.zip_file_contents)
 
     def get_connects(self) -> list[Connect]:
         elements = self.xml.findall(f".//{namespace}Connect")  # search recursively

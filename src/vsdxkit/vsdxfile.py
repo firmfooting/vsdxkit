@@ -23,7 +23,7 @@ import vsdxkit
 from . import relationships
 from .logging_support import attach_debug_stream_handler, get_logger
 from .package import PackageLimitError as PackageLimitError
-from .package import PackageLimits, PackageStore
+from .package import PackageLimits, PackageStore, XmlPart
 from .zip_contents import ZipFileContentsView, part_name_for_path
 
 # TODO(#362): `PackageLimitError` is imported here only to keep
@@ -83,6 +83,17 @@ def _normalise_page_path(path: str) -> str:
 MACRO_ENABLED_CONTENT_TYPE = "application/vnd.ms-visio.drawing.macroEnabled.main+xml"
 DRAWING_CONTENT_TYPE = "application/vnd.ms-visio.drawing.main+xml"
 _SUFFIX_BY_CONTENT_TYPE = {MACRO_ENABLED_CONTENT_TYPE: ".vsdm", DRAWING_CONTENT_TYPE: ".vsdx"}
+
+# OPC part names for the document-level parts `VisioFile` exposes as
+# properties. Fixed, unlike a page's part name, because there is only ever one
+# of each in a package.
+_PAGES_PART = "/visio/pages/pages.xml"
+_PAGES_RELS_PART = "/visio/pages/_rels/pages.xml.rels"
+_CONTENT_TYPES_PART = "/[Content_Types].xml"
+_APP_PART = "/docProps/app.xml"
+_DOCUMENT_PART = "/visio/document.xml"
+_DOCUMENT_RELS_PART = "/visio/_rels/document.xml.rels"
+_MASTERS_PART = "/visio/masters/masters.xml"
 
 # A ShapeSheet formula addresses another shape as `Sheet.5!Cell` or `Sheet5!Cell`.
 # Visio writes the dotted form in inherited cells and the undotted form in the
@@ -164,14 +175,11 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         self.limits = limits if limits is not None else PackageLimits()
 
         self.directory = os.path.abspath(filename)[:-5]
-        self.pages_xml: ET.ElementTree[ET.Element] | None = None
-        self.pages_xml_rels: ET.ElementTree[ET.Element] | None = None
-        self.content_types_xml: ET.ElementTree[ET.Element] | None = None
-        self.app_xml: ET.ElementTree[ET.Element] | None = None
-        self.document_xml: ET.ElementTree[ET.Element] | None = None
-        self.document_xml_rels: ET.ElementTree[ET.Element] | None = None
+        # pages_xml, pages_xml_rels, content_types_xml, app_xml, document_xml,
+        # document_xml_rels and masters_xml are store-backed properties, defined
+        # below -- there is nothing to initialise here, since the store itself
+        # is the state.
         self.pages: list[Page] = []  # populated by open_vsdx_file()
-        self.masters_xml: ET.Element | None = None  # <Masters> root element
         self.master_index: dict[str, Page] = {}  # master page info by item name e.g. 'Dynamic Connector'
         self.master_pages: list[Page] = []  # populated by open_vsdx_file()
         self.file_open = False
@@ -256,6 +264,85 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             raise ValueError(f"expected XML part not found: {description} ({path})")
         return tree
 
+    def _set_part_xml(self, name: str, tree: ET.ElementTree[ET.Element] | None) -> None:
+        """Make `tree` the part called `name`, or take the part out for None.
+
+        Handing back the tree the store already holds is not a change, and
+        writing it would throw away the baseline that lets an untouched part
+        save as the bytes it arrived as.
+        """
+        held = self._package.part(name)
+        if tree is None:
+            if held is not None:
+                self._package.remove(name)
+            return
+        if isinstance(held, XmlPart) and held.tree is tree:
+            return
+        self._package.write_xml(name, tree)
+
+    @property
+    def pages_xml(self) -> ET.ElementTree[ET.Element] | None:
+        return self._package.read_xml(_PAGES_PART)
+
+    @pages_xml.setter
+    def pages_xml(self, tree: ET.ElementTree[ET.Element] | None) -> None:
+        self._set_part_xml(_PAGES_PART, tree)
+
+    @property
+    def pages_xml_rels(self) -> ET.ElementTree[ET.Element] | None:
+        return self._package.read_xml(_PAGES_RELS_PART)
+
+    @pages_xml_rels.setter
+    def pages_xml_rels(self, tree: ET.ElementTree[ET.Element] | None) -> None:
+        self._set_part_xml(_PAGES_RELS_PART, tree)
+
+    @property
+    def content_types_xml(self) -> ET.ElementTree[ET.Element] | None:
+        return self._package.read_xml(_CONTENT_TYPES_PART)
+
+    @content_types_xml.setter
+    def content_types_xml(self, tree: ET.ElementTree[ET.Element] | None) -> None:
+        self._set_part_xml(_CONTENT_TYPES_PART, tree)
+
+    @property
+    def app_xml(self) -> ET.ElementTree[ET.Element] | None:
+        return self._package.read_xml(_APP_PART)
+
+    @app_xml.setter
+    def app_xml(self, tree: ET.ElementTree[ET.Element] | None) -> None:
+        self._set_part_xml(_APP_PART, tree)
+
+    @property
+    def document_xml(self) -> ET.ElementTree[ET.Element] | None:
+        return self._package.read_xml(_DOCUMENT_PART)
+
+    @document_xml.setter
+    def document_xml(self, tree: ET.ElementTree[ET.Element] | None) -> None:
+        self._set_part_xml(_DOCUMENT_PART, tree)
+
+    @property
+    def document_xml_rels(self) -> ET.ElementTree[ET.Element] | None:
+        return self._package.read_xml(_DOCUMENT_RELS_PART)
+
+    @document_xml_rels.setter
+    def document_xml_rels(self, tree: ET.ElementTree[ET.Element] | None) -> None:
+        self._set_part_xml(_DOCUMENT_RELS_PART, tree)
+
+    @property
+    @override
+    def masters_xml(self) -> ET.Element | None:
+        """The `<Masters>` root, read from the store so it can never be a stale copy."""
+        tree = self._package.read_xml(_MASTERS_PART)
+        return None if tree is None else tree.getroot()
+
+    @masters_xml.setter
+    @override
+    def masters_xml(self, root: ET.Element | None) -> None:
+        current = self._package.read_xml(_MASTERS_PART)
+        if root is not None and current is not None and current.getroot() is root:
+            return
+        self._set_part_xml(_MASTERS_PART, None if root is None else ET.ElementTree(root))
+
     def open_vsdx_file(self) -> None:
         self._load_zip_file_contents_to_memory()
 
@@ -265,9 +352,8 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         self.file_open = True
 
     def _pages_filename(self):
-        page_dir = f"{self.directory}/visio/pages/"
-        pages_filename = page_dir + "pages.xml"  # pages.xml contains Page name, width, height, mapped to Id
-        return pages_filename
+        # pages.xml contains Page name, width, height, mapped to Id
+        return f"{self.directory}{_PAGES_PART}"
 
     @property
     @override
@@ -279,8 +365,8 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         page_dir = f"{self.directory}/visio/pages/"
 
         rel_filename = rel_dir + "pages.xml.rels"
-        self.pages_xml_rels = self._require_part_xml(rel_filename, "pages.xml.rels")
-        rels = require_element(self.pages_xml_rels.getroot(), "pages.xml.rels")
+        pages_xml_rels = self._require_part_xml(rel_filename, "pages.xml.rels")
+        rels = require_element(pages_xml_rels.getroot(), "pages.xml.rels")
         if self.debug:
             logger.debug("Relationships(%s)\n%s", rel_filename, VisioFile.pretty_print_element(rels))
         relid_page_dict = {}
@@ -291,8 +377,8 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             relid_page_dict[rel_id] = page_file
 
         pages_filename = self._pages_filename()  # pages contains Page name, width, height, mapped to Id
-        self.pages_xml = self._require_part_xml(pages_filename, "pages.xml")
-        pages = require_element(self.pages_xml.getroot(), "pages.xml")
+        pages_xml = self._require_part_xml(pages_filename, "pages.xml")
+        pages = require_element(pages_xml.getroot(), "pages.xml")
         if self.debug:
             logger.debug("Pages(%s)\n%s", pages_filename, VisioFile.pretty_print_element(pages))
 
@@ -318,13 +404,19 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
             if self.debug:
                 logger.debug("Page(%s)\n%s", new_page.filename, VisioFile.pretty_print_element(new_page.xml))
 
-        self.content_types_xml = self._read_part_xml(f"{self.directory}/[Content_Types].xml")
+        # content_types_xml, app_xml, document_xml and document_xml_rels are
+        # store-backed properties, but promoted here rather than left to the
+        # first later access: a part promoted at load is an `XmlPart` from the
+        # moment the document opens, which is what lets a caller compare the
+        # store's own identity for a part it has not yet touched (app.xml, in
+        # particular, may simply be missing, and promoting a missing part is
+        # just None).
+        self._read_part_xml(f"{self.directory}/[Content_Types].xml")
+        self._read_part_xml(f"{self.directory}/docProps/app.xml")
+        self._read_part_xml(f"{self.directory}/visio/document.xml")
+        self._read_part_xml(f"{self.directory}/visio/_rels/document.xml.rels")
         # TODO: add correctness cross-check. Or maybe the other way round, start from [Content_Types].xml
         #       to get page_dir and other paths...
-
-        self.app_xml = self._read_part_xml(f"{self.directory}/docProps/app.xml")  # note: files in docProps may be missing
-        self.document_xml = self._read_part_xml(f"{self.directory}/visio/document.xml")
-        self.document_xml_rels = self._read_part_xml(f"{self.directory}/visio/_rels/document.xml.rels")
 
     @override
     def load_master_pages(self) -> None:
@@ -345,10 +437,8 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
                 continue
             relid_to_path[master_id] = f"{self.directory}/visio/masters/{rel.attrib.get('Target')}"
 
-        # load masters.xml file
-        masters_path = f"{self.directory}/visio/masters/masters.xml"
-        masters_xml = self._read_part_xml(masters_path)  # contains more info about master page (i.e. Name, Icon)
-        self.masters_xml = masters_xml.getroot() if masters_xml is not None else None
+        # masters_xml is a store-backed property (contains more info about
+        # master page, i.e. Name, Icon); reading it here promotes the part.
 
         # for each master page, create the Page object
         for master in self.masters_xml if self.masters_xml is not None else []:
