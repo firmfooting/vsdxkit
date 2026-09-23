@@ -26,10 +26,21 @@ ALL_PACKAGES = sorted(name for name in os.listdir(FIXTURES) if name.endswith((".
 
 
 def _saved_copy(filename: str, tmp_path) -> str:
+    """Save a fixture with every XML part written through the serialiser.
+
+    A save writes a part it did not change as the bytes it arrived as (#89), so
+    a plain open-and-save would hand these tests Visio's own bytes and they
+    would pass whatever the serialiser did. Each XML part is therefore written
+    back into the store as a tree, which carries no baseline and so is always
+    serialised -- the path every part the library edits takes to disk.
+    """
     out = os.path.join(str(tmp_path), "out" + os.path.splitext(filename)[1])
     with vsdxkit.VisioFile(os.path.join(FIXTURES, filename)) as vis:
-        page = vis.pages[0]
-        _ = page.child_shapes  # force the page part to be parsed and re-serialised
+        for name in vis._package.names():
+            if name.endswith((".xml", ".rels")):
+                tree = vis._package.read_xml(name)
+                assert tree is not None
+                vis._package.write_xml(name, tree)
         vis.save_vsdx(out)
     # save_vsdx may adjust the suffix it was handed; take whatever it wrote
     written = os.listdir(str(tmp_path))
@@ -77,7 +88,7 @@ def test_visio_parts_declare_the_visio_default_namespace(filename, tmp_path):
                 continue
             checked += 1
             head = body[:1024].decode("utf-8", "replace")
-            # parts the library did not rewrite keep Visio's own single quotes
+            # the serialiser writes double quotes; Visio's own bytes use single ones
             declared = f'xmlns="{visio_uri}"' in head or f"xmlns='{visio_uri}'" in head
             assert declared, f"{name} does not declare the Visio default namespace"
     assert checked, "expected the package to contain parts in the Visio namespace"
@@ -295,11 +306,13 @@ PACKAGE_RELATIONSHIPS = "http://schemas.openxmlformats.org/package/2006/relation
 def _in_memory_offenders(vis) -> dict[str, str]:
     """Parts sitting in the open package that carry a generated prefix.
 
-    Read from `zip_file_contents` rather than from a saved file. `save_vsdx`
-    re-serialises every page, its rels and the document-level parts on the way
-    out, so a part written with a generated prefix when it was built is
-    overwritten before it reaches disk -- which is why no assertion against a
-    saved archive can see it (#360).
+    Read from `zip_file_contents` rather than from a saved file, so the check
+    covers a part as the open document holds it. Before #89, `save_vsdx`
+    re-serialised every page, its rels and the document-level parts on the way
+    out, so a part written with a generated prefix when it was built was
+    overwritten before it reached disk and no assertion against a saved archive
+    could see it (#360). A save now writes the store as it holds it, so these
+    are also the bytes a save would write.
     """
     return {
         name: part.getvalue()[:160].decode("utf-8", "replace")
@@ -333,9 +346,9 @@ def test_connecting_shapes_writes_the_page_rels_in_the_default_namespace(vsdx_co
 def test_bootstrapping_masters_writes_the_visio_default_namespace(vsdx_copy):
     """The masters part created for a document that declares one but has none.
 
-    Called directly because its only caller overwrites the part a few lines
-    later, so these bytes never reach the package through the public API -- but
-    they are still what the next caller would get.
+    Called directly, so the part is checked as `_bootstrap_masters` writes it,
+    before its only caller appends the master it is importing. The tree it
+    writes is the store's own, and a save writes it out as it stands.
     """
     with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
         assert vis.masters_xml is None, "fixture is expected to have no masters part"

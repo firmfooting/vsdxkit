@@ -201,8 +201,8 @@ def test_reassigning_the_same_tree_keeps_the_promotion_baseline(vsdx_copy):
 
 def test_an_added_page_is_in_the_store_before_any_save(vsdx_copy):
     """Fails if `_create_page` never writes the new page part into the store,
-    so an added page reaches disk only through save_vsdx's rewrite rather than
-    at the moment it is created."""
+    which is the only thing a save writes -- the added page would never reach
+    disk at all."""
     with VisioFile(vsdx_copy("test1.vsdx")) as vis:
         page = vis.add_page("Added")
         held = vis._package.part(vis._part_name(page.filename))

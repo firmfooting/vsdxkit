@@ -252,8 +252,12 @@ class Page:
 
     @rels_xml.setter
     def rels_xml(self, value: ET.ElementTree[ET.Element] | None) -> None:
+        # None takes the rels part out of the package as well: the save writes
+        # whatever the store holds, so a part left behind would reach the file
+        self.vis._require_open("Setting Page.rels_xml")
+        attached = self._attached()
         self._rels_xml = value
-        if value is not None and self.rels_xml_filename is not None and self._attached():
+        if self.rels_xml_filename is not None and attached:
             self.vis._set_part_xml(self.vis._part_name(self.rels_xml_filename), value)
 
     @property

@@ -126,8 +126,8 @@ class Connect:
                 page.vis._add_content_types_override(
                     content_type="application/vnd.ms-visio.master+xml", part_name_path="/visio/masters/master1.xml"
                 )
-                # per-page master relationship (creates + registers the page
-                # rels part so save_vsdx persists it)
+                # per-page master relationship (creates the page rels part and
+                # writes it into the package store, which is what a save writes)
                 page._ensure_page_master_rel("rId1", "master1.xml")
             else:
                 # document has masters: import the connector master (by name)

@@ -642,29 +642,6 @@ def test_unparseable_bytes_flushed_at_one_save_survive_the_next(vsdx_copy, tmp_p
         assert archive.read(PAGE1[1:]) == expected
 
 
-def test_a_tree_assigned_after_unparseable_bytes_were_flushed_is_saved(vsdx_copy, tmp_path):
-    """Fails if the save skips a page whose part a buffer's bytes replaced, even when the page has a new tree since.
-
-    Only the tree those bytes replaced is stale. A tree the caller assigns
-    afterwards is their later word, and it is what the page must save as.
-    """
-    target = str(tmp_path / "saved.vsdx")
-    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
-        page = vis.pages[0]
-        replacement = copy.deepcopy(page.xml)
-        root = replacement.getroot()
-        assert root is not None
-        root.set("VsdxkitMarker", "1")
-        buf = vis.zip_file_contents[page.filename]
-        buf.seek(0)
-        buf.write(b"not xml")
-        vis.zip_file_contents.sync()
-        page.xml = replacement
-        vis.save_vsdx(target)
-    with VisioFile(target) as saved:
-        assert saved.pages[0].xml.getroot().get("VsdxkitMarker") == "1"
-
-
 def test_copy_is_a_plain_dict_detached_from_the_store(view, store):
     """Fails if the view has no copy(), which the old dict had, or if the copy it returns writes to the store."""
     names = store.names()

@@ -59,7 +59,6 @@ from .xmlio import (  # noqa: E402
     register_namespaces,
     require_element,
     require_tree,
-    xml_to_file,
 )
 
 register_namespaces()
@@ -399,7 +398,10 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
 
             if page_rels_path in self.zip_file_contents:
                 new_page.rels_xml_filename = page_rels_path
-                new_page.rels_xml = self._read_part_xml(page_rels_path)
+                # past the setter: the document is not open yet, which the
+                # setter refuses, and the tree is the store's own, so there is
+                # nothing for it to write through
+                new_page._rels_xml = self._read_part_xml(page_rels_path)
             self.pages.append(new_page)
 
             if self.debug:
@@ -966,9 +968,8 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         page_id = new_page_element.attrib["ID"]
         # written into the store before the Page is constructed, so `Page.xml`'s
         # write-through guard (`_attached()`) already finds the part present for
-        # any later assignment, and so this call itself is what gets the new page
-        # into the package at the moment it is created, rather than waiting on
-        # save_vsdx's rewrite
+        # any later assignment, and because this call is what gets the new page
+        # into the package at all: a save writes the store and nothing else
         self._package.write_xml(self._part_name(new_page_path), new_page_xml)
         new_page = Page(new_page_xml, new_page_path, page_name, page_id, new_page_relid, self)
         if source_page is not None and source_page.rels_xml is not None:
@@ -1472,19 +1473,6 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         self._check_destination_kind(self.filename)
         return self.filename
 
-    def _write_back(self, tree: ET.ElementTree[ET.Element], path: str) -> None:
-        """Write one document tree into the package at save, unless bytes a caller left stand in its place.
-
-        `zip_file_contents.sync()` runs first, and writes the bytes a buffer
-        was left holding that do not parse over the part they were meant for.
-        The document's tree for that part is then the stale one those bytes
-        replaced, and writing it back would undo what the caller left.
-        """
-        contents = self.zip_file_contents
-        if isinstance(contents, ZipFileContentsView) and contents.holds_bytes_over(path, tree):
-            return
-        xml_to_file(tree, path, contents)
-
     def save_vsdx(self, new_filename: str | None = None) -> None:
         """save the VisioFile object as new vsdx file
 
@@ -1500,8 +1488,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         if not self._package.names():
             raise ValueError("cannot save an empty package")
 
-        # resolve the destination before re-serialising anything, so a refused
-        # extension leaves the in-memory package untouched
+        # resolve the destination first, so a refused extension writes nothing
         target = self._in_place_filename() if new_filename is None else self._destination_filename(new_filename)
 
         # sync edits made through a `getbuffer()` memoryview on a buffer the
@@ -1510,45 +1497,9 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         if isinstance(self.zip_file_contents, ZipFileContentsView):
             self.zip_file_contents.sync()
 
-        # write pages.xml.rels
-        self._write_back(
-            self._part_tree(self.pages_xml_rels, "pages.xml.rels"),
-            f"{self.directory}/visio/pages/_rels/pages.xml.rels",
-        )
-
-        # write pages.xml file - in case pages added removed
-        self._write_back(self._part_tree(self.pages_xml, "pages.xml"), self._pages_filename())
-
-        # write the master pages to file
-        for page in self.master_pages:  # type: Page
-            self._write_back(page.xml, page.filename)
-
-        # write the pages to file
-        for page in self.pages:  # type: Page
-            self._write_back(page.xml, page.filename)
-            if page.rels_xml_filename is not None:
-                self._write_back(require_tree(page.rels_xml, "page rels"), page.rels_xml_filename)
-
-        # write [content_Types].xml
-        self._write_back(
-            self._part_tree(self.content_types_xml, "[Content_Types].xml"),
-            f"{self.directory}/[Content_Types].xml",
-        )
-
-        # write app.xml
-        if self.app_xml is not None:
-            self._write_back(self.app_xml, f"{self.directory}/docProps/app.xml")
-
-        # write document.xml
-        self._write_back(self._part_tree(self.document_xml, "document.xml"), f"{self.directory}/visio/document.xml")
-
-        # write document.xml.rels
-        self._write_back(
-            self._part_tree(self.document_xml_rels, "document.xml.rels"),
-            f"{self.directory}/visio/_rels/document.xml.rels",
-        )
-
-        # an in-place save writes back over the absolute source `PackageStore`
+        # every change is already in the store -- the trees this document edits
+        # are the store's own -- so saving is writing it, once, member by member.
+        # An in-place save writes back over the absolute source `PackageStore`
         # captured at open, not over `self.filename`, which may be relative and
         # resolve against a different working directory by the time this runs
         self._package.save(target if new_filename is not None else None)
