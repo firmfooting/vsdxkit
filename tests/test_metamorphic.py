@@ -51,6 +51,7 @@ from helpers.visio_observation import (
 )
 
 import vsdxkit
+from vsdxkit.xmlio import parse_part, serialise_part
 
 BASEDIR = os.path.dirname(os.path.realpath(__file__))
 PACKAGE_SUFFIXES = (".vsdx", ".vsdm")
@@ -209,9 +210,12 @@ def _assert_same_package_as_respelled(relation: str, package_path: str, expected
       declaration, namespace bindings, bytes -- never in canonical XML;
     * such a part has the XML declaration and the namespace bindings that
       session wrote it with, so the undoing session did not respell it in
-      some third way.
+      some third way;
+    * such a part is byte for byte what vsdxkit's serialiser writes for the
+      fixture's own part, so quoting, empty-element form and attribute order
+      are pinned too, not just the declaration and the bindings.
 
-    The changed part's bytes are not pinned to that session's. The undoing
+    The changed part's bytes are not compared with that session's. The undoing
     session changed its content back, so it no longer matches that session's
     baseline and is written as a fresh serialisation; bytes equal to the
     earlier session's would mean the undo never reached the file.
@@ -235,6 +239,13 @@ def _assert_same_package_as_respelled(relation: str, package_path: str, expected
             f"{relation} does not hold for {package_path}: {member} is spelled neither as the fixture "
             "nor as the session that edited it wrote it"
         )
+    with zipfile.ZipFile(expected) as fixture, zipfile.ZipFile(actual) as written_package:
+        for member in differences:
+            name = member.lstrip("/")
+            assert written_package.read(name) == serialise_part(parse_part(fixture.read(name))), (
+                f"{relation} does not hold for {package_path}: {member} is not spelled as vsdxkit's "
+                "serialiser writes the fixture's own part"
+            )
 
 
 def _descendants(page: PageObservation, shape_id: int) -> set[int]:
