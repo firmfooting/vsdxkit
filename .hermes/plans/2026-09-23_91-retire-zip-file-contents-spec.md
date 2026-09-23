@@ -61,7 +61,12 @@ The file and both references to it in `tests/test_package_manifest.py` go.
 
 ## Design
 
-1. **Part-name constants.** `vsdxfile.py` already has `_PAGES_PART`. Add the rest (`/[Content_Types].xml`, `/docProps/app.xml`, `/visio/document.xml`, `/visio/_rels/document.xml.rels`, `/visio/masters`, `/visio/pages`), and build names with them.
+1. **One module derives every part name** (added at plan review, 2026-09-23, for extensibility to any part a shape refers to). `src/vsdxkit/partnames.py` holds:
+   - the fixed part names as constants;
+   - `relationships_part_name(part)`: `/a/b.xml` → `/a/_rels/b.xml.rels`;
+   - `target_part_name(source, target)`: a relationship Target joined onto its source part's folder, exactly as the library joins it today.
+
+   Pages, masters and page relationships, and any part added later (images, embedded objects, data recordsets), are named by these rules rather than by folder strings of their own. `vsdxfile.py`'s private constants and `_page_relationship_path` go. OPC-conformant resolution of `..`, `.`, absolute and percent-encoded Targets is #378, a change to `target_part_name` alone.
 2. **`VisioFile`:**
    - `_read_part_xml(name)` and `_part_name` go. Callers use `self._package.read_xml(name)`.
    - Nothing in `src/` except the view itself reads `directory` or `zip_file_contents` any more.

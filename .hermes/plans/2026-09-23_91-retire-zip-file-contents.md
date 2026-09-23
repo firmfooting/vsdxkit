@@ -4,7 +4,7 @@
 
 **Goal:** Every part of an open document is named by its OPC part name, and the pre-store `zip_file_contents` view, `VisioFile.directory` and the helpers that served them are deleted.
 
-**Architecture:** `PackageStore` (`src/vsdxkit/package.py`) already holds the document. Six places still reach it through `ZipFileContentsView` (`src/vsdxkit/zip_contents.py`), keyed by pseudo-paths `f"{directory}/visio/…"`, and every store call first strips a pseudo-path back to a part name. PR 1 (Tasks 1–2) moves every consumer onto the store and part names, leaving the view in place. PR 2 (Tasks 3–6) deletes the view and everything that only served it.
+**Architecture:** `PackageStore` (`src/vsdxkit/package.py`) already holds the document. Six places still reach it through `ZipFileContentsView` (`src/vsdxkit/zip_contents.py`), keyed by pseudo-paths `f"{directory}/visio/…"`, and every store call first strips a pseudo-path back to a part name. PR 1 (Tasks 1–3) derives every part name in one module and moves every consumer onto the store and part names, leaving the view in place. PR 2 (Tasks 4–7) deletes the view and everything that only served it.
 
 **Tech Stack:** Python 3.10–3.14, `xml.etree.ElementTree`, pytest, `uv`, ruff, pyrefly, `gh stack`.
 
@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- The file output must not change. Every fixture saves the same member bytes before and after (Task 6 checks this against a baseline taken before Task 1).
+- The file output must not change. Every fixture saves the same member bytes before and after (Task 7 checks this against a baseline taken before Task 1).
 - `Page.filename` and `Page.rels_xml_filename` hold OPC part names such as `/visio/pages/page1.xml`: leading slash, no directory prefix (spec D1).
 - No public replacement for raw part access. `PackageStore` stays private as `VisioFile._package` (spec D2).
 - Do not edit `CHANGELOG.md` or any version string. release-please writes them from the squash commits (spec D3).
@@ -30,14 +30,30 @@
 - Worktree-isolated session: run plain, separate git commands from the worktree root. Never use `git -C`, and never use bare `git stash`.
 - Comments and docstrings match the surrounding code's density and voice. They say why, in full sentences, and never "this used to…" history for its own sake.
 - Test docstrings follow the repo idiom: `"""Fails if <the behaviour breaks>."""`, then a short why.
+- **Dignified Python.** Every line this plan adds or rewrites follows the checklist at `<workspace>/dignified-python-rules.md`, which the controller copies there from the scratchpad at setup. Reviewers check each diff against it. In particular:
+  - LBYL over try/except; a try block holds only the operation that raises.
+  - No new default parameter values, and no computation at module level: constants are plain literals.
+  - No re-exports, and no new `__all__`.
+  - Modern typing (`X | None`, built-in generics), with every new signature fully typed.
+  - Inline single-use locals.
+  - Chain every re-raise with `from`.
+  - Break an internal API and migrate its callers, never shim it.
+- **Where the repo's own conventions differ, the repo wins,** as dignified-python itself allows. Known cases:
+  - modules import each other relatively (`from .partnames import …`);
+  - the package's public `__init__.__all__` and `errors.__all__` stay as they are;
+  - `VisioFile._check_relationship_target`'s `try`/`except ValueError` stays, because it adds context before re-raising: package content reported as `MalformedPackageError`, chained.
+
+  Rule on any other conflict, and put the ruling in the ledger.
+- **Extensibility for any Visio shape.** No part name is spelled as a folder string outside `src/vsdxkit/partnames.py`. Every part name is a `partnames` constant, or comes from `target_part_name` or `relationships_part_name`. That way a part any shape refers to (an image, an embedded object, a data recordset) is named by the same two rules, and #378's OPC resolution changes one function.
+  - A relationship **Target**, the string written into a relationship part (`"../masters/master1.xml"`, `"masters/masters.xml"`), is not a part name, and stays as written.
 
 ## Review Focus
 
-1. **A package stored under a directory whose own path contains `visio/pages/`.** `Page._ensure_page_master_rel` builds the rels name with `self.filename.replace("visio/pages/", "visio/pages/_rels/")`. On a pseudo-path that rewrites the directory too. On a part name it must yield `/visio/pages/_rels/pageN.xml.rels`. Test in Task 2.
-2. **A relationship `Target` that is not a plain file name** (`../x.xml`, `a/../../x.xml`). It must still fail the open with `MalformedPackageError`, exactly as before. Joining now starts at `/visio/pages/` instead of a pseudo-path, so the `_checked` call is what must still see and reject it. Test in Task 2.
-3. **`insert_shape(..., page_path)`** must accept `page.filename` (the new part name) and reject any other page's name. Test in Task 2.
-4. **Importing the connector master into a document that already has masters.** `_ensure_masters_for_shape` copies it from the bundled donor, which is another document with the same part names. The imported part must be the donor's master, byte for byte. The target's own part at that name must not be read or overwritten. Test in Task 2.
-5. **Connecting shapes on a document with no masters.** The target gets exactly the donor's `/visio/masters/` parts, byte for byte. No donor page is read or serialised, and no sibling folder whose name merely starts with `masters` is copied. Test in Task 1.
+1. **A package stored under a directory whose own path contains `visio/pages/`.** `Page._ensure_page_master_rel` builds the rels name with `self.filename.replace("visio/pages/", "visio/pages/_rels/")`. On a pseudo-path that rewrites the directory too. On a part name it must yield `/visio/pages/_rels/pageN.xml.rels`. Test in Task 3.
+2. **A relationship `Target` that is not a plain file name** (`../x.xml`, `a/../../x.xml`). It must still fail the open with `MalformedPackageError`, exactly as before. Joining now starts at `/visio/pages/` instead of a pseudo-path, so the `_checked` call is what must still see and reject it. Test in Task 3.
+3. **`insert_shape(..., page_path)`** must accept `page.filename` (the new part name) and reject any other page's name. Test in Task 3.
+4. **Importing the connector master into a document that already has masters.** `_ensure_masters_for_shape` copies it from the bundled donor, which is another document with the same part names. The imported part must be the donor's master, byte for byte. The target's own part at that name must not be read or overwritten. Test in Task 3.
+5. **Connecting shapes on a document with no masters.** The target gets exactly the donor's `/visio/masters/` parts, byte for byte. No donor page is read or serialised, and no sibling folder whose name merely starts with `masters` is copied. Test in Task 2.
 
 ---
 
@@ -133,7 +149,131 @@ Expected: prints the package count. Every fixture has an entry.
 
 Branch: `refactor/91-retire-zip-file-contents`. It already carries the #377 and #91 spec commits.
 
-### Task 1: Read and write the store, not the view, everywhere in `src/`
+### Task 1: One module derives every part name
+
+**Files:**
+- Create: `src/vsdxkit/partnames.py`
+- Test: create `tests/test_partnames.py`
+
+**Interfaces:**
+- Consumes: nothing. The functions are pure: no I/O and no store.
+- Produces, for Tasks 2 and 3:
+  - `vsdxkit.partnames.relationships_part_name(part_name: str) -> str`
+  - `vsdxkit.partnames.target_part_name(source_part_name: str, target: str) -> str`
+  - part-name constants, with values exactly as below: `PAGES_PART = "/visio/pages/pages.xml"`, `MASTERS_PART = "/visio/masters/masters.xml"`, `CONTENT_TYPES_PART = "/[Content_Types].xml"`, `APP_PART = "/docProps/app.xml"`, `DOCUMENT_PART = "/visio/document.xml"`.
+
+Why this task exists (the user asked for #91 to be extensible for any Visio shape): today every kind of part builds its own names.
+- Pages use `page_dir + Target`.
+- The page-rels name is built with `.replace("visio/pages/", "visio/pages/_rels/")`, which is Review Focus 1's bug.
+- Masters use `f"/visio/masters/{target}"`.
+
+Any other part a shape refers to (an image, an embedded object, a data recordset) would add a fourth spelling. With these two rules every part is named the same way, and #378 (OPC-conformant target resolution) becomes a change to one function.
+
+- [ ] **Step 1: Write the failing tests.** Create `tests/test_partnames.py`:
+
+```python
+"""Every part name is derived from a part name and a relationship Target by two rules (#91)."""
+
+import pytest
+
+from vsdxkit.partnames import relationships_part_name, target_part_name
+
+
+@pytest.mark.parametrize(
+    ("part_name", "expected"),
+    [
+        ("/visio/pages/page1.xml", "/visio/pages/_rels/page1.xml.rels"),
+        ("/visio/masters/masters.xml", "/visio/masters/_rels/masters.xml.rels"),
+        ("/visio/document.xml", "/visio/_rels/document.xml.rels"),
+        ("/visio/media/image1.png", "/visio/media/_rels/image1.png.rels"),
+        ("/[Content_Types].xml", "/_rels/[Content_Types].xml.rels"),
+    ],
+)
+def test_a_parts_relationships_live_in_the_rels_folder_beside_it(part_name, expected):
+    """Fails if a part's relationships part is not `<folder>/_rels/<name>.rels`, whatever kind of part it is."""
+    assert relationships_part_name(part_name) == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "target", "expected"),
+    [
+        ("/visio/pages/pages.xml", "page1.xml", "/visio/pages/page1.xml"),
+        ("/visio/masters/masters.xml", "master3.xml", "/visio/masters/master3.xml"),
+        ("/visio/document.xml", "pages/pages.xml", "/visio/pages/pages.xml"),
+        ("/visio/pages/page1.xml", "../media/image1.png", "/visio/pages/../media/image1.png"),
+        ("/[Content_Types].xml", "visio/document.xml", "/visio/document.xml"),
+    ],
+)
+def test_a_target_is_joined_onto_its_source_parts_folder_as_written(source, target, expected):
+    """Fails if a Target is joined onto anything but its source part's folder, or is rewritten on the way.
+
+    Joined as written, not resolved: a `..` stays for the part-name check to
+    refuse, which `tests/test_errors.py` pins. Resolving it the way OPC does
+    is #378, and it changes this function and this test's fourth case.
+    """
+    assert target_part_name(source, target) == expected
+```
+
+- [ ] **Step 2: Run them and watch them fail.**
+Run: `uv run pytest tests/test_partnames.py -q`
+Expected: collection ERROR, `ModuleNotFoundError: No module named 'vsdxkit.partnames'`.
+
+- [ ] **Step 3: Write the module.** Create `src/vsdxkit/partnames.py`:
+
+```python
+"""How the parts of a Visio package name one another.
+
+A part is named by where it sits in the package, and it reaches every other
+part through a relationship whose Target is relative to its own folder. The
+library derives every name it uses from those two facts, here, so a page, a
+master, and any part a shape refers to -- an image, an embedded object, a
+data recordset -- are named by the same rules rather than by a folder string
+of their own.
+"""
+
+import posixpath
+
+PAGES_PART = "/visio/pages/pages.xml"
+MASTERS_PART = "/visio/masters/masters.xml"
+CONTENT_TYPES_PART = "/[Content_Types].xml"
+APP_PART = "/docProps/app.xml"
+DOCUMENT_PART = "/visio/document.xml"
+
+
+def relationships_part_name(part_name: str) -> str:
+    """The part holding `part_name`'s relationships: `/a/b.xml` -> `/a/_rels/b.xml.rels`."""
+    folder, name = posixpath.split(part_name)
+    return f"{folder.rstrip('/')}/_rels/{name}.rels"
+
+
+def target_part_name(source_part_name: str, target: str) -> str:
+    """The part a relationship of `source_part_name` points at.
+
+    The Target is joined onto the source part's folder exactly as written.
+    `.` and `..` segments, an absolute Target and a percent-encoded one are
+    left as they are, and the store's part-name check refuses them. OPC
+    resolves them instead, and doing that here is #378.
+    """
+    folder = posixpath.dirname(source_part_name)
+    return f"{folder.rstrip('/')}/{target}"
+```
+
+Match the repo's other small modules (`relationships.py`) on `from __future__ import annotations`. Give the module no `__all__` (dignified-python: never re-export). The five constants are plain string literals, which is the one kind of module-level value the rules allow.
+
+- [ ] **Step 4: Run them and watch them pass.**
+Run: `uv run pytest tests/test_partnames.py -q`
+Expected: 10 passed.
+
+- [ ] **Step 5: Run the gates.** Run all four gates. Expected: green.
+
+- [ ] **Step 6: Commit.**
+
+```bash
+git add src/vsdxkit/partnames.py tests/test_partnames.py
+git commit -m "feat: derive every part name from two rules in vsdxkit.partnames (#91)" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>" -m "Claude-Session: https://claude.ai/code/session_014SeJzNKgmmqyg4BHg7odRt"
+```
+
+### Task 2: Read and write the store, not the view, everywhere in `src/`
 
 **Files:**
 - Modify: `src/vsdxkit/connectors.py:114-124`
@@ -143,7 +283,7 @@ Branch: `refactor/91-retire-zip-file-contents`. It already carries the #377 and 
 
 **Interfaces:**
 - Consumes: `PackageStore.names() -> tuple[str, ...]`, `part(name) -> PartValue | None`, `read_bytes(name) -> bytes | None` and `write_bytes(name, data) -> None`, from `package.py`.
-- Produces: no `src/` module other than `vsdxfile.py`'s `_load_zip_file_contents_to_memory`, its `save_vsdx` `sync()` call and `zip_contents.py` itself mentions `zip_file_contents`. Task 3 deletes those three.
+- Produces: no `src/` module other than `vsdxfile.py`'s `_load_zip_file_contents_to_memory`, its `save_vsdx` `sync()` call and `zip_contents.py` itself mentions `zip_file_contents`. Task 4 deletes those three.
 
 - [ ] **Step 1: Write the failing test for the donor copy (Review Focus 5).** Replace `test_provisioning_masters_reads_only_the_donors_master_parts` in `tests/test_media_reuse.py`, and drop its `ZipFileContentsView` import:
 
@@ -215,13 +355,15 @@ Expected: `test_provisioning_masters_reads_only_the_donors_master_parts` FAILS w
                 page.vis.load_master_pages()  # load copied master page files into VisioFile object
 ```
 
-Add at module level in `connectors.py`, next to its other constants:
+Replace the `_MASTERS_PREFIX` name in that loop with a local computed just before it, not a module constant (dignified-python: no computation at import time):
 
 ```python
-# the folder a package keeps its masters in, as a part-name prefix; the
-# trailing slash keeps a sibling such as /visio/masters-old/ out of a copy
-_MASTERS_PREFIX = "/visio/masters/"
+                # the masters folder as a part-name prefix; the trailing slash
+                # keeps a sibling such as /visio/masters-old/ out of the copy
+                masters_folder = target_part_name(MASTERS_PART, "")
 ```
+
+and test `name.startswith(masters_folder)`. Import `MASTERS_PART` and `target_part_name` from `.partnames` (Task 1). `target_part_name(MASTERS_PART, "")` is `"/visio/masters/"`.
 
 - [ ] **Step 4: Move the other four consumers onto the store.**
 
@@ -242,17 +384,28 @@ _MASTERS_PREFIX = "/visio/masters/"
 ```python
         taken = set(self._package.names())
         rels_root = self._part_root(self.pages_xml_rels, "pages.xml.rels")
-        taken.update(f"/visio/pages/{rel.attrib['Target']}" for rel in rels_root)
+        taken.update(target_part_name(PAGES_PART, rel.attrib["Target"]) for rel in rels_root)
         counter = 1
-        while f"/visio/pages/page{counter}.xml" in taken or f"/visio/pages/_rels/page{counter}.xml.rels" in taken:
+        while _page_part_taken(taken, f"page{counter}.xml"):
             counter += 1
         return f"page{counter}.xml"
 ```
 
+and, at module level in `vsdxfile.py` beside `_page_relationship_path`:
+
+```python
+def _page_part_taken(taken: set[str], filename: str) -> bool:
+    """Whether a page part called `filename`, or the relationships part it would have, is already in `taken`."""
+    part_name = target_part_name(PAGES_PART, filename)
+    return part_name in taken or relationships_part_name(part_name) in taken
+```
+
+Import `PAGES_PART`, `MASTERS_PART`, `relationships_part_name` and `target_part_name` from `.partnames` in `vsdxfile.py` and `masters.py`. Task 3 retires `vsdxfile.py`'s own duplicate constants.
+
 `masters.py`, the next-master-number scan:
 
 ```python
-        prefix = "/visio/masters/master"
+        prefix = target_part_name(MASTERS_PART, "master")
         existing_numbers = [
             int(name[len(prefix) : -4])
             for name in self._package.names()
@@ -277,20 +430,20 @@ git add src/vsdxkit/connectors.py src/vsdxkit/masters.py src/vsdxkit/vsdxfile.py
 git commit -m "refactor: read and write the package store, not zip_file_contents (#91)" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>" -m "Claude-Session: https://claude.ai/code/session_014SeJzNKgmmqyg4BHg7odRt"
 ```
 
-### Task 2: Name every part by its part name
+### Task 3: Name every part by its part name
 
 **Files:**
 - Modify: `src/vsdxkit/vsdxfile.py` (the load, create, remove and relationship-check paths: lines 248-285, 399-470, 474-520, 590-603, 1010-1060)
 - Modify: `src/vsdxkit/pages.py:238-310` (setters, `_holds`, `_attached`, `_rels_attached`), `pages.py:401-404` (`_ensure_page_master_rel`)
 - Modify: `src/vsdxkit/masters.py` (protocol lines 40-46, 85-91, 115-133, 172, 208-209)
 - Modify: `src/vsdxkit/connectors.py:154`
-- Test: create `tests/test_part_names.py`. Migrate `tests/test_byte_preserving_save.py`, `tests/test_visiofile_package_store.py`, `tests/test_visiofile.py:453`, `tests/test_master_import_opc.py:255` (from Task 1) and `tests/test_media_reuse.py`.
+- Test: create `tests/test_part_names.py`. Migrate `tests/test_byte_preserving_save.py`, `tests/test_visiofile_package_store.py`, `tests/test_visiofile.py:453`, `tests/test_master_import_opc.py:255` (from Task 2) and `tests/test_media_reuse.py`.
 
 **Interfaces:**
-- Consumes: Task 1's store-only consumers.
-- Produces, for Tasks 3–5:
+- Consumes: Task 2's store-only consumers.
+- Produces, for Tasks 4–6:
   - `Page.filename: str` and `Page.rels_xml_filename: str | None` are part names.
-  - `VisioFile._masters_folder == "/visio/masters"`.
+  - `VisioFile._masters_folder` and `vsdxfile.py`'s private part constants no longer exist. Part names come from `vsdxkit.partnames`.
   - `VisioFile._require_part_xml(name: str, description: str)`.
   - `VisioFile._check_relationship_target(name: str, subject: str, target: str)`.
   - `VisioFile._part_name`, `VisioFile._read_part_xml` and `_pages_filename` no longer exist.
@@ -438,36 +591,49 @@ Expected:
 
 - [ ] **Step 3: Switch `vsdxfile.py` to part names.**
 
-  - Add `_PAGES_FOLDER = "/visio/pages/"`, `_PAGES_RELS_FOLDER = "/visio/pages/_rels/"` and `_MASTERS_FOLDER = "/visio/masters"` beside `_PAGES_PART` (line 92).
+  Every part name below comes from `vsdxkit.partnames` (Task 1): a constant, or `target_part_name`/`relationships_part_name` applied to one. No folder string is written out anywhere in `vsdxfile.py`.
+
+  - Delete `vsdxfile.py`'s own part constants at lines 92–98: `_PAGES_PART`, `_PAGES_RELS_PART`, `_CONTENT_TYPES_PART`, `_APP_PART`, `_DOCUMENT_PART`, `_DOCUMENT_RELS_PART` and `_MASTERS_PART`.
+    - Use the `partnames` constants in their place.
+    - Each `…_RELS_PART` becomes `relationships_part_name(<its source constant>)`.
+  - Delete `_page_relationship_path`. Its callers use `relationships_part_name(page_path)`.
   - Delete `_part_name`, `_read_part_xml` and `_pages_filename`.
-  - `_masters_folder` returns `_MASTERS_FOLDER`.
+  - Delete the `_masters_folder` property. It is used only by the code this task rewrites.
   - `_check_relationship_target(self, name, subject, target)` calls `_checked(name)` directly, keeping its `except ValueError` translation.
   - `_require_part_xml(self, name, description)` calls `self._package.read_xml(name)`.
   - `load_pages`:
-    - `rel_dir = _PAGES_RELS_FOLDER` and `page_dir = _PAGES_FOLDER`;
-    - `rel_filename = _PAGES_RELS_PART`, with `pages_filename = _PAGES_PART`;
-    - `page_rels_path` in `self._package.part(page_rels_path)`;
+    - `rels_name = relationships_part_name(PAGES_PART)`;
+    - `page_path = target_part_name(PAGES_PART, page_file)`;
+    - `page_rels_path = relationships_part_name(page_path)`, looked up as `self._package.part(page_rels_path)`;
     - `new_page._rels_xml = self._package.read_xml(page_rels_path)`;
-    - the four promotions read `self._package.read_xml(_CONTENT_TYPES_PART)`, and likewise for `_APP_PART`, `_DOCUMENT_PART` and `_DOCUMENT_RELS_PART`.
-  - `load_master_pages`: `master_rel_path = f"{_MASTERS_FOLDER}/_rels/masters.xml.rels"`, `self._package.read_xml(master_rel_path)`, and `master_path = f"{_MASTERS_FOLDER}/{master_target}"`.
-  - `remove_page_by_index`: drop the `_part_name(...)` wrappers. The content-types override stays `f"/visio/pages/{os.path.basename(page.filename)}"`, which is now simply `page.filename`, so use that.
-  - `_create_page`: `page_dir = _PAGES_FOLDER`, and drop the "better concatenation" TODOs; `self._package.write_xml(new_page_path, new_page_xml)`; `rel_dir = _PAGES_RELS_FOLDER`.
-  - `_unused_page_part_name` (from Task 1): use `_PAGES_FOLDER` and `_PAGES_RELS_FOLDER` in place of the literals.
+    - the four promotions read `self._package.read_xml(...)` of `CONTENT_TYPES_PART`, `APP_PART`, `DOCUMENT_PART` and `relationships_part_name(DOCUMENT_PART)`.
+  - `load_master_pages`:
+    - `master_rel_path = relationships_part_name(MASTERS_PART)`;
+    - `master_path = target_part_name(MASTERS_PART, master_target)`.
+  - `remove_page_by_index`: drop the `_part_name(...)` wrappers. The content-types override `f"/visio/pages/{os.path.basename(page.filename)}"` is now `page.filename`.
+  - `_create_page`:
+    - `new_page_path = target_part_name(PAGES_PART, new_page_filename)`;
+    - drop `page_dir`, `rel_dir` and the "better concatenation" TODOs;
+    - `self._package.write_xml(new_page_path, new_page_xml)`;
+    - `new_page.rels_xml_filename = relationships_part_name(new_page_path)`.
 
 - [ ] **Step 4: Switch `pages.py`, `masters.py` and `connectors.py` to part names.**
   - `pages.py`:
     - drop every `self.vis._part_name(...)` wrapper, since the attribute is the name;
-    - `_ensure_page_master_rel` builds `rels_filename = f"/visio/pages/_rels/{posixpath.basename(self.filename)}.rels"`, importing `posixpath`.
+    - `_ensure_page_master_rel` builds `rels_filename = relationships_part_name(self.filename)`.
   - `masters.py`:
-    - delete `directory`, `_read_part_xml` and `_part_name` from the protocol block;
+    - delete `directory`, `_read_part_xml`, `_part_name` and `_masters_folder` from the protocol block;
     - `src_vis._package.part(source_master_page.filename)` and `source_part_name = source_master_page.filename`;
-    - `self._package.read_xml(master_rels_path)`;
-    - `self._package.write_xml(master_rels_path, rels_tree)`;
-    - `self._package.write_bytes(part_path, master_bytes)`;
-    - `self._package.read_xml(part_path)`;
-    - in `_bootstrap_masters`, drop the `_part_name` wrappers;
+    - `master_rels_path = relationships_part_name(MASTERS_PART)` (both places), read with `self._package.read_xml(...)` and written with `write_xml(...)`;
+    - `part_path = target_part_name(MASTERS_PART, part_name)`, written with `self._package.write_bytes(part_path, master_bytes)` and read back with `self._package.read_xml(part_path)`;
+    - `_bootstrap_masters` writes `MASTERS_PART` and `relationships_part_name(MASTERS_PART)`;
     - update the comment at line 205 so it no longer names `xml_to_file`: "written as trees, not bytes literals (#366)".
-  - `connectors.py:154`: `master_part = master_page.filename.removeprefix(page.vis._masters_folder + "/")`.
+  - `connectors.py:154`: `master_part = posixpath.basename(master_page.filename)`, the Target's file name the page relationship is written with.
+  - Content-type overrides name parts too:
+    - `connectors.py:128-133`'s `"/visio/masters/masters.xml"` becomes `MASTERS_PART`, and `"/visio/masters/master1.xml"` becomes `target_part_name(MASTERS_PART, "master1.xml")`;
+    - `_create_page`'s `f"/visio/pages/{new_page_filename}"` becomes `new_page_path`.
+
+  `grep -n '"/visio/\|/_rels/' src/vsdxkit/vsdxfile.py src/vsdxkit/pages.py src/vsdxkit/masters.py src/vsdxkit/connectors.py` should now find only relationship **Targets**, the strings written into a relationship part (such as `'../masters/…'` and `"masters/masters.xml"`). It must find no part names. Report every hit and which kind it is.
 
 - [ ] **Step 5: Migrate the tests that built or stripped pseudo-paths.** Each keeps its assertion, only spelling the name differently:
   - `vis._part_name(X)` → `X`, wherever `X` is a page's `filename` or `rels_xml_filename`, in `tests/test_byte_preserving_save.py` and `tests/test_visiofile_package_store.py`.
@@ -475,8 +641,10 @@ Expected:
   - `X.removeprefix(f"{vis.directory}/")` → `X[1:]`, in `test_byte_preserving_save.py:274,297` and `test_visiofile.py:453`.
   - `vis._part_name(f"{vis.directory}/visio/pages/_rels/{candidate}.rels")` → `f"/visio/pages/_rels/{candidate}.rels"` (`test_visiofile_package_store.py:262`).
   - `tests/test_master_import_opc.py:255` → `vis._package.part(master_page.filename) is not None`.
-  - Tests that still index the view with a page name (`vis.zip_file_contents[page.filename]`, `del vis.zip_file_contents[page.rels_xml_filename]`) index `f"{vis.directory}{page.filename}"` for now. Task 3 deletes every one of them along with the view. Don't rewrite them further.
-  - `tests/test_visiofile_package_store.py:369`: `f"{vis.directory}/visio/masters/masters.xml"` stays for now. Task 3 moves it to `vis._package.write_bytes`.
+  - Tests that still index the view with a page name (`vis.zip_file_contents[page.filename]`, `del vis.zip_file_contents[page.rels_xml_filename]`) index `f"{vis.directory}{page.filename}"` for now. Task 4 deletes every one of them along with the view. Don't rewrite them further.
+  - `tests/test_visiofile_package_store.py:369`: `f"{vis.directory}/visio/masters/masters.xml"` stays for now. Task 4 moves it to `vis._package.write_bytes`.
+  - `tests/test_namespaces.py:356`: `f"{vis._masters_folder}/masters.xml"` becomes `f"{vis.directory}/visio/masters/masters.xml"` for now, since this task deletes `_masters_folder`. Task 4 moves it to the store.
+  - `tests/test_visiofile.py:135` `test_page_relationship_lookup_uses_opc_path_separator`: delete it. It pinned `_page_relationship_path` on Windows-style pseudo-paths. Part names never hold a backslash, and `tests/test_partnames.py` pins `relationships_part_name`.
 
 - [ ] **Step 6: Run the gates.** Run all four gates from Global Constraints.
 Expected: all green, including every test in `tests/test_part_names.py`. `grep -n "_part_name(\|_read_part_xml\|_pages_filename\|self\.directory" src/vsdxkit/*.py` lists only `_load_zip_file_contents_to_memory` and `zip_contents.py`.
@@ -499,7 +667,7 @@ git commit -m "refactor!: name every part by its part name (#91)" -m "BREAKING C
 
 Branch: `refactor/91-delete-zip-file-contents`, stacked on PR 1 with `gh stack`.
 
-### Task 3: Delete the view, `directory` and `write_bytes_keeping_tree`
+### Task 4: Delete the view, `directory` and `write_bytes_keeping_tree`
 
 **Files:**
 - Delete: `src/vsdxkit/zip_contents.py`, `tests/test_zip_contents_view.py`
@@ -512,7 +680,7 @@ Branch: `refactor/91-delete-zip-file-contents`, stacked on PR 1 with `gh stack`.
 - Modify tests: `tests/test_visiofile_package_store.py`, `tests/test_byte_preserving_save.py`, `tests/test_visiofile.py`, `tests/test_namespaces.py`, `tests/test_errors.py:879`, `tests/test_save_destinations.py:63`, `tests/test_package_store_save.py:364-372`, and any `tests/test_package_store.py` tests of `write_bytes_keeping_tree`.
 
 **Interfaces:**
-- Consumes: Task 2's state, where only `_load_zip_file_contents_to_memory` reads `directory` or `zip_file_contents`.
+- Consumes: Task 3's state, where only `_load_zip_file_contents_to_memory` reads `directory` or `zip_file_contents`.
 - Produces: `VisioFile` has no `directory` or `zip_file_contents` attribute. `PackageStore` has no `write_bytes_keeping_tree`.
 
 - [ ] **Step 1: Write the failing test.** Append to `tests/test_part_names.py`:
@@ -564,11 +732,11 @@ Run: `uv run pytest tests/test_part_names.py -q -k no_zip`. Expected: FAIL.
     - `vis.zip_file_contents[f"{vis.directory}/visio/pages/_rels/page1.xml.rels"].getvalue()` → `vis._package.read_bytes("/visio/pages/_rels/page1.xml.rels")`;
     - `vis.zip_file_contents[f"{vis._masters_folder}/masters.xml"]` → `vis._package.read_bytes("/visio/masters/masters.xml")`;
     - update the docstring at line 309 to "Read from the package store rather than from a saved file".
-  - `tests/test_visiofile.py:618` `test_load_zip_file_contents` → rename it to `test_every_xml_part_of_an_opened_document_parses`. Iterate `vis._package.names()`, and for each name ending `.xml` or `.rels`, assert `vis._package.read_xml(name) is not None`. Keep whatever else it asserts. Drop the `file_to_xml` import only if Task 4 hasn't run yet and nothing else uses it.
+  - `tests/test_visiofile.py:618` `test_load_zip_file_contents` → rename it to `test_every_xml_part_of_an_opened_document_parses`. Iterate `vis._package.names()`, and for each name ending `.xml` or `.rels`, assert `vis._package.read_xml(name) is not None`. Keep whatever else it asserts. Drop the `file_to_xml` import only if Task 5 hasn't run yet and nothing else uses it.
   - `tests/test_package_store_save.py:364-372`: keep the test and reword the docstring. The NUL check guards every writer, and it no longer mentions the view.
-  - `tests/test_byte_preserving_save.py` and `tests/test_visiofile_package_store.py`: any remaining `vis.directory` or `vis.zip_file_contents` from Task 2's interim spelling.
+  - `tests/test_byte_preserving_save.py` and `tests/test_visiofile_package_store.py`: any remaining `vis.directory` or `vis.zip_file_contents` from Task 3's interim spelling.
 
-- [ ] **Step 5: Fix docstrings and comments that describe the view.** `grep -rn "zip_file_contents\|write_bytes_keeping_tree\|ZipFileContentsView\|_WriteThroughBuffer" src tests`. Rewrite each hit so it describes the code as it now is, or delete it where it only explained the view: `package.py`'s docstrings, `pages.py:_attached`'s docstring and `_rels_attached`'s comment. Task 5 rewrites `_attached` and `_rels_attached`, so a one-line holding edit there is enough.
+- [ ] **Step 5: Fix docstrings and comments that describe the view.** `grep -rn "zip_file_contents\|write_bytes_keeping_tree\|ZipFileContentsView\|_WriteThroughBuffer" src tests`. Rewrite each hit so it describes the code as it now is, or delete it where it only explained the view: `package.py`'s docstrings, `pages.py:_attached`'s docstring and `_rels_attached`'s comment. Task 6 rewrites `_attached` and `_rels_attached`, so a one-line holding edit there is enough.
 
 - [ ] **Step 6: Run the gates.** Run all four gates.
 Expected: all green, and `grep -rn "zip_file_contents\|\.directory\b\|part_name_for_path\|ZipFileContentsView\|write_bytes_keeping_tree" src tests` returns nothing. `tests/test_part_names.py`'s docstring and the no-attribute test are the only exceptions.
@@ -580,7 +748,7 @@ git add -A src tests
 git commit -m "refactor!: delete zip_file_contents and VisioFile.directory (#91)" -m "BREAKING CHANGE: VisioFile.zip_file_contents and VisioFile.directory are removed. Work on the document through its object model; to read raw part bytes, open the saved file with zipfile." -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>" -m "Claude-Session: https://claude.ai/code/session_014SeJzNKgmmqyg4BHg7odRt"
 ```
 
-### Task 4: Delete `xmlio`'s mapping helpers
+### Task 5: Delete `xmlio`'s mapping helpers
 
 **Files:**
 - Modify: `src/vsdxkit/xmlio.py`:
@@ -636,14 +804,14 @@ git add -A src tests
 git commit -m "refactor!: delete xmlio's helpers over the old part mapping (#91)" -m "BREAKING CHANGE: vsdxkit.xmlio.file_to_xml, xml_to_file, require_xml_tree and require_root are removed, and so is vsdxkit.vsdxfile.file_to_xml. parse_part(bytes) and serialise_part(tree) do the same work on bytes." -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>" -m "Claude-Session: https://claude.ai/code/session_014SeJzNKgmmqyg4BHg7odRt"
 ```
 
-### Task 5: Simplify `Page._attached` and `_rels_attached`
+### Task 6: Simplify `Page._attached` and `_rels_attached`
 
 **Files:**
 - Modify: `src/vsdxkit/pages.py:252-296`
 - Test: `tests/test_visiofile_package_store.py`, `tests/test_byte_preserving_save.py` (existing tests), and `tests/test_part_names.py`
 
 **Interfaces:**
-- Consumes: Task 3's state. Nothing can write a page's part as bytes, or delete it, behind a live page.
+- Consumes: Task 4's state. Nothing can write a page's part as bytes, or delete it, behind a live page.
 - Produces: `_attached() -> bool` is `self._holds(self.filename, self._xml)`. `_rels_attached()` accepts a missing rels part, or its own tree, and nothing else.
 
 - [ ] **Step 1: Look for any other route to a `BytesPart` or missing part under a live page.** Grep for `write_bytes(` and `remove(` in `src/`. For each call, decide whether its name can be a live page's part or a live page's rels part. Put the list, with a verdict per call, in the report.
@@ -721,14 +889,14 @@ git add src/vsdxkit/pages.py tests/test_part_names.py
 git commit -m "refactor: a page is attached exactly when the store holds its tree (#91)" -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>" -m "Claude-Session: https://claude.ai/code/session_014SeJzNKgmmqyg4BHg7odRt"
 ```
 
-### Task 6: Move `KNOWN_DRIFT.md` into the README, and check the output is unchanged
+### Task 7: Move `KNOWN_DRIFT.md` into the README, and check the output is unchanged
 
 **Files:**
 - Delete: `tests/fixtures/package_manifests/KNOWN_DRIFT.md`
 - Modify: `README.md`, "Open, edit and save" (after the in-place save example, around line 81); `tests/test_package_manifest.py:12` and `:429`, the two references to it.
 
 **Interfaces:**
-- Consumes: Tasks 1–5.
+- Consumes: Tasks 1–6.
 - Produces: the finished branch.
 
 - [ ] **Step 1: Add the README note.** After the paragraph and code block that show `vis.save_vsdx()` saving in place, add:
@@ -783,9 +951,9 @@ git commit -m "docs: say how a save spells an edited part, and retire KNOWN_DRIF
 ## Finishing (controller)
 
 - Split the stack.
-  - PR 1 is `refactor/91-retire-zip-file-contents`, up to and including Task 2's commit.
-  - PR 2 is `refactor/91-delete-zip-file-contents`, with Tasks 3–6.
-  - Create PR 2's branch at Task 2's commit before dispatching Task 3.
+  - PR 1 is `refactor/91-retire-zip-file-contents`, up to and including Task 3's commit.
+  - PR 2 is `refactor/91-delete-zip-file-contents`, with Tasks 4–7.
+  - Create PR 2's branch at Task 3's commit before dispatching Task 4.
 - Open both PRs with `gh stack`.
   - PR titles: `refactor!: name every part by its part name` and `refactor!: delete zip_file_contents and the helpers that served it`.
   - Each body ends with its `BREAKING CHANGE:` paragraph, which is what release-please reads from the squash commit, then the attribution lines.
