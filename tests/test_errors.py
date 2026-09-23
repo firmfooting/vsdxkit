@@ -42,14 +42,14 @@ PUBLIC_ERRORS = (
 )
 
 
-def _package_with_document(source: str, destination: str, document: bytes) -> str:
-    """A copy of `source` whose `visio/document.xml` holds `document` instead."""
+def _package_with_document(source: str, destination: str, document: bytes, member: str = "visio/document.xml") -> str:
+    """A copy of `source` whose `member` holds `document` instead."""
     with zipfile.ZipFile(source) as original, zipfile.ZipFile(destination, "w") as rewritten:
-        for member in original.infolist():
-            data = original.read(member.filename)
-            if member.filename == "visio/document.xml":
+        for entry in original.infolist():
+            data = original.read(entry.filename)
+            if entry.filename == member:
                 data = document
-            rewritten.writestr(member, data)
+            rewritten.writestr(entry, data)
     return destination
 
 
@@ -66,6 +66,25 @@ def bad_encoding_package(vsdx_copy, tmp_path) -> str:
         vsdx_copy("test1.vsdx"),
         str(tmp_path / "bad-encoding.vsdx"),
         b'<?xml version="1.0" encoding="NOT-A-CODEC"?><VisioDocument/>',
+    )
+
+
+# UTF-7 is the encoding `ET.iterparse` refuses outright: expat recognises it but
+# cannot stream it, and reports `ValueError("multi-byte encodings are not
+# supported")` rather than the `LookupError` an unknown codec name gets.
+# Reproduced by hand: `'<?xml version="1.0" encoding="UTF-7"?><a/>'.encode("UTF-7")`
+# raised exactly that ValueError from `ET.iterparse`.
+REFUSED_MULTIBYTE_PART = '<?xml version="1.0" encoding="UTF-7"?><a/>'.encode("UTF-7")
+
+
+@pytest.fixture
+def multibyte_page_package(vsdx_copy, tmp_path) -> str:
+    """A real package whose `visio/pages/page1.xml` names a multi-byte encoding the parser refuses."""
+    return _package_with_document(
+        vsdx_copy("test1.vsdx"),
+        str(tmp_path / "multibyte-page.vsdx"),
+        REFUSED_MULTIBYTE_PART,
+        member="visio/pages/page1.xml",
     )
 
 
@@ -539,6 +558,33 @@ def test_a_part_declaring_an_unknown_encoding_raises_malformed_package_error(bad
     """
     with pytest.raises(MalformedPackageError, match="encoding"):
         vsdxkit.VisioFile(bad_encoding_package)
+
+
+def test_a_part_in_a_multibyte_encoding_the_parser_refuses_is_malformed():
+    """Fails if parse_part lets expat's "multi-byte encodings are not supported" ValueError escape untranslated."""
+    from vsdxkit import xmlio
+
+    with pytest.raises(vsdxkit.MalformedPackageError, match="encoding"):
+        xmlio.parse_part(REFUSED_MULTIBYTE_PART, "/visio/pages/page1.xml")
+
+
+@pytest.mark.allow_invalid_package("unreadable-part")
+def test_opening_a_package_with_a_refused_multibyte_page_encoding_raises_malformed_package_error(multibyte_page_package):
+    """The public open path must translate this ValueError too, not just the direct `parse_part` call above."""
+    with pytest.raises(MalformedPackageError, match="encoding"):
+        vsdxkit.VisioFile(multibyte_page_package)
+
+
+def test_memory_exhausted_while_reading_a_member_is_not_blamed_on_the_package(monkeypatch, tmp_path):
+    """Fails if _member_bytes' broad handler turns MemoryError into MalformedPackageError."""
+    from vsdxkit import package
+
+    def exhausted(*args, **kwargs):
+        raise MemoryError
+
+    monkeypatch.setattr(package, "_read_bounded", exhausted)
+    with pytest.raises(MemoryError):
+        package.PackageStore.open(os.path.join(BASEDIR, "test1.vsdx"))
 
 
 def test_malformed_shapesheet_number_raises_malformed_package_error(vsdx_copy):

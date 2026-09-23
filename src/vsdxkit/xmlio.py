@@ -263,6 +263,11 @@ def parse_part(data: bytes, name: str = "") -> ET.ElementTree[ET.Element]:
         # Nothing in the loop body looks anything up, so this catches the
         # parser and only the parser.
         raise MalformedPackageError(f"{subject} declares an encoding that cannot be decoded: {error}") from error
+    except ValueError as error:
+        # expat refuses some encodings it recognises -- multi-byte ones it cannot
+        # stream -- with a ValueError rather than LookupError. Nothing in the loop
+        # body raises ValueError, so this catches the parser and only the parser.
+        raise MalformedPackageError(f"{subject} declares an encoding the parser does not support: {error}") from error
     if root is None:  # pragma: no cover - a part with no root element fails to parse first
         raise MalformedPackageError(f"{subject} has no root element")
     _declared_prefixes[root] = declared

@@ -354,6 +354,10 @@ def _member_bytes(archive: zipfile.ZipFile, info: zipfile.ZipInfo, limits: Packa
         if error.errno is not None:
             raise
         raise MalformedPackageError(f"package member {info.filename!r} cannot be read: {error}") from error
+    except MemoryError:
+        # the process ran out, not the package: blaming the archive would let an
+        # `except VsdxError` caller carry on under memory pressure
+        raise
     except Exception as error:
         raise MalformedPackageError(f"package member {info.filename!r} cannot be read: {error}") from error
 
