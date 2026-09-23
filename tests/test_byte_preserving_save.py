@@ -212,3 +212,19 @@ def test_setting_a_pages_rels_on_a_closed_document_is_refused(vsdx_copy):
         page = vis.pages[0]
     with pytest.raises(vsdxkit.VisioFileNotOpen):
         page.rels_xml = None
+
+
+def test_setting_a_pages_xml_to_none_is_refused(vsdx_copy):
+    """Fails if `Page.xml = None` removes the page part.
+
+    Unlike `rels_xml`, nothing else names a page's rels part, but pages.xml,
+    pages.xml.rels and the content-type override all still point at the page
+    part after this assignment, so removing it would leave the package
+    promising a part it does not hold.
+    """
+    with vsdxkit.VisioFile(vsdx_copy("test3_house.vsdx")) as vis:
+        page = vis.pages[0]
+        part_name = vis._part_name(page.filename)
+        with pytest.raises(ValueError, match=r"Page\.xml"):
+            page.xml = None
+        assert vis._package.part(part_name) is not None

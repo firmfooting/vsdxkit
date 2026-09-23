@@ -231,8 +231,14 @@ class Page:
         return self._xml
 
     @xml.setter
-    def xml(self, value: ET.ElementTree[ET.Element]) -> None:
+    def xml(self, value: ET.ElementTree[ET.Element] | None) -> None:
         self.vis._require_open("Setting Page.xml")
+        if value is None:
+            raise ValueError(
+                f"Page.xml cannot be set to None: {self.filename} cannot be removed through "
+                f"this property, because pages.xml, pages.xml.rels and the content-type "
+                f"override would still name it"
+            )
         attached = self._attached()
         self._xml = value
         if attached:
