@@ -1,8 +1,8 @@
 API reference
 =============
 
-The distribution installs as ``vsdxkit`` but keeps the ``vsdx`` import
-namespace.
+Each class is imported from the module named in its heading, for example
+``from vsdxkit.vsdxfile import VisioFile``. The package root re-exports nothing.
 
 VisioFile
 ---------

@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import sys
 import xml.etree.ElementTree as ET
+from typing import TYPE_CHECKING
 from xml.etree.ElementTree import Element
 
 if sys.version_info >= (3, 12):
@@ -10,14 +11,15 @@ if sys.version_info >= (3, 12):
 else:
     from typing_extensions import override
 
-import vsdxkit
+from vsdxkit.document_part import DocumentPart
+from vsdxkit.errors import InvalidOperationError
+from vsdxkit.inheritance import InheritedRow
+from vsdxkit.logging_support import get_logger
+from vsdxkit.xmlio import make_cell_element, pretty_print_element, to_float, xml_value
 
-from .document_part import DocumentPart
-from .errors import InvalidOperationError
-from .inheritance import InheritedRow
-from .logging_support import get_logger
-from .shapes import to_float
-from .xmlio import make_cell_element, xml_value
+if TYPE_CHECKING:
+    from vsdxkit.shapes import Shape
+    from vsdxkit.vsdxfile import VisioFile
 
 logger = get_logger(__name__)
 
@@ -54,7 +56,7 @@ class Geometry(DocumentPart):
     going through the row still edits the master.
     """
 
-    def __init__(self, xml: Element, shape: vsdxkit.Shape):
+    def __init__(self, xml: Element, shape: Shape):
         # get shape master geometry, and append/overwrite with actual shape instance data
 
         self.xml = xml  # expect an Element of Section with attr N='Geometry'
@@ -89,7 +91,7 @@ class Geometry(DocumentPart):
 
     @property
     @override
-    def _document(self) -> vsdxkit.VisioFile:
+    def _document(self) -> VisioFile:
         return self.shape._document
 
     def start_pos(self) -> tuple[float | None, float | None] | None:
@@ -165,7 +167,7 @@ class Geometry(DocumentPart):
 
     def __repr__(self):
         s = f"Geometry: {self.cells} {[(r.row_type, r.index, r.x, r.y) for r in self.rows.values()]}"
-        s += f"\nGeometry: {vsdxkit.pretty_print_element(self.xml)}"
+        s += f"\nGeometry: {pretty_print_element(self.xml)}"
         return s
 
 
@@ -195,7 +197,7 @@ class GeometryRow(InheritedRow, DocumentPart):
 
     @property
     @override
-    def _document(self) -> vsdxkit.VisioFile:
+    def _document(self) -> VisioFile:
         return self.geometry._document
 
     def inherited_by(self, geometry: Geometry) -> GeometryRow:
@@ -369,7 +371,7 @@ class GeometryCell(DocumentPart):
 
     @property
     @override
-    def _document(self) -> vsdxkit.VisioFile:
+    def _document(self) -> VisioFile:
         return self.parent._document
 
     def create_cell_xml(self, name: str) -> Element:

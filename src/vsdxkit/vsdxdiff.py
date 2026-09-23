@@ -3,8 +3,8 @@ import difflib
 import hashlib
 import zipfile
 
-from .logging_support import get_logger
-from .package import PackageLimitError
+from vsdxkit.errors import PackageLimitError
+from vsdxkit.logging_support import get_logger
 
 logger = get_logger(__name__)
 

@@ -12,7 +12,8 @@ from xml.etree import ElementTree
 
 import pytest
 
-from vsdxkit import VisioFile, namespace
+from vsdxkit import namespace
+from vsdxkit.vsdxfile import VisioFile
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 

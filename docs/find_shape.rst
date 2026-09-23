@@ -11,7 +11,7 @@ Pages can be selected by zero-based index or case-sensitive name.
 
 .. code-block:: python
 
-   from vsdx import VisioFile
+   from vsdxkit.vsdxfile import VisioFile
 
    with VisioFile("diagram.vsdx") as vis:
        first_page = vis.pages[0]
@@ -25,7 +25,7 @@ Find one shape
 --------------
 
 The ``find_shape_*`` methods return the first matching
-:class:`vsdx.shapes.Shape`, or ``None``.
+:class:`vsdxkit.shapes.Shape`, or ``None``.
 
 .. code-block:: python
 

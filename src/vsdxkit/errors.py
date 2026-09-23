@@ -32,18 +32,6 @@ if sys.version_info >= (3, 12):
 else:
     from typing_extensions import override
 
-__all__ = [
-    "InvalidOperationError",
-    "MalformedPackageError",
-    "MissingPartError",
-    "NotFoundError",
-    "PackageError",
-    "PackageLimitError",
-    "PartParseError",
-    "VisioFileNotOpen",
-    "VsdxError",
-]
-
 
 class VsdxError(Exception):
     """Base class for every error this library raises itself."""

@@ -14,8 +14,10 @@ import xml.etree.ElementTree as ET
 
 import pytest
 
-from vsdxkit import Shape, VisioFile, namespace
+from vsdxkit import namespace
 from vsdxkit.containers import ROW_HEADING_TEXT, get_user_row
+from vsdxkit.shapes import Shape
+from vsdxkit.vsdxfile import VisioFile
 
 CFF_FIXTURE = "fixtures/com_reference/s05_swimlanes_cfflow.vsdx"
 

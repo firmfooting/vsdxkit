@@ -3,9 +3,9 @@ from __future__ import annotations
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from .errors import NotFoundError, VisioFileNotOpen
-from .shapes import Shape
-from .vsdxfile import VisioFile
+from vsdxkit.errors import NotFoundError, VisioFileNotOpen
+from vsdxkit.shapes import Shape
+from vsdxkit.vsdxfile import VisioFile
 
 
 def _media_path(filename: str) -> str:

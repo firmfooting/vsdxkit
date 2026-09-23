@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import sys
 import xml.etree.ElementTree as ET
+from typing import TYPE_CHECKING
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -28,10 +29,13 @@ else:
     from typing_extensions import override
 
 import vsdxkit
+from vsdxkit.document_part import DocumentPart
+from vsdxkit.errors import InvalidOperationError, MissingPartError
+from vsdxkit.shapes import Shape
 
-from .document_part import DocumentPart
-from .errors import InvalidOperationError, MissingPartError
-from .shapes import Shape
+if TYPE_CHECKING:
+    from vsdxkit.pages import Page
+    from vsdxkit.vsdxfile import VisioFile
 
 # observed lane pitch in the Visio 16 CFF capture (inches)
 LANE_PITCH_INCHES = 1.18110236220472
@@ -75,18 +79,18 @@ class Container(DocumentPart):
     behaviour. There are no membership cells to write.
     """
 
-    def __init__(self, page: vsdxkit.Page):
+    def __init__(self, page: Page):
         self.page = page
 
     @property
     @override
-    def _document(self) -> vsdxkit.VisioFile:
+    def _document(self) -> VisioFile:
         return self.page.vis
 
     # ---- discovery -------------------------------------------------------
 
     @staticmethod
-    def find(page: vsdxkit.Page) -> Container | None:
+    def find(page: Page) -> Container | None:
         """Return a Container for the page, or None if this is not a CFF page."""
         for shape in page.all_shapes:
             if shape.shape_name == "CFF Container":
@@ -185,7 +189,7 @@ class Container(DocumentPart):
         # which the structural validator cannot see (#330). A failed call still
         # burns the ids the clone was allocated; the page's id mark only rises,
         # so the next shape gets a higher number and nothing else changes.
-        new_xml = vsdxkit.ET.fromstring(vsdxkit.ET.tostring(top_lane.xml))
+        new_xml = ET.fromstring(ET.tostring(top_lane.xml))
         self.page.vis.renumber_shape_ids(new_xml, self.page)
         new_lane = Shape(xml=new_xml, parent=self.page, page=self.page)
         new_lane.get_or_create_cell("PinY", v=str((top_lane.y or 0.0) + LANE_PITCH_INCHES))

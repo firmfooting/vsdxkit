@@ -3,10 +3,8 @@ from datetime import datetime
 
 import pytest
 
-from vsdxkit import (
-    Shape,
-    VisioFile,
-)
+from vsdxkit.shapes import Shape
+from vsdxkit.vsdxfile import VisioFile
 
 
 @pytest.mark.parametrize(

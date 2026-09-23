@@ -12,8 +12,11 @@ from collections import Counter
 
 import pytest
 
-from vsdxkit import Connect, Media, VisioFile, VisioFileNotOpen
+from vsdxkit.connectors import Connect
+from vsdxkit.errors import VisioFileNotOpen
+from vsdxkit.media import Media
 from vsdxkit.package import PackageStore
+from vsdxkit.vsdxfile import VisioFile
 
 BASE = "test8_simple_connector.vsdx"
 

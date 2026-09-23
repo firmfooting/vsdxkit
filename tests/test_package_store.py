@@ -18,7 +18,8 @@ from pathlib import Path
 import pytest
 from helpers.broken_package import append_member, make_package
 
-from vsdxkit.package import BytesPart, PackageLimitError, PackageLimits, PackageStore, XmlPart, canonical_hash
+from vsdxkit.errors import PackageLimitError
+from vsdxkit.package import BytesPart, PackageLimits, PackageStore, XmlPart, canonical_hash
 
 BASEDIR = os.path.dirname(os.path.realpath(__file__))
 FIXTURE = "test1.vsdx"

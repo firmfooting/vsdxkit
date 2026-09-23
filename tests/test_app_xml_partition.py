@@ -25,7 +25,9 @@ import zipfile
 import pytest
 from helpers.broken_package import rewritten
 
-from vsdxkit import Connect, VisioFile, ext_prop_namespace, namespace, vt_namespace
+from vsdxkit import ext_prop_namespace, namespace, vt_namespace
+from vsdxkit.connectors import Connect
+from vsdxkit.vsdxfile import VisioFile
 
 APP_PART = "docProps/app.xml"
 

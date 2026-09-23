@@ -70,12 +70,14 @@ def main() -> int:
             ok(f"installed media/{member_name} present")
 
     import vsdxkit
+    from vsdxkit.media import Media
+    from vsdxkit.vsdxfile import VisioFile
 
     ok(f"vsdxkit {vsdxkit.__version__} imports cleanly")
 
     # 4. exercise Media() and the creation APIs against a sample document
     try:
-        vsdxkit.Media()
+        Media()
     except Exception as error:  # smoke harness reports every failure mode
         fail(f"Media() failed from the installed wheel: {error}")
         return 1
@@ -90,7 +92,7 @@ def main() -> int:
             handle.write(payload)
 
         try:
-            with vsdxkit.VisioFile(document) as vis:
+            with VisioFile(document) as vis:
                 page = vis.pages[0]
                 shape = vis.create_shape(page, "PALETTE_DECISION", 4.0, 6.0, w=1.5, h=1.0, text="smoke")
                 if shape is None:
@@ -105,7 +107,7 @@ def main() -> int:
                     ok("create_connect between created shapes")
                 vis.save_vsdx(document)
 
-            with vsdxkit.VisioFile(document) as reloaded:
+            with VisioFile(document) as reloaded:
                 found = reloaded.pages[0].find_shape_by_text("smoke")
                 if found is None:
                     fail("saved document lost the created shape")

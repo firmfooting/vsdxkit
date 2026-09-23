@@ -24,7 +24,8 @@ from dataclasses import dataclass
 
 import pytest
 
-from vsdxkit import Connect, VisioFile
+from vsdxkit.connectors import Connect
+from vsdxkit.vsdxfile import VisioFile
 
 RELS_NS = "{http://schemas.openxmlformats.org/package/2006/relationships}"
 R_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"

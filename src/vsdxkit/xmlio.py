@@ -6,11 +6,12 @@ import io
 import re
 import threading
 import weakref
+import xml.dom.minidom as minidom
 import xml.etree.ElementTree as ET
 from collections.abc import Generator
 from contextlib import contextmanager
 
-from .errors import MalformedPackageError, MissingPartError, PartParseError
+from vsdxkit.errors import MalformedPackageError, MissingPartError, PartParseError
 
 # Prefixes Visio itself writes. ElementTree invents `ns0:`, `ns1:`, ... for any
 # namespace it has no prefix for, and consumers stricter than Visio -- libvisio
@@ -83,6 +84,18 @@ def register_namespaces() -> None:
         for uri, prefix in _GLOBAL_PREFIXES.items():
             ET.register_namespace(prefix, uri)
         _registered = True
+
+
+def pretty_print_element(xml: ET.Element | ET.ElementTree[ET.Element]) -> str:
+    """An element, or a tree's root, as indented XML for reading.
+
+    Registers the prefixes first, so the output spells namespaces the way Visio
+    does whichever module the caller happened to import before this one.
+    """
+    register_namespaces()
+    if isinstance(xml, ET.ElementTree):
+        xml = require_element(xml.getroot(), "element")
+    return minidom.parseString(ET.tostring(xml)).toprettyxml()
 
 
 def _namespaces_in(root: ET.Element) -> set[str]:
@@ -348,3 +361,19 @@ def require_attribute(element: ET.Element, name: str, description: str) -> str:
     if value is None:
         raise MalformedPackageError(f"{description} has no {name} attribute")
     return value
+
+
+def to_float(val: str | None, cell: str | None = None) -> float | None:
+    """Convert a ShapeSheet value to float.
+
+    ``None`` input stays ``None``: an absent cell is distinct from a malformed
+    one. A malformed numeric value raises rather than masquerading as a real
+    zero coordinate; the message carries the cell name and raw value.
+    """
+    if val is None:
+        return None
+    try:
+        return float(val)
+    except ValueError as error:
+        label = f" for {cell}" if cell else ""
+        raise MalformedPackageError(f"malformed numeric ShapeSheet value{label}: {val!r}") from error

@@ -4,7 +4,8 @@ import os
 
 import pytest
 
-from vsdxkit import PagePosition, VisioFile
+from vsdxkit.pages import PagePosition
+from vsdxkit.vsdxfile import VisioFile
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 

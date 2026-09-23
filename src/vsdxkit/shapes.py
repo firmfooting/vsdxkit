@@ -18,29 +18,20 @@ import deprecation
 
 import vsdxkit
 from vsdxkit import namespace
-
-from .document_part import DocumentPart
-from .errors import InvalidOperationError, MalformedPackageError
-from .inheritance import InheritedRow
-from .logging_support import get_logger
-from .xmlio import make_cell_element, xml_value
+from vsdxkit.connectors import Connect
+from vsdxkit.document_part import DocumentPart
+from vsdxkit.errors import InvalidOperationError
+from vsdxkit.formulae import calc_value
+from vsdxkit.geometry import Geometry, GeometryCell
+from vsdxkit.inheritance import InheritedRow
+from vsdxkit.logging_support import get_logger
+from vsdxkit.xmlio import make_cell_element, to_float, xml_value
 
 if TYPE_CHECKING:
-    from vsdxkit.connectors import Connect
+    from vsdxkit.pages import Page
+    from vsdxkit.vsdxfile import VisioFile
 
 logger = get_logger(__name__)
-
-
-def __getattr__(name: str):
-    # Module-level lazy attribute (PEP 562): typing.get_type_hints on the
-    # quoted 'Connect' annotation resolves through module globals, and
-    # vsdxkit.connectors imports this module, so the reference is provided on
-    # demand instead of at import time (which would be a cycle).
-    if name == "Connect":
-        from vsdxkit.connectors import Connect
-
-        return Connect
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def parent_of(root: Element, element: Element) -> Element | None:
@@ -70,22 +61,6 @@ shape_type_names = {  # a map from English language shape to a list of know name
     # note that Shape names may be appended with a number e.g. 'Dynamischer Verbinder.2'
     "Dynamic Connector": ["dynamic connector", "dynamischer verbinder"]
 }
-
-
-def to_float(val: str | None, cell: str | None = None) -> float | None:
-    """Convert a ShapeSheet value to float.
-
-    ``None`` input stays ``None``: an absent cell is distinct from a malformed
-    one. A malformed numeric value raises rather than masquerading as a real
-    zero coordinate; the message carries the cell name and raw value.
-    """
-    if val is None:
-        return None
-    try:
-        return float(val)
-    except ValueError as error:
-        label = f" for {cell}" if cell else ""
-        raise MalformedPackageError(f"malformed numeric ShapeSheet value{label}: {val!r}") from error
 
 
 def _coordinate_value(value: float | str | None) -> str:
@@ -209,7 +184,7 @@ class Cell(DocumentPart):
 
     @property
     @override
-    def _document(self) -> vsdxkit.VisioFile:
+    def _document(self) -> VisioFile:
         return self.shape._document
 
     @property
@@ -303,7 +278,7 @@ class DataProperty(InheritedRow, DocumentPart):
 
     @property
     @override
-    def _document(self) -> vsdxkit.VisioFile:
+    def _document(self) -> VisioFile:
         return self.shape._document
 
     def inherited_by(self, shape: Shape) -> DataProperty:
@@ -431,10 +406,10 @@ class Shape(DocumentPart):
     """Represents a single shape, or a group shape containing other shapes"""
 
     xml: Element
-    parent: vsdxkit.Page | Shape
-    page: vsdxkit.Page
+    parent: Page | Shape
+    page: Page
     cells: dict[str, Cell]
-    _geometry: vsdxkit.Geometry | None
+    _geometry: Geometry | None
     _geometry_xml: Element | None
     _master_shape: Shape | None
     _master_shape_resolved: bool
@@ -442,7 +417,7 @@ class Shape(DocumentPart):
     _data_properties: dict[str, DataProperty] | None
     _data_properties_key: tuple[Element, ...] | None
 
-    def __init__(self, xml: Element, parent: vsdxkit.Page | Shape, page: vsdxkit.Page):
+    def __init__(self, xml: Element, parent: Page | Shape, page: Page):
         self.xml = xml
         self.parent = parent
         self.page = page
@@ -470,7 +445,7 @@ class Shape(DocumentPart):
                 row_type = r.attrib["T"]
                 if row_type:
                     for e in r.findall(f"{namespace}Cell"):
-                        cell = vsdxkit.Cell(xml=e, shape=self)
+                        cell = Cell(xml=e, shape=self)
                         if cell.name is not None:
                             self.cells[f"Geometry/{row_type}/{cell.name}"] = cell
 
@@ -480,7 +455,7 @@ class Shape(DocumentPart):
                 row_type = r.attrib["N"]
                 if row_type:
                     for e in r.findall(f"{namespace}Cell"):
-                        cell = vsdxkit.Cell(xml=e, shape=self)
+                        cell = Cell(xml=e, shape=self)
                         if cell.name is not None:
                             self.cells[f"Control/{row_type}/{cell.name}"] = cell
 
@@ -491,7 +466,7 @@ class Shape(DocumentPart):
         return f"<Shape tag={self.tag} ID={self.ID} is_master=({self.is_master_shape}) type={self.shape_type} text='{self.text}' >"
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, vsdxkit.Shape):
+        if not isinstance(other, Shape):
             return False
 
         return hash(self) == hash(other)
@@ -571,11 +546,11 @@ class Shape(DocumentPart):
 
     @property
     @override
-    def _document(self) -> vsdxkit.VisioFile:
+    def _document(self) -> VisioFile:
         return self.page.vis
 
     @property
-    def geometry(self) -> vsdxkit.Geometry | None:
+    def geometry(self) -> Geometry | None:
         """This shape's Geometry section, merged with the master's, or ``None``.
 
         Built on first read and then held for as long as this Shape object
@@ -595,11 +570,11 @@ class Shape(DocumentPart):
         if self._geometry_xml is None:
             return None
         if self._geometry is None:
-            self._geometry = vsdxkit.Geometry(xml=self._geometry_xml, shape=self)
+            self._geometry = Geometry(xml=self._geometry_xml, shape=self)
         return self._geometry
 
     @geometry.setter
-    def geometry(self, value: vsdxkit.Geometry | None) -> None:
+    def geometry(self, value: Geometry | None) -> None:
         """Give the shape a Geometry, or ``None`` to report none at all.
 
         Here because this was a plain attribute before it was built on demand,
@@ -628,7 +603,7 @@ class Shape(DocumentPart):
                 name_univ = name_univ_cell.attrib.get("V") or name_univ
         return name_univ
 
-    def copy(self, page: vsdxkit.Page | None = None) -> Shape:
+    def copy(self, page: Page | None = None) -> Shape:
         """Copy this Shape to the specified destination Page, and return the copy.
 
         If the destination page is not specified, the Shape is copied to its containing Page.
@@ -644,7 +619,7 @@ class Shape(DocumentPart):
 
         # parent decides where the new shape tag lands: the destination
         # page's Shapes tag, or the source shape's own parent
-        parent: vsdxkit.Page | Shape
+        parent: Page | Shape
         if page is not None:
             # copy_shape() above guarantees a Shapes tag exists on the page
             page_shapes = page._shapes
@@ -669,7 +644,7 @@ class Shape(DocumentPart):
         master element's children, by identity, in the way
         :attr:`data_properties` is checked against this shape's Property rows.
         Repointing ``master_page_ID`` or ``master_shape_ID``, as
-        :meth:`vsdxkit.Connect.create` does, resolves the new master rather than
+        :meth:`vsdxkit.connectors.Connect.create` does, resolves the new master rather than
         answering with the old one, and a cell added to, removed from or
         swapped on the master is picked up on the next read. One limitation
         remains, the same one :attr:`data_properties` has: the key covers the
@@ -711,7 +686,7 @@ class Shape(DocumentPart):
         return master_shape
 
     @property
-    def master_page(self) -> vsdxkit.Page | None:
+    def master_page(self) -> Page | None:
         """Get this pages master
 
         Returns this Page's master as a Page object (or None)
@@ -1141,7 +1116,7 @@ class Shape(DocumentPart):
             self.begin_y = self.begin_y + y_delta
         self.y = (self.y or 0.0) + y_delta
 
-    def get_or_create_cell(self, name: str, v: str | None = None, f: str | None = None) -> vsdxkit.Cell:
+    def get_or_create_cell(self, name: str, v: str | None = None, f: str | None = None) -> Cell:
         """Set or create a named cell on this shape.
 
         Existing cells have their V/F attributes updated in place. New cells
@@ -1172,7 +1147,7 @@ class Shape(DocumentPart):
             if child.tag == f"{vsdxkit.namespace}Cell":
                 insert_at = i + 1
         self.xml.insert(insert_at, cell_el)
-        cell = vsdxkit.Cell(xml=cell_el, shape=self)
+        cell = Cell(xml=cell_el, shape=self)
         self.cells[name] = cell
         return cell
 
@@ -1281,7 +1256,7 @@ class Shape(DocumentPart):
                 self.set_cell_value(name="Control/TextPosition/XDyn", value=text_x)
                 self.set_cell_value(name="Control/TextPosition/YDyn", value=text_y)
                 # print(cp1.cells.keys())
-            cells: list[Cell | vsdxkit.GeometryCell] = list(self.cells.values())
+            cells: list[Cell | GeometryCell] = list(self.cells.values())
             if self.geometry is not None:
                 cells.extend(self.geometry.cells)
                 for r in self.geometry.rows.values():
@@ -1297,7 +1272,7 @@ class Shape(DocumentPart):
                         formula = master_c.formula if master_c else formula
                     if formula is None:
                         continue
-                    v = vsdxkit.calc_value(self, formula)
+                    v = calc_value(self, formula)
                     if v is not None:
                         c.value = v
 
@@ -1399,7 +1374,7 @@ class Shape(DocumentPart):
         Recursively search for a shape, based on a known shape_id, and return a single Shape
 
         :param shape_id:
-        :return: vsdxkit.Shape
+        :return: vsdxkit.shapes.Shape
         """
         # recursively search for shapes by text and return first match
         for shape in self.all_shapes:  # type: Shape
@@ -1416,7 +1391,7 @@ class Shape(DocumentPart):
 
         :param attr:
         :param attr_value:
-        :return: vsdxkit.Shape
+        :return: vsdxkit.shapes.Shape
         """
         #  xml.attrib.get('NameU') or xml.get('Name')
         # recursively search for shapes by text and return first match
@@ -1586,9 +1561,9 @@ class Shape(DocumentPart):
     def connects(self) -> list[Connect]:
         """Connect items linking this shape to others.
 
-        The annotation quotes ``Connect`` so ``typing.get_type_hints`` stays
-        runtime-resolvable while avoiding an import cycle with
-        ``vsdxkit.connectors`` (resolved lazily by the type checker).
+        ``vsdxkit.connectors`` needs this module only for annotations, so
+        ``Connect`` is imported here at load time and ``typing.get_type_hints``
+        resolves it.
         """
         connects = list()
         for c in self.page.connects:

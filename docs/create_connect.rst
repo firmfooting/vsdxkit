@@ -4,13 +4,13 @@ Create shapes and connectors
 Create shapes
 -------------
 
-:meth:`vsdx.vsdxfile.VisioFile.create_shape` copies a masterless shape from
+:meth:`vsdxkit.vsdxfile.VisioFile.create_shape` copies a masterless shape from
 the bundled palette into an existing page. Coordinates are Visio page units,
 normally inches, and identify the centre of the shape.
 
 .. code-block:: python
 
-   from vsdx import VisioFile
+   from vsdxkit.vsdxfile import VisioFile
 
    with VisioFile("diagram.vsdx") as vis:
        page = vis.pages[0]
@@ -41,13 +41,13 @@ The bundled palette exposes these names:
 * ``PALETTE_PARALLELOGRAM``
 * ``PALETTE_DATABASE``
 
-An unknown name raises ``vsdxkit.NotFoundError``.
+An unknown name raises ``vsdxkit.errors.NotFoundError``.
 
 Connector glue and routing
 --------------------------
 
-:meth:`vsdx.pages.Page.connect_shapes` returns the new connector as a
-:class:`vsdx.shapes.Shape`.
+:meth:`vsdxkit.pages.Page.connect_shapes` returns the new connector as a
+:class:`vsdxkit.shapes.Shape`.
 
 ``dynamic``
    Dynamic shape glue. This is the default.
@@ -75,7 +75,7 @@ Connector glue and routing
 Re-anchor a connector
 ---------------------
 
-:meth:`vsdx.pages.Page.reanchor_connector` moves either or both endpoints.
+:meth:`vsdxkit.pages.Page.reanchor_connector` moves either or both endpoints.
 Pass ``None`` to retain an existing endpoint.
 
 .. code-block:: python
@@ -89,7 +89,7 @@ Pass ``None`` to retain an existing endpoint.
 Delete a connected shape
 ------------------------
 
-Use :meth:`vsdx.pages.Page.delete_shape` when connector cleanup matters. It
+Use :meth:`vsdxkit.pages.Page.delete_shape` when connector cleanup matters. It
 removes incident connector shapes and their ``Connect`` records before it
 removes the requested shape.
 

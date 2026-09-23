@@ -2,7 +2,7 @@
 
 import zipfile
 
-from vsdxkit import VisioFile
+from vsdxkit.vsdxfile import VisioFile
 
 BASE = "test8_simple_connector.vsdx"
 

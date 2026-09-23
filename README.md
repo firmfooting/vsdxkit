@@ -9,7 +9,7 @@ Create, edit and analyse Microsoft Visio `.vsdx` files with Python. Visio is not
 
 > **0.x API notice.** The 0.x line carries the inherited API and is changing under it: 0.8 alone made seven breaking changes, each listed in the [changelog](CHANGELOG.md). 1.0 renames `VisioFile` to `Document` and `Container` to `SwimlaneDiagram`, splits `Connect` into an internal `ConnectionRecord` and a public `Connector`, and drops the context manager: opening closes the archive before it returns, and `save()` is the only write. The [1.0 design](https://github.com/firmfooting/vsdxkit/blob/main/.hermes/plans/2026-09-12_simplification-usability-refactor.md) lists every change. Pin `vsdxkit<1` to stay on the 0.x names.
 
-The distribution is named **`vsdxkit`**. The import remains **`vsdx`**, so existing code keeps working.
+The distribution and the import package are both named **`vsdxkit`**. Import each name from the module that defines it, for example `from vsdxkit.vsdxfile import VisioFile`; the package root re-exports nothing.
 
 vsdxkit adds shape creation, Visio-faithful connectors, connector re-anchoring, cross-functional flowchart swimlanes, stricter package handling, current Python tooling and typed public APIs. It began as a fork of [`dave-howard/vsdx`](https://github.com/dave-howard/vsdx) and is now developed as its own project; see [Provenance and licence](#provenance-and-licence).
 
@@ -60,7 +60,7 @@ or later.
 Use the context manager to close the package cleanly. Saving is explicit.
 
 ```python
-from vsdxkit import VisioFile
+from vsdxkit.vsdxfile import VisioFile
 
 with VisioFile("diagram.vsdx") as vis:
     page = vis.pages[0]
@@ -87,7 +87,7 @@ A save writes every part you did not change exactly as it arrived. A part you di
 Shape coordinates are in Visio page units, normally inches. `x` and `y` identify the shape centre.
 
 ```python
-from vsdxkit import VisioFile
+from vsdxkit.vsdxfile import VisioFile
 
 with VisioFile("diagram.vsdx") as vis:
     page = vis.pages[0]
@@ -190,7 +190,7 @@ The package also supports its existing group-shape loop and `showif` conventions
 - `.vsdm` files can be read and saved, but only back to a `.vsdm` destination. The package kind is decided by the content type of `visio/document.xml`, not by the filename, so `save_vsdx()` refuses a `.vsdx` destination for a macro-enabled package and a `.vsdm` destination for one that is not — either would produce a file whose extension and `[Content_Types].xml` disagree, which Visio reports as corrupt. Stripping macros to convert a `.vsdm` into a `.vsdx` is not supported. A destination with no extension, or with an unrelated one, gets the matching Visio extension appended.
 - Swimlane creation works on existing Visio CFF diagrams. It does not convert an ordinary page into a CFF diagram.
 - Visio may recalculate layout when a generated file opens. The library writes the glue and route cells but does not reproduce Visio's entire layout engine.
-- Loading enforces package expansion limits before any archive member is read: at most 512 members, 64 MiB per member, 256 MiB total uncompressed, and a 100:1 compression ratio, plus rejection of duplicate and path-unsafe member names. A hostile or accidental archive is refused with `vsdxkit.PackageLimitError` instead of exhausting process memory. The defaults suit documents from unknown sources; trusted callers can relax the caps with `VisioFile(filename, limits=PackageLimits(...))` or `limits_path="vsdxkit.limits.json"` (same keys, JSON object).
+- Loading enforces package expansion limits before any archive member is read: at most 512 members, 64 MiB per member, 256 MiB total uncompressed, and a 100:1 compression ratio, plus rejection of duplicate and path-unsafe member names. A hostile or accidental archive is refused with `vsdxkit.errors.PackageLimitError` instead of exhausting process memory. The defaults suit documents from unknown sources; trusted callers can relax the caps with `VisioFile(filename, limits=PackageLimits(...))` or `limits_path="vsdxkit.limits.json"` (same keys, JSON object).
 
 ## Development and verification
 
@@ -222,4 +222,4 @@ interpreter.
 
 vsdxkit descends from [`dave-howard/vsdx`](https://github.com/dave-howard/vsdx), originally written by Dave Howard and released under the BSD 3-Clause licence. That work is the foundation this library is built on, and its copyright notice is retained in [`LICENSE`](LICENSE) alongside our own.
 
-vsdxkit is now developed independently: it is not a downstream of that project and does not track it. The `vsdx` import namespace is kept so existing code continues to work, and the licence remains BSD 3-Clause.
+vsdxkit is now developed independently: it is not a downstream of that project and does not track it. The import package is `vsdxkit`, not `vsdx`, and the licence remains BSD 3-Clause.

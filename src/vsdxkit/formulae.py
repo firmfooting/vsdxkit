@@ -1,7 +1,12 @@
-import math
+from __future__ import annotations
 
-from .logging_support import get_logger
-from .shapes import Shape
+import math
+from typing import TYPE_CHECKING
+
+from vsdxkit.logging_support import get_logger
+
+if TYPE_CHECKING:
+    from vsdxkit.shapes import Shape
 
 logger = get_logger(__name__)
 

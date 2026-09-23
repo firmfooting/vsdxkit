@@ -19,7 +19,8 @@ from pathlib import Path
 import pytest
 
 import vsdxkit.package as package_module
-from vsdxkit.package import PackageLimitError, PackageLimits, PackageStore
+from vsdxkit.errors import PackageLimitError
+from vsdxkit.package import PackageLimits, PackageStore
 
 BASEDIR = os.path.dirname(os.path.realpath(__file__))
 PAGE_PART = "/visio/pages/page1.xml"

@@ -2,8 +2,8 @@
 
 import zipfile
 
-from vsdxkit import VisioFile
 from vsdxkit.containers import get_user_row, set_user_row_value
+from vsdxkit.vsdxfile import VisioFile
 
 FIXTURE = "fixtures/com_reference/s05_swimlanes_cfflow.vsdx"
 

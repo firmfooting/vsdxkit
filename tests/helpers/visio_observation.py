@@ -53,22 +53,6 @@ from typing import Any
 
 from helpers.opc import DOC_REL_NS, MAIN_NS, MASTERS_PART, MASTERS_RELS_PART, PAGES_PART, PAGES_RELS_PART
 
-__all__ = [
-    "PLACEMENT_CELLS",
-    "PLACEMENT_TOLERANCE",
-    "SCHEMA_VERSION",
-    "CellObservation",
-    "ConnectObservation",
-    "Difference",
-    "Observation",
-    "PageObservation",
-    "ShapeObservation",
-    "compare",
-    "format_differences",
-    "observation_from_com_json",
-    "observation_from_package",
-]
-
 # Bumped when the JSON the COM extractor emits changes shape. A recorded
 # observation carries the version it was written under, so a stale recording is
 # refused rather than silently misread.

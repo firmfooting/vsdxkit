@@ -15,10 +15,11 @@ import zipfile
 
 import pytest
 
-from vsdxkit import Connect, VisioFile
+from vsdxkit.connectors import Connect
 from vsdxkit.errors import MalformedPackageError
 from vsdxkit.partnames import relationships_part_name
 from vsdxkit.shapes import find_or_create_shapes_tag
+from vsdxkit.vsdxfile import VisioFile
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
@@ -180,7 +181,6 @@ def test_a_document_has_no_zip_file_contents_or_directory(vsdx_copy):
 @pytest.mark.parametrize("name", ["file_to_xml", "xml_to_file", "require_xml_tree", "require_root"])
 def test_xmlio_has_no_helpers_over_the_old_mapping(name):
     """Fails if a helper that took the pre-store `{path: BytesIO}` mapping is still in `xmlio` (#91)."""
-    import vsdxkit.vsdxfile
     import vsdxkit.xmlio
 
     assert not hasattr(vsdxkit.xmlio, name)

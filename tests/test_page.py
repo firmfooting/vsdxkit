@@ -4,8 +4,10 @@ from datetime import datetime
 
 import pytest
 
-import vsdxkit
-from vsdxkit import Connect, Shape, VisioFile
+from vsdxkit.connectors import Connect
+from vsdxkit.formulae import calc_value
+from vsdxkit.shapes import Shape
+from vsdxkit.vsdxfile import VisioFile
 
 
 @pytest.mark.parametrize("filename, count", [("test1.vsdx", 1), ("test2.vsdx", 1)])
@@ -635,7 +637,7 @@ def test_copy_and_move_line(filename: str, shape_text: str, start: tuple, finish
             if formula == "Inh" and cp1.master_shape:
                 master_cell = cp1.master_shape.cells.get(cell.name)
                 formula = master_cell.formula if master_cell else formula
-            value = vsdxkit.calc_value(cp1, formula)
+            value = calc_value(cp1, formula)
             if value is not None:
                 cell.value = value
 

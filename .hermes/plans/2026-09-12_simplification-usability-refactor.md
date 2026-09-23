@@ -12,6 +12,19 @@
 > milestones and issues, and those are authoritative for what is done. The
 > design itself is unchanged.
 
+> **Amended 2026-09-23: imports and module seams.** The import package is
+> `vsdxkit` (#350), so paths below say `vsdxkit`, not `vsdx`. The maintainer
+> ruled that nothing is re-exported, the package root included: every public
+> name is imported from the module that defines it. #383 put that in place,
+> and a dependency-inversion PR follows it. Three things change:
+> - **the target API** imports each name from its defining module;
+> - **the ownership rules** replace "type-only edges use `TYPE_CHECKING`"
+>   with dependency inversion. A lower module declares a `Protocol` for what
+>   it needs from an upper one, and every public annotation resolves at
+>   runtime;
+> - **Phase 6 and the DRY and done lists** drop the package-root cycle work,
+>   which #383 finished, and gain the resolution ratchet.
+
 ## Decision
 
 Replace the inherited upstream Python API with one coherent object model. Remove old names rather than carrying compatibility wrappers or a multi-release deprecation period.
@@ -105,9 +118,19 @@ Document / Page / Shape / Connector / collections
 
 Rules:
 
-- internal modules do not `import vsdx`;
-- lower layers never import public facades at runtime;
-- type-only edges use `TYPE_CHECKING`;
+- absolute imports only (ruff `TID252`, `ban-relative-imports = "all"`);
+- no `__all__` and no re-exports anywhere, the package root included. Each
+  public name is imported from the module that defines it, and the root holds
+  only the XML namespace constants and `__version__`;
+- dependency arrows point down, and lower layers never import public facades,
+  at runtime or for typing;
+- when a lower module needs something from an upper entity, it declares a
+  `Protocol` for exactly that, and the entity satisfies it structurally.
+  `TYPE_CHECKING` imports of an upper class are not a seam;
+- every public annotation resolves under `typing.get_type_hints` at runtime,
+  on every supported Python, and a ratchet test counts the ones that do not;
+- a function-local import is allowed only to break a cycle this design
+  schedules for removal, with a comment naming the phase that removes it;
 - no class reaches through two owners such as `shape.page.document._package`;
 - every wrapper receives a direct immutable document identity token;
 - mutations call the owner-boundary operation rather than editing another entity's private XML;
@@ -156,7 +179,9 @@ Absolute member names, `..` traversal and separator-normalisation collisions fai
 ## Target public API
 
 ```python
-from vsdx import Document, Glue, Routing, ShapeKind
+from vsdxkit.connectors import Glue, Routing
+from vsdxkit.document import Document
+from vsdxkit.shapes import ShapeKind
 
 document = Document.open("process.vsdx")
 page = document.pages.require_name("Current state")
@@ -312,7 +337,7 @@ Use document identity plus XML element identity, not filename, page name, text, 
 
 ## Errors
 
-Add `vsdx/errors.py`:
+Add `vsdxkit/errors.py` (landed in #365):
 
 ```text
 VsdxError(Exception)
@@ -382,7 +407,7 @@ Add strict xfail ratchets for:
 - mutable wrapper hash;
 - raw `Shape.remove()` leaving graph residue;
 - detached-wrapper access;
-- runtime package-root imports.
+- runtime package-root imports (retired by #383: the root imports nothing, and `test_imports` imports each module first in its own interpreter).
 
 **Acceptance:** production behaviour unchanged; assertion layer independent of old API; canonicalisation rule and fixture provenance documented.
 
@@ -429,7 +454,7 @@ Remove `MastersImportMixin` in this phase. `Document` holds one private catalogu
 
 ## Phase 3 — scoped collections, traversal and identity
 
-Add `PageCollection`, `ShapeCollection` and pure functions in `vsdx/shape_tree.py`.
+Add `PageCollection`, `ShapeCollection` and pure functions in `vsdxkit/shape_tree.py`.
 
 Implement the exact scopes defined above. Remove:
 
@@ -481,7 +506,7 @@ Rename and reshape in one deliberate public-API PR:
 
 Update the API-coupled driver, all tests, README, Sphinx API pages and migration guide. Do not change Phase 0 assertion data or assertion implementation in this PR.
 
-**Acceptance:** no old public names in `vsdx.__all__`, tests or primary docs; every removed documented call has one migration entry; graph-query and detached-wrapper APIs are covered.
+**Acceptance:** no old public names in any module, test or primary doc; every removed documented call has one migration entry; graph-query and detached-wrapper APIs are covered.
 
 **Risk:** high Python breakage, low file-format risk.
 
@@ -495,9 +520,9 @@ def render_document(document: Document, context: Mapping[str, object]) -> None: 
 
 `Document.render()` calls it. There is no renderer class.
 
-Remove all runtime `import vsdx` statements from internal modules. Add an import-graph test that fails on package-root imports or new cycles.
+The package-root half of this phase landed early in #383. Internal modules import siblings absolutely and by name, and `test_imports` fails on a module that cannot be imported first.
 
-**Acceptance:** `Document` has no mixin bases; dependency arrows point down; Jinja fixtures and COM checks pass.
+**Acceptance:** `Document` has no mixin bases; dependency arrows point down, with `Protocol`s at the seams; the runtime annotation-resolution ratchet is at zero; Jinja fixtures and COM checks pass.
 
 ## Phase 7 — cleanup
 
@@ -531,7 +556,7 @@ Do not split a class to meet a line-count target. File size is evidence, not the
 5. **Mutation A** — creation, media, deletion and attachment state.
 6. **Mutation B** — connectors and graph records, if split is needed.
 7. **Public cutover** — clean 1.0 entities, collections, graph queries and errors.
-8. **Composition** — remove templating mixin and root-import cycles.
+8. **Composition** — remove the templating mixin; finish dependency inversion.
 9. **Cleanup** — dead code, generated trees and dependency reduction.
 10. **Release** — 1.0 docs, wheel/sdist, PyPI and GitHub release.
 
@@ -541,9 +566,9 @@ Each PR starts from current `origin/main`, lands serially, and is independently 
 
 ```bash
 python -m pytest tests -q
-ruff check vsdx tests tools
-ruff format --check vsdx tests tools
-pyrefly check vsdx --min-severity warn --output-format min-text
+ruff check src tests tools
+ruff format --check src tests tools
+pyrefly check src/vsdxkit --min-severity warn --output-format min-text
 sphinx-build -W --keep-going -b html docs docs/_build/html
 actionlint .github/workflows/*.yml
 uvx zizmor .github/workflows
@@ -571,7 +596,8 @@ The refactor is incomplete while any of these remain:
 - two connector record builders;
 - raw shape deletion outside `_remove_element_only`;
 - mixin host stubs;
-- runtime `import vsdx` inside package modules;
+- a relative import, an `__all__`, a re-export, or a module that reaches a sibling through the package root;
+- a public annotation that does not resolve at runtime;
 - a class whose methods only forward without owning state, identity or a collection;
 - a collection method whose validity depends on an undisclosed owner type.
 
@@ -587,7 +613,8 @@ The refactor is incomplete while any of these remain:
 - Wrapper identity is class-independent and stable; detached wrappers fail visibly.
 - Existing CFF diagrams have one typed, non-duplicated domain view.
 - One safe deletion path and one atomic save path remain.
-- Mixins and package-root cycles are gone.
+- Mixins and package-root cycles are gone; every public name is imported from its defining module.
+- Every public annotation resolves at runtime; upward dependencies are `Protocol`s declared by the lower module.
 - No old API aliases remain.
 - The migration guide contains every removed documented call from the first breaking PR onward.
 - Python 3.10–3.14, static gates, package builds, installed-wheel workflow, package manifests and relevant COM oracles are green.

@@ -18,8 +18,6 @@ import struct
 import zipfile
 import zlib
 
-__all__ = ["Edit", "append_member", "make_package", "rewritten", "understated"]
-
 # What one member may have done to it. A `(old, new)` pair substitutes once and
 # fails if `old` is not there; `bytes` replaces the member outright, for a part
 # swapped for something the test generates; `None` drops it from the archive.

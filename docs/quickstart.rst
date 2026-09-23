@@ -18,23 +18,24 @@ Install from GitHub in the meantime:
 That tracks ``main``, so pin a commit if you need a reproducible install. Once
 there is a release on the index, install it with ``pip install vsdxkit``.
 
-The distribution name and import name differ deliberately:
+Import each name from the module that defines it; the package root re-exports
+nothing:
 
 .. code-block:: python
 
-   from vsdx import VisioFile
+   from vsdxkit.vsdxfile import VisioFile
 
 Python 3.10–3.14 is supported.
 
 Open a document
 ---------------
 
-Use :class:`vsdx.vsdxfile.VisioFile` as a context manager. This closes the
+Use :class:`vsdxkit.vsdxfile.VisioFile` as a context manager. This closes the
 package and any temporary resources when the block exits.
 
 .. code-block:: python
 
-   from vsdx import VisioFile
+   from vsdxkit.vsdxfile import VisioFile
 
    with VisioFile("diagram.vsdx") as vis:
        page = vis.pages[0]
@@ -60,7 +61,7 @@ editing it.
 Save in place
 -------------
 
-Call :meth:`vsdx.vsdxfile.VisioFile.save_vsdx` without a filename to replace
+Call :meth:`vsdxkit.vsdxfile.VisioFile.save_vsdx` without a filename to replace
 the source file. Saving remains explicit; leaving the context manager does not
 save automatically.
 
