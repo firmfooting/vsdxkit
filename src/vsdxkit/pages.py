@@ -17,7 +17,7 @@ from vsdxkit import namespace
 from .connectors import Connect
 from .errors import InvalidOperationError, MissingPartError, NotFoundError
 from .package import BytesPart, XmlPart
-from .partnames import relationships_part_name
+from .partnames import relationship_target, relationships_part_name
 from .shapes import Shape, parent_of, to_float
 from .xmlio import require_element, xml_value
 
@@ -393,11 +393,13 @@ class Page:
         connects.append(connect.xml)
 
     def _ensure_page_master_rel(self, master_rel_id: str, master_part_name: str):
-        """Ensure this page's rels reference the given master part.
+        """Ensure this page's rels reference the master part named `master_part_name`.
 
         Visio writes a per-page relationship to each master used by shapes on
-        that page (Target '../masters/masterN.xml'). The rels part is created
-        on demand; assigning it writes it into the package.
+        that page (Target '../masters/masterN.xml'). The Target is derived from
+        the master's part name, so a master kept in a subfolder of the masters
+        folder is reached there. The rels part is created on demand; assigning
+        it writes it into the package.
         """
         rels_xml: ET.ElementTree[ET.Element] | None = self.rels_xml
         if rels_xml is None:
@@ -409,7 +411,7 @@ class Page:
         rels_root = rels_xml.getroot()
         assert rels_root is not None
         existing = {r.attrib.get("Target") for r in rels_root}
-        target = f"../masters/{master_part_name}"
+        target = relationship_target(self.filename, master_part_name)
         if target in existing:
             return
         rel_element = ET.fromstring(

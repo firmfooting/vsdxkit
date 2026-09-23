@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import copy
-import posixpath
 import xml.etree.ElementTree as ET
 from xml.etree.ElementTree import Element
 
 import vsdxkit
 
 from .errors import InvalidOperationError, MalformedPackageError
-from .partnames import MASTERS_PART, target_part_name
+from .partnames import MASTERS_PART, folder_of, target_part_name
 from .shapes import Shape
 
 namespace = "{http://schemas.microsoft.com/office/visio/2012/main}"
@@ -122,7 +121,7 @@ class Connect:
                 donor_store = media.media._package
                 # the masters folder as a part-name prefix; the trailing slash
                 # keeps a sibling such as /visio/masters-old/ out of the copy
-                masters_folder = target_part_name(MASTERS_PART, "")
+                masters_folder = folder_of(MASTERS_PART)
                 for name in donor_store.names():
                     if name.startswith(masters_folder):
                         data = donor_store.read_bytes(name)
@@ -143,7 +142,7 @@ class Connect:
                 )
                 # per-page master relationship (creates the page rels part and
                 # writes it into the package store, which is what a save writes)
-                page._ensure_page_master_rel("rId1", "master1.xml")
+                page._ensure_page_master_rel("rId1", target_part_name(MASTERS_PART, "master1.xml"))
             else:
                 # document has masters: import the connector master (by name)
                 # BEFORE the copy, while media_shape still points at its source
@@ -159,8 +158,7 @@ class Connect:
             effective_master_id = new_master_id or connector_shape.master_page_ID
             master_page = page.vis.get_master_page_by_id(effective_master_id) if effective_master_id else None
             if master_page is not None:
-                master_part = posixpath.basename(master_page.filename)
-                page._ensure_page_master_rel(master_page.rel_id, master_part)
+                page._ensure_page_master_rel(master_page.rel_id, master_page.filename)
 
             # app.xml lists master names too, and the document has just
             # gained this one

@@ -25,6 +25,15 @@ def relationships_part_name(part_name: str) -> str:
     return f"{folder.rstrip('/')}/_rels/{name}.rels"
 
 
+def folder_of(part_name: str) -> str:
+    """The folder a part sits in, as a part-name prefix with its trailing slash: `/a/b.xml` -> `/a/`.
+
+    The slash keeps the prefix from matching a sibling folder whose name
+    merely starts the same way, `/a-old/` beside `/a/`.
+    """
+    return f"{posixpath.dirname(part_name).rstrip('/')}/"
+
+
 def target_part_name(source_part_name: str, target: str) -> str:
     """The part a relationship of `source_part_name` points at.
 
@@ -33,5 +42,14 @@ def target_part_name(source_part_name: str, target: str) -> str:
     left as they are, and the store's part-name check refuses them. OPC
     resolves them instead, and doing that here is #378.
     """
-    folder = posixpath.dirname(source_part_name)
-    return f"{folder.rstrip('/')}/{target}"
+    return folder_of(source_part_name) + target
+
+
+def relationship_target(source_part_name: str, part_name: str) -> str:
+    """The Target a relationship of `source_part_name` writes to reach `part_name`, relative to the source's folder.
+
+    The inverse of `target_part_name`: every folder of `part_name` below the
+    one the two parts share is kept, so a part in a subfolder is reached where
+    it is rather than by its file name alone.
+    """
+    return posixpath.relpath(part_name, posixpath.dirname(source_part_name))

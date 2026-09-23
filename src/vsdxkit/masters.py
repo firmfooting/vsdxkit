@@ -18,7 +18,7 @@ from .errors import MissingPartError
 from .logging_support import get_logger
 from .package import PackageStore
 from .pages import Page
-from .partnames import MASTERS_PART, relationships_part_name, target_part_name
+from .partnames import MASTERS_PART, folder_of, relationships_part_name, target_part_name
 from .shapes import Shape
 
 if TYPE_CHECKING:
@@ -81,10 +81,11 @@ class MastersImportMixin:
         # package as it was. The check above says the part is there, so None
         # is a source store contradicting itself; writing empty bytes in its
         # place would make a master part no reader can parse.
-        source_part_name = source_master_page.filename
-        master_bytes = src_vis._package.read_bytes(source_part_name)
+        master_bytes = src_vis._package.read_bytes(source_master_page.filename)
         if master_bytes is None:
-            raise MissingPartError(f"source master part {source_part_name} could not be read, though the package lists it")
+            raise MissingPartError(
+                f"source master part {source_master_page.filename} could not be read, though the package lists it"
+            )
 
         # 1. ensure this document has a masters.xml (and rels) to append to,
         # BEFORE resolving master_rels_path below. A masters relationship can
@@ -99,7 +100,7 @@ class MastersImportMixin:
             self._bootstrap_masters()
 
         # 2. copy the master part bytes under the next free filename
-        prefix = target_part_name(MASTERS_PART, "master")
+        prefix = folder_of(MASTERS_PART) + "master"
         existing_numbers = [
             int(name[len(prefix) : -4])
             for name in self._package.names()

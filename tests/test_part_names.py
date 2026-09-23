@@ -7,6 +7,8 @@ to part names. A part name is what the store, the relationship parts and
 """
 
 import os
+import posixpath
+import re
 import shutil
 import xml.etree.ElementTree as ET
 import zipfile
@@ -15,6 +17,7 @@ import pytest
 
 from vsdxkit import Connect, VisioFile
 from vsdxkit.errors import MalformedPackageError
+from vsdxkit.partnames import relationships_part_name
 from vsdxkit.shapes import find_or_create_shapes_tag
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
@@ -33,14 +36,13 @@ def test_loaded_pages_and_masters_are_named_by_part_name(vsdx_copy):
 
 def test_added_and_copied_pages_are_named_by_part_name(vsdx_copy):
     """Fails if a page the library creates is named by anything but its part name."""
-    with VisioFile(vsdx_copy("test2.vsdx")) as vis:
+    with VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
         added = vis.add_page("Added")
         copied = vis.copy_page(vis.pages[0], name="Copied")
         for page in (added, copied):
             assert page.filename.startswith("/visio/pages/page")
             assert vis._package.part(page.filename) is not None
-        if copied.rels_xml_filename is not None:
-            assert copied.rels_xml_filename == f"/visio/pages/_rels/{copied.filename.rsplit('/', 1)[-1]}.rels"
+        assert copied.rels_xml_filename == relationships_part_name(copied.filename)
 
 
 def test_a_document_has_no_directory_prefix_in_any_page_name(vsdx_copy):
@@ -124,3 +126,45 @@ def test_the_connector_master_is_imported_from_the_donor_not_the_target(vsdx_cop
         assert vis._package.read_bytes(imported.filename) == donor._package.read_bytes(connector_master.filename)
         for name, data in target_before.items():
             assert vis._package.read_bytes(name) == data
+
+
+def test_a_connector_reaches_a_master_kept_in_a_subfolder_of_the_masters_folder(tmp_path):
+    """Fails if the page relationship `Connect.create` writes to a master drops the master's subfolder.
+
+    Nothing requires a package to keep its masters directly in
+    `/visio/masters/`: masters.xml reaches each one by a Target, and here that
+    Target is `sub/masterN.xml`. `test4_connectors.vsdx` already holds a
+    "Dynamic connector", so the connector reuses that master rather than
+    importing one, and the page's Target has to name the part where it is.
+    """
+    crafted = tmp_path / "crafted.vsdx"
+    with (
+        zipfile.ZipFile(os.path.join(FIXTURES, "test4_connectors.vsdx")) as original,
+        zipfile.ZipFile(crafted, "w") as rewritten,
+    ):
+        for entry in original.infolist():
+            data = original.read(entry.filename)
+            name = entry.filename
+            if re.fullmatch(r"visio/masters/master\d+\.xml", name):
+                name = name.replace("visio/masters/", "visio/masters/sub/")
+            elif name == "visio/masters/_rels/masters.xml.rels":
+                data = data.replace(b'Target="master', b'Target="sub/master')
+            elif name == "[Content_Types].xml":
+                data = re.sub(rb'PartName="/visio/masters/(master\d+\.xml)"', rb'PartName="/visio/masters/sub/\1"', data)
+            elif name.startswith("visio/pages/_rels/page"):
+                data = data.replace(b'Target="../masters/master', b'Target="../masters/sub/master')
+            rewritten.writestr(name, data)
+    with VisioFile(str(crafted)) as vis:
+        assert "Dynamic connector" in vis.master_index, "the fixture has changed: it should hold the connector master"
+        page = vis.pages[0]
+        shapes = page.child_shapes
+        Connect.create(page=page, from_shape=shapes[0], to_shape=shapes[1])
+        rels_root = page.rels_xml.getroot()
+        assert rels_root is not None
+        targets = [rel.attrib["Target"] for rel in rels_root]
+        assert targets
+        # resolved here, `..` and all, because `target_part_name` joins a
+        # Target as written; resolving it the way OPC does is #378
+        resolved = {t: posixpath.normpath(posixpath.join(posixpath.dirname(page.filename), t)) for t in targets}
+        assert {t: name for t, name in resolved.items() if vis._package.part(name) is None} == {}
+        vis.save_vsdx(str(tmp_path / "out.vsdx"))
