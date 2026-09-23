@@ -131,10 +131,20 @@ def test_builtin_bases_are_kept_for_existing_callers(error_type, builtin_base):
 
 
 def test_missing_part_is_a_kind_of_not_found():
+    """Fails if `MissingPartError` stops deriving from `NotFoundError`.
+
+    A required part that is absent is still something that is not there, so
+    `except NotFoundError` has to cover it as well as a lookup that missed.
+    """
     assert issubclass(MissingPartError, NotFoundError)
 
 
 def test_package_limit_error_sits_under_package_error():
+    """Fails if `PackageLimitError` stops deriving from `PackageError`.
+
+    A load limit refuses the package, not an argument, so it belongs with the
+    other failures to read a package, where `except PackageError` finds it.
+    """
     assert issubclass(PackageLimitError, PackageError)
 
 
@@ -144,10 +154,20 @@ def test_package_error_is_not_a_value_error():
 
 
 def test_visio_file_not_open_is_an_invalid_operation():
+    """Fails if `VisioFileNotOpen` stops deriving from `InvalidOperationError`.
+
+    Editing a closed document is refused because of the document's state,
+    which is exactly what `InvalidOperationError` stands for.
+    """
     assert issubclass(VisioFileNotOpen, InvalidOperationError)
 
 
 def test_package_limit_error_keeps_its_reason_slug():
+    """Fails if moving `PackageLimitError` into errors.py changes its constructor.
+
+    Callers branch on `reason` and read the message from `str()`, so both have
+    to come out of the two arguments the class has always taken.
+    """
     error = PackageLimitError("member_size", "too big")
     assert error.reason == "member_size"
     assert str(error) == "too big"
@@ -155,6 +175,11 @@ def test_package_limit_error_keeps_its_reason_slug():
 
 @pytest.mark.parametrize("name", [t.__name__ for t in PUBLIC_ERRORS] + ["VsdxError"])
 def test_errors_are_exported_from_the_package_root(name):
+    """Fails if an error drops out of `vsdxkit.__all__` or the root binds its name to a different class.
+
+    `vsdxkit.<Error>` is the documented spelling. It has to be the class the
+    library raises, or `except vsdxkit.<Error>` catches nothing.
+    """
     assert name in vsdxkit.__all__
     assert getattr(vsdxkit, name) is getattr(vsdxkit.errors, name)
 
@@ -166,6 +191,11 @@ def test_package_limit_error_is_the_same_class_wherever_it_is_imported_from():
 
 
 def test_visio_file_not_open_is_the_same_class_wherever_it_is_imported_from():
+    """Fails if vsdxfile.py defines its own `VisioFileNotOpen` rather than re-exporting the errors module's.
+
+    It moved to errors.py. Code that imports it from `vsdxkit.vsdxfile` has to
+    keep catching what the library raises, which needs a single class.
+    """
     assert vsdxkit.vsdxfile.VisioFileNotOpen is VisioFileNotOpen
     assert vsdxkit.VisioFileNotOpen is VisioFileNotOpen
 
@@ -194,21 +224,41 @@ def test_part_parse_error_is_the_same_class_on_every_import_path():
 
 
 def test_require_element_raises_missing_part_error():
+    """Fails if `xmlio.require_element` reports an absent element with anything but `MissingPartError`.
+
+    The load path uses it for elements the schema requires, so an absent one
+    means an incomplete package, not a bad argument.
+    """
     with pytest.raises(MissingPartError, match="Pages root"):
         vsdxkit.xmlio.require_element(None, "Pages root")
 
 
 def test_require_tree_raises_missing_part_error():
+    """Fails if `xmlio.require_tree` reports an absent tree with anything but `MissingPartError`.
+
+    It guards parts the document cannot be read without, so an absent one is a
+    part that is not there.
+    """
     with pytest.raises(MissingPartError, match=r"pages\.xml"):
         vsdxkit.xmlio.require_tree(None, "pages.xml")
 
 
 def test_require_xml_tree_raises_missing_part_error():
+    """Fails if `xmlio.require_xml_tree` reports an absent member with anything but `MissingPartError`.
+
+    It looks a required part up in a member mapping, and a member that is not
+    there is a missing part, whichever mapping it was looked up in.
+    """
     with pytest.raises(MissingPartError, match=r"absent\.xml"):
         vsdxkit.xmlio.require_xml_tree("absent.xml", {}, "a part that is not there")
 
 
 def test_store_require_xml_raises_missing_part_error(tmp_path):
+    """Fails if `PackageStore.require_xml` reports an absent part with anything but `MissingPartError`.
+
+    The store is the other way into a required part, and it has to report an
+    absent one the same way the `xmlio` helpers do.
+    """
     store = vsdxkit.package.PackageStore(tmp_path / "nothing.vsdx")
     with pytest.raises(MissingPartError, match=r"/visio/document\.xml"):
         store.require_xml("/visio/document.xml")
@@ -252,6 +302,11 @@ def test_a_source_master_listed_but_unreadable_is_a_missing_part(vsdx_copy, monk
 
 
 def test_promoting_a_part_that_is_not_xml_raises_malformed_package_error(tmp_path):
+    """Fails if `PackageStore.read_xml` lets the parser's error out instead of `MalformedPackageError`.
+
+    Promoting a part parses bytes the package supplied, so bytes that are not
+    well-formed XML are a malformed package, however the parser reports them.
+    """
     store = vsdxkit.package.PackageStore(tmp_path / "nothing.vsdx")
     store.write_bytes("/visio/document.xml", b"<not-xml")
     with pytest.raises(MalformedPackageError, match="not well-formed XML"):
@@ -637,6 +692,12 @@ def test_a_package_limit_is_not_reported_as_a_malformed_member(tmp_path):
 
 
 def test_require_attribute_returns_the_value_when_it_is_there():
+    """Fails if `xmlio.require_attribute` returns anything but the value of an attribute that is present.
+
+    The load path reads every required attribute through it, so a helper that
+    refused a present attribute, or returned something else, would break every
+    open rather than only the malformed ones.
+    """
     element = ET.fromstring('<Relationship Id="rId1"/>')
     assert vsdxkit.xmlio.require_attribute(element, "Id", "Relationship") == "rId1"
 
@@ -679,6 +740,11 @@ def test_memory_exhausted_while_reading_a_member_is_not_blamed_on_the_package(mo
 
 
 def test_malformed_shapesheet_number_raises_malformed_package_error(vsdx_copy):
+    """Fails if `shapes.to_float` reports a cell that is not a number with a plain `ValueError`.
+
+    The value comes from the document, not from the caller, so a cell that does
+    not hold the number it has to is a malformed package.
+    """
     with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
         shape = vis.pages[0].all_shapes[0]
         shape.set_cell_value("PinX", "not-a-number")
@@ -692,12 +758,22 @@ def test_malformed_shapesheet_number_raises_malformed_package_error(vsdx_copy):
 
 
 def test_unknown_palette_name_raises_not_found_error(vsdx_copy):
+    """Fails if `VisioFile.create_shape` reports an unknown palette name with anything but `NotFoundError`.
+
+    The name is a lookup in the palette, and a lookup that finds nothing is
+    what `NotFoundError` is for. It is still a `ValueError`, as it was.
+    """
     with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
         with pytest.raises(NotFoundError, match="palette has no shape named"):
             vis.create_shape(vis.pages[0], "PALETTE_NOT_A_SHAPE", 1.0, 1.0)
 
 
 def test_deleting_a_shape_that_is_not_on_the_page_raises_not_found_error(vsdx_copy):
+    """Fails if `Page.delete_shape` reports a shape from elsewhere with anything but `NotFoundError`.
+
+    The shape is looked up on this page and is not found there, which is a
+    missing thing rather than a refused operation.
+    """
     with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
         with vsdxkit.VisioFile(vsdx_copy("test2.vsdx")) as other:
             stranger = other.pages[0].all_shapes[0]
@@ -718,6 +794,11 @@ def test_saving_a_drawing_under_a_vsdm_name_raises_invalid_operation(vsdx_copy, 
 
 
 def test_gluing_to_a_connection_point_a_shape_does_not_have_raises_invalid_operation(vsdx_copy):
+    """Fails if `Connect._validate_point_glue` refuses a connection-point index past the shape's last with anything but `InvalidOperationError`.
+
+    Whether the index is usable depends on how many connection points that
+    shape has, so the refusal is about the document's state, not the index.
+    """
     with vsdxkit.VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
         page = vis.pages[0]
         a, b = page.child_shapes[0], page.child_shapes[1]
@@ -750,12 +831,22 @@ def test_connecting_a_shape_with_no_pin_coordinates_raises_invalid_operation(vsd
 
 
 def test_a_page_with_no_container_raises_invalid_operation(vsdx_copy):
+    """Fails if `Page.add_swimlane` refuses a page with no CFF container with anything but `InvalidOperationError`.
+
+    A swimlane needs a container to go into. The call is valid on a page that
+    has one, so this page's state is what refuses it.
+    """
     with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
         with pytest.raises(InvalidOperationError, match="no CFF Container"):
             vis.pages[0].add_swimlane("Lane")
 
 
 def test_appending_a_shape_to_a_non_group_raises_invalid_operation(vsdx_copy):
+    """Fails if `Shape.append_shape` refuses a host that is not a group with anything but `InvalidOperationError`.
+
+    Only a group can hold shapes, and whether the host is one is the document's
+    state rather than something wrong with the shape passed in.
+    """
     with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
         page = vis.pages[0]
         host, guest = page.child_shapes[0], page.child_shapes[1]
@@ -764,6 +855,11 @@ def test_appending_a_shape_to_a_non_group_raises_invalid_operation(vsdx_copy):
 
 
 def test_a_duplicate_geometry_row_index_raises_invalid_operation(vsdx_copy):
+    """Fails if the geometry section refuses a row index already in use with anything but `InvalidOperationError`.
+
+    The same index is fine in a section that does not use it yet, so the
+    refusal comes from what the section already holds.
+    """
     with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
         shape = vis.pages[0].all_shapes[0]
         geometry = shape.geometry
@@ -774,6 +870,11 @@ def test_a_duplicate_geometry_row_index_raises_invalid_operation(vsdx_copy):
 
 
 def test_saving_an_empty_package_raises_invalid_operation(vsdx_copy, tmp_path):
+    """Fails if `VisioFile.save_vsdx` refuses a package with no parts with anything but `InvalidOperationError`.
+
+    Nothing is wrong with the destination path. The document has been emptied,
+    and that state is why there is nothing to save.
+    """
     with vsdxkit.VisioFile(vsdx_copy("test1.vsdx")) as vis:
         vis.zip_file_contents.clear()
         with pytest.raises(InvalidOperationError, match="empty package"):
