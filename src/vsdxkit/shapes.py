@@ -654,9 +654,11 @@ class Shape(DocumentPart):
         # source still holds the masters its shapes name (#331)
         masters = dst_page.vis._masters_for(master_ids, self.page.vis)
         new_shape_xml = self.page.vis.copy_shape(self.xml, dst_page)
-        if inherited and inherited in masters:
-            new_shape_xml.attrib["Master"] = inherited
         cross_document = dst_page.vis is not self.page.vis
+        # within one document a dangling master is kept, as it is on any other
+        # copy; only another document's copy drops it, below
+        if inherited and (inherited in masters or not cross_document):
+            new_shape_xml.attrib["Master"] = inherited
         for node in new_shape_xml.iter(f"{namespace}Shape"):
             master_id = node.attrib.get("Master")
             if not master_id:

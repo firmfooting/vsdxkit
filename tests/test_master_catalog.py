@@ -257,6 +257,17 @@ def test_a_copy_within_one_document_keeps_a_master_reference_it_cannot_resolve(v
         assert copy.xml.attrib["Master"] == "999"
 
 
+def test_a_sub_shape_copied_within_one_document_keeps_its_group_s_dangling_master(vsdx_copy):
+    """Fails if a sub-shape copied out of its group, in one document, loses the master its `MasterShape` reaches into."""
+    with VisioFile(vsdx_copy("test_master_multiple_child_shapes.vsdx")) as vis:
+        group = _master_instance(vis)
+        group.xml.attrib["Master"] = "999"
+        sub_shape = next(child for child in group.child_shapes if child.master_shape_ID)
+        copy = sub_shape.copy(vis.pages[0])
+        assert copy.xml.attrib.get("Master") == "999"
+        assert copy.xml.attrib.get("MasterShape") == sub_shape.master_shape_ID
+
+
 def test_copying_into_a_closed_document_names_the_copy(vsdx_copy):
     """Fails if the refusal names an internal step rather than the operation the caller made."""
     with VisioFile(vsdx_copy("test5_master.vsdx")) as source:
