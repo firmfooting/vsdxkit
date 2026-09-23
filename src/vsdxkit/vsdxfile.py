@@ -296,7 +296,12 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         `_set_part_xml` directly.
         """
         if tree is None:
-            raise ValueError(f"VisioFile.{attribute} cannot be set to None: the package still refers to {name}")
+            raise ValueError(
+                f"VisioFile.{attribute} cannot remove {name} through this property: this "
+                f"property does not also remove the relationship and content-type override "
+                f"that name a document part, so setting it to None would leave the package "
+                f"inconsistent"
+            )
         self._set_part_xml(name, tree)
 
     @property
@@ -1004,8 +1009,9 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         page_id = new_page_element.attrib["ID"]
         # written into the store before the Page is constructed, so `Page.xml`'s
         # write-through guard (`_attached()`) already finds the page's own tree
-        # at its part name for any later assignment, and because this call is what gets the new page
-        # into the package at all: a save writes the store and nothing else
+        # at its part name for any later assignment, and because this call is
+        # what gets the new page into the package at all: a save writes the
+        # store and nothing else
         self._package.write_xml(self._part_name(new_page_path), new_page_xml)
         new_page = Page(new_page_xml, new_page_path, page_name, page_id, new_page_relid, self)
         if source_page is not None and source_page.rels_xml is not None:
