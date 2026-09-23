@@ -1,0 +1,37 @@
+"""How the parts of a Visio package name one another.
+
+A part is named by where it sits in the package, and it reaches every other
+part through a relationship whose Target is relative to its own folder. The
+library derives every name it uses from those two facts, here, so a page, a
+master, and any part a shape refers to -- an image, an embedded object, a
+data recordset -- are named by the same rules rather than by a folder string
+of their own.
+"""
+
+from __future__ import annotations
+
+import posixpath
+
+PAGES_PART = "/visio/pages/pages.xml"
+MASTERS_PART = "/visio/masters/masters.xml"
+CONTENT_TYPES_PART = "/[Content_Types].xml"
+APP_PART = "/docProps/app.xml"
+DOCUMENT_PART = "/visio/document.xml"
+
+
+def relationships_part_name(part_name: str) -> str:
+    """The part holding `part_name`'s relationships: `/a/b.xml` -> `/a/_rels/b.xml.rels`."""
+    folder, name = posixpath.split(part_name)
+    return f"{folder.rstrip('/')}/_rels/{name}.rels"
+
+
+def target_part_name(source_part_name: str, target: str) -> str:
+    """The part a relationship of `source_part_name` points at.
+
+    The Target is joined onto the source part's folder exactly as written.
+    `.` and `..` segments, an absolute Target and a percent-encoded one are
+    left as they are, and the store's part-name check refuses them. OPC
+    resolves them instead, and doing that here is #378.
+    """
+    folder = posixpath.dirname(source_part_name)
+    return f"{folder.rstrip('/')}/{target}"
