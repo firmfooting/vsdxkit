@@ -54,6 +54,7 @@ __all__ = [
     "PackageLimitError",
     "PackageLimits",
     "PackageStore",
+    "PartParseError",
     "PartValue",
     "XmlPart",
     "canonical_hash",
@@ -447,11 +448,29 @@ class XmlPart:
 PartValue = BytesPart | XmlPart
 
 
+class PartParseError(ET.ParseError, ValueError):
+    """A part that is not well-formed XML, named, and catchable as either error it has been.
+
+    Before the store, a malformed part reached the caller as the bare
+    `ET.ParseError` the parser raised. The store rewrapped it as a `ValueError`
+    so the message could name the part. Both spellings are in callers' code
+    now, and a caller should not have to know which release it is running
+    against to catch a broken package, so this is both. The parser's
+    `position` and `code` are carried across, because they are what says where
+    in the part it broke.
+    """
+
+
 def _promoted(name: str, data: bytes) -> XmlPart:
     try:
         tree = parse_part(data)
     except ET.ParseError as error:
-        raise ValueError(f"package part {name} is not well-formed XML: {error}") from error
+        raised = PartParseError(f"package part {name} is not well-formed XML: {error}")
+        # ParseError sets these on the instance rather than taking them in its
+        # constructor, so they are copied the same way
+        raised.position = error.position
+        raised.code = error.code
+        raise raised from error
     return XmlPart(tree=tree, original_bytes=data, original_canonical_hash=canonical_hash(tree))
 
 
