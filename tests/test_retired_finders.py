@@ -7,6 +7,7 @@ match anywhere in the text, a property value compared as text.
 
 import pytest
 
+from vsdxkit.shapes import Shape
 from vsdxkit.vsdxfile import VisioFile
 
 # test2.vsdx: group 9 holds 1 ("Shape Text"), 7 ("Sub-shape 1") and 8 ("Sub-shape 2")
@@ -106,3 +107,25 @@ def test_the_warning_points_at_the_caller(vsdx_copy):
         with pytest.warns(DeprecationWarning) as caught:
             page.find_shape_by_id("7")
         assert caught[0].filename == __file__
+
+
+@pytest.mark.parametrize("finder", ["find_shape_by_property_label", "find_shape_by_property_label_value"])
+def test_a_first_match_property_finder_stops_at_the_first_match(vsdx_copy, monkeypatch, finder):
+    """Fails if the first-match form reads the properties of shapes after the one it answers."""
+    read: list[str | None] = []
+    data_properties = Shape.data_properties
+
+    def recording(shape):
+        read.append(shape.ID)
+        return data_properties.fget(shape)
+
+    with VisioFile(vsdx_copy("test6_shape_properties.vsdx")) as vis:
+        page = vis.pages[0]
+        order = [shape.ID for shape in page.shapes]
+        monkeypatch.setattr(Shape, "data_properties", property(recording))
+        args = ("my_property_label",) if finder == "find_shape_by_property_label" else ("my_property_label", "property value")
+        with pytest.warns(DeprecationWarning):
+            found = getattr(page, finder)(*args)
+        assert found is not None
+        assert found.ID == "1"
+        assert read == order[: order.index("1") + 1]

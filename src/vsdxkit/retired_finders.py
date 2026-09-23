@@ -16,9 +16,16 @@ from __future__ import annotations
 
 import re
 import warnings
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from typing import Protocol, TypeVar
 from xml.etree.ElementTree import Element
+
+
+class SearchedProperty(Protocol):
+    """What a finder reads of a Shape Data property."""
+
+    @property
+    def value(self) -> str | None: ...
 
 
 class SearchedShape(Protocol):
@@ -38,6 +45,9 @@ class SearchedShape(Protocol):
 
     @property
     def master_shape_ID(self) -> str | None: ...
+
+    @property
+    def data_properties(self) -> Mapping[str, SearchedProperty]: ...
 
 
 S = TypeVar("S", bound=SearchedShape)
@@ -86,7 +96,13 @@ def all_by_regex(shapes: Searched[S], regex: str) -> list[S]:
 
 
 def first_by_property(shapes: Searched[S], label: str, value: str | None = None) -> S | None:
-    return next(iter(shapes.matching_property(label, value)), None)
+    # shape by shape, stopping at the first: matching_property reads every
+    # shape's properties, which resolves the master of each
+    for shape in shapes:
+        found = shape.data_properties.get(label)
+        if found is not None and (value is None or str(found.value) == value):
+            return shape
+    return None
 
 
 def all_by_property(shapes: Searched[S], label: str, value: str | None = None) -> list[S]:

@@ -136,4 +136,6 @@ collection:
 
 .. code-block:: python
 
+   import re
+
    numbered_steps = [shape for shape in page.shapes if re.search(r"Step \d+", shape.text)]
