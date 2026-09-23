@@ -1388,7 +1388,7 @@ class VisioFile(MastersImportMixin, JinjaTemplatingMixin):
         # extension leaves the in-memory package untouched
         target = self._in_place_filename() if new_filename is None else self._destination_filename(new_filename)
 
-        # collect edits made through a `getbuffer()` memoryview on a buffer the
+        # sync edits made through a `getbuffer()` memoryview on a buffer the
         # view handed out, which no write-through method could see; done after
         # the destination check, so a refused save still changes nothing
         if isinstance(self.zip_file_contents, ZipFileContentsView):

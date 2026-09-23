@@ -181,3 +181,45 @@ def test_sync_does_not_bring_back_a_removed_part(view, store):
     del view[f"{DIRECTORY}/docProps/thumbnail.emf"]
     view.sync()
     assert store.part("/docProps/thumbnail.emf") is None
+
+
+def test_a_one_line_getbuffer_edit_reaches_disk(vsdx_copy, tmp_path):
+    """Fails if the view holds exported buffers weakly, so a temporary buffer's edit dies before save."""
+    target = str(tmp_path / "saved.vsdx")
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        key = f"{vis.directory}/docProps/thumbnail.emf"
+        first = vis.zip_file_contents[key].getvalue()[0]
+        vis.zip_file_contents[key].getbuffer()[0] = first ^ 0xFF
+        vis.save_vsdx(target)
+    with zipfile.ZipFile(target) as archive:
+        assert archive.read("docProps/thumbnail.emf")[0] == first ^ 0xFF
+
+
+def test_a_buffer_stays_registered_after_sync(view, store):
+    """Fails if sync() unregisters a buffer, so an edit through a memoryview still held is lost at the next save."""
+    buf = view[f"{DIRECTORY}/docProps/thumbnail.emf"]
+    memory = buf.getbuffer()
+    memory[0] = 1
+    view.sync()
+    memory[0] = 2
+    view.sync()
+    assert store.read_bytes("/docProps/thumbnail.emf")[:1] == b"\x02"
+
+
+def test_repeated_exports_register_a_buffer_once(view):
+    """Fails if getbuffer() registers the same buffer on every call, growing the registry without bound."""
+    buf = view[f"{DIRECTORY}/docProps/thumbnail.emf"]
+    for _ in range(3):
+        buf.getbuffer().release()
+    assert len(view._exports) == 1
+
+
+def test_sync_skips_and_drops_a_closed_buffer(view, store):
+    """Fails if sync() reads a closed buffer (ValueError) or keeps it registered."""
+    original = store.read_bytes("/docProps/thumbnail.emf")
+    buf = view[f"{DIRECTORY}/docProps/thumbnail.emf"]
+    buf.getbuffer().release()
+    buf.close()
+    view.sync()
+    assert store.read_bytes("/docProps/thumbnail.emf") == original
+    assert view._exports == {}
