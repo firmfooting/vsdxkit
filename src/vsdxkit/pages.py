@@ -19,7 +19,7 @@ from vsdxkit.errors import InvalidOperationError, MissingPartError, NotFoundErro
 from vsdxkit.package import XmlPart
 from vsdxkit.partnames import relationship_target, relationships_part_name
 from vsdxkit.shape_tree import iter_descendants
-from vsdxkit.shapes import Shape, is_connector, parent_of
+from vsdxkit.shapes import Shape, ShapeCollection, is_connector, parent_of
 from vsdxkit.xmlio import PartTree, require_element, to_float, xml_value
 
 # the two places a Connect record names a shape: the connector it leads from,
@@ -310,19 +310,17 @@ class Page:
         return [Shape(xml=shapes, parent=self, page=self) for shapes in self.xml.findall(f"{namespace}Shapes")]
 
     @property
-    @deprecation.deprecated(
-        deprecated_in="0.5.0",
-        removed_in="1.0.0",
-        current_version=vsdxkit.__version__,
-        details="Use Page.child_shapes property to access top level shapes of a Page",
-    )
-    def shapes(self) -> list[Shape]:
-        """Return a list of :class:`Shape` objects
+    def shapes(self) -> ShapeCollection:
+        """Every shape on the page, at any depth, connectors included: depth first, parents first."""
+        return ShapeCollection(lambda: self.all_shapes, self._scope)
 
-        Note: typically returns one :class:`Shape` object which itself contains :class:`Shape` objects
+    @property
+    def children(self) -> ShapeCollection:
+        """The page's top-level shapes."""
+        return ShapeCollection(lambda: self.child_shapes, self._scope)
 
-        """
-        return self._shapes
+    def _scope(self) -> str:
+        return f"page {self.name!r}"
 
     @deprecation.deprecated(
         deprecated_in="0.5.0",
@@ -347,7 +345,7 @@ class Page:
         """The page's `<Shapes>` element as a Shape, where every walk of the page starts.
 
         Top-level shapes take it as their parent, which templating reads as the
-        element they sit in. #103 retires it, with the deprecated ``shapes``.
+        element they sit in. #103 retires it.
         """
         shapes = self._shapes
         return shapes[0] if shapes else None

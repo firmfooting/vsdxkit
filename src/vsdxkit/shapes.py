@@ -6,7 +6,7 @@ import re
 import sys
 import warnings
 import xml.etree.ElementTree as ET
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING
 from xml.etree.ElementTree import Element
 
@@ -21,7 +21,7 @@ import vsdxkit
 from vsdxkit import namespace
 from vsdxkit.connectors import Connect
 from vsdxkit.document_part import DocumentPart
-from vsdxkit.errors import InvalidOperationError
+from vsdxkit.errors import InvalidOperationError, NotFoundError, PackageError
 from vsdxkit.formulae import calc_value
 from vsdxkit.geometry import Geometry, GeometryCell
 from vsdxkit.inheritance import InheritedRow
@@ -1412,6 +1412,19 @@ class Shape(DocumentPart):
         return [Shape(xml=child, parent=self, page=self.page) for child in iter_children(self.xml)]
 
     @property
+    def children(self) -> ShapeCollection:
+        """The shapes directly inside this one: a group's members, or none."""
+        return ShapeCollection(lambda: self.child_shapes, self._scope)
+
+    @property
+    def descendants(self) -> ShapeCollection:
+        """Every shape inside this one, at any depth, depth first and parents first."""
+        return ShapeCollection(lambda: self.all_shapes, self._scope)
+
+    def _scope(self) -> str:
+        return f"shape {self.ID} on page {self.page.name!r}"
+
+    @property
     def all_shapes(self) -> list[Shape]:
         """Every shape inside this one, at any depth, depth first and parents first.
 
@@ -1655,3 +1668,101 @@ class Shape(DocumentPart):
                 if found is not None:
                     shapes.append(found)
         return shapes
+
+
+class ShapeCollection:
+    """A fixed scope of shapes, and the one way to look shapes up in it.
+
+    The scope is a page's or a group's direct children, or everything below
+    one, and it never changes. Iteration and every finder read the same
+    members. The collection is live: each call walks its scope again, so a
+    shape added or removed since the collection was taken is seen.
+
+    Lookups say how many shapes they expect. ``by_*`` wants at most one and
+    answers None for none; ``require_*`` wants exactly one and raises
+    :class:`NotFoundError` for none; both raise :class:`InvalidOperationError`
+    when several match, rather than choosing one. ``matching_*`` returns every
+    match.
+    """
+
+    def __init__(self, members: Callable[[], list[Shape]], scope: Callable[[], str]) -> None:
+        self._members = members
+        self._scope = scope
+
+    def __repr__(self) -> str:
+        return f"<ShapeCollection {self._scope()}>"
+
+    def __iter__(self) -> Iterator[Shape]:
+        return iter(self._members())
+
+    def __len__(self) -> int:
+        return len(self._members())
+
+    def by_id(self, shape_id: str) -> Shape | None:
+        """The shape with this page-scoped ID, or None.
+
+        Two shapes with one ID make the page invalid, which is a
+        :class:`PackageError` rather than a choice between them.
+        """
+        matches = tuple(shape for shape in self._members() if shape_id == shape.ID)
+        if len(matches) > 1:
+            raise PackageError(
+                f"{self._scope()} holds {len(matches)} shapes with ID {shape_id}; "
+                "shape IDs are unique on a page, so the page is not valid"
+            )
+        return matches[0] if matches else None
+
+    def require_id(self, shape_id: str) -> Shape:
+        """The shape with this page-scoped ID."""
+        return self._required(self.by_id(shape_id), f"ID {shape_id}")
+
+    def matching_text(self, text: str) -> tuple[Shape, ...]:
+        """Every shape whose text is `text`, exactly."""
+        return tuple(shape for shape in self._members() if shape.text == text)
+
+    def by_text(self, text: str) -> Shape | None:
+        """The one shape whose text is `text`, exactly, or None."""
+        return self._unique(self.matching_text(text), f"text {text!r}")
+
+    def require_text(self, text: str) -> Shape:
+        """The one shape whose text is `text`, exactly."""
+        return self._required(self.by_text(text), f"text {text!r}")
+
+    def matching_property(self, label: str, value: str | None = None) -> tuple[Shape, ...]:
+        """Every shape with the Shape Data property labelled `label`, and with `value` where one is given.
+
+        A property inherited from the shape's master counts. A value is
+        compared as text, as Visio shows it.
+        """
+        return tuple(shape for shape in self._members() if _has_property(shape, label, value))
+
+    def by_property(self, label: str, value: str | None = None) -> Shape | None:
+        """The one shape with the property, as :meth:`matching_property` matches it, or None."""
+        return self._unique(self.matching_property(label, value), _describe_property(label, value))
+
+    def require_property(self, label: str, value: str | None = None) -> Shape:
+        """The one shape with the property, as :meth:`matching_property` matches it."""
+        return self._required(self.by_property(label, value), _describe_property(label, value))
+
+    def _unique(self, matches: tuple[Shape, ...], wanted: str) -> Shape | None:
+        if len(matches) > 1:
+            ids = ", ".join(str(shape.ID) for shape in matches)
+            raise InvalidOperationError(
+                f"{len(matches)} shapes in {self._scope()} match {wanted}: IDs {ids}; "
+                "use the matching_* form to take every match"
+            )
+        return matches[0] if matches else None
+
+    def _required(self, found: Shape | None, wanted: str) -> Shape:
+        if found is None:
+            raise NotFoundError(f"no shape matches {wanted} in {self._scope()}")
+        return found
+
+
+def _has_property(shape: Shape, label: str, value: str | None) -> bool:
+    found = shape.data_properties.get(label)
+    return found is not None and (value is None or str(found.value) == value)
+
+
+def _describe_property(label: str, value: str | None) -> str:
+    return f"property {label!r}" if value is None else f"property {label!r} = {value!r}"

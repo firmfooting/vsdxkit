@@ -127,8 +127,7 @@ def test_reads_still_work_after_close(closed_document):
     assert vis.get_page_names()
     with pytest.deprecated_call():
         assert page.page_name == page.name
-    with pytest.deprecated_call():
-        assert page.shapes
+    assert page.shapes.require_id(str(shape_a.ID)).xml is shape_a.xml
 
 
 def test_the_guard_follows_the_page_not_the_receiver(vsdx_copy):
