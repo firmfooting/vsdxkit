@@ -105,20 +105,10 @@ class Page:
     )
     def set_name(self, value: str) -> None:
         self.vis._require_open("Page.set_name()")
-        from .vsdxfile import file_to_xml  # to break circular imports - is this really needed?
-
-        pages_filename = self.vis._pages_filename()  # pages contains Page name, width, height, mapped to Id
-        pages = file_to_xml(
-            pages_filename, self.vis.zip_file_contents
-        )  # this contains a list of pages with rel_id and filename
-        if pages is None:
-            raise ValueError(f"no pages.xml part found at {pages_filename}")
-        pages_root = require_element(pages.getroot(), "Pages root")
-        page = pages_root.find(f"{namespace}Page[{self._index() + 1}]")
-        if page:
-            page.attrib["Name"] = value
-            self.name = value
-            self.vis.pages_xml = pages
+        # the `name` setter edits the store's own pages.xml tree, Name and NameU
+        # both; this used to go on to overwrite that tree with a fresh parse
+        # carrying only Name, which left NameU with the old name
+        self.name = value
 
     @property
     def name(self) -> str:

@@ -361,24 +361,20 @@ def test_assigning_masters_xml_writes_through_to_disk(vsdx_copy, tmp_path):
         assert b'VsdxkitMarker="1"' in archive.read("visio/masters/masters.xml")
 
 
-def test_page_set_name_replaces_the_stores_pages_tree(vsdx_copy, tmp_path):
-    """Fails if `Page.set_name` stops assigning the private tree it parsed to `vis.pages_xml`.
+def test_page_set_name_renames_the_page_in_the_saved_file(vsdx_copy, tmp_path):
+    """Fails if `Page.set_name` writes a private copy of pages.xml over the store's tree.
 
-    `self.name = value`, called just above that assignment, already edits the
-    store's promoted tree in place -- Name and NameU both -- so a test that
-    only checks the saved Name attribute passes whether or not `set_name` goes
-    on to replace that tree with the private copy `file_to_xml` parsed: it
-    would still read back as "VsdxkitRenamed" either way. This checks the
-    replacement directly, by identity, so dropping the assignment is caught
-    here rather than passing unnoticed.
+    It used to parse pages.xml afresh, set only `Name` on that copy, and assign
+    the copy to `vis.pages_xml`, after `self.name = value` had already set
+    `Name` and `NameU` on the store's own tree. The copy then replaced that
+    tree, so the saved `NameU` kept the old name, and Visio shows `NameU`.
     """
     with VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
-        before = vis.pages_xml
         with pytest.warns(DeprecationWarning):
             vis.pages[1].set_name("VsdxkitRenamed")
-        assert vis.pages_xml is not before
         out = str(tmp_path / "test4_connectors-renamed.vsdx")
         vis.save_vsdx(out)
     with zipfile.ZipFile(out) as archive:
         pages = ET.fromstring(archive.read("visio/pages/pages.xml"))
-    assert [page.get("Name") for page in pages][1] == "VsdxkitRenamed"
+    renamed = list(pages)[1]
+    assert (renamed.get("Name"), renamed.get("NameU")) == ("VsdxkitRenamed", "VsdxkitRenamed")
