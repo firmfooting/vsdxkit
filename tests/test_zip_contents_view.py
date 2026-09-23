@@ -347,3 +347,130 @@ def test_a_write_to_a_parsed_part_keeps_the_baseline_it_arrived_with(view, store
     assert b"VsdxkitMarker" in store.read_bytes(name)
     view[key] = io.BytesIO(respelled)
     assert store.read_bytes(name) == original
+
+
+def test_a_write_through_a_buffer_whose_member_was_deleted_leaves_it_deleted(view, store):
+    """Fails if a buffer writes through without checking the store still holds the part it was made from.
+
+    The old dict dropped its BytesIO on `del`, so a write to that BytesIO went
+    nowhere; writing it to the store brings the member back.
+    """
+    key = f"{DIRECTORY}/docProps/thumbnail.emf"
+    buf = view[key]
+    del view[key]
+    buf.seek(0)
+    buf.write(b"resurrected")
+    buf.truncate()
+    assert store.part("/docProps/thumbnail.emf") is None
+    assert buf.getvalue() == b"resurrected"  # still an ordinary BytesIO
+
+
+def test_a_write_through_a_deleted_parsed_members_snapshot_leaves_it_deleted(view, store):
+    """Fails if a snapshot of a parsed part writes through after the part was removed from the store."""
+    name = "/visio/pages/page2.xml"
+    store.require_xml(name)
+    buf = view[f"{DIRECTORY}{name}"]
+    del view[f"{DIRECTORY}{name}"]
+    buf.seek(0)
+    buf.write(b"<Resurrected/>")
+    buf.truncate()
+    assert store.part(name) is None
+
+
+def test_a_deleted_member_stays_absent_from_disk_after_a_late_write(vsdx_copy, tmp_path):
+    """Fails if a buffer taken before `del zip_file_contents[key]` can still write the member back before save."""
+    target = str(tmp_path / "saved.vsdx")
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        # a member of the test's own, so deleting it leaves nothing pointing at it
+        key = f"{vis.directory}/visio/scratch.bin"
+        vis.zip_file_contents[key] = io.BytesIO(b"scratch")
+        buf = vis.zip_file_contents[key]
+        del vis.zip_file_contents[key]
+        buf.seek(0)
+        buf.write(b"resurrected")
+        vis.save_vsdx(target)
+    with zipfile.ZipFile(target) as archive:
+        assert "visio/scratch.bin" not in archive.namelist()
+
+
+def test_a_write_through_a_buffer_whose_member_was_reassigned_keeps_the_new_value(view, store):
+    """Fails if a buffer read before `view[key] = new` writes its own bytes over `new`."""
+    key = f"{DIRECTORY}/docProps/thumbnail.emf"
+    buf = view[key]
+    view[key] = io.BytesIO(b"new")
+    buf.seek(0)
+    buf.write(b"stale")
+    assert store.read_bytes("/docProps/thumbnail.emf") == b"new"
+
+
+def test_a_store_write_detaches_a_buffer_read_before_it(view, store):
+    """Fails if a buffer keeps writing through after a store write replaced the part it was made from."""
+    key = f"{DIRECTORY}/docProps/thumbnail.emf"
+    buf = view[key]
+    store.write_bytes("/docProps/thumbnail.emf", b"later")
+    buf.seek(0)
+    buf.write(b"stale")
+    assert store.read_bytes("/docProps/thumbnail.emf") == b"later"
+
+
+def test_a_new_tree_detaches_a_snapshot_taken_of_the_old_one(view, store):
+    """Fails if a parsed part's snapshot writes through after `write_xml` gave the part a different tree."""
+    name = "/visio/pages/page2.xml"
+    store.require_xml(name)
+    buf = view[f"{DIRECTORY}{name}"]
+    replacement = ET.ElementTree(ET.Element("Replacement"))
+    store.write_xml(name, replacement)
+    buf.seek(0)
+    buf.write(b"<Stale/>")
+    buf.truncate()
+    held = store.part(name)
+    assert isinstance(held, XmlPart)
+    assert held.tree is replacement
+    assert held.tree.getroot().tag == "Replacement"
+
+
+def test_a_detached_buffer_stays_detached(view, store):
+    """Fails if a detached buffer re-attaches when its own write lands on a store that no longer holds its part.
+
+    Once `del` has run, the buffer's first write must not bring the member
+    back as a fresh part the buffer then treats as its own.
+    """
+    key = f"{DIRECTORY}/docProps/thumbnail.emf"
+    buf = view[key]
+    del view[key]
+    buf.write(b"one")
+    buf.write(b"two")
+    assert store.part("/docProps/thumbnail.emf") is None
+
+
+def test_an_exported_buffer_detached_by_reassignment_is_not_synced_at_save(vsdx_copy, tmp_path):
+    """Fails if sync() writes an exported buffer's memoryview edit after its member was reassigned."""
+    target = str(tmp_path / "saved.vsdx")
+    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
+        key = f"{vis.directory}/docProps/thumbnail.emf"
+        memory = vis.zip_file_contents[key].getbuffer()
+        vis.zip_file_contents[key] = io.BytesIO(b"new")
+        memory[0] = 0
+        vis.save_vsdx(target)
+    with zipfile.ZipFile(target) as archive:
+        assert archive.read("docProps/thumbnail.emf") == b"new"
+
+
+def test_promotion_does_not_detach_a_buffer(view, store):
+    """Fails if parsing a part counts as replacing it, so a buffer read before the parse stops writing through.
+
+    Promotion changes how the store holds a part, not what it holds; the old
+    dict had no such step, and a buffer taken from it kept changing the
+    package however often something else read the member as XML.
+    """
+    name = "/visio/pages/page2.xml"
+    buf = view[f"{DIRECTORY}{name}"]
+    tree = store.require_xml(name)
+    # longer than the part, so the one write replaces all of it and parses
+    rewritten = b"<Rewritten Padding='" + b"x" * len(buf.getvalue()) + b"'/>"
+    buf.seek(0)
+    buf.write(rewritten)
+    held = store.part(name)
+    assert isinstance(held, XmlPart)
+    assert held.tree is tree
+    assert tree.getroot().tag == "Rewritten"

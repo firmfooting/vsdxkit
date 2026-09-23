@@ -43,7 +43,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 import zlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
@@ -437,6 +437,10 @@ class XmlPart:
     tree: ET.ElementTree[ET.Element]
     original_bytes: bytes | None
     original_canonical_hash: str | None
+    # the part this one was parsed from, so a holder of that part can tell a
+    # promotion, which changes how the store holds the part but not what it
+    # holds, from a write that replaced it. None for a part written as a tree
+    promoted_from: BytesPart | None = field(default=None, compare=False, repr=False)
 
     def current_bytes(self) -> bytes:
         data = serialise_part(self.tree)
@@ -461,7 +465,8 @@ class PartParseError(ET.ParseError, ValueError):
     """
 
 
-def _promoted(name: str, data: bytes) -> XmlPart:
+def _promoted(name: str, part: BytesPart) -> XmlPart:
+    data = part.data
     try:
         tree = parse_part(data)
     except ET.ParseError as error:
@@ -471,7 +476,7 @@ def _promoted(name: str, data: bytes) -> XmlPart:
         raised.position = error.position
         raised.code = error.code
         raise raised from error
-    return XmlPart(tree=tree, original_bytes=data, original_canonical_hash=canonical_hash(tree))
+    return XmlPart(tree=tree, original_bytes=data, original_canonical_hash=canonical_hash(tree), promoted_from=part)
 
 
 # --------------------------------------------------------------------------
@@ -579,7 +584,7 @@ class PackageStore:
             return None
         if isinstance(value, XmlPart):
             return value.tree
-        promoted = _promoted(checked, value.data)
+        promoted = _promoted(checked, value)
         self._parts[checked] = promoted
         return promoted.tree
 

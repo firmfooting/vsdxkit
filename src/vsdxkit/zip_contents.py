@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     else:
         from typing_extensions import Buffer
 
-from .package import BytesPart, PackageStore
+from .package import BytesPart, PackageStore, PartValue, XmlPart
 
 
 class _WriteThroughBuffer(io.BytesIO):
@@ -62,36 +62,79 @@ class _WriteThroughBuffer(io.BytesIO):
     these bytes: the next read of the key has nothing newer to snapshot, and
     handing back this buffer is what keeps a second holder's edits from
     being written over by a stale copy.
+
+    A buffer is bound to the part object it was made from, and writes through
+    only while the store still holds that object. The old dict detached a
+    BytesIO the moment its key was deleted or rebound, so a later write to it
+    changed nothing; writing it to the store would bring a deleted member
+    back, or put stale bytes over the value that replaced them. So anything
+    that replaces the part -- `view[key] = ...`, `del view[key]`, a store
+    write, a new tree, another buffer's write that becomes a new part --
+    detaches this one for good, and it carries on as a plain in-memory
+    BytesIO. Its own writes re-bind it to the part they leave in the store,
+    and so does a promotion of its part, which changes how the store holds
+    the part and not what it holds. Two snapshots of one parsed part are
+    both bound to that part, because a write into its tree keeps the part
+    object, so the last of them to write wins: the documented limitation.
     """
 
     def __init__(
         self,
         store: PackageStore,
         name: str,
+        part: PartValue,
         initial_bytes: bytes,
         exports: dict[int, _WriteThroughBuffer],
-        live: dict[str, tuple[BytesPart, _WriteThroughBuffer]],
+        live: dict[str, _WriteThroughBuffer],
     ) -> None:
         super().__init__(initial_bytes)
         self._store = store
         self._name = name
+        # the part this buffer speaks for, or None once it is detached
+        self._bound: PartValue | None = part
         self._exports = exports
         self._live = live
         # what the store last agreed this buffer held, set on first export;
         # None means no memoryview has ever been handed out
         self._baseline: bytes | None = None
 
+    def is_bound_to(self, part: PartValue) -> bool:
+        """Whether this buffer speaks for exactly this part object."""
+        return self._bound is part
+
+    def _attached(self) -> bool:
+        """Whether the store still holds the part this buffer is bound to, detaching it for good if not."""
+        bound = self._bound
+        if bound is None:
+            return False
+        held = self._store.part(self._name)
+        if held is bound:
+            return True
+        if isinstance(held, XmlPart) and held.promoted_from is bound:
+            self._bound = held
+            return True
+        self._bound = None
+        # a detached buffer has nothing left to sync, and must not be handed
+        # out as the member's buffer again
+        self._exports.pop(id(self), None)
+        if self._live.get(self._name) is self:
+            del self._live[self._name]
+        return False
+
     def _store_value(self, value: bytes) -> None:
         self._store.write_bytes_keeping_tree(self._name, value)
         part = self._store.part(self._name)
+        self._bound = part
         if isinstance(part, BytesPart):
-            self._live[self._name] = (part, self)
+            self._live[self._name] = self
         else:
             # a parsed part kept its tree, which is authoritative and is read
             # as a fresh snapshot every time, so no buffer is live for it
             self._live.pop(self._name, None)
 
     def _write_through(self) -> None:
+        if not self._attached():
+            return
         value = self.getvalue()
         self._store_value(value)
         if self._baseline is not None:
@@ -121,7 +164,7 @@ class _WriteThroughBuffer(io.BytesIO):
     @override
     def getbuffer(self) -> memoryview:
         view = super().getbuffer()
-        if self._baseline is None:
+        if self._baseline is None and self._attached():
             # only the first export sets the baseline and registers: a second
             # export while an earlier memoryview still has unsynced edits must
             # not hide them, and must not register the same buffer twice
@@ -130,22 +173,21 @@ class _WriteThroughBuffer(io.BytesIO):
         return view
 
     def sync(self) -> None:
-        """Write memoryview edits made since the baseline to the store, if the part is still there.
+        """Write memoryview edits made since the baseline to the store, if this buffer is still bound.
 
-        A part removed since this buffer was read stays removed: the old dict
-        dropped its buffer on delete, so an edit to it never reached a save,
-        and bringing a deleted page's part back as an orphan would be worse.
-        The view only calls this on an open buffer; a closed one has nothing
-        left to read.
+        A part removed or replaced since this buffer was read stays as it is
+        now: the old dict dropped its buffer on delete or rebind, so an edit
+        to it never reached a save, and bringing a deleted page's part back as
+        an orphan would be worse. The view only calls this on an open buffer;
+        a closed one has nothing left to read.
         """
-        if self._baseline is None:
+        if self._baseline is None or not self._attached():
             return
         value = self.getvalue()
         if value == self._baseline:
             return
         self._baseline = value
-        if self._store.part(self._name) is not None:
-            self._store_value(value)
+        self._store_value(value)
 
 
 def part_name_for_path(directory: str, path: str) -> str | None:
@@ -167,7 +209,9 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
     still holds the very part that buffer was made from. When anything else
     replaces or removes the part -- `view[key] = ...`, a store write, a
     `VisioFile` setter -- the buffer no longer describes the part, and the
-    next read makes a new one from what the store holds now.
+    next read makes a new one from what the store holds now. The old buffer
+    is detached and writes nothing more to the store, the way a BytesIO the
+    old dict had let go of changed nothing (see `_WriteThroughBuffer`).
 
     A write to a part that has been parsed lands in its tree rather than
     replacing it (see `PackageStore.write_bytes_keeping_tree`), because the
@@ -196,12 +240,12 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
         # for the life of the document anyway. They stay registered after a
         # sync, so a memoryview a caller still holds is synced again next time.
         self._exports: dict[int, _WriteThroughBuffer] = {}
-        # the one buffer each member is read as, by part name, alongside the
-        # part it was made from. Held strongly, like the old dict held its
-        # buffers, so `view[k].seek(0); view[k].write(...)` edits one buffer.
-        # An entry whose part the store no longer holds is stale and is
-        # replaced on the next read of that member.
-        self._live: dict[str, tuple[BytesPart, _WriteThroughBuffer]] = {}
+        # the one buffer each member is read as, by part name. Held strongly,
+        # like the old dict held its buffers, so `view[k].seek(0);
+        # view[k].write(...)` edits one buffer. An entry no longer bound to
+        # the part the store holds is stale and is replaced on the next read
+        # of that member.
+        self._live: dict[str, _WriteThroughBuffer] = {}
 
     def sync(self) -> None:
         """Write to the store every change made through a `getbuffer()` memoryview.
@@ -212,7 +256,8 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
         `VisioFile.save_vsdx` calls this before it writes anything. The cost
         is ordering: an exported buffer's edit, synced at save, wins over a
         store write to the same part made after the edit, where the old dict
-        would have kept whichever came last.
+        would have kept whichever came last. A buffer detached since it was
+        exported is not written: its member has been deleted or replaced.
         """
         # a snapshot, because a closed buffer is dropped while iterating: it
         # can take no more edits, and its bytes can no longer be read
@@ -240,16 +285,16 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
             # the view, so a cached buffer could hold bytes the tree has
             # moved past; this is the documented limitation
             self._live.pop(name, None)
-            return self._new_buffer(name, part.current_bytes())
+            return self._new_buffer(name, part, part.current_bytes())
         cached = self._live.get(name)
-        if cached is not None and cached[0] is part and not cached[1].closed:
-            return cached[1]
-        buffer = self._new_buffer(name, part.data)
-        self._live[name] = (part, buffer)
+        if cached is not None and cached.is_bound_to(part) and not cached.closed:
+            return cached
+        buffer = self._new_buffer(name, part, part.data)
+        self._live[name] = buffer
         return buffer
 
-    def _new_buffer(self, name: str, data: bytes) -> _WriteThroughBuffer:
-        return _WriteThroughBuffer(self._store, name, data, self._exports, self._live)
+    def _new_buffer(self, name: str, part: PartValue, data: bytes) -> _WriteThroughBuffer:
+        return _WriteThroughBuffer(self._store, name, part, data, self._exports, self._live)
 
     @override
     def __setitem__(self, key: str, value: io.BytesIO) -> None:
@@ -257,9 +302,9 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
         if name is None:
             raise ValueError(f"{key!r} is not under the package directory {self._directory!r}")
         self._store.write_bytes_keeping_tree(name, value.getvalue())
-        # the cached buffer no longer holds what the part does; the identity
-        # check would catch that on the next read, but dropping it here lets
-        # its bytes go now
+        # the cached buffer no longer holds what the part does, and the new
+        # part detaches it; the binding check would catch that on the next
+        # read, but dropping it here lets its bytes go now
         self._live.pop(name, None)
 
     @override
