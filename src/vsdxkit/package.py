@@ -489,9 +489,10 @@ class PackageStore:
 
     def __init__(self, source: Path, limits: PackageLimits | None = None) -> None:
         # The one copy of where this package came from. It is only knowable at
-        # open, and #89's `save(target=None)` writes back over it. Stored as
-        # an absolute path so that later `save()` calls are not affected by
-        # working directory changes.
+        # open, and #89's `save(target=None)` writes back over it. Kept as
+        # given: `open()` is what makes it absolute, so a store built there is
+        # unaffected by later working-directory changes, and one constructed
+        # directly with a relative path resolves it at each save.
         self.source = source
         # The limits this package was opened with, used during save to ensure
         # written members satisfy the compression ratio constraints.
