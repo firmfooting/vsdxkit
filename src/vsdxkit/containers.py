@@ -31,7 +31,7 @@ else:
 import vsdxkit
 from vsdxkit.document_part import DocumentPart
 from vsdxkit.errors import InvalidOperationError, MissingPartError
-from vsdxkit.shapes import Shape
+from vsdxkit.shapes import Shape, is_connector
 
 if TYPE_CHECKING:
     from vsdxkit.pages import Page
@@ -154,7 +154,7 @@ class Container(DocumentPart):
             name = shape.shape_name or ""
             if name.startswith(_CFF_MACHINERY) or name.startswith("Swimlane"):
                 continue
-            if "BeginX" in shape.cells:  # connectors are not members
+            if is_connector(shape):  # connectors are not members
                 continue
             if bottom <= (shape.y or 0.0) <= top:
                 result.append(shape)

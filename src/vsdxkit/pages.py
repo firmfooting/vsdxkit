@@ -18,7 +18,8 @@ from vsdxkit.containers import Container
 from vsdxkit.errors import InvalidOperationError, MissingPartError, NotFoundError
 from vsdxkit.package import XmlPart
 from vsdxkit.partnames import relationship_target, relationships_part_name
-from vsdxkit.shapes import Shape, parent_of
+from vsdxkit.shape_tree import iter_descendants
+from vsdxkit.shapes import Shape, is_connector, parent_of
 from vsdxkit.xmlio import PartTree, require_element, to_float, xml_value
 
 # the two places a Connect record names a shape: the connector it leads from,
@@ -339,11 +340,17 @@ class Page:
         :returns: list of `Shape` objects
         :rtype: List[Shape]
         """
-        # note that self.shapes should always return a single shape
+        top = self._top_shapes()
+        return top.child_shapes if top is not None else []
+
+    def _top_shapes(self) -> Shape | None:
+        """The page's `<Shapes>` element as a Shape, where every walk of the page starts.
+
+        Top-level shapes take it as their parent, which templating reads as the
+        element they sit in. #103 retires it, with the deprecated ``shapes``.
+        """
         shapes = self._shapes
-        if shapes:
-            return shapes[0].child_shapes
-        return []  # empty list if no top shapes object
+        return shapes[0] if shapes else None
 
     def _set_max_ids(self) -> None:
         """Raise this page's ID high-water mark to cover every shape now on it.
@@ -354,11 +361,9 @@ class Page:
         ones that forgot handed out IDs the page was already using. Monotonic
         and idempotent, so calling it again costs a scan and nothing else.
         """
-        for shapes in self._shapes:
-            for shape in shapes.child_shapes:
-                id = shape.get_max_id()
-                if id > self._max_id:
-                    self._max_id = id
+        top = self._top_shapes()
+        if top is not None:
+            self._max_id = max(self._max_id, top.get_max_id())
 
     def _next_shape_id(self) -> int:
         """Hand out the next shape ID. ``_set_max_ids()`` syncs the mark first."""
@@ -428,34 +433,26 @@ class Page:
 
     def apply_text_context(self, context: dict[str, object]) -> None:
         self.vis._require_open("Page.apply_text_context()")
-        for s in self._shapes:
-            s.apply_text_filter(context)
+        for shape in self.child_shapes:
+            shape.apply_text_filter(context)
 
     def find_replace(self, old: str, new: str) -> None:
         self.vis._require_open("Page.find_replace()")
-        for s in self._shapes:
-            s.find_replace(old, new)
+        for shape in self.child_shapes:
+            shape.find_replace(old, new)
 
     def find_shape_by_id(self, shape_id: str) -> Shape | None:
-        for s in self._shapes:
-            found = s.find_shape_by_id(shape_id)
-            if found:
-                return found
+        top = self._top_shapes()
+        return top.find_shape_by_id(shape_id) if top is not None else None
 
     def _find_shapes_by_id(self, shape_id: str) -> list[Shape]:
         # return all shapes by ID - should only be used internally where ID is not unique (i.e. copying shapes)
-        found = list()
-        for s in self._shapes:
-            found = s.find_shapes_by_id(shape_id)
-            if found:
-                return found
-        return found
+        top = self._top_shapes()
+        return top.find_shapes_by_id(shape_id) if top is not None else []
 
     def find_shape_by_attr(self, attr: str, attr_value: str) -> Shape | None:
-        for s in self._shapes:
-            found = s.find_shape_by_attr(attr, attr_value)
-            if found:
-                return found
+        top = self._top_shapes()
+        return top.find_shape_by_attr(attr, attr_value) if top is not None else None
 
     def find_shapes_with_same_master(self, shape: Shape) -> list[Shape]:
         # return all shapes with master
@@ -466,59 +463,45 @@ class Page:
         ]
 
     def find_shape_by_text(self, text: str) -> Shape | None:
-        for s in self._shapes:
-            found = s.find_shape_by_text(text)
-            if found:
-                return found
+        top = self._top_shapes()
+        return top.find_shape_by_text(text) if top is not None else None
 
     def find_shapes_by_text(self, text: str) -> list[Shape]:
-        shapes = list()
-        for s in self._shapes:
-            found = s.find_shapes_by_text(text)
-            if found:
-                shapes.extend(found)
-        return shapes
+        top = self._top_shapes()
+        return top.find_shapes_by_text(text) if top is not None else []
 
     def find_shapes_by_regex(self, regex: str) -> list[Shape]:
         """Search for shapes in this page's top shape by regex"""
-        return self._shapes[0].find_shapes_by_regex(regex) if len(self._shapes) else []
+        top = self._top_shapes()
+        return top.find_shapes_by_regex(regex) if top is not None else []
 
     @property
     def all_shapes(self) -> list[Shape]:
-        # return all shapes in page
-        shapes = self._shapes
-        return shapes[0].all_shapes if shapes else []
+        """Every shape on the page, at any depth, depth first and parents first."""
+        top = self._top_shapes()
+        return top.all_shapes if top is not None else []
 
     def find_shape_by_property_label(self, property_label: str) -> Shape | None:
         """Search for shapes in this page's top shape by property label"""
         # note: use label rather than name as label is more easily visible in diagram
-        return self._shapes[0].find_shape_by_property_label(property_label) if len(self._shapes) else None
+        top = self._top_shapes()
+        return top.find_shape_by_property_label(property_label) if top is not None else None
 
     def find_shapes_by_property_label(self, property_label: str) -> list[Shape]:
         # return all matching shapes with property label
-        shapes = list()
-        for s in self._shapes:
-            found = s.find_shapes_by_property_label(property_label)
-            if found:
-                shapes.extend(found)
-        return shapes
+        top = self._top_shapes()
+        return top.find_shapes_by_property_label(property_label) if top is not None else []
 
     def find_shape_by_property_label_value(self, property_label: str, property_value: str) -> Shape | None:
         # return first matching shape with label
         # note: use label rather than name as label is more easily visible in diagram
-        for s in self._shapes:
-            found = s.find_shape_by_property_label_value(property_label, property_value)
-            if found:
-                return found
+        top = self._top_shapes()
+        return top.find_shape_by_property_label_value(property_label, property_value) if top is not None else None
 
     def find_shapes_by_property_label_value(self, property_label: str, property_value: str) -> list[Shape]:
         # return all matching shapes with property label and value
-        shapes = list()
-        for s in self._shapes:
-            found = s.find_shapes_by_property_label_value(property_label, property_value)
-            if found:
-                shapes.extend(found)
-        return shapes
+        top = self._top_shapes()
+        return top.find_shapes_by_property_label_value(property_label, property_value) if top is not None else []
 
     def connect_shapes(
         self, from_shape: Shape, to_shape: Shape, route: str = "dynamic", from_cp: int = 0, to_cp: int = 0
@@ -626,10 +609,10 @@ class Page:
         connector_ids = {c.from_id for c in self.connects if c.to_id in doomed_ids and c.from_rel in ("BeginX", "EndX")}
         doomed = set(on_this_page)
         for s in self.all_shapes:
-            # cell_value, not `in s.cells`: a connector may inherit BeginX from
-            # its master, and one missed here survives as a detached line whose
-            # glue record has just been removed
-            if str(s.ID) in connector_ids and s.cell_value("BeginX") is not None:
+            # the master too: a connector may inherit BeginX from it, and one
+            # missed here survives as a detached line whose glue record has just
+            # been removed
+            if str(s.ID) in connector_ids and is_connector(s):
                 doomed.add(s)
         for s in doomed:
             self._remove_shape_xml(s)
@@ -703,4 +686,5 @@ class Page:
         Read off the elements rather than through ``all_shapes``, which builds a
         ``Shape`` per element to answer a question about the xml.
         """
-        return {shape_id for element in self.xml.iter(f"{namespace}Shape") if (shape_id := element.attrib.get("ID"))}
+        root = self.xml.getroot()
+        return {shape_id for element in iter_descendants(root) if (shape_id := element.attrib.get("ID"))}
