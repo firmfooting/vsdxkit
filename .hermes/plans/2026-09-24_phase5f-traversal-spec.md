@@ -1,4 +1,4 @@
-# Phase 5F: the 0.x traversal names go (#112, part 2 of 4)
+# Phase 5F: the 0.x traversal names go (#112, part 2 of 5)
 
 Part of the 1.0 API cutover (#108-#112). Stacked on #409 (the checked
 migration guide). Authority:
@@ -6,13 +6,14 @@ migration guide). Authority:
 ("remove all old exports and methods") and Collection semantics ("there is no
 ... separate `walk()` whose scope can disagree with iteration").
 
-#112 lands as four PRs:
+#112 lands as five PRs:
 
 1. #409: the guide check.
 2. **This one:** the traversal names.
-3. 5G: `Shape.delete`, the connection records made internal, and the
-   `Document` page methods that `PageCollection` replaces.
-4. 5H: README, quickstart and `classes.rst` for 1.0. This closes #112.
+3. #411: `Shape.delete`, and the `Document` page methods that
+   `PageCollection` replaces.
+4. 5H: the connection records made internal.
+5. 5I: README, quickstart and `classes.rst` for 1.0. This closes #112.
 
 ## Removed
 

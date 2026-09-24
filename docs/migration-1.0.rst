@@ -351,7 +351,7 @@ page's finder and ``shape.descendants`` for a shape's.
        ``shape.find_shapes_by_property_label_value(label, value)``
      - ``scope.matching_property(label, value)``
    * - ``page.find_shapes_by_regex(regex)``, ``shape.find_shapes_by_regex(regex)``
-     - ``[s for s in scope if re.search(regex, s.text)]``
+     - ``[s for s in scope if re.search(regex, s.text)]``, after ``import re``
    * - ``page.find_shape_by_attr(attr, value)``, ``shape.find_shape_by_attr(attr, value)``
      - ``next((s for s in scope if s.xml.get(attr) == value), None)``
    * - ``shape.find_shapes_by_master(page_id, shape_id)``
