@@ -53,6 +53,9 @@ def _imports(tree: ast.Module) -> Iterator[tuple[ast.Import | ast.ImportFrom, st
             elif isinstance(node, ast.If) and _is_type_checking(node.test):
                 yield from walk(node.body, "typing" if where == "module" else where)
                 yield from walk(node.orelse, where)
+            elif isinstance(node, ast.Match):
+                for case in node.cases:
+                    yield from walk(case.body, where)
             else:
                 for field in ("body", "orelse", "finalbody"):
                     yield from walk(getattr(node, field, []), where)
@@ -77,16 +80,19 @@ def edges_of(importer: str, source: str, modules: set[str]) -> Iterator[Edge]:
                     root_names.add(alias.asname or PACKAGE)
                 elif alias.name.startswith(f"{PACKAGE}."):
                     yield Edge(importer, alias.name.split(".")[1], where)
+                    if alias.asname is None:
+                        root_names.add(PACKAGE)
         elif node.level == 0 and node.module == PACKAGE:
             for alias in node.names:
                 if alias.name in modules:
                     yield Edge(importer, alias.name, where)
                     yield Edge(importer, alias.name, "root")
-                elif where == "typing":
+                elif where != "module":
                     # not a sibling module, so the root-attribute branches
-                    # below never see it, but a type checker still resolves
-                    # it against the root and a runtime import does not
-                    yield Edge(importer, PACKAGE, "typing")
+                    # below never see it, but a type checker or a function
+                    # call still resolves it against the root and a
+                    # module-level runtime import does not
+                    yield Edge(importer, PACKAGE, where)
         elif node.level == 0 and node.module is not None and node.module.startswith(f"{PACKAGE}."):
             yield Edge(importer, node.module.split(".")[1], where)
     for node in ast.walk(tree):
@@ -200,6 +206,25 @@ def test_a_sibling_imported_from_the_root_is_a_root_edge():
 def test_a_sibling_reached_through_import_vsdxkit_is_a_root_edge():
     source = "import vsdxkit\nvalue = vsdxkit.beta.B\nprefix = vsdxkit.namespace\n"
     assert set(edges_of("alpha", source, MODULES)) == {Edge("alpha", "beta", "module"), Edge("alpha", "beta", "root")}
+
+
+def test_a_root_constant_imported_inside_a_function_is_a_function_edge():
+    source = "def f():\n    from vsdxkit import namespace\n"
+    assert set(edges_of("alpha", source, MODULES)) == {Edge("alpha", "vsdxkit", "function")}
+
+
+def test_a_sibling_reached_through_a_dotted_import_binding_is_a_root_edge():
+    source = "import vsdxkit.alpha\nvalue = vsdxkit.beta.B\n"
+    assert set(edges_of("gamma", source, MODULES)) == {
+        Edge("gamma", "alpha", "module"),
+        Edge("gamma", "beta", "module"),
+        Edge("gamma", "beta", "root"),
+    }
+
+
+def test_an_import_inside_a_match_case_is_found():
+    source = "match x:\n    case 1:\n        from vsdxkit.beta import B\n"
+    assert set(edges_of("alpha", source, MODULES)) == {Edge("alpha", "beta", "module")}
 
 
 def test_a_cycle_through_every_kind_of_edge_is_found():

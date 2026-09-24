@@ -33,12 +33,15 @@ logger = get_logger(__name__)
 class PageView(Protocol):
     """A page, as :attr:`Shape.page` gives it.
 
-    The type of a shape's back-reference to its page. It lists the page's
-    public API apart from ``swimlanes``, ``require_swimlanes`` and ``vis``,
-    whose types are declared above this module, and apart from the page's
-    part-level attributes, such as ``filename``, ``page_id`` and ``rel_id``.
-    For those, use the :class:`vsdxkit.pages.Page` you hold. At runtime the
-    object is that ``Page`` itself.
+    The type of a shape's back-reference to its page. It is read-only: it
+    lists the page's public API apart from ``swimlanes``,
+    ``require_swimlanes`` and ``vis``, whose types are declared above this
+    module, and apart from the page's part-level attributes, such as
+    ``filename``, ``page_id`` and ``rel_id``. To change a page (set
+    ``name``, ``width``, ``height``, ``background`` and so on), or to reach
+    those part-level attributes, use the :class:`vsdxkit.pages.Page` you
+    hold, such as ``document.pages[0]``. At runtime the object is that
+    ``Page`` itself.
     """
 
     @property
@@ -76,10 +79,10 @@ class PageView(Protocol):
         source: Shape,
         target: Shape,
         *,
-        glue: Glue = ...,
-        routing: Routing = ...,
-        from_point: int = ...,
-        to_point: int = ...,
+        glue: Glue = Glue.DYNAMIC,
+        routing: Routing = Routing.DEFAULT,
+        from_point: int = 0,
+        to_point: int = 0,
     ) -> Connector: ...
 
     def create_shape(
@@ -88,9 +91,9 @@ class PageView(Protocol):
         *,
         x: float,
         y: float,
-        width: float | None = ...,
-        height: float | None = ...,
-        text: str | None = ...,
+        width: float | None = None,
+        height: float | None = None,
+        text: str | None = None,
     ) -> Shape: ...
 
     def apply_text_context(self, context: dict[str, object]) -> None: ...
@@ -976,11 +979,7 @@ class Shape:
 
     @property
     def master_page(self) -> PageView | None:
-        """Get this pages master
-
-        Returns this Page's master as a Page object (or None)
-
-        """
+        """This shape's master page, typed as a :class:`PageView`, or None."""
         if self.master_page_ID is None:
             return None
         return self._page._master_by_id(self.master_page_ID)
