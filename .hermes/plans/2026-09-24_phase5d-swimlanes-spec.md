@@ -47,6 +47,18 @@ edge in two lanes, and `lane_of` then returned whichever it found first.
 The container and lanes are found among `page.children`, the shared top-level
 walk. The container is the child named `CFF Container` or `CFF Container.<n>`,
 where `<n>` is a number: `CFF Container.backup` is not a copy Visio made.
+The same rule names every piece of the CFF machinery. A lane is `Swimlane` or
+`Swimlane.<n>`, and a flowchart shape named `Swimlane.backup`, `SwimlaneTask`
+or `Separator task` is a member of the lane it sits in, not machinery
+(Codex on #408). Membership is one predicate: a top-level shape that is not
+the container, the Swimlane List, the Phase List, a Separator, a lane or a
+connector.
+
+A page removed from its document has no diagram to find: `page.swimlanes` and
+`require_swimlanes()` raise `InvalidOperationError` instead of reading the
+stale XML. `move_to_lane` refuses a shape that is not a member candidate on
+the diagram's page (another page's shape, a lane, a connector, the
+container), before writing anything.
 
 A diagram whose container has been deleted, or whose page has, refuses every
 operation with `InvalidOperationError`, before anything is written. `lanes`,

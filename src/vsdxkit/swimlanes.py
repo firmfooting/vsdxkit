@@ -43,8 +43,10 @@ ROW_SWIMLANE_GUID = "SwimlaneListGUID"
 CONTAINER_NAME = "CFF Container"
 _SWIMLANE_LIST_NAME = "Swimlane List"
 
+_LANE_NAME = "Swimlane"
+
 # top-level shape NameU values of the CFF machinery (excluded from membership)
-_CFF_MACHINERY = (CONTAINER_NAME, _SWIMLANE_LIST_NAME, "Phase List", "Separator")
+_CFF_MACHINERY = (CONTAINER_NAME, _SWIMLANE_LIST_NAME, "Phase List", "Separator", _LANE_NAME)
 
 
 def _named(shape: Shape, name: str) -> bool:
@@ -58,9 +60,9 @@ def _named(shape: Shape, name: str) -> bool:
     return base == name and (not dot or suffix.isdigit())
 
 
-def _is_lane(shape: Shape) -> bool:
-    name = shape.shape_name or ""
-    return name.startswith("Swimlane") and not name.startswith(_SWIMLANE_LIST_NAME)
+def _is_member(shape: Shape) -> bool:
+    """Whether the top-level shape is part of the flowchart: not the CFF machinery, a lane or a connector."""
+    return not any(_named(shape, name) for name in _CFF_MACHINERY) and not is_connector(shape)
 
 
 def _user_row(shape: Shape, name: str) -> ET.Element | None:
@@ -134,6 +136,8 @@ def _diagram_on(page: Page) -> SwimlaneDiagram | None:
 
     :raises InvalidOperationError: the page has more than one
     """
+    if not page._attached():
+        raise InvalidOperationError(f"page {page.name!r} is no longer in its document, so it has no swimlane diagram")
     containers = [shape for shape in page.children if _named(shape, CONTAINER_NAME)]
     if len(containers) > 1:
         ids = ", ".join(str(shape.ID) for shape in containers)
@@ -183,7 +187,7 @@ class SwimlaneDiagram:
         :raises InvalidOperationError: the container is no longer in the document
         """
         self._require_container("reading a swimlane diagram's lanes")
-        lanes = [shape for shape in self._page.children if _is_lane(shape)]
+        lanes = [shape for shape in self._page.children if _named(shape, _LANE_NAME)]
         lanes.sort(key=lambda lane: -(lane.y or 0.0))
         return tuple(lanes)
 
@@ -196,13 +200,7 @@ class SwimlaneDiagram:
         """
         self._require_lane(lane)
         band = _bands(self.lanes)[lane]
-        return tuple(
-            shape
-            for shape in self._page.children
-            if not (shape.shape_name or "").startswith((*_CFF_MACHINERY, "Swimlane"))
-            and not is_connector(shape)
-            and _holds(band, shape)
-        )
+        return tuple(shape for shape in self._page.children if _is_member(shape) and _holds(band, shape))
 
     def lane_for(self, shape: Shape) -> Shape | None:
         """The lane whose band holds the shape's centre, or None.
@@ -264,9 +262,14 @@ class SwimlaneDiagram:
         This is what Visio does when a shape is dragged into a lane. A shape
         already in the lane is left where it is.
 
-        :raises InvalidOperationError: ``lane`` is not one of :attr:`lanes`
+        :raises InvalidOperationError: ``lane`` is not one of :attr:`lanes`, or
+            ``shape`` is not a top-level flowchart shape on the diagram's page
         """
         self._require_lane(lane)
+        if not (_is_member(shape) and shape in self._page.children):
+            raise InvalidOperationError(
+                f"shape {shape.ID} is not a flowchart shape of the swimlane diagram on page {self._page.name!r}"
+            )
         if _holds(_bands(self.lanes)[lane], shape):
             return
         shape.get_or_create_cell("PinY", v=str(lane.y or 0.0))

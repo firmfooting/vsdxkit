@@ -143,6 +143,63 @@ def test_a_diagram_whose_container_is_deleted_refuses_before_writing(vsdx_copy):
     assert _xml(before) == _xml(snapshot)
 
 
+def _add_named_copy(page, shape, shape_id, name):
+    """Append a copy of `shape`'s element to the page under a new ID and NameU."""
+    element = copy.deepcopy(shape.xml)
+    element.attrib["ID"] = shape_id
+    element.attrib["NameU"] = name
+    page.xml.getroot().find(f"{namespace}Shapes").append(element)
+    return page.shapes.require_id(shape_id)
+
+
+@pytest.mark.parametrize("name", ["Swimlane.backup", "SwimlaneTask", "Swimlane List draft"])
+def test_only_a_lane_or_a_numbered_copy_of_one_is_a_lane(vsdx_copy, name):
+    """Fails if a flowchart shape merely named like a lane is taken for one, and dropped from the lane it sits in."""
+    page, diagram = _diagram(vsdx_copy)
+    lanes = diagram.lanes
+    lookalike = _add_named_copy(page, page.shapes.require_text("Decision"), "9999", name)
+
+    assert diagram.lanes == lanes
+    assert lookalike in diagram.shapes_in(diagram.lane_for(lookalike))
+
+
+@pytest.mark.parametrize("name", ["CFF Container.backup", "Separator task", "Phase List notes"])
+def test_a_shape_named_like_the_machinery_is_still_a_member(vsdx_copy, name):
+    """Fails if a flowchart shape is left out of its lane because its name starts like a piece of the CFF machinery."""
+    page, diagram = _diagram(vsdx_copy)
+    lookalike = _add_named_copy(page, page.shapes.require_text("Decision"), "9999", name)
+
+    assert lookalike in diagram.shapes_in(diagram.lane_for(lookalike))
+
+
+def test_move_to_lane_refuses_a_shape_that_is_not_in_the_diagram(vsdx_copy):
+    """Fails if `move_to_lane` writes the PinY of a shape on another page, or of a lane or connector."""
+    page, diagram = _diagram(vsdx_copy)
+    elsewhere = Document.open(vsdx_copy("test1.vsdx")).pages[0]
+    foreign = next(iter(elsewhere.children))
+    lane = diagram.lanes[0]
+    connector = page.shapes.require_id("57")
+    before = (_xml(page.xml.getroot()), _xml(elsewhere.xml.getroot()))
+
+    for shape in (foreign, diagram.lanes[1], connector, diagram.container):
+        with pytest.raises(InvalidOperationError, match="not a flowchart shape"):
+            diagram.move_to_lane(shape, lane)
+
+    assert (_xml(page.xml.getroot()), _xml(elsewhere.xml.getroot())) == before
+
+
+def test_a_removed_page_has_no_diagram_to_find(vsdx_copy):
+    """Fails if `page.swimlanes` builds a diagram from the XML of a page no longer in its document."""
+    vis = Document.open(vsdx_copy(FIXTURE))
+    page = vis.pages[0]
+    vis.pages.delete(page)
+
+    with pytest.raises(InvalidOperationError, match="no longer in its document"):
+        page.swimlanes  # noqa: B018
+    with pytest.raises(InvalidOperationError, match="no longer in its document"):
+        page.require_swimlanes()
+
+
 def test_overlapping_lanes_make_lane_for_refuse(vsdx_copy):
     page, diagram = _diagram(vsdx_copy)
     upper, lower = diagram.lanes[0], diagram.lanes[1]
