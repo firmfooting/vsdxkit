@@ -114,6 +114,16 @@ def test_a_value_0_8_published_under_a_new_name_is_in_the_snapshot(monkeypatch):
     assert check.unexplained(["vsdx.relationships.CONTENT_TYPES_NS"], [], check.vsdxkit_modules())
 
 
+def test_the_root_version_is_in_the_snapshot(monkeypatch):
+    """Fails if `vsdx.__version__`, which the 0.8.0 root assigned for callers, is outside the surface checked."""
+    monkeypatch.chdir(ROOT)
+    with open(check.SNAPSHOT, encoding="utf-8") as snapshot:
+        names = set(snapshot.read().split())
+
+    assert "vsdx.__version__" in names
+    assert check.unexplained(["vsdx.__version__"], [], check.vsdxkit_modules()) == []
+
+
 def test_code_blocks_count_as_literals():
     text = "Title\n\n.. code-block:: python\n\n   vis.gone_call()\n\nProse gone_prose.\n"
 

@@ -29,6 +29,7 @@ vsdx.r_namespace
 vsdx.document_rels_namespace
 vsdx.cont_types_namespace
 vsdx.pretty_print_element
+vsdx.__version__
 vsdx.connectors.namespace
 vsdx.connectors.Connect
 vsdx.connectors.Connect.connector_shape
