@@ -306,17 +306,17 @@ def test_assigning_masters_xml_writes_through_to_disk(vsdx_copy, tmp_path):
         assert b'VsdxkitMarker="1"' in archive.read("visio/masters/masters.xml")
 
 
-def test_page_set_name_renames_the_page_in_the_saved_file(vsdx_copy, tmp_path):
-    """Fails if `Page.set_name` writes a private copy of pages.xml over the store's tree.
+def test_a_page_rename_renames_the_page_in_the_saved_file(vsdx_copy, tmp_path):
+    """Fails if a rename writes a private copy of pages.xml over the store's tree.
 
-    It used to parse pages.xml afresh, set only `Name` on that copy, and assign
-    the copy to `vis.pages_xml`, after `self.name = value` had already set
-    `Name` and `NameU` on the store's own tree. The copy then replaced that
-    tree, so the saved `NameU` kept the old name, and Visio shows `NameU`.
+    0.x's `Page.set_name` parsed pages.xml afresh, set only `Name` on that copy,
+    and assigned the copy to `vis.pages_xml`, after `self.name = value` had
+    already set `Name` and `NameU` on the store's own tree. The copy then
+    replaced that tree, so the saved `NameU` kept the old name, and Visio shows
+    `NameU`.
     """
     vis = Document.open(vsdx_copy("test4_connectors.vsdx"))
-    with pytest.warns(DeprecationWarning):
-        vis.pages[1].set_name("VsdxkitRenamed")
+    vis.pages[1].name = "VsdxkitRenamed"
     out = str(tmp_path / "test4_connectors-renamed.vsdx")
     vis.save(out)
     with zipfile.ZipFile(out) as archive:

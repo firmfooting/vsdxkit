@@ -68,7 +68,7 @@ def test_a_page_rels_created_under_a_visio_pages_directory_lands_in_the_package(
     out = tmp_path / "out.vsdx"
     vis = Document.open(str(path))
     page = vis.pages[0]
-    shapes = page.child_shapes
+    shapes = list(page.children)
     page.connect(shapes[0], shapes[1])
     assert page.rels_xml_filename == "/visio/pages/_rels/page1.xml.rels"
     vis.save(str(out))
@@ -100,7 +100,7 @@ def test_insert_shape_takes_the_pages_part_name(vsdx_copy):
     assert len(vis.pages) > 1, "the fixture has changed: it should have more than one page"
     page, other = vis.pages[0], vis.pages[1]
     shapes = find_or_create_shapes_tag(page.xml.getroot())
-    source = page.child_shapes[0].xml
+    source = next(iter(page.children)).xml
     vis.insert_shape(ET.fromstring(ET.tostring(source)), shapes, page, page.filename)
     with pytest.raises(ValueError):
         vis.insert_shape(ET.fromstring(ET.tostring(source)), shapes, page, other.filename)
@@ -117,7 +117,7 @@ def test_the_connector_master_is_imported_from_the_donor_not_the_target(vsdx_cop
     vis = Document.open(vsdx_copy("test3_house.vsdx"))
     target_before = {master.filename: vis._package.read_bytes(master.filename) for master in vis.master_pages}
     page = vis.pages[0]
-    shapes = page.child_shapes
+    shapes = list(page.children)
     page.connect(shapes[0], shapes[1])
     donor = media._donor(media.MEDIA)
     master_page_id = media._sentinel(media.MEDIA, media.STRAIGHT_CONNECTOR).master_page_ID
@@ -160,7 +160,7 @@ def test_a_connector_reaches_a_master_kept_in_a_subfolder_of_the_masters_folder(
     vis = Document.open(str(crafted))
     assert "Dynamic connector" in vis.master_index, "the fixture has changed: it should hold the connector master"
     page = vis.pages[0]
-    shapes = page.child_shapes
+    shapes = list(page.children)
     page.connect(shapes[0], shapes[1])
     rels_root = page.rels_xml.getroot()
     assert rels_root is not None

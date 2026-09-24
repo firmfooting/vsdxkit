@@ -30,7 +30,7 @@ def _copy(tmp_path, name="test1.vsdx"):
 def test_document_text_cannot_reach_the_interpreter(tmp_path):
     """A sandbox escape in shape text is refused, not executed."""
     vis = Document.open(_copy(tmp_path))
-    vis.pages[0].child_shapes[0].text = ESCAPE
+    next(iter(vis.pages[0].children)).text = ESCAPE
     with pytest.raises(SecurityError):
         vis.render(context={"safe": "value"})
 
@@ -39,7 +39,7 @@ def test_a_shape_name_cannot_reach_the_interpreter(tmp_path):
     """The same applies to the per-shape render path, not only the page one."""
     vis = Document.open(_copy(tmp_path))
     page = vis.pages[0]
-    shape = page.child_shapes[0]
+    shape = next(iter(page.children))
     shape.text = f"{{% if {ESCAPE[3:-3]} %}}x{{% endif %}}"
     with pytest.raises(SecurityError):
         vis.render(context={"safe": "value"})
@@ -49,9 +49,9 @@ def test_ordinary_templating_still_works(tmp_path):
     """The sandbox must not cost the templating this library exists to do."""
     out = os.path.join(str(tmp_path), "rendered.vsdx")
     vis = Document.open(_copy(tmp_path))
-    vis.pages[0].child_shapes[0].text = "{{ project }} has {{ 1.0 + 2.4 * 3 }}"
+    next(iter(vis.pages[0].children)).text = "{{ project }} has {{ 1.0 + 2.4 * 3 }}"
     vis.render(context={"project": "Ward refurbishment"})
     vis.save(out)
 
     vis = Document.open(out)
-    assert vis.pages[0].child_shapes[0].text.startswith("Ward refurbishment has 8.2")
+    assert next(iter(vis.pages[0].children)).text.startswith("Ward refurbishment has 8.2")

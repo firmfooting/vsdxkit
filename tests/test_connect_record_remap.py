@@ -59,7 +59,7 @@ def test_renumbering_a_group_moves_records_naming_a_shape_inside_it(vsdx_copy, t
     vis = Document.open(vsdx_copy("test4_connectors.vsdx"))
     page = vis.pages[2]
     group = page.shapes.require_id("1")
-    child = group.child_shapes[0]
+    child = next(iter(group.children))
     old_child_id = child.ID
     page.connect(child, page.shapes.require_id("11"))
 

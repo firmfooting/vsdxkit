@@ -15,7 +15,7 @@ Page, PageCollection and PagePosition
 -------------------------------------
 
 .. autoclass:: vsdxkit.pages.Page
-   :members: all_shapes, child_shapes, children, connect, connectors, connects, create_shape, delete_shape, shapes, swimlanes, require_swimlanes
+   :members: children, connect, connectors, connects, create_shape, delete_shape, shapes, swimlanes, require_swimlanes
    :undoc-members:
 
 .. autoclass:: vsdxkit.pages.PageCollection
@@ -36,7 +36,7 @@ Shape, Connector, ShapeCollection, Cell and DataProperty
 --------------------------------------------------------
 
 .. autoclass:: vsdxkit.shapes.Shape
-   :members: ID, all_shapes, bounds, cell_value, cells, center_x_y, child_shapes, children, connected_shapes, connectors, connects, copy, data_properties, descendants, fill_color, is_attached, find_replace, geometry, get_or_create_cell, height, line_color, line_weight, master_page_ID, master_shape_ID, move, remove, shape_name, shape_type, tag, text, text_color, width, x, y
+   :members: ID, bounds, cell_value, cells, center_x_y, children, connected_shapes, connectors, connects, copy, data_properties, descendants, fill_color, is_attached, find_replace, geometry, get_or_create_cell, height, line_color, line_weight, master_page_ID, master_shape_ID, move, remove, shape_name, shape_type, tag, text, text_color, width, x, y
    :undoc-members:
 
 .. autoclass:: vsdxkit.shapes.Connector

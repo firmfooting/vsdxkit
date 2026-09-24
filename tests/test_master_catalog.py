@@ -38,7 +38,7 @@ def _masters(path: str) -> list[ET.Element]:
 
 
 def _master_instance(vis: Document):
-    return next(shape for shape in vis.pages[0].all_shapes if shape.xml.attrib.get("Master"))
+    return next(shape for shape in vis.pages[0].shapes if shape.xml.attrib.get("Master"))
 
 
 def _page_rels_root(page) -> ET.Element:
@@ -89,9 +89,7 @@ def test_a_sub_shape_copied_onto_another_documents_page_names_its_master(vsdx_co
     source = Document.open(vsdx_copy("test_master_multiple_child_shapes.vsdx"))
     target = Document.open(vsdx_copy("test1.vsdx"))
     sub_shape = next(
-        shape
-        for shape in source.pages[0].all_shapes
-        if shape.xml.attrib.get("MasterShape") and not shape.xml.attrib.get("Master")
+        shape for shape in source.pages[0].shapes if shape.xml.attrib.get("MasterShape") and not shape.xml.attrib.get("Master")
     )
     copy_id = sub_shape.copy(target.pages[0]).ID
     target.save(saved)
@@ -141,7 +139,7 @@ def test_a_connector_in_a_masterless_document_brings_one_master(vsdx_copy, tmp_p
     saved = str(tmp_path / "connected.vsdx")
     vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
-    shapes = page.child_shapes
+    shapes = list(page.children)
     connector = page.connect(shapes[0], shapes[1])
     master_name = connector.master_page.name
     vis.save(saved)
@@ -166,7 +164,7 @@ def test_a_page_master_relationship_takes_an_id_the_page_rels_does_not_hold(vsdx
         if f"rId{number}" not in held:
             ET.SubElement(rels_root, f"{RELS_NS}Relationship", Id=f"rId{number}", Type="urn:unrelated", Target="unrelated.xml")
     prefilled = {r.attrib["Id"] for r in rels_root}
-    shapes = page.child_shapes
+    shapes = list(page.children)
     connector = page.connect(shapes[0], shapes[1])
 
     target = relationship_target(page.filename, connector.master_page.filename)
@@ -234,13 +232,13 @@ def test_a_nested_group_with_an_unresolvable_master_does_not_inherit_the_outer_o
     source = Document.open(vsdx_copy("test_master_multiple_child_shapes.vsdx"))
     target = Document.open(vsdx_copy("test1.vsdx"))
     group = _master_instance(source)
-    nested = next(child for child in group.child_shapes if child.shape_type == "Group")
+    nested = next(child for child in group.children if child.shape_type == "Group")
     nested.xml.attrib["Master"] = "999"
     copied = group.copy(target.pages[0])
-    copied_nested = next(child for child in copied.child_shapes if child.shape_type == "Group")
+    copied_nested = next(child for child in copied.children if child.shape_type == "Group")
     assert "Master" not in copied_nested.xml.attrib
     assert [node.attrib.get("MasterShape") for node in copied_nested.xml.iter(f"{{{MAIN_NS}}}Shape")] == [None] * 4
-    assert all(child.xml.attrib.get("MasterShape") for child in copied.child_shapes if child.shape_type != "Group")
+    assert all(child.xml.attrib.get("MasterShape") for child in copied.children if child.shape_type != "Group")
 
 
 def test_a_document_without_app_xml_still_takes_a_master(vsdx_copy, tmp_path):
@@ -257,7 +255,7 @@ def test_a_document_without_app_xml_still_takes_a_master(vsdx_copy, tmp_path):
     assert target.app_xml is None, "fixture is expected to have no app.xml"
     page = target.pages[0]
     _master_instance(source).copy(page)
-    shapes = page.child_shapes
+    shapes = list(page.children)
     page.connect(shapes[0], shapes[1])
     target.save(saved)
 
@@ -305,7 +303,7 @@ def test_a_sub_shape_copied_within_one_document_keeps_its_group_s_dangling_maste
     vis = Document.open(vsdx_copy("test_master_multiple_child_shapes.vsdx"))
     group = _master_instance(vis)
     group.xml.attrib["Master"] = "999"
-    sub_shape = next(child for child in group.child_shapes if child.master_shape_ID)
+    sub_shape = next(child for child in group.children if child.master_shape_ID)
     copy = sub_shape.copy(vis.pages[0])
     assert copy.xml.attrib.get("Master") == "999"
     assert copy.xml.attrib.get("MasterShape") == sub_shape.master_shape_ID
@@ -354,7 +352,7 @@ def test_a_same_name_master_is_imported_when_neither_unique_id_nor_match_by_name
     own = _master_element(target, "Test Master")
     own.attrib["UniqueID"] = "{00000000-0000-0000-0000-000000000001}"
     before = {page.page_id for page in target.master_pages}
-    instance = next(shape for shape in source.pages[0].all_shapes if shape.master_page == source.master_index["Test Master"])
+    instance = next(shape for shape in source.pages[0].shapes if shape.master_page == source.master_index["Test Master"])
     copied = instance.copy(target.pages[0])
     assert copied.master_page_ID not in before
     names = [page.name for page in target.master_pages]
@@ -367,7 +365,7 @@ def test_a_master_with_the_same_unique_id_is_reused(vsdx_copy):
     source = Document.open(vsdx_copy("test_master.vsdx"))
     target = Document.open(vsdx_copy("test_master.vsdx"))
     before = [page.page_id for page in target.master_pages]
-    instance = next(shape for shape in source.pages[0].all_shapes if shape.master_page == source.master_index["Test Master"])
+    instance = next(shape for shape in source.pages[0].shapes if shape.master_page == source.master_index["Test Master"])
     copied = instance.copy(target.pages[0])
     assert [page.page_id for page in target.master_pages] == before
     assert copied.master_page is target.master_index["Test Master"]
@@ -380,7 +378,7 @@ def test_a_match_by_name_master_answers_for_its_name(vsdx_copy):
     own = target.master_index["Dynamic connector"]
     assert own.master_unique_id != source.master_index["Dynamic connector"].master_unique_id
     before = len(target.master_pages)
-    connector = next(shape for shape in source.pages[0].all_shapes if shape.master_page_ID)
+    connector = next(shape for shape in source.pages[0].shapes if shape.master_page_ID)
     copied = connector.copy(target.pages[0])
     assert copied.master_page is own
     assert len(target.master_pages) == before
@@ -403,7 +401,7 @@ def test_a_master_shape_the_reused_master_lacks_is_dropped(vsdx_copy, tmp_path):
     element = target._masters.element_by_id(master.page_id)
     element.attrib["MatchByName"] = "1"
     element.attrib["UniqueID"] = "{00000000-0000-0000-0000-000000000002}"
-    member = next(child for child in group.child_shapes if child.master_shape_ID)
+    member = next(child for child in group.children if child.master_shape_ID)
     missing = member.master_shape_ID
     master_shapes = master.xml.getroot().find(f"{{{MAIN_NS}}}Shapes")[0].find(f"{{{MAIN_NS}}}Shapes")
     master_shapes.remove(next(s for s in master_shapes if s.attrib["ID"] == missing))
@@ -411,7 +409,7 @@ def test_a_master_shape_the_reused_master_lacks_is_dropped(vsdx_copy, tmp_path):
 
     second = group.copy(target.pages[0])
     assert second.master_page is master
-    references = [child.xml.attrib.get("MasterShape") for child in second.child_shapes]
+    references = [child.xml.attrib.get("MasterShape") for child in second.children]
     assert missing not in references
     assert any(references)
     target.save(saved)
@@ -425,7 +423,7 @@ def test_a_master_shape_whose_master_cannot_be_resolved_is_dropped(vsdx_copy):
     group.xml.attrib["Master"] = "999"
     copied = group.copy(target.pages[0])
     assert [node.attrib for node in copied.xml.iter(f"{{{MAIN_NS}}}Shape") if "MasterShape" in node.attrib] == []
-    sub_shape = next(child for child in group.child_shapes if child.master_shape_ID)
+    sub_shape = next(child for child in group.children if child.master_shape_ID)
     copied_sub_shape = sub_shape.copy(target.pages[0])
     assert "MasterShape" not in copied_sub_shape.xml.attrib
 
@@ -436,7 +434,7 @@ def test_a_target_whose_app_xml_lists_no_titles_still_takes_a_copy(vsdx_copy):
     target = Document.open(vsdx_copy("test1.vsdx"))
     app = target.app_xml.getroot()
     app.remove(app.find("{http://schemas.openxmlformats.org/officeDocument/2006/extended-properties}TitlesOfParts"))
-    plain = next(shape for shape in source.pages[0].all_shapes if not shape.master_page_ID)
+    plain = next(shape for shape in source.pages[0].shapes if not shape.master_page_ID)
     plain.copy(target.pages[0])
     _master_instance(source).copy(target.pages[0])
     assert len(target.master_pages) == 1
@@ -466,7 +464,7 @@ def test_a_colliding_import_takes_a_name_no_master_already_has(vsdx_copy):
     other = _master_element(target, "Test Master 2")
     other.attrib["NameU"] = other.attrib["Name"] = f"Test Master.{next_id}"
     target.load_master_pages()
-    instance = next(shape for shape in source.pages[0].all_shapes if shape.master_page == source.master_index["Test Master"])
+    instance = next(shape for shape in source.pages[0].shapes if shape.master_page == source.master_index["Test Master"])
     instance.copy(target.pages[0])
     names = [master.attrib["NameU"] for master in target._masters.root]
     assert len(names) == len(set(names)), names

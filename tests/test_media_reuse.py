@@ -117,7 +117,7 @@ def test_provisioning_masters_reads_only_the_donors_master_parts(vsdx_copy, monk
         return original(self, name)
 
     monkeypatch.setattr(PackageStore, "read_bytes", spy)
-    shapes = page.child_shapes
+    shapes = list(page.children)
     page.connect(shapes[0], shapes[1])
     assert read, "the donor's masters were not copied through its store; the test has gone stale"
     assert [name for name in read if not name.startswith("/visio/masters/")] == []
@@ -129,7 +129,7 @@ def test_provisioning_masters_copies_the_donors_master_parts_byte_for_byte(vsdx_
     assert not [n for n in vis._package.names() if n.startswith("/visio/masters/")]
     page = vis.pages[0]
     donor = media._donor(media.MEDIA)
-    shapes = page.child_shapes
+    shapes = list(page.children)
     page.connect(shapes[0], shapes[1])
     donor_masters = {n: donor._package.read_bytes(n) for n in donor._package.names() if n.startswith("/visio/masters/")}
     copied = {n: vis._package.read_bytes(n) for n in vis._package.names() if n.startswith("/visio/masters/")}
@@ -154,6 +154,6 @@ def test_provisioning_masters_leaves_a_sibling_of_the_masters_folder_behind(vsdx
     vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
     media._donor(media.MEDIA)._package.write_bytes("/visio/masters-old/x.xml", b"<x/>")
-    shapes = page.child_shapes
+    shapes = list(page.children)
     page.connect(shapes[0], shapes[1])
     assert vis._package.part("/visio/masters-old/x.xml") is None

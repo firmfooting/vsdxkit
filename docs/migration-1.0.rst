@@ -285,25 +285,75 @@ A lookup by ID on a page where two shapes share the ID
    Raises :class:`vsdxkit.errors.PackageError`, because the page is not
    valid. It used to take the first match.
 
-A shape is its element
-----------------------
+``page.child_shapes``, ``page.sub_shapes()``
+   ``page.children``.
 
-``shape_a == shape_b``, ``hash(shape)``
-   Two shapes are equal when they wrap the same XML element, whatever their
-   class, and a shape keeps its place in a set or dict through a rename, a
-   renumber or a save. The hash used to be the ID, page name and file name.
-   Shapes from two documents are never equal, even two opens of one file.
+``page.all_shapes``
+   ``page.shapes``.
 
-Reading or writing a deleted shape
-   Raises :class:`vsdxkit.errors.InvalidOperationError`, as does a shape on
-   a deleted page. ``shape.is_attached`` says whether a shape is still in
-   its document. ``ID``, ``xml``, ``page``, ``parent``, ``repr`` and
-   ``hash`` keep working: ``page`` and ``parent`` are where the shape was.
+``shape.child_shapes``, ``shape.sub_shapes()``
+   ``shape.children``.
 
-``shape.cells``
-   A read-only property that returns a new ``dict`` on each read, from the
-   XML. Assigning into the dict changes nothing; set a cell with
-   ``shape.set_cell_value`` or ``shape.set_cell_formula``.
+``shape.all_shapes``
+   ``shape.descendants``.
+
+A collection is not a list: it has ``len`` and iteration, but no indexing.
+Where a list is needed, ``list(page.children)`` makes one.
+
+``page.set_name(name)``, ``page.page_name``
+   ``page.name``, which can be assigned.
+
+``vis.get_sub_shapes(element, nth)``
+   Gone. ``shape.children`` holds the shapes inside a group.
+
+The finders are gone
+--------------------
+
+The ``find_shape_*`` and ``find_shapes_*`` methods of ``Page`` and ``Shape``
+are gone. A page's finders searched ``page.shapes``, and a shape's searched
+``shape.descendants``. They differed from the collections in two ways:
+
+- text was matched as a substring;
+- a lookup of one shape returned the first match without saying there
+  were several.
+
+The collections match whole text and refuse more than one match; see
+:doc:`find_shape`. In the replacements, ``scope`` is ``page.shapes`` for a
+page's finder and ``shape.descendants`` for a shape's.
+
+.. list-table::
+   :header-rows: 1
+
+   * - 0.x
+     - 1.0
+   * - ``page.find_shape_by_id(id)``, ``shape.find_shape_by_id(id)``,
+       ``shape.find_shapes_by_id(id)``
+     - ``scope.by_id(id)``, or ``scope.require_id(id)``
+   * - ``page.find_shape_by_text(text)``, ``shape.find_shape_by_text(text)``
+     - ``scope.by_text(text)`` for the whole text;
+       ``next((s for s in scope if text in s.text), None)`` for a substring
+   * - ``page.find_shapes_by_text(text)``, ``shape.find_shapes_by_text(text)``
+     - ``scope.matching_text(text)`` for the whole text;
+       ``[s for s in scope if text in s.text]`` for a substring
+   * - ``page.find_shape_by_property_label(label)``,
+       ``shape.find_shape_by_property_label(label)``
+     - ``scope.by_property(label)``
+   * - ``page.find_shape_by_property_label_value(label, value)``,
+       ``shape.find_shape_by_property_label_value(label, value)``
+     - ``scope.by_property(label, value)``
+   * - ``page.find_shapes_by_property_label(label)``,
+       ``shape.find_shapes_by_property_label(label)``
+     - ``scope.matching_property(label)``
+   * - ``page.find_shapes_by_property_label_value(label, value)``,
+       ``shape.find_shapes_by_property_label_value(label, value)``
+     - ``scope.matching_property(label, value)``
+   * - ``page.find_shapes_by_regex(regex)``, ``shape.find_shapes_by_regex(regex)``
+     - ``[s for s in scope if re.search(regex, s.text)]``
+   * - ``page.find_shape_by_attr(attr, value)``, ``shape.find_shape_by_attr(attr, value)``
+     - ``next((s for s in scope if s.xml.get(attr) == value), None)``
+   * - ``shape.find_shapes_by_master(page_id, shape_id)``,
+       ``page.find_shapes_with_same_master(shape)``
+     - ``[s for s in scope if (s.master_page_ID, s.master_shape_ID) == (page_id, shape_id)]``
 
 ``shape.data_properties``
    Also a new ``dict`` on each read; 0.8 returned the same one while the

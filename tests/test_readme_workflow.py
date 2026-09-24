@@ -55,7 +55,7 @@ def readme_workspace(tmp_path, basedir):
     # nothing about whether the example works.
     template = str(tmp_path / "template.vsdx")
     document = Document.open(template)
-    shape = document.pages[0].child_shapes[0]
+    shape = next(iter(document.pages[0].children))
     shape.text = "{{ project }} for {{ owner }}"
     document.save(template)
     return tmp_path
@@ -116,7 +116,7 @@ def test_every_readme_example_does_what_it_says(readme_workspace, monkeypatch):
 def _texts(path) -> set[str]:
     """Every shape's text, exactly, so a longer string does not match a shorter."""
     document = Document.open(str(path))
-    return {shape.text.strip() for page in document.pages for shape in page.all_shapes}
+    return {shape.text.strip() for page in document.pages for shape in page.shapes}
 
 
 def _page_names(path) -> list[str]:

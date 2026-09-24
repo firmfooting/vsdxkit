@@ -106,7 +106,7 @@ class JinjaTemplatingMixin:
     def jinja_render_shape(shape: Page | Shape, context: dict[str, object], loop_shape_ids: list[str]) -> None:
         """Render the statements in the text of every shape inside `shape`, a page or a group."""
         prev_shape = None
-        for s in shape.child_shapes:  # type: Shape
+        for s in shape._children():  # type: Shape
             # manage for loops in template
             loop_shape_id = JinjaTemplatingMixin.jinja_create_for_loop_if(s, prev_shape)
             if loop_shape_id:

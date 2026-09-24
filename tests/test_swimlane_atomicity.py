@@ -105,7 +105,7 @@ def test_add_lane_still_allocates_unique_ids_after_a_refused_call(vsdx_copy):
 
     restore_value_cell(container.lanes[0])
     page.require_swimlanes().add_lane("Accepted")
-    ids = [shape.ID for shape in page.all_shapes]
+    ids = [shape.ID for shape in page.shapes]
     assert len(ids) == len(set(ids))
 
 

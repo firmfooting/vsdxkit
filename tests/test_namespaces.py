@@ -325,7 +325,7 @@ def test_connecting_shapes_writes_the_page_rels_in_the_default_namespace(vsdx_co
     out = os.path.join(str(tmp_path), "connected.vsdx")
     vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
-    page.connect(page.child_shapes[0], page.child_shapes[1])
+    page.connect(next(iter(page.children)), list(page.children)[1])
     in_memory = vis._package.read_bytes("/visio/pages/_rels/page1.xml.rels")
     vis.save(out)
 
@@ -353,7 +353,7 @@ def test_bootstrapping_masters_writes_the_visio_default_namespace(vsdx_copy):
 
 def _connect_two_shapes(vis) -> None:
     page = vis.pages[0]
-    page.connect(page.child_shapes[0], page.child_shapes[1])
+    page.connect(next(iter(page.children)), list(page.children)[1])
 
 
 # The operations that write a part into the package before save. An operation

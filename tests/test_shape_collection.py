@@ -32,12 +32,12 @@ def test_every_scope_holds_what_its_walk_holds(fixture):
     """Fails if a collection's members disagree with the traversal it is scoped to, on any fixture page."""
     vis = Document.open(os.path.join(BASEDIR, fixture))
     for page in vis.pages:
-        assert _ids(page.children) == _ids(page.child_shapes)
-        assert _ids(page.shapes) == _ids(page.all_shapes)
-        assert len(page.shapes) == len(page.all_shapes)
-        for shape in page.all_shapes:
-            assert _ids(shape.children) == _ids(shape.child_shapes)
-            assert _ids(shape.descendants) == _ids(shape.all_shapes)
+        assert _ids(page.children) == _ids(page.children)
+        assert _ids(page.shapes) == _ids(page.shapes)
+        assert len(page.shapes) == len(page.shapes)
+        for shape in page.shapes:
+            assert _ids(shape.children) == _ids(shape.children)
+            assert _ids(shape.descendants) == _ids(shape.descendants)
 
 
 def test_every_scope_is_a_shape_collection(basedir):

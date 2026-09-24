@@ -22,7 +22,7 @@ def test_get_page_child_shapes(filename: str, child_count: int, basedir):
     vis = Document.open(os.path.join(basedir, filename))
     page = vis.get_page(0)  # type: Page
     # check that page has expected number of child shapes
-    assert len(page.child_shapes) == child_count
+    assert len(page.children) == child_count
 
 
 @pytest.mark.parametrize(
@@ -103,9 +103,9 @@ def test_get_page_bounds(filename: str, page_index: int, expected_bounds: dict, 
     """
     vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[page_index]
-    assert page.all_shapes  # a bounds test needs shapes to bound
+    assert page.shapes  # a bounds test needs shapes to bound
 
-    shape_by_text = {s.text: s for s in page.all_shapes if s.text}
+    shape_by_text = {s.text: s for s in page.shapes if s.text}
     assert shape_by_text, "fixture shapes carry no text to key expectations"
     for text, expected in expected_bounds.items():
         shape = shape_by_text.get(text)
@@ -187,7 +187,7 @@ def test_find_replace_writes_only_the_text_it_changes(vsdx_copy):
     """
     vis = Document.open(vsdx_copy("test3_house.vsdx"))
     page = vis.pages[0]
-    textless = [s.xml for s in page.all_shapes if s.xml.find(f"{namespace}Text") is None]
+    textless = [s.xml for s in page.shapes if s.xml.find(f"{namespace}Text") is None]
     assert textless, "fixture is expected to have shapes with no text of their own"
     page.find_replace("no such text", "anything")
     shapes = page.xml.find(f"{namespace}Shapes")
@@ -344,7 +344,7 @@ def test_find_shapes_by_regex(filename: str, page_index, regex: str, expected_sh
     descendants by regex as well.
 
         test1.vsdx contains Shapes with text fields
-            [(shp.ID,shp.text) for shp in shapes.all_shapes]:
+            [(shp.ID,shp.text) for shp in shapes.descendants]:
             ('1', 'Shape Text\n')
             ('2', 'Shape to remove\n')
             ('5', 'Shape to copy\n')
@@ -355,7 +355,7 @@ def test_find_shapes_by_regex(filename: str, page_index, regex: str, expected_sh
     """
     vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[page_index]  # type: Page
-    assert len([s for s in page.shapes if re.search("", s.text)]) == len(page.all_shapes)
+    assert len([s for s in page.shapes if re.search("", s.text)]) == len(page.shapes)
     fil_shapes = [s for s in page.shapes if re.search(regex, s.text)]
     assert [shp.ID for shp in fil_shapes] == expected_shape_ids
 
@@ -457,7 +457,7 @@ def test_add_multiple_connectors(filename: str, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_new_test_1.vsdx")
     vis = Document.open(os.path.join(basedir, filename))
     src_page = vis.pages[0]
-    block_shape = src_page.child_shapes[0]
+    block_shape = next(iter(src_page.children))
     new_page = vis.add_page("new page")
     new_shape1 = block_shape.copy(new_page)
     new_shape1.text = "new shape 1"
@@ -477,7 +477,7 @@ def test_add_multiple_connectors(filename: str, tmp_path, basedir):
     shape2 = new_page.shapes.by_text("new shape 2")
     shape3 = new_page.shapes.by_text("new shape 3")
     assert shape1 is not None and shape2 is not None and shape3 is not None
-    connectors = [s for s in new_page.all_shapes if "BeginX" in s.cells]
+    connectors = [s for s in new_page.shapes if "BeginX" in s.cells]
     assert len(connectors) >= 2
     # each Connect.create() yields one connector shape with one Connect
     # record per endpoint, so group endpoints by connector and require
@@ -540,8 +540,8 @@ def test_add_connect_between_shapes_by_property(
 
 def _only(page, matching) -> Shape:
     """The one shape on the page that `matching` accepts."""
-    found = [shape for shape in page.all_shapes if matching(shape)]
-    assert len(found) == 1, f"expected one matching shape, the page has {[s.text for s in page.all_shapes]}"
+    found = [shape for shape in page.shapes if matching(shape)]
+    assert len(found) == 1, f"expected one matching shape, the page has {[s.text for s in page.shapes]}"
     return found[0]
 
 
@@ -701,7 +701,7 @@ def test_page_all_shapes(filename, page_index, expected_ids, basedir):
     vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[page_index]
     # all_shapes() gets all shapes on a page, recursively
-    shape_ids = [s.ID for s in page.all_shapes]
+    shape_ids = [s.ID for s in page.shapes]
     print(shape_ids)
     assert shape_ids == expected_ids
 

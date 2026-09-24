@@ -126,7 +126,7 @@ def test_copying_a_group_remaps_its_children_references(vsdx_copy):
     """End to end: the master group in test5 references its own shape ID."""
     vis = Document.open(vsdx_copy("test5_master.vsdx"))
     page = vis.pages[0]
-    group = page.child_shapes[0]
+    group = next(iter(page.children))
     referenced = {cell.attrib["F"] for shape in group.xml.iter(f"{namespace}Cell") for cell in [shape] if "F" in shape.attrib}
     assert any("Sheet." in formula for formula in referenced), "fixture is expected to carry sheet references"
 

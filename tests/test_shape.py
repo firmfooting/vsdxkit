@@ -86,7 +86,7 @@ def test_get_shape_child_shapes(filename: str, shape_id: str, child_count: int, 
     shape = page.shapes.require_id(shape_id)
 
     # check that page has expected number of child shapes
-    assert len(shape.child_shapes) == child_count
+    assert len(shape.children) == child_count
 
 
 @pytest.mark.parametrize(
@@ -104,10 +104,10 @@ def test_get_shape_all_shapes(filename: str, shape_id: str, all_count: int, base
     page = vis.get_page(0)  # type: Page
 
     shape_group = page.shapes.require_id(shape_id)
-    for shape in shape_group.all_shapes:
+    for shape in shape_group.descendants:
         print(shape)
     # check that page has expected number of child shapes
-    assert len(shape_group.all_shapes) == all_count
+    assert len(shape_group.descendants) == all_count
 
 
 @pytest.mark.parametrize(
@@ -121,7 +121,7 @@ def test_shape_locations(filename: str, expected_locations: str, basedir):
     print("=== list_shape_locations ===")
     vis = Document.open(os.path.join(basedir, filename))
     page = vis.get_page(0)  # type: Page
-    shapes = page.child_shapes
+    shapes = list(page.children)
     locations = ""
     for shape in shapes:  # type: Shape
         locations += f"{shape.x:.2f},{shape.y:.2f} "
@@ -233,7 +233,7 @@ def test_shape_copy(filename: str, shape_name: str, tmp_path, basedir):
     shape = page.shapes.by_text(shape_name)  # type: Shape
     assert shape  # check shape found
     print(f"found {shape.ID}")
-    max_id = max(int(existing.ID) for existing in page.all_shapes)
+    max_id = max(int(existing.ID) for existing in page.shapes)
 
     new_shape = shape.copy()
     assert new_shape  # check new shape exists
@@ -624,7 +624,7 @@ def test_all_shape_bounds(filename, page_index, basedir):
     """
     vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[page_index]
-    shapes = page.all_shapes
+    shapes = list(page.shapes)
     assert shapes, "a bounds test needs shapes to bound"
     for shape in shapes:
         bx, by, ex, ey = shape.bounds
@@ -711,7 +711,7 @@ def test_shape_universal_name(filename, page_index, shape_text, expected_univers
 )  # expected master shape name
 def test_get_shape_master_page(filename: str, expected_master_shape_name: str, basedir):
     vis = Document.open(os.path.join(basedir, filename))
-    child_shape = vis.get_page(0).child_shapes[0]
+    child_shape = next(iter(vis.pages[0].children))
     assert child_shape.master_page.name == expected_master_shape_name
 
 
@@ -799,7 +799,7 @@ def test_append_shape_puts_the_shape_inside_the_group(vsdx_copy, tmp_path):
 
     Appending to the group element itself makes the new shape a sibling of that
     container, which the schema does not allow and which child_shapes and
-    page.all_shapes cannot see.
+    page.shapes cannot see.
     """
     filename = vsdx_copy("test2.vsdx")
     out_file = os.path.join(str(tmp_path), "test2_append_shape.vsdx")
@@ -808,7 +808,7 @@ def test_append_shape_puts_the_shape_inside_the_group(vsdx_copy, tmp_path):
     page = vis.pages[0]
     group = page.shapes.require_id("9")
     assert group.shape_type == "Group"
-    ids_before = [s.ID for s in page.all_shapes]
+    ids_before = [s.ID for s in page.shapes]
 
     new_shape = _loose_shape(page)
     group.append_shape(new_shape)
@@ -819,15 +819,15 @@ def test_append_shape_puts_the_shape_inside_the_group(vsdx_copy, tmp_path):
 
     new_id = new_shape.xml.attrib["ID"]
     assert new_id not in ids_before
-    assert new_id in [s.ID for s in group.child_shapes]
-    assert new_id in [s.ID for s in page.all_shapes]
+    assert new_id in [s.ID for s in group.children]
+    assert new_id in [s.ID for s in page.shapes]
     vis.save(out_file)
 
     vis = Document.open(out_file)
     page = vis.pages[0]
     group = page.shapes.require_id("9")
-    assert new_id in [s.ID for s in group.child_shapes]
-    ids = [s.ID for s in page.all_shapes]
+    assert new_id in [s.ID for s in group.children]
+    ids = [s.ID for s in page.shapes]
     assert len(ids) == len(set(ids))
     assert page.shapes.require_id(new_id).text.strip() == "appended"
 
@@ -840,7 +840,7 @@ def test_append_shape_creates_a_shapes_container_for_an_empty_group(vsdx_copy):
     page = vis.pages[0]
     group = page.shapes.require_id("9")
     group.xml.remove(group.xml.find(f"{namespace}Shapes"))
-    assert group.child_shapes == []
+    assert list(group.children) == []
 
     new_shape = _loose_shape(page)
     group.append_shape(new_shape)
@@ -848,7 +848,7 @@ def test_append_shape_creates_a_shapes_container_for_an_empty_group(vsdx_copy):
     shapes_tag = group.xml.find(f"{namespace}Shapes")
     assert shapes_tag is not None
     assert list(shapes_tag) == [new_shape.xml]
-    assert [s.ID for s in group.child_shapes] == [new_shape.xml.attrib["ID"]]
+    assert [s.ID for s in group.children] == [new_shape.xml.attrib["ID"]]
 
 
 def test_append_shape_rejects_a_shape_that_cannot_hold_sub_shapes(vsdx_copy):
@@ -881,8 +881,8 @@ def test_append_shape_moves_a_shape_that_is_already_on_the_page(vsdx_copy):
 
     group.append_shape(existing)
 
-    assert "6" in [s.ID for s in group.child_shapes]
-    ids = [s.ID for s in page.all_shapes]
+    assert "6" in [s.ID for s in group.children]
+    ids = [s.ID for s in page.shapes]
     assert ids.count("6") == 1, "the shape must not be on the page twice"
     assert len(ids) == len(set(ids))
 
@@ -892,11 +892,11 @@ def test_appending_a_copy_places_it_in_the_group(vsdx_copy):
     vis = Document.open(vsdx_copy("test2.vsdx"))
     page = vis.pages[0]
     group = page.shapes.require_id("9")
-    before = {s.ID for s in page.all_shapes}
+    before = {s.ID for s in page.shapes}
 
     group.append_shape(page.shapes.require_id("6").copy())
 
-    ids = [s.ID for s in page.all_shapes]
+    ids = [s.ID for s in page.shapes]
     assert len(ids) == len(set(ids)), "the copy must get an id of its own"
     assert set(ids) - before, "a new shape should have appeared"
 

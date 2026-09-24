@@ -19,14 +19,14 @@ def test_connect_create_writes_connection_records(vsdx_copy, tmp_path):
     output = os.path.join(str(tmp_path), "connectors.vsdx")
     vis = Document.open(path)
     page = vis.pages[0]
-    a = page.child_shapes[0]
-    b = page.child_shapes[1]
+    a = next(iter(page.children))
+    b = list(page.children)[1]
     page.connect(a, b)
     vis.save(output)
 
     vis = Document.open(output)
     page = vis.pages[0]
-    shape_ids = {s.ID for s in page.all_shapes}
+    shape_ids = {s.ID for s in page.shapes}
     connects = page.connects
     assert len(connects) >= 2  # one Connect element per end of the connector
     for connect in connects:
@@ -39,7 +39,7 @@ def test_visiodiff_reports_changed_members(vsdx_copy, tmp_path):
     path = vsdx_copy("test1.vsdx")
     changed = os.path.join(str(tmp_path), "changed.vsdx")
     vis = Document.open(path)
-    shape = vis.pages[0].all_shapes[0]
+    shape = next(iter(vis.pages[0].shapes))
     original_text = shape.text
     shape.text = f"{original_text} CHANGED"
     vis.save(changed)
@@ -103,7 +103,7 @@ def test_page_bounds_match_declared_shape_bounds(vsdx_copy):
     path = vsdx_copy("test1.vsdx")
     vis = Document.open(path)
     page = vis.pages[0]
-    shapes = page.all_shapes
+    shapes = list(page.shapes)
     assert shapes
     boxes = [s.bounds for s in shapes]
     min_x = min(box[0] for box in boxes)
@@ -122,7 +122,7 @@ def test_remove_connect_records_removes_their_records(vsdx_copy, tmp_path):
     output = os.path.join(str(tmp_path), "removed.vsdx")
     vis = Document.open(path)
     page = vis.pages[0]
-    connectors = [s for s in page.all_shapes if "BeginX" in s.cells]
+    connectors = [s for s in page.shapes if "BeginX" in s.cells]
     assert connectors
     connector_ids = [str(connector.ID) for connector in connectors if connector.ID is not None]
     assert connector_ids

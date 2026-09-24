@@ -45,7 +45,7 @@ def test_removing_a_connected_shape_takes_its_connector_with_it(vsdx_copy):
 
     assert _referencing(page, start.ID) == []
     assert _referencing(page, connector.ID) == []
-    remaining = {shape.ID for shape in page.all_shapes}
+    remaining = {shape.ID for shape in page.shapes}
     assert start.ID not in remaining
     assert connector.ID not in remaining, "the connector was left with nothing to glue to"
 
@@ -61,7 +61,7 @@ def test_remove_and_delete_shape_leave_the_page_in_the_same_state(vsdx_copy):
         page.connect(start, end)
         delete(page, start)
         return (
-            sorted(shape.ID for shape in page.all_shapes),
+            sorted(shape.ID for shape in page.shapes),
             sorted(ET.tostring(record, encoding="unicode") for record in _connect_records(page)),
         )
 
@@ -75,8 +75,8 @@ def test_removing_a_group_child_removes_records_that_reference_it(vsdx_copy):
     """A record pointing into a group must not outlive the shape it points at."""
     vis = Document.open(vsdx_copy("test10_nested_shapes.vsdx"))
     page = vis.pages[0]
-    group = next(shape for shape in page.child_shapes if shape.child_shapes)
-    child = group.child_shapes[0]
+    group = next(shape for shape in page.children if shape.children)
+    child = next(iter(group.children))
 
     connects = page.xml.find(f".//{namespace}Connects")
     if connects is None:
@@ -93,7 +93,7 @@ def test_removing_a_group_child_removes_records_that_reference_it(vsdx_copy):
         child.remove()
 
     assert _referencing(page, child.ID) == []
-    assert child.ID not in {shape.ID for shape in group.child_shapes}
+    assert child.ID not in {shape.ID for shape in group.children}
 
 
 def _add_connect(page, from_id, to_id):
@@ -112,9 +112,9 @@ def test_deleting_a_group_takes_the_records_naming_its_children(vsdx_copy):
     """A group's children go with it, so records naming them must go too."""
     vis = Document.open(vsdx_copy("test10_nested_shapes.vsdx"))
     page = vis.pages[0]
-    group = next(shape for shape in page.child_shapes if shape.child_shapes)
-    child = group.child_shapes[0]
-    survivor = next(shape for shape in page.child_shapes if shape.ID != group.ID)
+    group = next(shape for shape in page.children if shape.children)
+    child = next(iter(group.children))
+    survivor = next(shape for shape in page.children if shape.ID != group.ID)
     _add_connect(page, "99", child.ID)
     _add_connect(page, "99", survivor.ID)
 
@@ -166,7 +166,7 @@ def test_an_inherited_begin_cell_still_marks_a_shape_as_a_connector(vsdx_copy):
 
     page.delete_shape(start)
 
-    assert connector.ID not in {shape.ID for shape in page.all_shapes}
+    assert connector.ID not in {shape.ID for shape in page.shapes}
 
 
 def test_deleting_a_shape_belonging_to_another_page_is_refused(vsdx_copy):
@@ -179,13 +179,13 @@ def test_deleting_a_shape_belonging_to_another_page_is_refused(vsdx_copy):
     vis = Document.open(vsdx_copy("test1.vsdx"))
     page1, page3 = vis.pages[0], vis.pages[2]
     victim = page1.shapes.by_id("1")
-    bystander_ids = [shape.ID for shape in page3.all_shapes]
+    bystander_ids = [shape.ID for shape in page3.shapes]
     assert victim is not None and "1" in bystander_ids, "fixture must have colliding ids"
 
     with pytest.raises(ValueError, match="not on page"):
         page3.delete_shape(victim)
 
-    assert [shape.ID for shape in page3.all_shapes] == bystander_ids
+    assert [shape.ID for shape in page3.shapes] == bystander_ids
     assert page1.shapes.by_id("1") is not None
 
 

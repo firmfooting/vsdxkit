@@ -14,10 +14,9 @@ if sys.version_info >= (3, 12):
 else:
     from typing_extensions import override
 
-import deprecation
 
 import vsdxkit
-from vsdxkit import namespace, retired_finders
+from vsdxkit import namespace
 from vsdxkit.connectors import Connect, _glued_ends, _retarget_connector
 from vsdxkit.errors import InvalidOperationError, NotFoundError, PackageError
 from vsdxkit.formulae import calc_value
@@ -839,7 +838,7 @@ class Shape:
         master_page = self.page.vis.get_master_page_by_id(self.master_page_ID)
         if not master_page:
             return None  # None if no master page set for this Shape
-        master_shape = master_page.child_shapes[0]  # there's always a single master shape in a master page
+        master_shape = master_page._children()[0]  # there's always a single master shape in a master page
 
         if self.master_shape_ID is not None:
             return master_shape.descendants.by_id(self.master_shape_ID)
@@ -1519,41 +1518,26 @@ class Shape:
         prefix, _, suffix, trailing = self._text_runs()
         _write_text(self.xml, value, prefix=prefix, suffix=suffix, trailing=trailing)
 
-    @deprecation.deprecated(
-        deprecated_in="0.5.0",
-        removed_in="1.0.0",
-        current_version=vsdxkit.__version__,
-        details="Use Shape.child_shapes property to access shapes within a shape",
-    )
-    def sub_shapes(self) -> list[Shape]:
-        return self.child_shapes
-
-    @property
-    def child_shapes(self) -> list[Shape]:
-        """The shapes directly inside this one: a group's members, or none.
-
-        :returns: list of Shape objects
-        :rtype: List[Shape]
-        """
-        self._require_attached("reading a shape's children")
-        return _wrap_children(self.xml, self, self.page)
-
     @property
     def children(self) -> ShapeCollection:
         """The shapes directly inside this one: a group's members, or none."""
-        return ShapeCollection(lambda: self.child_shapes, self._scope)
+        return ShapeCollection(self._children, self._scope)
 
     @property
     def descendants(self) -> ShapeCollection:
         """Every shape inside this one, at any depth, depth first and parents first."""
-        return ShapeCollection(lambda: self.all_shapes, self._scope)
+        return ShapeCollection(self._descendants, self._scope)
 
     def _scope(self) -> str:
         return f"shape {self.ID} on page {self.page.name!r}"
 
-    @property
-    def all_shapes(self) -> list[Shape]:
-        """Every shape inside this one, at any depth, depth first and parents first.
+    def _children(self) -> list[Shape]:
+        """What :attr:`children` holds, as a list, for the library's own walks."""
+        self._require_attached("reading a shape's children")
+        return _wrap_children(self.xml, self, self.page)
+
+    def _descendants(self) -> list[Shape]:
+        """What :attr:`descendants` holds, as a list, for the library's own walks.
 
         Each is given the wrapper of the shape it sits in as its parent: a
         sub-shape with no ``Master`` of its own instances its group's.
@@ -1565,83 +1549,6 @@ class Shape:
         """The highest ID on this shape and every shape inside it, or 0 where none carries one."""
         elements = (self.xml, *iter_descendants(self.xml))
         return max((int(shape_id) for element in elements if (shape_id := element.attrib.get("ID")) is not None), default=0)
-
-    def find_shape_by_id(self, shape_id: str) -> Shape | None:
-        """The first shape inside this one with this ID, or None. Deprecated: use ``shape.descendants.by_id(shape_id)``."""
-        retired_finders.warn("Shape.find_shape_by_id", "shape.descendants.by_id(shape_id)")
-        return retired_finders.first_by_id(self.descendants, shape_id)
-
-    def find_shapes_by_id(self, shape_id: str) -> list[Shape]:
-        """Every shape inside this one with this ID. Deprecated: IDs are unique on a page, so use ``shape.descendants.by_id(shape_id)``."""
-        retired_finders.warn("Shape.find_shapes_by_id", "shape.descendants.by_id(shape_id)")
-        return retired_finders.all_by_id(self.descendants, shape_id)
-
-    def find_shape_by_attr(self, attr: str, attr_value: str) -> Shape | None:
-        """The first shape inside this one whose XML attribute `attr` is `attr_value`, or None. Deprecated."""
-        retired_finders.warn("Shape.find_shape_by_attr", "a comprehension over shape.descendants")
-        return retired_finders.first_by_attr(self.descendants, attr, attr_value)
-
-    def find_shape_by_text(self, text: str) -> Shape | None:
-        """The first shape inside this one whose text contains `text`, or None.
-
-        Deprecated: ``shape.descendants.by_text(text)`` matches the whole text and refuses
-        more than one match; for a substring, filter ``shape.descendants`` directly.
-        """
-        retired_finders.warn("Shape.find_shape_by_text", "shape.descendants.by_text(text), which matches the whole text")
-        return retired_finders.first_by_text(self.descendants, text)
-
-    def find_shapes_by_text(self, text: str) -> list[Shape]:
-        """Every shape inside this one whose text contains `text`.
-
-        Deprecated: ``shape.descendants.matching_text(text)`` matches the whole text; for a
-        substring, filter ``shape.descendants`` directly.
-        """
-        retired_finders.warn(
-            "Shape.find_shapes_by_text", "shape.descendants.matching_text(text), which matches the whole text"
-        )
-        return retired_finders.all_by_text(self.descendants, text)
-
-    def find_shapes_by_regex(self, regex: str) -> list[Shape]:
-        """Every shape inside this one whose text `regex` matches. Deprecated: filter ``shape.descendants`` directly."""
-        retired_finders.warn("Shape.find_shapes_by_regex", "a comprehension over shape.descendants")
-        return retired_finders.all_by_regex(self.descendants, regex)
-
-    def find_shape_by_property_label(self, property_label: str) -> Shape | None:
-        """The first shape inside this one with this Shape Data label, or None. Deprecated: use ``shape.descendants.by_property(label)``."""
-        retired_finders.warn("Shape.find_shape_by_property_label", "shape.descendants.by_property(label)")
-        return retired_finders.first_by_property(self.descendants, property_label)
-
-    def find_shapes_by_property_label(self, property_label: str, shapes: list[Shape] | None = None) -> list[Shape]:
-        """Every shape inside this one with this Shape Data label. Deprecated: use ``shape.descendants.matching_property(label)``.
-
-        `shapes` was never read, and still is not.
-        """
-        retired_finders.warn("Shape.find_shapes_by_property_label", "shape.descendants.matching_property(label)")
-        return retired_finders.all_by_property(self.descendants, property_label)
-
-    def find_shape_by_property_label_value(self, property_label: str, property_value: str) -> Shape | None:
-        """The first shape inside this one whose property `property_label` is `property_value`, or None.
-
-        Deprecated: use ``shape.descendants.by_property(label, value)``.
-        """
-        retired_finders.warn("Shape.find_shape_by_property_label_value", "shape.descendants.by_property(label, value)")
-        return retired_finders.first_by_property(self.descendants, property_label, property_value)
-
-    def find_shapes_by_property_label_value(
-        self, property_label: str, property_value: str, shapes: list[Shape] | None = None
-    ) -> list[Shape]:
-        """Every shape inside this one whose property `property_label` is `property_value`.
-
-        Deprecated: use ``shape.descendants.matching_property(label, value)``. `shapes` was
-        never read, and still is not.
-        """
-        retired_finders.warn("Shape.find_shapes_by_property_label_value", "shape.descendants.matching_property(label, value)")
-        return retired_finders.all_by_property(self.descendants, property_label, property_value)
-
-    def find_shapes_by_master(self, master_page_ID: str, master_shape_ID: str) -> list[Shape]:
-        """Every shape inside this one instancing this master shape. Deprecated: filter ``shape.descendants`` directly."""
-        retired_finders.warn("Shape.find_shapes_by_master", "a comprehension over shape.descendants")
-        return retired_finders.all_by_master(self.descendants, master_page_ID, master_shape_ID)
 
     def apply_text_filter(self, context: dict[str, object]) -> None:
         """Substitute `context` into the text of this shape and every shape inside it."""
@@ -1663,7 +1570,7 @@ class Shape:
         showing its master's text would gain a copy of it as its own. So a shape
         with nothing to change must not be altered by being visited.
         """
-        for shape in (self, *self.all_shapes):
+        for shape in (self, *self._descendants()):
             text = shape.text
             rewritten = rewrite(text)
             if rewritten != text:
@@ -1698,7 +1605,7 @@ class Shape:
         when the group has none. Appending to the group's own ``<Shape>``
         element instead made the new shape a sibling of that container, which
         the schema does not allow and which this library's own traversal cannot
-        see, neither through ``child_shapes`` nor through ``Page.all_shapes``.
+        see, neither through ``child_shapes`` nor through ``Page._descendants()``.
 
         This places a shape, it does not move one. An element already in a page
         gains a second parent rather than changing parent, because

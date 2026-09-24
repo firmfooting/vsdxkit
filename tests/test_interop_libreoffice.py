@@ -56,7 +56,7 @@ def test_edited_package_converts_in_libreoffice(filename, tmp_path):
     out = os.path.join(str(tmp_path), filename)
     vis = Document.open(os.path.join(FIXTURES, filename))
     page = vis.pages[0]
-    shape = page.child_shapes[0]
+    shape = next(iter(page.children))
     shape.text = "converted by libreoffice"
     vis.save(out)
 

@@ -34,7 +34,7 @@ def test_reading_every_data_property_does_not_change_the_saved_package(filename,
     after_reading = os.path.join(str(tmp_path), "after_reading.vsdx")
     vis = Document.open(os.path.join(FIXTURES, filename))
     for page in vis.pages:
-        for shape in page.all_shapes:
+        for shape in page.shapes:
             for prop in shape.data_properties.values():
                 prop.value  # noqa: B018 - reading is the operation under test
     vis.save(after_reading)
