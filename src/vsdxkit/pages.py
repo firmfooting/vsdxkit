@@ -95,7 +95,6 @@ class Page:
         self._xml = xml
         self.filename = filename
         self._name = page_name
-        self._background: bool | None = None
         self.page_id = page_id
         self.rel_id = rel_id
         self.master_unique_id: str | None = None
@@ -155,23 +154,20 @@ class Page:
 
     def _page_xml(self) -> ET.Element:
         """The Pages/Page element for this page (from pages.xml)."""
-        root = _pages_root(self.vis)
-        position = self._index() + 1
-        return require_element(root.find(f"{namespace}Page[{position}]"), f"Page[{position}]")
+        # by position among the Page children, not with a Page[n] path: a
+        # positional predicate builds a map of the whole tree on every call
+        index = self._index()
+        pages = _pages_root(self.vis).findall(f"{namespace}Page")
+        return require_element(pages[index] if index < len(pages) else None, f"Page[{index + 1}]")
 
     @property
     def background(self) -> bool:
-        if self._background is not None:
-            return self._background
-        bg = self._page_xml().attrib.get("Background", "0") != "0"
-        self._background = bg
-        return self._background
+        return self._page_xml().attrib.get("Background", "0") != "0"
 
     @background.setter
     def background(self, value: bool) -> None:
         self.vis._require_open("Setting Page.background")
         self._page_xml().attrib["Background"] = "1" if value else "0"
-        self._background = value
 
     def _get_page_name(self) -> str:
         return self.name
