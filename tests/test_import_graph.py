@@ -93,6 +93,11 @@ def edges_of(importer: str, source: str, modules: set[str]) -> Iterator[Edge]:
                 if alias.name in modules:
                     yield Edge(importer, alias.name, where)
                     yield Edge(importer, alias.name, "root")
+                elif where == "typing":
+                    # not a sibling module, so the root-attribute branches
+                    # below never see it, but a type checker still resolves
+                    # it against the root and a runtime import does not
+                    yield Edge(importer, PACKAGE, "typing")
         elif node.level == 0 and node.module is not None and node.module.startswith(f"{PACKAGE}."):
             yield Edge(importer, node.module.split(".")[1], where)
     for node in ast.walk(tree):
@@ -149,6 +154,19 @@ def cycle(edges: set[Edge]) -> list[str] | None:
     return None
 
 
+def test_the_package_root_imports_nothing_from_the_package():
+    """`package_edges` never reads `__init__.py`, so this is the one check on it.
+
+    Every `from vsdxkit import <constant>` elsewhere is edge-free only because
+    the root itself imports nothing: if `__init__.py` pulled a name in from a
+    sibling module, a caller reaching it through the root would be taking a
+    hidden edge to that sibling, and nothing above would ever see it.
+    """
+    modules = {path.stem for path in SOURCE.glob("*.py") if path.stem != "__init__"}
+    source = (SOURCE / "__init__.py").read_text(encoding="utf-8")
+    assert set(edges_of("__init__", source, modules)) == set()
+
+
 def test_every_import_points_down_in_plain_sight():
     found = violations(package_edges())
     assert found - ALLOWED == set(), "imports that hide an edge or point up"
@@ -168,6 +186,18 @@ MODULES = {"alpha", "beta", "gamma"}
 def test_a_type_checking_import_is_a_typing_edge():
     source = "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from vsdxkit.beta import B\n"
     assert set(edges_of("alpha", source, MODULES)) == {Edge("alpha", "beta", "typing")}
+
+
+def test_a_root_constant_under_type_checking_is_a_typing_edge():
+    """A `from vsdxkit import <constant>` under `TYPE_CHECKING` is an upward edge too.
+
+    `namespace` is not a sibling module, so the plain-sight branch below never
+    catches it, but a type checker still resolves it against the root and a
+    runtime import does not: the same asymmetry the module-level check exists
+    for.
+    """
+    source = "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from vsdxkit import namespace\n"
+    assert set(edges_of("alpha", source, MODULES)) == {Edge("alpha", "vsdxkit", "typing")}
 
 
 def test_an_import_inside_a_function_is_a_function_edge():

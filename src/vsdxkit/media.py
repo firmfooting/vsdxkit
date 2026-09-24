@@ -6,8 +6,10 @@ module sits below the document, so it cannot import it. The package is read
 into memory with no file held, so a document that used a donor has nothing
 to release.
 
-Nothing here reaches a caller outside the package. The document copies a
-shape or connector source before anyone else sees it, and
+Nothing here reaches a caller outside the package. The library copies a
+shape or connector source before a caller sees it:
+:meth:`vsdxkit.pages.Page.create_shape` copies a kind's source, and
+:meth:`vsdxkit.document.Document._copy_connector` copies the connector.
 :func:`_style_copy` answers a copy. A caller holding a donor's own elements
 could edit them, and every later creation in the process would copy the edit.
 
