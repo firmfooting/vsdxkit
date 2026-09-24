@@ -30,7 +30,7 @@ else:
 
 import vsdxkit
 from vsdxkit.errors import InvalidOperationError, MissingPartError
-from vsdxkit.shapes import Shape, is_connector
+from vsdxkit.shapes import Shape, _wrap, is_connector
 
 if TYPE_CHECKING:
     from vsdxkit.pages import Page
@@ -98,7 +98,7 @@ class Container:
         for el in shapes_tag.findall(f"{vsdxkit.namespace}Shape"):
             name = el.attrib.get("NameU") or el.attrib.get("Name") or ""
             if name.startswith(name_prefix):
-                result.append(Shape(xml=el, parent=self.page, page=self.page))
+                result.append(_wrap(el, self.page, self.page))
         return result
 
     @property
@@ -184,7 +184,7 @@ class Container:
         new_xml = ET.fromstring(ET.tostring(top_lane.xml))
         self.page.vis.renumber_shape_ids(new_xml, self.page)
         shapes_tag.append(new_xml)
-        new_lane = Shape(xml=new_xml, parent=self.page, page=self.page)
+        new_lane = _wrap(new_xml, self.page, self.page)
         new_lane.get_or_create_cell("PinY", v=str((top_lane.y or 0.0) + LANE_PITCH_INCHES))
         if label:
             self._write_lane_label(new_lane, label, subject=subject)

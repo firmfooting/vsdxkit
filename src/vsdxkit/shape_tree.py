@@ -19,6 +19,7 @@ from vsdxkit import namespace
 
 _SHAPE = f"{namespace}Shape"
 _SHAPES = f"{namespace}Shapes"
+_CELL = f"{namespace}Cell"
 
 
 def iter_children(element: Element) -> Iterator[Element]:
@@ -63,4 +64,10 @@ def is_connector_element(element: Element, master: Element | None = None) -> boo
 
 
 def _has_cell(element: Element, name: str) -> bool:
-    return element.find(f'{namespace}Cell[@N="{name}"]') is not None
+    # every wrapper a walk builds asks this: an ElementPath attribute predicate
+    # tripled the cost of a walk, and any() over a generator costs half again
+    # what this loop does
+    for child in element:  # noqa: SIM110
+        if child.get("N") == name and child.tag == _CELL:
+            return True
+    return False

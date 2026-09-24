@@ -26,7 +26,6 @@ import pytest
 from helpers.broken_package import rewritten
 
 from vsdxkit import ext_prop_namespace, namespace, vt_namespace
-from vsdxkit.connectors import Connect
 from vsdxkit.document import Document
 
 APP_PART = "docProps/app.xml"
@@ -210,11 +209,7 @@ def test_the_imported_master_is_named_and_counted_in_the_masters_section(vsdx_co
     """A document that already has masters gains one when a connector is created."""
     vis = Document.open(vsdx_copy("test3_house.vsdx"))
     page = vis.pages[0]
-    Connect.create(
-        page=page,
-        from_shape=page.shapes.by_text("Shape to copy"),
-        to_shape=page.shapes.by_text("Shape to remove"),
-    )
+    page.connect(page.shapes.by_text("Shape to copy"), page.shapes.by_text("Shape to remove"))
     saved = _saved(vis, tmp_path, "house-connected.vsdx")
 
     sections = _sections(_app_xml(saved))
@@ -225,7 +220,7 @@ def test_the_imported_master_is_named_and_counted_in_the_masters_section(vsdx_co
 def test_a_document_with_no_masters_heading_gains_one_with_its_first_master(vsdx_copy, tmp_path):
     vis = Document.open(vsdx_copy("test8_simple_connector.vsdx"))
     page = vis.pages[0]
-    Connect.create(page=page, from_shape=page.child_shapes[0], to_shape=page.child_shapes[1])
+    page.connect(page.child_shapes[0], page.child_shapes[1])
     saved = _saved(vis, tmp_path, "simple-connected.vsdx")
 
     sections = _sections(_app_xml(saved))
@@ -243,7 +238,7 @@ def test_a_master_is_listed_even_when_a_page_is_called_the_same_thing(vsdx_copy,
     vis = Document.open(vsdx_copy("test8_simple_connector.vsdx"))
     page = vis.pages[0]
     page.name = "Dynamic connector"
-    Connect.create(page=page, from_shape=page.child_shapes[0], to_shape=page.child_shapes[1])
+    page.connect(page.child_shapes[0], page.child_shapes[1])
     saved = _saved(vis, tmp_path, "namesake-page.vsdx")
 
     sections = _sections(_app_xml(saved))

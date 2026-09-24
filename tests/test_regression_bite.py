@@ -2,7 +2,6 @@
 
 import os
 
-from vsdxkit.connectors import Connect
 from vsdxkit.document import Document
 from vsdxkit.vsdxdiff import VisioFileDiff
 
@@ -22,7 +21,7 @@ def test_connect_create_writes_connection_records(vsdx_copy, tmp_path):
     page = vis.pages[0]
     a = page.child_shapes[0]
     b = page.child_shapes[1]
-    Connect.create(page=page, from_shape=a, to_shape=b)
+    page.connect(a, b)
     vis.save(output)
 
     vis = Document.open(output)

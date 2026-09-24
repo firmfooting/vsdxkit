@@ -37,7 +37,7 @@ def test_removing_a_connected_shape_takes_its_connector_with_it(vsdx_copy):
     page = vis.pages[0]
     start = page.create_shape(ShapeKind.PROCESS, x=2.0, y=2.0, text="A")
     end = page.create_shape(ShapeKind.PROCESS, x=6.0, y=2.0, text="B")
-    connector = page.connect_shapes(start, end)
+    connector = page.connect(start, end)
     assert _referencing(page, start.ID)
 
     with pytest.warns(DeprecationWarning, match="delete_shape"):
@@ -58,7 +58,7 @@ def test_remove_and_delete_shape_leave_the_page_in_the_same_state(vsdx_copy):
         page = vis.pages[0]
         start = page.create_shape(ShapeKind.PROCESS, x=2.0, y=2.0, text="A")
         end = page.create_shape(ShapeKind.PROCESS, x=6.0, y=2.0, text="B")
-        page.connect_shapes(start, end)
+        page.connect(start, end)
         delete(page, start)
         return (
             sorted(shape.ID for shape in page.all_shapes),
@@ -156,7 +156,7 @@ def test_an_inherited_begin_cell_still_marks_a_shape_as_a_connector(vsdx_copy):
     page = vis.pages[0]
     start = page.create_shape(ShapeKind.PROCESS, x=2.0, y=2.0, text="A")
     end = page.create_shape(ShapeKind.PROCESS, x=6.0, y=2.0, text="B")
-    connector = page.connect_shapes(start, end)
+    connector = page.connect(start, end)
     # move BeginX off the connector so it can only be found via the master
     begin_cell = connector.xml.find(f'{namespace}Cell[@N="BeginX"]')
     connector.xml.remove(begin_cell)
@@ -195,7 +195,7 @@ def _three_connected(vis):
     a = page.create_shape(ShapeKind.PROCESS, x=1.0, y=2.0, text="A")
     b = page.create_shape(ShapeKind.PROCESS, x=4.0, y=2.0, text="B")
     c = page.create_shape(ShapeKind.PROCESS, x=7.0, y=2.0, text="C")
-    return page, (a, b, c), (page.connect_shapes(a, b), page.connect_shapes(b, c))
+    return page, (a, b, c), (page.connect(a, b), page.connect(b, c))
 
 
 def test_a_half_glued_connector_goes_with_the_shape_it_is_glued_to(vsdx_copy):

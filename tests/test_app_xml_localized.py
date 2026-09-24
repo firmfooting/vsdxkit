@@ -299,7 +299,7 @@ def test_a_master_added_ahead_of_the_pages_is_counted_among_the_masters(tmp_path
     out = str(tmp_path / "out.vsdx")
     vis = Document.open(reordered)
     page = vis.pages[0]
-    page.connect_shapes(page.shapes.require_id("1"), page.shapes.require_id("5"))
+    page.connect(page.shapes.require_id("1"), page.shapes.require_id("5"))
     vis.save(out)
     headings, titles = _app_xml(out)
     assert headings == ["Master", "2", "Seiten", "1"]

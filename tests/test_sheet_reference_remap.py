@@ -13,6 +13,7 @@ import xml.etree.ElementTree as ET
 
 from vsdxkit import namespace
 from vsdxkit.document import Document
+from vsdxkit.glue import Glue
 from vsdxkit.shape_kind import ShapeKind
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
@@ -33,7 +34,7 @@ def test_update_ids_remaps_shape_glue_trigger_formulas(vsdx_copy):
     page = vis.pages[0]
     start = page.create_shape(ShapeKind.PROCESS, x=2.0, y=2.0, text="A")
     end = page.create_shape(ShapeKind.PROCESS, x=6.0, y=2.0, text="B")
-    connector = page.connect_shapes(start, end)
+    connector = page.connect(start, end)
 
     shapes_element = page.xml.getroot().find(f"{namespace}Shapes")
     vis.update_ids(shapes_element, {start.ID: 900, end.ID: 901})
@@ -48,7 +49,7 @@ def test_update_ids_remaps_point_glue_formulas():
     page = vis.pages[0]
     start = page.shapes.require_id("90")
     end = page.shapes.require_id("97")
-    connector = page.connect_shapes(start, end, route="point")
+    connector = page.connect(start, end, glue=Glue.POINT)
 
     shapes_element = page.xml.getroot().find(f"{namespace}Shapes")
     vis.update_ids(shapes_element, {start.ID: 900, end.ID: 901})
@@ -64,7 +65,7 @@ def test_update_ids_leaves_references_outside_the_copy_untouched(vsdx_copy):
     page = vis.pages[0]
     start = page.create_shape(ShapeKind.PROCESS, x=2.0, y=2.0, text="A")
     end = page.create_shape(ShapeKind.PROCESS, x=6.0, y=2.0, text="B")
-    connector = page.connect_shapes(start, end)
+    connector = page.connect(start, end)
 
     shapes_element = page.xml.getroot().find(f"{namespace}Shapes")
     vis.update_ids(shapes_element, {start.ID: 900})
@@ -148,7 +149,7 @@ def test_copy_page_keeps_connector_glue(vsdx_copy):
     page = vis.pages[0]
     start = page.create_shape(ShapeKind.PROCESS, x=2.0, y=2.0, text="A")
     end = page.create_shape(ShapeKind.PROCESS, x=6.0, y=2.0, text="B")
-    connector = page.connect_shapes(start, end)
+    connector = page.connect(start, end)
     expected = {
         "BegTrigger": _formula(connector, "BegTrigger"),
         "EndTrigger": _formula(connector, "EndTrigger"),

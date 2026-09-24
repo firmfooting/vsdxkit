@@ -16,8 +16,8 @@ from collections import Counter
 import pytest
 
 from vsdxkit import media
-from vsdxkit.connectors import Connect
 from vsdxkit.document import Document
+from vsdxkit.glue import Routing
 from vsdxkit.package import PackageStore
 from vsdxkit.shape_kind import ShapeKind
 
@@ -56,12 +56,12 @@ def test_each_donor_is_opened_once_across_documents(vsdx_copy, monkeypatch, fres
     page = vis.pages[0]
     shapes = [page.create_shape(ShapeKind.PROCESS, x=1.0 + i * 0.01, y=1.0, text=f"S{i}") for i in range(50)]
     for i in range(50):
-        assert page.connect_shapes(shapes[i], shapes[(i + 1) % 50]) is not None
+        assert page.connect(shapes[i], shapes[(i + 1) % 50]) is not None
     vis.save(path)
     second = Document.open(vsdx_copy("test1.vsdx"))
     a = second.pages[0].create_shape(ShapeKind.DECISION, x=1.0, y=1.0, text="A")
     b = second.pages[0].create_shape(ShapeKind.DATABASE, x=2.0, y=1.0, text="B")
-    second.pages[0].connect_shapes(a, b)
+    second.pages[0].connect(a, b)
 
     for donor in DONORS:
         assert opens[donor] == 1, f"{donor} opened {opens[donor]} times, expected 1"
@@ -95,7 +95,7 @@ def test_creation_leaves_the_donors_as_they_were(vsdx_copy, fresh_donors):
     page = vis.pages[0]
     a = page.create_shape(ShapeKind.PROCESS, x=1.0, y=1.0, text="A")
     b = page.create_shape(ShapeKind.START_END, x=3.0, y=1.0)
-    page.connect_shapes(a, b, route="curved")
+    page.connect(a, b, routing=Routing.CURVED)
     assert _donor_xml() == before
 
 
@@ -118,7 +118,7 @@ def test_provisioning_masters_reads_only_the_donors_master_parts(vsdx_copy, monk
 
     monkeypatch.setattr(PackageStore, "read_bytes", spy)
     shapes = page.child_shapes
-    Connect.create(page=page, from_shape=shapes[0], to_shape=shapes[1])
+    page.connect(shapes[0], shapes[1])
     assert read, "the donor's masters were not copied through its store; the test has gone stale"
     assert [name for name in read if not name.startswith("/visio/masters/")] == []
 
@@ -130,7 +130,7 @@ def test_provisioning_masters_copies_the_donors_master_parts_byte_for_byte(vsdx_
     page = vis.pages[0]
     donor = media._donor(media.MEDIA)
     shapes = page.child_shapes
-    Connect.create(page=page, from_shape=shapes[0], to_shape=shapes[1])
+    page.connect(shapes[0], shapes[1])
     donor_masters = {n: donor._package.read_bytes(n) for n in donor._package.names() if n.startswith("/visio/masters/")}
     copied = {n: vis._package.read_bytes(n) for n in vis._package.names() if n.startswith("/visio/masters/")}
     # the copy is exact at the moment it is made; masters.xml and its rels may
@@ -155,5 +155,5 @@ def test_provisioning_masters_leaves_a_sibling_of_the_masters_folder_behind(vsdx
     page = vis.pages[0]
     media._donor(media.MEDIA)._package.write_bytes("/visio/masters-old/x.xml", b"<x/>")
     shapes = page.child_shapes
-    Connect.create(page=page, from_shape=shapes[0], to_shape=shapes[1])
+    page.connect(shapes[0], shapes[1])
     assert vis._package.part("/visio/masters-old/x.xml") is None

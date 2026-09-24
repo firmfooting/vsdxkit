@@ -27,6 +27,7 @@ from vsdxkit.partnames import (
     relationships_part_name,
     target_part_name,
 )
+from vsdxkit.shape_tree import is_connector_element, iter_children, iter_descendants
 from vsdxkit.xmlio import PartTree, require_attribute, require_element
 
 MASTERS_RELATIONSHIP = "http://schemas.microsoft.com/visio/2010/relationships/masters"
@@ -80,6 +81,10 @@ class MasterCatalog:
         # source's ID: an import renamed to avoid a collision no longer
         # matches by name, and would be imported again by every later copy
         self._imported: weakref.WeakKeyDictionary[MasterCatalog, dict[str, str]] = weakref.WeakKeyDictionary()
+        # every wrapper a walk builds looks its master up by id; which page has
+        # an id changes only when the revision does
+        self._by_id: dict[str, Page] = {}
+        self._by_id_revision = -1
 
     @property
     def pages(self) -> list[Page]:
@@ -102,10 +107,12 @@ class MasterCatalog:
         return None if tree is None else tree.getroot()
 
     def by_id(self, master_id: str) -> Page | None:
-        for page in self._pages:
-            if page.page_id == master_id:
-                return page
-        return None
+        if self._by_id_revision != self._revision:
+            self._by_id = {}
+            for page in self._pages:
+                self._by_id.setdefault(page.page_id, page)
+            self._by_id_revision = self._revision
+        return self._by_id.get(master_id)
 
     def by_name(self, name: str) -> Page | None:
         """The first master whose `NameU` (or `Name`, where it has no `NameU`) is `name`."""
@@ -139,6 +146,25 @@ class MasterCatalog:
             if not unique_id and not element.attrib.get("UniqueID"):
                 return page
         return None
+
+    def is_one_d(self, master_id: str, master_shape_id: str | None) -> bool:
+        """Whether the master shape an instance inherits from is 1-D: the master's top shape, or the one `master_shape_id` names.
+
+        The master shape is looked up afresh on every call, and its cells read,
+        so a master edited or replaced in place is seen at once.
+        """
+        element = self._find_shape_element(master_id, master_shape_id)
+        return element is not None and is_connector_element(element)
+
+    def _find_shape_element(self, master_id: str, master_shape_id: str | None) -> Element | None:
+        page = self.by_id(master_id)
+        root = None if page is None else page.xml.getroot()
+        top = None if root is None else next(iter_children(root), None)
+        if top is None or master_shape_id is None:
+            return top
+        if top.attrib.get("ID") == master_shape_id:
+            return top
+        return next((shape for shape in iter_descendants(top) if shape.attrib.get("ID") == master_shape_id), None)
 
     def element_by_id(self, master_id: str) -> Element | None:
         """The `<Master>` element with this ID."""

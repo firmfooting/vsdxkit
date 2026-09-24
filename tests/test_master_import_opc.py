@@ -23,7 +23,6 @@ from dataclasses import dataclass
 
 import pytest
 
-from vsdxkit.connectors import Connect
 from vsdxkit.document import Document
 
 RELS_NS = "{http://schemas.openxmlformats.org/package/2006/relationships}"
@@ -141,11 +140,7 @@ def imported_master(vsdx_copy, tmp_path) -> ImportedMaster:
     document = os.path.join(str(tmp_path), "imported_master.vsdx")
     vis = Document.open(source)
     page = vis.pages[0]
-    connector = Connect.create(
-        page=page,
-        from_shape=page.shapes.by_text("Shape to copy"),
-        to_shape=page.shapes.by_text("Shape to remove"),
-    )
+    connector = page.connect(page.shapes.by_text("Shape to copy"), page.shapes.by_text("Shape to remove"))
     master_id = connector.xml.attrib["Master"]
     vis.save(document)
     return ImportedMaster(document=document, master_id=master_id, master_name="Dynamic connector")
@@ -293,7 +288,7 @@ def test_import_survives_masters_declared_with_no_masters_parts(vsdx_copy):
         vis = Document.open(crafted_path)
         page = vis.pages[0]
         shapes = page.child_shapes
-        connector = Connect.create(page=page, from_shape=shapes[0], to_shape=shapes[1])
+        connector = page.connect(shapes[0], shapes[1])
         master_id = connector.xml.attrib["Master"]
         document = os.path.join(os.path.dirname(crafted_path), "reopened.vsdx")
         vis.save(document)

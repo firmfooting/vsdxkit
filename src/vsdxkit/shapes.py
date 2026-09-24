@@ -18,10 +18,11 @@ import deprecation
 
 import vsdxkit
 from vsdxkit import namespace, retired_finders
-from vsdxkit.connectors import Connect
+from vsdxkit.connectors import Connect, _glued_ends, _retarget_connector
 from vsdxkit.errors import InvalidOperationError, NotFoundError, PackageError
 from vsdxkit.formulae import calc_value
 from vsdxkit.geometry import Geometry, GeometryCell
+from vsdxkit.glue import ConnectorOptions
 from vsdxkit.inheritance import InheritedRow
 from vsdxkit.logging_support import get_logger
 from vsdxkit.shape_part import AttachedShape, ShapePart
@@ -44,8 +45,23 @@ def parent_of(root: Element, element: Element) -> Element | None:
 
 def is_connector(shape: Shape) -> bool:
     """Whether `shape` is 1-D, reading the master it inherits from as well as its own cells."""
-    master = shape.master_shape
-    return is_connector_element(shape.xml, None if master is None else master.xml)
+    return _is_one_d(shape.xml, shape.parent, shape.page)
+
+
+def _is_one_d(xml: Element, parent: Page | Shape, page: Page) -> bool:
+    """The one test of whether a shape element is 1-D, before or after it has a wrapper.
+
+    A sub-shape with no ``Master`` of its own instances its group's, so the
+    parent is needed to find the master it inherits from.
+    """
+    if is_connector_element(xml):
+        return True
+    master_id = xml.attrib.get("Master")
+    if master_id is None and isinstance(parent, Shape):
+        master_id = parent.master_page_ID
+    if master_id is None:
+        return False
+    return page.vis._master_is_one_d(master_id, xml.attrib.get("MasterShape"))
 
 
 def _shape_ids(master: Page) -> frozenset[str]:
@@ -449,11 +465,22 @@ class DataProperty(InheritedRow, ShapePart):
         return element
 
 
+def _wrap(xml: Element, parent: Page | Shape, page: Page) -> Shape:
+    """The wrapper for a shape element: a `Connector` for a 1-D shape, a `Shape` for any other.
+
+    Every wrapper the library hands out is made here, so a connector is a
+    `Connector` however it was reached.
+    """
+    if _is_one_d(xml, parent, page):
+        return Connector(xml=xml, parent=parent, page=page)
+    return Shape(xml=xml, parent=parent, page=page)
+
+
 def _wrap_children(element: Element, parent: Page | Shape, page: Page) -> list[Shape]:
     """A Shape for each shape directly inside `element`, a page's contents root or a group."""
     children = []
     for slot, child in enumerate(iter_children(element)):
-        shape = Shape(xml=child, parent=parent, page=page)
+        shape = _wrap(child, parent, page)
         shape._slot = slot  # where the walk found it, for is_attached to try first
         children.append(shape)
     return children
@@ -469,7 +496,7 @@ def _wrap_descendants(element: Element, parent: Page | Shape, page: Page) -> lis
     slots: dict[Element, int] = {}
     shapes: list[Shape] = []
     for holder, child in iter_edges(element):
-        shape = Shape(xml=child, parent=wrappers[holder], page=page)
+        shape = _wrap(child, wrappers[holder], page)
         shape._slot = slots.get(holder, 0)
         slots[holder] = shape._slot + 1
         wrappers[child] = shape
@@ -765,7 +792,7 @@ class Shape:
             dst_page._carry_relationships(new_shape_xml, self.page)
 
         # copy_shape put it at the page's top level, whatever the source sat in
-        return Shape(xml=new_shape_xml, parent=dst_page, page=dst_page)
+        return _wrap(new_shape_xml, dst_page, dst_page)
 
     @property
     def master_shape(self) -> Shape | None:
@@ -1739,24 +1766,117 @@ class Shape:
         return connects
 
     @property
-    def connected_shapes(self) -> list[Shape]:
-        """Shapes at the far end of this shape's connector records.
+    def connectors(self) -> tuple[Connector, ...]:
+        """Every connector on the page glued to this shape at either end, in page order."""
+        return tuple(connector for connector, _ in self._incidence())
 
-        Connect records can reference a shape that is not on this page (for
-        example a connector record left behind by a deleted shape), so lookups
-        that resolve to nothing are skipped rather than held as None.
+    @property
+    def connected_shapes(self) -> tuple[Shape, ...]:
+        """The shape at the other end of each of :attr:`connectors`, each once, in connector order.
+
+        A floating end leads nowhere, and a connector glued back to this shape
+        leads nowhere else, so neither adds anything.
         """
         shapes: list[Shape] = []
-        for c in self.connects:
-            if c.connector_shape_id != self.ID:
-                found = self.page.shapes.by_id(c.connector_shape_id or "")
-                if found is not None:
-                    shapes.append(found)
-            if c.shape_id != self.ID:
-                found = self.page.shapes.by_id(c.shape_id or "")
-                if found is not None:
-                    shapes.append(found)
-        return shapes
+        for _, ends in self._incidence():
+            for end in ends:
+                if end is not None and end != self and end not in shapes:
+                    shapes.append(end)
+        return tuple(shapes)
+
+    def _incidence(self) -> list[tuple[Connector, tuple[Shape | None, Shape | None]]]:
+        """Each connector glued to this shape, with the shapes its begin and end are glued to.
+
+        One pass over the page's records and one walk of its shapes, however
+        many connectors there are. Only a record from ``BeginX`` or ``EndX``
+        glues an end.
+        """
+        self._require_attached("reading the connectors glued to a shape")
+        ends: dict[str, dict[str, str]] = {}
+        for record in self.page.connects:
+            if record.from_rel in ("BeginX", "EndX"):
+                ends.setdefault(record.from_id, {})[record.from_rel] = record.to_id
+        glued = {connector_id for connector_id, named in ends.items() if self.ID in named.values()}
+        if not glued:
+            return []
+        shapes = list(self.page.shapes)
+        by_id: dict[str, list[Shape]] = {}
+        for shape in shapes:
+            if shape.ID is not None:
+                by_id.setdefault(shape.ID, []).append(shape)
+
+        def resolve(shape_id: str | None) -> Shape | None:
+            # an end with no record is floating, whatever shapes lack an ID
+            if shape_id is None:
+                return None
+            found = by_id.get(shape_id, [])
+            if len(found) > 1:
+                # as ShapeCollection.by_id reports it: a page with two shapes
+                # of one ID is invalid, and neither is the one a record names
+                raise PackageError(
+                    f"page {self.page.name!r} holds {len(found)} shapes with ID {shape_id}; "
+                    "shape IDs are unique on a page, so the page is not valid"
+                )
+            return found[0] if found else None
+
+        resolve(self.ID)
+        incidence: list[tuple[Connector, tuple[Shape | None, Shape | None]]] = []
+        for connector_id in glued:
+            connector = resolve(connector_id)
+            if isinstance(connector, Connector):
+                named = ends[connector_id]
+                incidence.append((connector, (resolve(named.get("BeginX")), resolve(named.get("EndX")))))
+        order = {shape: position for position, shape in enumerate(shapes)}
+        return sorted(incidence, key=lambda item: order[item[0]])
+
+
+class Connector(Shape):
+    """A 1-D shape: a line whose ends can each be glued to a shape.
+
+    It is a :class:`Shape` in every other respect. Which shape each end is
+    glued to is read from the page's ``Connect`` records on each access.
+    """
+
+    @override
+    def __repr__(self) -> str:
+        return super().__repr__().replace("<Shape ", "<Connector ", 1)
+
+    @property
+    def source(self) -> Shape | None:
+        """The shape the connector's begin end is glued to, or None when that end is floating."""
+        self._require_attached("Connector.source")
+        begin, _ = _glued_ends(self)
+        return None if begin is None else begin[0]
+
+    @property
+    def target(self) -> Shape | None:
+        """The shape the connector's end is glued to, or None when that end is floating."""
+        self._require_attached("Connector.target")
+        _, end = _glued_ends(self)
+        return None if end is None else end[0]
+
+    def retarget(
+        self,
+        *,
+        source: Shape | None = None,
+        target: Shape | None = None,
+        options: ConnectorOptions | None = None,
+    ) -> None:
+        """Glue one or both ends to other shapes on the page.
+
+        An end not named stays where it is, floating if it was. Without
+        ``options`` the connector keeps its glue and routing: a moved end
+        keeps the connection point it had, and one that was floating or glued
+        dynamically is glued dynamically. A connection point the new shape
+        does not have is refused, never dropped for dynamic glue. ``options``
+        replaces the glue and routing of both ends.
+
+        Everything is checked before anything is written.
+
+        :raises InvalidOperationError: neither end is named, a shape is not on
+            the page, or a connection point does not exist
+        """
+        _retarget_connector(self, source, target, options)
 
 
 class ShapeCollection:

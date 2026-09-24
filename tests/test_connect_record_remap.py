@@ -61,7 +61,7 @@ def test_renumbering_a_group_moves_records_naming_a_shape_inside_it(vsdx_copy, t
     group = page.shapes.require_id("1")
     child = group.child_shapes[0]
     old_child_id = child.ID
-    page.connect_shapes(child, page.shapes.require_id("11"))
+    page.connect(child, page.shapes.require_id("11"))
 
     new_child_id = str(vis.increment_sub_shape_ids(group, page)[old_child_id])
 

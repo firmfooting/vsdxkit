@@ -100,3 +100,38 @@ A copy of an existing shape
    ``ConnectorOptions(routing=Routing.DEFAULT)``, which is also the default:
    the connector keeps the routing Visio gives it. ``None`` raises
    ``TypeError``.
+
+A connector is a shape
+----------------------
+
+Every 1-D shape is a :class:`vsdxkit.shapes.Connector`, wherever it is reached
+from: a walk of ``page.shapes``, ``page.connectors`` or a copy. Route strings
+are gone; glue and routing are :class:`vsdxkit.glue.Glue` and
+:class:`vsdxkit.glue.Routing`.
+
+``page.connect_shapes(a, b, route="point|curved", from_cp=1, to_cp=2)``
+   ``page.connect(a, b, glue=Glue.POINT, routing=Routing.CURVED, from_point=1, to_point=2)``.
+   ``"dynamic"`` is the default glue, and ``"straight"``, ``"rightangle"``
+   and ``"curved"`` are ``Routing.STRAIGHT``, ``Routing.RIGHT_ANGLE`` and
+   ``Routing.CURVED``.
+
+``page.connect_shapes(a, b, options=ConnectorOptions(...))``, ``Connect.create(page, a, b, ...)``
+   ``page.connect(a, b, ...)`` with the options' fields as keywords.
+
+``page.reanchor_connector(connector, from_shape=a, to_shape=b, route=...)``
+   ``connector.retarget(source=a, target=b, options=ConnectorOptions(...))``.
+   An end not named stays where it is, so ``None`` is never needed. Without
+   ``options`` the glue and routing are kept, as before.
+
+``page.get_connectors_between(shape_a_id=..., shape_b_id=...)``
+   ``set(a.connectors) & set(b.connectors)``. The text form matched a
+   substring of the first shape's text; use ``page.shapes.require_text`` or
+   ``matching_text`` to choose the shapes.
+
+``shape.connected_shapes``
+   It now returns the shapes at the other end of each connector glued to
+   ``shape``, each once, as a tuple. It used to return the connector shapes
+   themselves; those are :attr:`vsdxkit.shapes.Shape.connectors`.
+
+``ConnectorOptions.from_route(route)``
+   Gone with the route strings.

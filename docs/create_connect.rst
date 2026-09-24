@@ -13,6 +13,7 @@ inches, and identify the centre of the shape. ``x`` and ``y`` are keyword-only;
 .. code-block:: python
 
    from vsdxkit.document import Document
+   from vsdxkit.glue import Routing
    from vsdxkit.shape_kind import ShapeKind
 
    vis = Document.open("diagram.vsdx")
@@ -24,8 +25,8 @@ inches, and identify the centre of the shape. ``x`` and ``y`` are keyword-only;
    )
    decision = page.create_shape(ShapeKind.DECISION, x=10.0, y=6.0, text="OK?")
 
-   page.connect_shapes(start, work)
-   page.connect_shapes(work, decision, route="rightangle")
+   page.connect(start, work)
+   page.connect(work, decision, routing=Routing.RIGHT_ANGLE)
    vis.save("flow.vsdx")
 
 Shape kinds
@@ -49,69 +50,82 @@ document raises ``vsdxkit.errors.InvalidOperationError``.
 Connector glue and routing
 --------------------------
 
-:meth:`vsdxkit.pages.Page.connect_shapes` returns the new connector as a
-:class:`vsdxkit.shapes.Shape`.
+:meth:`vsdxkit.pages.Page.connect` is the one way to create a connector. It
+returns a :class:`vsdxkit.shapes.Connector`, a shape whose
+:attr:`~vsdxkit.shapes.Connector.source` and
+:attr:`~vsdxkit.shapes.Connector.target` are the shapes its ends are glued to.
 
-``dynamic``
-   Dynamic shape glue. This is the default.
+``glue``
+   :attr:`vsdxkit.glue.Glue.DYNAMIC`, the default, walks each end round its
+   shape to the nearest side. :attr:`vsdxkit.glue.Glue.POINT` glues the ends to
+   ``from_point`` and ``to_point``, zero-based rows of each shape's
+   ``Connection`` section.
 
-``point``
-   Glue to zero-based connection points selected with ``from_cp`` and
-   ``to_cp``.
-
-``straight``, ``rightangle`` or ``curved``
-   Dynamic glue with the selected route style.
-
-``point|straight``, ``point|rightangle`` or ``point|curved``
-   Connection-point glue with the selected route style.
-
-.. code-block:: python
-
-   connector = page.connect_shapes(
-       source,
-       target,
-       route="point|curved",
-       from_cp=0,
-       to_cp=2,
-   )
-
-The same choice can be passed as a :class:`vsdxkit.glue.ConnectorOptions`
-instead of a ``route`` string. Pass one or the other:
+``routing``
+   :attr:`vsdxkit.glue.Routing.DEFAULT` is Visio's own: dynamic glue reroutes
+   at right angles and point glue stays straight. ``STRAIGHT``,
+   ``RIGHT_ANGLE`` and ``CURVED`` choose the path.
 
 .. code-block:: python
 
-   from vsdxkit.glue import ConnectorOptions, Glue, Routing
+   from vsdxkit.glue import Glue, Routing
 
-   connector = page.connect_shapes(
+   connector = page.connect(
        source,
        target,
-       options=ConnectorOptions(glue=Glue.POINT, routing=Routing.CURVED, to_point=2),
+       glue=Glue.POINT,
+       routing=Routing.CURVED,
+       from_point=0,
+       to_point=2,
    )
 
 A connection point counts whether the shape holds it or inherits it from its
 master. Both shapes must be on the page. Everything is checked before the
 connector is created, so a refused call leaves the page as it was.
 
-Re-anchor a connector
----------------------
+Find connectors
+---------------
 
-:meth:`vsdxkit.pages.Page.reanchor_connector` moves either or both endpoints.
-Pass ``None`` to retain an existing endpoint.
+A connector either end of which is floating still counts as a connector; its
+floating end's ``source`` or ``target`` is ``None``.
 
-Without ``options`` or ``route``, the connector keeps its glue and routing. A
-moved end keeps the connection point it was glued to, and a point the new shape
-does not have raises :class:`vsdxkit.errors.InvalidOperationError`. It does not
-fall back to dynamic glue. An end that was floating, or glued dynamically, is
-glued dynamically. An end left as ``None`` stays where it is, floating if it
-was. ``options`` or ``route`` replace the glue and routing of both ends.
+:attr:`vsdxkit.pages.Page.connectors`
+   Every connector on the page, at any depth.
+
+:attr:`vsdxkit.shapes.Shape.connectors`
+   The connectors glued to a shape at either end.
+
+:attr:`vsdxkit.shapes.Shape.connected_shapes`
+   The shape at the other end of each of those, each once.
+
+All three are tuples. The connectors between two shapes are the ones both list:
 
 .. code-block:: python
 
-   connector = page.shapes.by_id("9")
-   new_target = page.shapes.by_text("Store")
+   between = set(start.connectors) & set(work.connectors)
 
-   if connector is not None and new_target is not None:
-       page.reanchor_connector(connector, to_shape=new_target)
+Retarget a connector
+--------------------
+
+:meth:`vsdxkit.shapes.Connector.retarget` moves either or both ends. Name the
+end that moves, as ``source`` or ``target``; an end not named stays where it
+is, floating if it was. Naming neither raises
+:class:`vsdxkit.errors.InvalidOperationError`.
+
+Without ``options``, the connector keeps its glue and routing. A moved end
+keeps the connection point it was glued to, and a point the new shape does not
+have raises :class:`vsdxkit.errors.InvalidOperationError`. It does not fall
+back to dynamic glue. An end that was floating, or glued dynamically, is glued
+dynamically. A :class:`vsdxkit.glue.ConnectorOptions` passed as ``options``
+replaces the glue and routing of both ends.
+
+.. code-block:: python
+
+   from vsdxkit.glue import ConnectorOptions, Glue
+
+   new_target = page.shapes.require_text("Store")
+   connector.retarget(target=new_target)
+   connector.retarget(target=new_target, options=ConnectorOptions(glue=Glue.POINT, to_point=1))
 
 Delete a connected shape
 ------------------------

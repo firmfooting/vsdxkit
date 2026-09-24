@@ -10,8 +10,8 @@ import os
 
 import pytest
 
-from vsdxkit.connectors import Connect
 from vsdxkit.document import Document
+from vsdxkit.glue import ConnectorOptions, Glue
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
@@ -41,7 +41,7 @@ def test_create_rejects_invalid_connection_point_without_mutating_package(atomic
     a, b = shapes[0], shapes[1]
     before = _snapshot(atomicity_page)
     with pytest.raises(ValueError, match="connection point"):
-        Connect.create(page=atomicity_page, from_shape=a, to_shape=b, route="point", from_cp=999)
+        atomicity_page.connect(a, b, glue=Glue.POINT, from_point=999)
     assert _snapshot(atomicity_page) == before
 
 
@@ -51,7 +51,7 @@ def test_create_rejects_negative_connection_point_without_mutating_package(atomi
     a, b = shapes[0], shapes[1]
     before = _snapshot(atomicity_page)
     with pytest.raises(ValueError, match="connection point"):
-        Connect.create(page=atomicity_page, from_shape=a, to_shape=b, route="point", from_cp=-1)
+        atomicity_page.connect(a, b, glue=Glue.POINT, from_point=-1)
     assert _snapshot(atomicity_page) == before
 
 
@@ -66,13 +66,7 @@ def test_retarget_rejects_invalid_connection_point_without_mutating_package(vsdx
     other = next(s for s in page.all_shapes if "BeginX" not in s.cells)
     records_before = sorted((c.from_id, c.to_id, c.from_rel, c.to_rel) for c in page.connects)
     with pytest.raises(ValueError, match="connection point"):
-        Connect.retarget(
-            page,
-            connector,
-            to_shape=other,
-            route="point",
-            to_cp=999,
-        )
+        connector.retarget(target=other, options=ConnectorOptions(glue=Glue.POINT, to_point=999))
     records_after = sorted((c.from_id, c.to_id, c.from_rel, c.to_rel) for c in page.connects)
     assert records_after == records_before, "rejected retarget removed the connector's records"
 
@@ -86,6 +80,6 @@ def test_create_with_valid_point_glue_still_works(vsdx_copy):
     b = page.shapes.by_id("97")
     assert a is not None and b is not None
     records_before = len(page.connects)
-    connector = Connect.create(page=page, from_shape=a, to_shape=b, route="point")
+    connector = page.connect(a, b, glue=Glue.POINT)
     assert connector is not None
     assert len(page.connects) == records_before + 2
