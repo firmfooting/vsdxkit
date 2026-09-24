@@ -598,8 +598,12 @@ delete. The graph is read through connectors and shapes instead.
    ``connector.source`` or ``connector.target``, and its ``ID``.
 
 ``Connect.from_rel``, ``Connect.to_rel``
-   Which end is glued, and to what, are the connector's ``BeginX`` and
-   ``EndX`` cell formulas: a formula that refers to a shape glues that end.
+   ``connector.source`` and ``connector.target`` are the shapes each end is
+   glued to. The record's exact ``FromCell`` and ``ToCell``, such as
+   ``BeginX`` and ``PinX`` for dynamic glue or a ``Connections.X<n>`` row for
+   glue to a point, are only on the raw ``<Connect>`` element, found as under
+   ``Connect.xml`` below. For dynamic glue the ``BeginX`` and ``EndX``
+   formulas are ``_WALKGLUE`` expressions that name no shape.
 
 ``Connect.page``
    ``connector.page``.
