@@ -326,9 +326,12 @@ page's finder and ``shape.descendants`` for a shape's.
 
    * - 0.x
      - 1.0
-   * - ``page.find_shape_by_id(id)``, ``shape.find_shape_by_id(id)``,
-       ``shape.find_shapes_by_id(id)``
-     - ``scope.by_id(id)``, or ``scope.require_id(id)``
+   * - ``page.find_shape_by_id(id)``, ``page.find_shapes_by_id(id)``,
+       ``shape.find_shape_by_id(id)``, ``shape.find_shapes_by_id(id)``
+     - ``scope.by_id(id)``, or ``scope.require_id(id)``. IDs are unique on a
+       page, so the plural forms had at most one shape to return; a page that
+       holds two shapes with one ID raises
+       :class:`vsdxkit.errors.PackageError`.
    * - ``page.find_shape_by_text(text)``, ``shape.find_shape_by_text(text)``
      - ``scope.by_text(text)`` for the whole text;
        ``next((s for s in scope if text in s.text), None)`` for a substring
@@ -354,6 +357,32 @@ page's finder and ``shape.descendants`` for a shape's.
    * - ``shape.find_shapes_by_master(page_id, shape_id)``,
        ``page.find_shapes_with_same_master(shape)``
      - ``[s for s in scope if (s.master_page_ID, s.master_shape_ID) == (page_id, shape_id)]``
+
+``shape.data_properties``
+   Also a new ``dict`` on each read; 0.8 returned the same one while the
+   property rows were unchanged. A key added to the dict, or a dict kept
+   from an earlier read, is not the shape's. Change a property through its
+   :class:`vsdxkit.shapes.DataProperty`:
+   ``shape.data_properties["Status"].value = "Done"``.
+
+A shape is its element
+----------------------
+
+``shape_a == shape_b``, ``hash(shape)``
+   Two shapes are equal when they wrap the same XML element, whatever their
+   class, and a shape keeps its place in a set or dict through a rename, a
+   renumber or a save. The hash used to be the ID, page name and file name.
+   Shapes from two documents are never equal, even two opens of one file.
+
+Reading or writing a deleted shape
+   Raises :class:`vsdxkit.errors.InvalidOperationError`, as does a shape on
+   a deleted page. ``shape.is_attached`` says whether a shape is still in
+   its document. ``ID``, ``xml``, ``repr`` and ``hash`` keep working.
+
+``shape.cells``
+   A read-only property that returns a new ``dict`` on each read, from the
+   XML. Assigning into the dict changes nothing; set a cell with
+   ``shape.set_cell_value`` or ``shape.set_cell_formula``.
 
 ``shape.data_properties``
    Also a new ``dict`` on each read; 0.8 returned the same one while the
