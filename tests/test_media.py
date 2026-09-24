@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 
 from vsdxkit import media
+from vsdxkit.document import Document
 from vsdxkit.errors import NotFoundError
-from vsdxkit.vsdxfile import VisioFile
 
 MEDIA_DIR = Path(__file__).resolve().parents[1] / "src" / "vsdxkit" / "media"
 
@@ -30,13 +30,13 @@ def test_media_curved_connector_returns_curved():
     curved = media._sentinel(media.MEDIA, media.CURVED_CONNECTOR)
     straight = media._sentinel(media.MEDIA, media.STRAIGHT_CONNECTOR)
     assert curved.ID != straight.ID
-    vis = VisioFile(str(MEDIA_DIR / "media.vsdx"))
+    vis = Document.open(str(MEDIA_DIR / "media.vsdx"))
     assert curved.ID == vis.pages[0].shapes.require_text("CURVED_CONNECTOR").ID
 
 
 def test_a_truncated_palette_name_is_refused(vsdx_copy):
     """Fails if a palette name is matched as a substring, so "PALETTE_PRO" builds a process shape (#310)."""
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
     before = [shape.ID for shape in page.shapes]
 
@@ -50,7 +50,7 @@ def test_what_the_module_hands_out_is_a_copy(vsdx_copy):
     """Fails if a caller is given a donor's own elements, which it could edit past the closed guard."""
     donor = media._donor(media.PALETTE)
     donor_elements = set(donor.pages[0].xml.getroot().iter())
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     shape = media.copy_palette_shape("PALETTE_PROCESS", vis.pages[0])
     connector = media.copy_connector(vis.pages[0])
     assert not donor_elements & set(shape.xml.iter())
@@ -65,13 +65,13 @@ def test_each_donor_loads_once_across_threads(monkeypatch):
 
     monkeypatch.setattr(media, "_donors", {})
     opened: list[str] = []
-    real_visiofile = media.VisioFile
+    real_open = media.Document.open
 
     def recording(path):
         opened.append(path)
-        return real_visiofile(path)
+        return real_open(path)
 
-    monkeypatch.setattr(media, "VisioFile", recording)
+    monkeypatch.setattr(media.Document, "open", recording)
     start = threading.Barrier(8)
 
     def load():

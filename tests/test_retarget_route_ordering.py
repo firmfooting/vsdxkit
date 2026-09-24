@@ -8,7 +8,7 @@ import os
 
 import pytest
 
-from vsdxkit.vsdxfile import VisioFile
+from vsdxkit.document import Document
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
@@ -16,7 +16,7 @@ FIXTURES = os.path.dirname(os.path.realpath(__file__))
 def test_reanchor_with_invalid_route_keeps_connect_records(vsdx_copy, tmp_path):
     path = vsdx_copy("test4_connectors.vsdx")
     output = os.path.join(str(tmp_path), "after-rejected-retarget.vsdx")
-    vis = VisioFile(path)
+    vis = Document.open(path)
     page = vis.pages[0]
     connectors = [s for s in page.all_shapes if "BeginX" in s.cells]
     assert connectors
@@ -27,8 +27,8 @@ def test_reanchor_with_invalid_route_keeps_connect_records(vsdx_copy, tmp_path):
         page.reanchor_connector(connector, to_shape=other, route="diagonal")
     records_after = sorted((c.from_id, c.to_id, c.from_rel) for c in page.connects)
     assert records_after == records_before, "rejected retarget removed the connector's records"
-    vis.save_vsdx(output)
+    vis.save(output)
 
-    reloaded = VisioFile(output)
+    reloaded = Document.open(output)
     records_reloaded = sorted((c.from_id, c.to_id, c.from_rel) for c in reloaded.pages[0].connects)
     assert records_reloaded == records_before, "rejected retarget corrupted saved connectivity"

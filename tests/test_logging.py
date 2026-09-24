@@ -6,7 +6,7 @@ import logging
 import pathlib
 
 import vsdxkit
-from vsdxkit.vsdxfile import VisioFile
+from vsdxkit.document import Document
 
 BASE = "test8_simple_connector.vsdx"
 
@@ -53,22 +53,11 @@ def _is_eagerly_formatted(message: ast.expr | None) -> bool:
 def test_no_output_on_default_configuration(vsdx_copy, capsys):
     """Default config: NullHandler only; nothing reaches stdout/stderr."""
     path = vsdx_copy(BASE)
-    vis = VisioFile(path)
+    vis = Document.open(path)
     vis.pages[0].delete_shape(vis.pages[0].all_shapes[0])
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == ""
-
-
-def test_debug_true_bridges_to_logging(vsdx_copy, capsys):
-    """debug=True reproduces the old print behaviour via a logging handler."""
-    path = vsdx_copy(BASE)
-    vis = VisioFile(path, debug=True)
-    vis.pages[0]  # touch enough to trigger debug paths
-    # handler writes to stderr; capsys captures it even though it is
-    # bypassing print (StreamHandler holds the stream by default capture)
-    err = capsys.readouterr().err
-    assert "vsdxkit.vsdxfile" in err
 
 
 def test_host_application_can_capture_module_logs(vsdx_copy):
@@ -80,10 +69,10 @@ def test_host_application_can_capture_module_logs(vsdx_copy):
     root.setLevel(logging.DEBUG)
     try:
         path = vsdx_copy(BASE)
-        vis = VisioFile(path)
+        vis = Document.open(path)
         vis.remove_page_by_index(0)
         assert "_remove_page_from_app_xml()" in stream.getvalue()
-        assert "VisioFile(filename=" in stream.getvalue()
+        assert "Document.open(" in stream.getvalue()
     finally:
         root.removeHandler(handler)
         root.setLevel(logging.NOTSET)
@@ -101,7 +90,7 @@ def test_no_log_call_in_the_package_formats_its_own_message():
     between, and so held whatever the library did.
 
     What it does not see is an expensive *argument*: `logger.debug("%s", f(x))`
-    calls `f` at any level, and four calls in `vsdxfile.py` pass
+    calls `f` at any level, and four calls in `document.py` pass
     `pretty_print_element` of a page part that way. Lazy formatting is not lazy
     evaluation, and no reading of the message argument can tell you otherwise.
     """

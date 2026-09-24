@@ -3,13 +3,13 @@
 import zipfile
 
 from vsdxkit.containers import get_user_row, set_user_row_value
-from vsdxkit.vsdxfile import VisioFile
+from vsdxkit.document import Document
 
 FIXTURE = "fixtures/com_reference/s05_swimlanes_cfflow.vsdx"
 
 
 def test_container_discovery(vsdx_copy):
-    vis = VisioFile(vsdx_copy(FIXTURE))
+    vis = Document.open(vsdx_copy(FIXTURE))
     page = vis.pages[0]
     container = page.get_container()
     assert container is not None
@@ -18,7 +18,7 @@ def test_container_discovery(vsdx_copy):
 
 
 def test_lanes_discovered_in_visual_order(vsdx_copy):
-    vis = VisioFile(vsdx_copy(FIXTURE))
+    vis = Document.open(vsdx_copy(FIXTURE))
     lanes = vis.pages[0].get_container().lanes
     assert len(lanes) == 3
     ys = [lane.y for lane in lanes]
@@ -32,7 +32,7 @@ def test_lanes_discovered_in_visual_order(vsdx_copy):
 
 
 def test_membership_is_geometric(vsdx_copy):
-    vis = VisioFile(vsdx_copy(FIXTURE))
+    vis = Document.open(vsdx_copy(FIXTURE))
     container = vis.pages[0].get_container()
     lanes = container.lanes
     # every member lies inside its lane band
@@ -47,7 +47,7 @@ def test_membership_is_geometric(vsdx_copy):
 
 def test_a_connector_whose_endpoints_come_from_its_master_is_not_a_member(vsdx_copy):
     """Fails if lane membership looks for BeginX only on the shape, not on the master it inherits from."""
-    vis = VisioFile(vsdx_copy(FIXTURE))
+    vis = Document.open(vsdx_copy(FIXTURE))
     page = vis.pages[0]
     container = page.get_container()
     connector = page.shapes.require_id("57")
@@ -66,7 +66,7 @@ def _in_band(container, lane, shape) -> bool:
 
 def test_add_swimlane_clones_and_labels(vsdx_copy):
     path = vsdx_copy(FIXTURE)
-    vis = VisioFile(path)
+    vis = Document.open(path)
     page = vis.pages[0]
     container = page.get_container()
     original_count = len(container.lanes)
@@ -80,13 +80,13 @@ def test_add_swimlane_clones_and_labels(vsdx_copy):
     row = get_user_row(new_lane, "visHeadingText")
     values = [c.attrib.get("V") for c in row if c.attrib.get("N") == "Value"]
     assert values == ["Test lane"]
-    vis.save_vsdx(path)
+    vis.save(path)
     assert zipfile.ZipFile(path).testzip() is None
 
 
 def test_add_shape_to_lane_moves_geometry(vsdx_copy):
     path = vsdx_copy(FIXTURE)
-    vis = VisioFile(path)
+    vis = Document.open(path)
     page = vis.pages[0]
     container = page.get_container()
     decision = page.shapes.by_text("Decision")
@@ -96,15 +96,15 @@ def test_add_shape_to_lane_moves_geometry(vsdx_copy):
     assert decision.y == target_lane.y
     assert container.lane_of(decision).ID == target_lane.ID
     assert original_y != decision.y
-    vis.save_vsdx(path)
-    vis2 = VisioFile(path)
+    vis.save(path)
+    vis2 = Document.open(path)
     container = vis2.pages[0].get_container()
     decision = vis2.pages[0].shapes.by_text("Decision")
     assert container.lane_of(decision).ID == container.lanes[0].ID
 
 
 def test_set_user_row_value_roundtrip(vsdx_copy):
-    vis = VisioFile(vsdx_copy(FIXTURE))
+    vis = Document.open(vsdx_copy(FIXTURE))
     lane = vis.pages[0].get_container().lanes[0]
     assert set_user_row_value(lane, "visHeadingText", "Renamed") is True
     row = get_user_row(lane, "visHeadingText")

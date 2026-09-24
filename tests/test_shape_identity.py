@@ -7,14 +7,14 @@ whatever has happened to the shape's ID, its page's name or the file since.
 
 import pytest
 
+from vsdxkit.document import Document
 from vsdxkit.errors import InvalidOperationError
 from vsdxkit.shapes import Shape
-from vsdxkit.vsdxfile import VisioFile
 
 
 def test_two_wrappers_of_one_shape_are_equal_and_hash_alike(vsdx_copy):
     """Fails if two traversals' wrappers of one shape are different keys."""
-    vis = VisioFile(vsdx_copy("test2.vsdx"))
+    vis = Document.open(vsdx_copy("test2.vsdx"))
     page = vis.pages[0]
     first = page.shapes.require_text("Sub-shape 1")
     second = page.shapes.require_text("Group shape text").children.require_text("Sub-shape 1")
@@ -31,7 +31,7 @@ def test_equality_ignores_the_wrapper_s_class(vsdx_copy):
     class Special(Shape):
         pass
 
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
     plain = page.shapes.require_id("1")
     special = Special(xml=plain.xml, parent=plain.parent, page=page)
@@ -41,21 +41,21 @@ def test_equality_ignores_the_wrapper_s_class(vsdx_copy):
 
 def test_a_shape_s_hash_survives_rename_renumber_and_save(vsdx_copy, tmp_path):
     """Fails if a set of shapes loses a member when its page is renamed, its ID changes, or the file is saved."""
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
     shape = page.shapes.require_id("5")
     members = {shape}
     page.name = "Renamed"
     vis.renumber_shape_ids(shape.xml, page)
     assert shape.ID != "5"
-    vis.save_vsdx(str(tmp_path / "saved.vsdx"))
+    vis.save(str(tmp_path / "saved.vsdx"))
     assert shape in members
     assert page.shapes.require_id(shape.ID) in members
 
 
 def test_a_shape_is_attached_until_it_is_deleted(vsdx_copy):
     """Fails if `is_attached` is wrong either side of a delete, or misses a deleted group's members."""
-    vis = VisioFile(vsdx_copy("test2.vsdx"))
+    vis = Document.open(vsdx_copy("test2.vsdx"))
     page = vis.pages[0]
     group = page.shapes.require_text("Shape to remove")
     member = group.children.require_text("Sub-shape to remove")
@@ -69,7 +69,7 @@ def test_a_shape_is_attached_until_it_is_deleted(vsdx_copy):
 
 def test_a_shape_on_a_deleted_page_is_detached(vsdx_copy):
     """Fails if a shape whose page was removed from the document still reports itself attached."""
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
     shape = page.shapes.require_id("1")
     vis.pages.delete(page)
@@ -78,7 +78,7 @@ def test_a_shape_on_a_deleted_page_is_detached(vsdx_copy):
 
 def test_a_moved_shape_is_attached_through_every_wrapper(vsdx_copy):
     """Fails if a second wrapper of a shape that was moved into a group thinks the shape is gone."""
-    vis = VisioFile(vsdx_copy("test2.vsdx"))
+    vis = Document.open(vsdx_copy("test2.vsdx"))
     page = vis.pages[0]
     moved = page.shapes.require_text("Scenario: {{scenario}}")
     other_wrapper = page.children.require_text("Scenario: {{scenario}}")
@@ -90,7 +90,7 @@ def test_a_moved_shape_is_attached_through_every_wrapper(vsdx_copy):
 
 def test_a_detached_shape_refuses_reads_and_writes(vsdx_copy):
     """Fails if a deleted shape still answers or accepts changes, as if it were on the page."""
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
     shape = page.shapes.require_id("1")
     cell = shape.cells["PinX"]
@@ -113,7 +113,7 @@ def test_a_detached_shape_refuses_reads_and_writes(vsdx_copy):
 
 def test_a_detached_shape_keeps_its_id_repr_and_hash(vsdx_copy):
     """Fails if a deleted shape cannot be named in a message, or falls out of the sets it was in."""
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
     shape = page.shapes.require_id("1")
     members = {shape}

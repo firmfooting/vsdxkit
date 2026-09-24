@@ -17,7 +17,7 @@ from xml.etree import ElementTree
 import pytest
 
 from vsdxkit import namespace, xmlio
-from vsdxkit.vsdxfile import VisioFile
+from vsdxkit.document import Document
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
@@ -37,14 +37,14 @@ def _saved_copy(filename: str, tmp_path) -> str:
     serialised -- the path every part the library edits takes to disk.
     """
     out = os.path.join(str(tmp_path), "out" + os.path.splitext(filename)[1])
-    vis = VisioFile(os.path.join(FIXTURES, filename))
+    vis = Document.open(os.path.join(FIXTURES, filename))
     for name in vis._package.names():
         if name.endswith((".xml", ".rels")):
             tree = vis._package.read_xml(name)
             assert tree is not None
             vis._package.write_xml(name, tree)
-    vis.save_vsdx(out)
-    # save_vsdx may adjust the suffix it was handed; take whatever it wrote
+    vis.save(out)
+    # save may adjust the suffix it was handed; take whatever it wrote
     written = os.listdir(str(tmp_path))
     assert len(written) == 1, written
     return os.path.join(str(tmp_path), written[0])
@@ -102,7 +102,7 @@ def test_setting_text_preserves_the_formatting_runs_as_elements(tmp_path):
     The runs used to be spliced back as serialised text matched by an `ns0:`
     regex, which broke the moment the Visio namespace stopped being prefixed.
     """
-    vis = VisioFile(os.path.join(FIXTURES, "test2.vsdx"))
+    vis = Document.open(os.path.join(FIXTURES, "test2.vsdx"))
     shape = vis.pages[0].shapes.require_id("9")
     text_element = shape.xml.find(f"{namespace}Text")
     before = [(child.tag, dict(child.attrib)) for child in text_element]
@@ -268,9 +268,9 @@ def test_a_copied_page_keeps_the_prefixes_its_source_declared(tmp_path):
     loses what `parse_part` recorded about it.
     """
     out = os.path.join(str(tmp_path), "copied.vsdx")
-    vis = VisioFile(os.path.join(FIXTURES, "test5_master.vsdx"))
+    vis = Document.open(os.path.join(FIXTURES, "test5_master.vsdx"))
     vis.copy_page(vis.pages[0])
-    vis.save_vsdx(out)
+    vis.save(out)
     assert f'xmlns:lc="{LUCIDCHART}"' in _page_part(out, "visio/pages/page2.xml")
     assert "lucidchartcom" not in _page_part(out, "visio/pages/page2.xml")
 
@@ -282,9 +282,9 @@ def test_a_copied_page_keeps_the_prefixes_its_source_declared(tmp_path):
 def test_a_rendered_page_keeps_the_prefixes_it_declared(tmp_path):
     """Rendering a template replaces the page tree with one parsed from a string."""
     out = os.path.join(str(tmp_path), "rendered.vsdx")
-    vis = VisioFile(os.path.join(FIXTURES, "test5_master.vsdx"))
-    vis.jinja_render_vsdx(context={})
-    vis.save_vsdx(out)
+    vis = Document.open(os.path.join(FIXTURES, "test5_master.vsdx"))
+    vis.render(context={})
+    vis.save(out)
     assert f'xmlns:lc="{LUCIDCHART}"' in _page_part(out)
     assert "lucidchartcom" not in _page_part(out)
 
@@ -300,7 +300,7 @@ def _in_memory_offenders(vis) -> dict[str, str]:
     """Parts sitting in the open package that carry a generated prefix.
 
     Read from the package store rather than from a saved file, so the check
-    covers a part as the open document holds it. Before #89, `save_vsdx`
+    covers a part as the open document holds it. Before #89, `save`
     re-serialised every page, its rels and the document-level parts on the way
     out, so a part written with a generated prefix when it was built was
     overwritten before it reached disk and no assertion against a saved archive
@@ -323,11 +323,11 @@ def test_connecting_shapes_writes_the_page_rels_in_the_default_namespace(vsdx_co
     exists to keep out of the package.
     """
     out = os.path.join(str(tmp_path), "connected.vsdx")
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
     page.connect_shapes(page.child_shapes[0], page.child_shapes[1])
     in_memory = vis._package.read_bytes("/visio/pages/_rels/page1.xml.rels")
-    vis.save_vsdx(out)
+    vis.save(out)
 
     assert f'<Relationships xmlns="{PACKAGE_RELATIONSHIPS}"'.encode() in in_memory
     assert not GENERATED_PREFIX_RE.search(in_memory)
@@ -342,7 +342,7 @@ def test_bootstrapping_masters_writes_the_visio_default_namespace(vsdx_copy):
     it, before an import appends the master it brings. The tree it
     writes is the store's own, and a save writes it out as it stands.
     """
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     assert vis.masters_xml is None, "fixture is expected to have no masters part"
     vis._masters.bootstrap()
     written = vis._package.read_bytes("/visio/masters/masters.xml")
@@ -384,7 +384,7 @@ def test_no_operation_leaves_a_generated_prefix_in_the_package(filename, mutate,
     path rewriting every page on the way out, so the next one would otherwise
     be found by a LibreOffice import failure rather than by this suite.
     """
-    vis = VisioFile(vsdx_copy(filename))
+    vis = Document.open(vsdx_copy(filename))
     before = {name: vis._package.read_bytes(name) for name in vis._package.names()}
     mutate(vis)
     written = {name for name in vis._package.names() if before.get(name) != vis._package.read_bytes(name)}

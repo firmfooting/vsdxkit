@@ -12,8 +12,8 @@ import xml.etree.ElementTree as ET
 import pytest
 
 from vsdxkit import namespace
+from vsdxkit.document import Document
 from vsdxkit.errors import InvalidOperationError
-from vsdxkit.vsdxfile import VisioFile
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
@@ -32,7 +32,7 @@ def _referencing(page, shape_id: str):
 
 
 def test_removing_a_connected_shape_takes_its_connector_with_it(vsdx_copy):
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
     start = vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="A")
     end = vis.create_shape(page, "PALETTE_PROCESS", 6.0, 2.0, text="B")
@@ -53,7 +53,7 @@ def test_remove_and_delete_shape_leave_the_page_in_the_same_state(vsdx_copy):
     """The two APIs are the same deletion and must not disagree."""
 
     def _state_after(delete):
-        vis = VisioFile(vsdx_copy("test1.vsdx"))
+        vis = Document.open(vsdx_copy("test1.vsdx"))
         page = vis.pages[0]
         start = vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="A")
         end = vis.create_shape(page, "PALETTE_PROCESS", 6.0, 2.0, text="B")
@@ -72,7 +72,7 @@ def test_remove_and_delete_shape_leave_the_page_in_the_same_state(vsdx_copy):
 
 def test_removing_a_group_child_removes_records_that_reference_it(vsdx_copy):
     """A record pointing into a group must not outlive the shape it points at."""
-    vis = VisioFile(vsdx_copy("test10_nested_shapes.vsdx"))
+    vis = Document.open(vsdx_copy("test10_nested_shapes.vsdx"))
     page = vis.pages[0]
     group = next(shape for shape in page.child_shapes if shape.child_shapes)
     child = group.child_shapes[0]
@@ -109,7 +109,7 @@ def _add_connect(page, from_id, to_id):
 
 def test_deleting_a_group_takes_the_records_naming_its_children(vsdx_copy):
     """A group's children go with it, so records naming them must go too."""
-    vis = VisioFile(vsdx_copy("test10_nested_shapes.vsdx"))
+    vis = Document.open(vsdx_copy("test10_nested_shapes.vsdx"))
     page = vis.pages[0]
     group = next(shape for shape in page.child_shapes if shape.child_shapes)
     child = group.child_shapes[0]
@@ -125,7 +125,7 @@ def test_deleting_a_group_takes_the_records_naming_its_children(vsdx_copy):
 
 def test_deleting_a_shape_that_is_not_on_the_page_is_an_error(vsdx_copy):
     """Silently doing nothing would hide a caller's mistake."""
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
     shape = vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="A")
     page.delete_shape(shape)
@@ -135,7 +135,7 @@ def test_deleting_a_shape_that_is_not_on_the_page_is_an_error(vsdx_copy):
 
 
 def test_removing_the_same_shape_twice_is_an_error(vsdx_copy):
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
     shape = vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="A")
     with pytest.warns(DeprecationWarning):
@@ -151,7 +151,7 @@ def test_an_inherited_begin_cell_still_marks_a_shape_as_a_connector(vsdx_copy):
     the shape it is glued to, as a detached line whose glue record has just
     been swept away.
     """
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
     start = vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="A")
     end = vis.create_shape(page, "PALETTE_PROCESS", 6.0, 2.0, text="B")
@@ -175,7 +175,7 @@ def test_deleting_a_shape_belonging_to_another_page_is_refused(vsdx_copy):
     page a shape from the other used to satisfy the guard by ID and then delete
     whichever shape on *this* page happened to share the number.
     """
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page1, page3 = vis.pages[0], vis.pages[2]
     victim = page1.shapes.by_id("1")
     bystander_ids = [shape.ID for shape in page3.all_shapes]
@@ -199,7 +199,7 @@ def _three_connected(vis):
 
 def test_a_half_glued_connector_goes_with_the_shape_it_is_glued_to(vsdx_copy):
     """Fails if a connector whose other end floats survives the one shape it was glued to (#105)."""
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page, (a, b, _), (ab, _) = _three_connected(vis)
     connects = page.xml.find(f".//{namespace}Connects")
     end_record = next(
@@ -218,7 +218,7 @@ def test_a_half_glued_connector_goes_with_the_shape_it_is_glued_to(vsdx_copy):
 
 def test_deleting_a_connector_leaves_the_shapes_it_joined_and_their_other_glue(vsdx_copy):
     """Fails if deleting a connector directly cascades into the shapes it joins (#105)."""
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page, (a, b, c), (ab, bc) = _three_connected(vis)
 
     page.delete_shape(ab)
@@ -232,7 +232,7 @@ def test_deleting_a_connector_leaves_the_shapes_it_joined_and_their_other_glue(v
 
 def test_every_shape_a_delete_takes_is_detached(vsdx_copy):
     """Fails if a connector removed by the cascade still answers through a Shape held before the delete (#105)."""
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page, (_, b, _), (ab, bc) = _three_connected(vis)
 
     page.delete_shape(b)
@@ -250,11 +250,11 @@ def test_a_shape_a_showif_hides_takes_its_connectors_and_records(vsdx_copy):
     `delete_shape`, and the connector glued to it survived with a record
     naming a shape no longer there.
     """
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page, (a, b, c), (ab, bc) = _three_connected(vis)
     a.text = "{% showif show_a %}A"
 
-    vis.jinja_render_vsdx({"show_a": False})
+    vis.render({"show_a": False})
 
     page = vis.pages[0]
     ids = {shape.ID for shape in page.shapes}
@@ -268,11 +268,11 @@ def test_a_shape_a_showif_hides_takes_its_connectors_and_records(vsdx_copy):
 
 def test_a_connector_a_showif_hides_takes_only_its_own_records(vsdx_copy):
     """Fails if a connector rendered out leaves its glue records naming it (#105)."""
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page, (a, b, _), (ab, bc) = _three_connected(vis)
     ab.text = "{% showif False %}"
 
-    vis.jinja_render_vsdx({})
+    vis.render({})
 
     page = vis.pages[0]
     ids = {shape.ID for shape in page.shapes}

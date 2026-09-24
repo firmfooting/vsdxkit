@@ -4,15 +4,15 @@ Create shapes and connectors
 Create shapes
 -------------
 
-:meth:`vsdxkit.vsdxfile.VisioFile.create_shape` copies a masterless shape from
+:meth:`vsdxkit.document.Document.create_shape` copies a masterless shape from
 the bundled palette into an existing page. Coordinates are Visio page units,
 normally inches, and identify the centre of the shape.
 
 .. code-block:: python
 
-   from vsdxkit.vsdxfile import VisioFile
+   from vsdxkit.document import Document
 
-   vis = VisioFile("diagram.vsdx")
+   vis = Document.open("diagram.vsdx")
    page = vis.pages[0]
 
    start = vis.create_shape(
@@ -28,7 +28,7 @@ normally inches, and identify the centre of the shape.
 
    page.connect_shapes(start, work)
    page.connect_shapes(work, decision, route="rightangle")
-   vis.save_vsdx("flow.vsdx")
+   vis.save("flow.vsdx")
 
 Palette names
 -------------

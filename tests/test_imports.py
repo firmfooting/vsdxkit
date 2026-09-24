@@ -43,7 +43,7 @@ def test_the_package_root_re_exports_nothing():
     """Fails if `vsdxkit` binds a class or function that another module defines.
 
     Each name is imported from the module that defines it
-    (`from vsdxkit.vsdxfile import VisioFile`), so the root holds only its own
+    (`from vsdxkit.document import Document`), so the root holds only its own
     namespace constants and helpers.
     """
     borrowed = [

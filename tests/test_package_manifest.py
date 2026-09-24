@@ -27,7 +27,7 @@ from helpers.package_manifest import (
     member_matches,
 )
 
-from vsdxkit.vsdxfile import VisioFile
+from vsdxkit.document import Document
 
 BASEDIR = os.path.dirname(os.path.realpath(__file__))
 PACKAGE_SUFFIXES = (".vsdx", ".vsdm")
@@ -402,8 +402,8 @@ def round_trip(tmp_path_factory):
         if package_path not in saved:
             source = os.path.join(BASEDIR, package_path)
             destination = tmp_path_factory.mktemp("round_trip") / os.path.basename(package_path)
-            vis = VisioFile(source)
-            vis.save_vsdx(str(destination))
+            vis = Document.open(source)
+            vis.save(str(destination))
             saved[package_path] = (
                 PackageManifest.from_path(source),
                 PackageManifest.from_path(str(destination)),

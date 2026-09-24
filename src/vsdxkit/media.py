@@ -18,10 +18,10 @@ import threading
 from pathlib import Path
 from xml.etree.ElementTree import Element
 
+from vsdxkit.document import Document
 from vsdxkit.errors import NotFoundError
 from vsdxkit.pages import Page
 from vsdxkit.shapes import Shape
-from vsdxkit.vsdxfile import VisioFile
 
 MEDIA = "media.vsdx"
 PALETTE = "palette_extended.vsdx"
@@ -31,7 +31,7 @@ CURVED_CONNECTOR = "CURVED_CONNECTOR"
 
 # the donors loaded so far, by filename; the lock makes the first load of
 # each happen once even when several threads create shapes at the same time
-_donors: dict[str, VisioFile] = {}
+_donors: dict[str, Document] = {}
 _loading = threading.Lock()
 
 
@@ -40,12 +40,12 @@ def media_path(filename: str) -> str:
     return str(Path(__file__).resolve().parent / "media" / filename)
 
 
-def _donor(filename: str) -> VisioFile:
+def _donor(filename: str) -> Document:
     """The bundled document `filename`, opened once per process."""
     with _loading:
         document = _donors.get(filename)
         if document is None:
-            document = VisioFile(media_path(filename))
+            document = Document.open(media_path(filename))
             _donors[filename] = document
         return document
 

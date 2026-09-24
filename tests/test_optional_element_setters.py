@@ -16,7 +16,7 @@ import pytest
 
 from vsdxkit import namespace
 from vsdxkit.containers import ROW_HEADING_TEXT, get_user_row
-from vsdxkit.vsdxfile import VisioFile
+from vsdxkit.document import Document
 
 CFF_FIXTURE = "fixtures/com_reference/s05_swimlanes_cfflow.vsdx"
 
@@ -51,16 +51,16 @@ def character_runs(shape) -> list[ET.Element]:
 def test_text_color_reaches_a_shape_that_has_no_character_cell(filename, shape_id, basedir, vsdx_copy, tmp_path):
     """The write has to land, and has to still be there after a save."""
     out_file = os.path.join(str(tmp_path), "out.vsdx")
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     shape = vis.pages[0].shapes.require_id(shape_id)
     assert colour_cells(shape) == [], "fixture already carries the cell; this case proves nothing"
 
     shape.text_color = "#00ff00"
 
     assert shape.text_color == "#00ff00"
-    vis.save_vsdx(out_file)
+    vis.save(out_file)
 
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     assert vis.pages[0].shapes.require_id(shape_id).text_color == "#00ff00"
 
 
@@ -74,7 +74,7 @@ def test_a_created_character_row_is_referenced_by_a_run(filename, shape_id, base
     reads and then ignores, which would leave the setter as silent as it was
     before.
     """
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     shape = vis.pages[0].shapes.require_id(shape_id)
     text_before = shape.text
 
@@ -92,7 +92,7 @@ def test_a_created_character_row_is_referenced_by_a_run(filename, shape_id, base
 
 def test_text_color_updates_the_existing_cell_in_place(basedir):
     """An existing cell is updated, not duplicated, and the runs are left alone."""
-    vis = VisioFile(os.path.join(basedir, "test12_colors.vsdx"))
+    vis = Document.open(os.path.join(basedir, "test12_colors.vsdx"))
     shape = vis.pages[0].shapes.require_id("2")
     runs_before = [run.attrib.get("IX") for run in character_runs(shape)]
 
@@ -109,7 +109,7 @@ def test_text_color_updates_the_existing_cell_in_place(basedir):
 
 def test_text_color_fills_in_a_character_row_that_has_no_colour_cell(basedir):
     """A Character section may exist for an unrelated attribute, e.g. font size."""
-    vis = VisioFile(os.path.join(basedir, "test1.vsdx"))
+    vis = Document.open(os.path.join(basedir, "test1.vsdx"))
     shape = vis.pages[0].shapes.require_id("1")
     section = ET.SubElement(shape.xml, f"{namespace}Section", {"N": "Character"})
     ET.SubElement(ET.SubElement(section, f"{namespace}Row", {"IX": "0"}), f"{namespace}Cell", {"N": "Size", "V": "0.16"})
@@ -127,7 +127,7 @@ def test_text_color_lands_on_the_row_the_text_actually_names(vsdx_copy):
     only the empty tail after its second run. Writing into the first row found
     colours nothing, which is issue #263 by another route.
     """
-    vis = VisioFile(vsdx_copy(CFF_FIXTURE))
+    vis = Document.open(vsdx_copy(CFF_FIXTURE))
     shape = vis.pages[0].shapes.require_id("37")
     runs = [run.attrib.get("IX") for run in character_runs(shape)]
     assert runs and runs[0] != "1", "fixture no longer has a row the first run does not name"
@@ -145,7 +145,7 @@ def test_text_color_lands_on_the_row_the_text_actually_names(vsdx_copy):
 
 def test_text_color_follows_a_run_that_names_a_row_out_of_range(basedir):
     """The row index comes from the text, not from counting from zero."""
-    vis = VisioFile(os.path.join(basedir, "test1.vsdx"))
+    vis = Document.open(os.path.join(basedir, "test1.vsdx"))
     shape = vis.pages[0].shapes.require_id("1")
     text = shape.xml.find(f"{namespace}Text")
     run = ET.Element(f"{namespace}cp", {"IX": "3"})
@@ -161,7 +161,7 @@ def test_text_color_follows_a_run_that_names_a_row_out_of_range(basedir):
 
 def test_a_created_section_goes_where_visio_puts_one(vsdx_copy):
     """A group holds its children in `Shapes`, and no section follows that."""
-    vis = VisioFile(vsdx_copy(CFF_FIXTURE))
+    vis = Document.open(vsdx_copy(CFF_FIXTURE))
     lane = vis.pages[0].get_container().lanes[0]
     assert lane.xml.find(f"{namespace}Shapes") is not None, "fixture lane is no longer a group"
     assert lane.xml.find(f'{namespace}Section[@N="Geometry"]') is None
@@ -175,7 +175,7 @@ def test_a_created_section_goes_where_visio_puts_one(vsdx_copy):
 
 def test_a_rejected_colour_leaves_the_shape_untouched(basedir):
     """A setter that raises must not have half-written first."""
-    vis = VisioFile(os.path.join(basedir, "test1.vsdx"))
+    vis = Document.open(os.path.join(basedir, "test1.vsdx"))
     shape = vis.pages[0].shapes.require_id("1")
     before = ET.tostring(shape.xml)
 
@@ -187,7 +187,7 @@ def test_a_rejected_colour_leaves_the_shape_untouched(basedir):
 
 def test_add_swimlane_with_a_label_adds_no_lane_it_cannot_label(vsdx_copy):
     """A lane whose heading row is missing adds no lane at all (#263, #330)."""
-    vis = VisioFile(vsdx_copy(CFF_FIXTURE))
+    vis = Document.open(vsdx_copy(CFF_FIXTURE))
     page = vis.pages[0]
     container = page.get_container()
     lane = container.lanes[0]
@@ -204,7 +204,7 @@ def test_add_swimlane_with_a_label_adds_no_lane_it_cannot_label(vsdx_copy):
 
 def test_set_lane_label_refuses_a_shape_that_is_not_a_lane(vsdx_copy):
     """A lane with no `visHeadingText` row cannot be labelled, and must say so."""
-    vis = VisioFile(vsdx_copy(CFF_FIXTURE))
+    vis = Document.open(vsdx_copy(CFF_FIXTURE))
     page = vis.pages[0]
     lane = page.get_container().lanes[0]
     row = get_user_row(lane, ROW_HEADING_TEXT)
@@ -215,7 +215,7 @@ def test_set_lane_label_refuses_a_shape_that_is_not_a_lane(vsdx_copy):
 
 
 def test_set_lane_label_still_labels_a_real_lane(vsdx_copy):
-    vis = VisioFile(vsdx_copy(CFF_FIXTURE))
+    vis = Document.open(vsdx_copy(CFF_FIXTURE))
     page = vis.pages[0]
     container = page.get_container()
     lane = container.lanes[0]

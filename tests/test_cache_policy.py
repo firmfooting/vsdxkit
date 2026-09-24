@@ -8,12 +8,12 @@ fail.
 import copy
 
 from vsdxkit import namespace
-from vsdxkit.vsdxfile import VisioFile
+from vsdxkit.document import Document
 
 
 def test_a_cell_added_through_one_shape_object_is_read_through_another(vsdx_copy):
     """Fails if `Shape.cells` is a snapshot taken when the Shape was built."""
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
     writer = page.shapes.require_id("1")
     reader = page.shapes.require_id("1")
@@ -27,7 +27,7 @@ def test_a_cell_added_through_one_shape_object_is_read_through_another(vsdx_copy
 
 def test_a_cell_removed_from_the_xml_is_gone_from_the_shape(vsdx_copy):
     """Fails if a Shape keeps answering from a cell no longer in its XML."""
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     shape = vis.pages[0].shapes.require_id("1")
     pin_x = shape.cells["PinX"]
 
@@ -39,7 +39,7 @@ def test_a_cell_removed_from_the_xml_is_gone_from_the_shape(vsdx_copy):
 
 def test_a_property_relabelled_in_place_is_keyed_under_its_new_label(vsdx_copy):
     """Fails if `data_properties` is held and keyed on its rows' identity, which a relabel leaves alone."""
-    vis = VisioFile(vsdx_copy("test6_shape_properties.vsdx"))
+    vis = Document.open(vsdx_copy("test6_shape_properties.vsdx"))
     page = vis.pages[0]
     writer = page.shapes.require_id("1")
     reader = page.shapes.require_id("1")
@@ -54,7 +54,7 @@ def test_a_property_relabelled_in_place_is_keyed_under_its_new_label(vsdx_copy):
 
 def test_a_page_s_background_is_read_from_pages_xml(vsdx_copy):
     """Fails if `Page.background` answers from what it read first."""
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
     assert page.background is False
 
@@ -71,13 +71,13 @@ def test_a_master_added_after_a_shape_missed_it_is_resolved(vsdx_copy):
     """
     source_path = vsdx_copy("test5_master.vsdx")
     target_path = vsdx_copy("test1.vsdx")
-    source = VisioFile(source_path)
-    rehearsal = VisioFile(target_path)
+    source = Document.open(source_path)
+    rehearsal = Document.open(target_path)
     instance = next(shape for shape in source.pages[0].all_shapes if shape.xml.attrib.get("Master"))
     imported_id = instance.copy(rehearsal.pages[0]).master_page_ID
 
-    source = VisioFile(source_path)
-    target = VisioFile(target_path)
+    source = Document.open(source_path)
+    target = Document.open(target_path)
     instance = next(shape for shape in source.pages[0].all_shapes if shape.xml.attrib.get("Master"))
     waiting = target.pages[0].shapes.require_id("1")
     waiting.master_page_ID = imported_id
@@ -97,7 +97,7 @@ def test_a_geometry_section_added_to_a_resolved_master_is_merged(vsdx_copy):
     built, so the memo is keyed on the master element's children as well as
     on the catalog's revision.
     """
-    vis = VisioFile(vsdx_copy("test5_master.vsdx"))
+    vis = Document.open(vsdx_copy("test5_master.vsdx"))
     instance = vis.pages[0].shapes.require_id("2")
     master = instance.master_shape
     assert master is not None

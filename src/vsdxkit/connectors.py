@@ -198,7 +198,7 @@ class Connect:
         for glued in (begin, end):
             _check_point(glued)
 
-        # vsdxkit.media opens its donors as VisioFiles, which import this
+        # vsdxkit.media opens its donors as Documents, which import this
         # module, so importing it at module level would be a cycle
         from vsdxkit import media
 

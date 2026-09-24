@@ -7,10 +7,10 @@ import zipfile
 import pytest
 from helpers.broken_package import make_package
 
+from vsdxkit.document import Document
 from vsdxkit.errors import PackageLimitError
 from vsdxkit.package import PackageLimits, _preflight_eocd
 from vsdxkit.vsdxdiff import VisioFileDiff
-from vsdxkit.vsdxfile import VisioFile
 
 # Most packages here are synthetic archives built to exercise the zip reader:
 # declared entry counts that lie, directories that disagree with their bounds,
@@ -45,7 +45,7 @@ def test_eocd_preflight_rejects_declared_entry_overflow(tmp_path):
         handle.write(payload)
 
     with pytest.raises(PackageLimitError) as excinfo:
-        VisioFile(lying, limits=limits)
+        Document.open(lying, limits=limits)
     assert excinfo.value.reason == "member_count"
 
 
@@ -107,7 +107,7 @@ def test_zip64_low_count_with_real_directory_bounds_is_rejected(tmp_path):
         handle.write(payload)
 
     with pytest.raises(PackageLimitError) as excinfo:
-        VisioFile(lying, limits=PackageLimits(max_members=10))
+        Document.open(lying, limits=PackageLimits(max_members=10))
     assert excinfo.value.reason == "member_count"
 
 
@@ -123,7 +123,7 @@ def test_low_declared_count_with_swollen_directory_is_rejected(tmp_path):
     payload[eocd + 10 : eocd + 12] = struct.pack("<H", 3)  # declared count lied low
 
     with pytest.raises(PackageLimitError) as excinfo:
-        VisioFile(path, limits=PackageLimits(max_members=20))
+        Document.open(path, limits=PackageLimits(max_members=20))
     assert excinfo.value.reason == "member_count"
 
 
@@ -144,7 +144,7 @@ def test_zero_declared_count_with_nonempty_directory_is_rejected(tmp_path):
     payload[eocd + 10 : eocd + 12] = struct.pack("<H", 0)  # declared count zero
 
     with pytest.raises(PackageLimitError) as excinfo:
-        VisioFile(path, limits=PackageLimits(max_members=20))
+        Document.open(path, limits=PackageLimits(max_members=20))
     assert excinfo.value.reason == "member_count"
 
 
@@ -181,7 +181,7 @@ def test_eocd_preflight_reads_zip64_entry_count(tmp_path):
         handle.write(payload)
 
     with pytest.raises(PackageLimitError) as excinfo:
-        VisioFile(lying, limits=PackageLimits(max_members=20))
+        Document.open(lying, limits=PackageLimits(max_members=20))
     assert excinfo.value.reason == "member_count"
     assert "40000" in str(excinfo.value)
 

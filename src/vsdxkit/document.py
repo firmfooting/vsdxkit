@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import copy
+import logging
+import os
 import posixpath
 import re
 import sys
 import warnings
 import xml.etree.ElementTree as ET
+from pathlib import Path
 from typing import NamedTuple
 from xml.etree.ElementTree import Element
 
@@ -25,7 +28,7 @@ from vsdxkit import (
     xmlio,
 )
 from vsdxkit.errors import InvalidOperationError, MissingPartError
-from vsdxkit.logging_support import attach_debug_stream_handler, get_logger
+from vsdxkit.logging_support import get_logger
 from vsdxkit.masters import MasterCatalog
 from vsdxkit.package import PackageLimits, PackageStore, XmlPart, check_relationship_target
 from vsdxkit.pages import Page, PageCollection, PagePosition
@@ -98,60 +101,55 @@ def _remap_sheet_references(formula: str, id_map: dict[str, int]) -> str:
     return _SHEET_REFERENCE_RE.sub(replace, formula)
 
 
-class VisioFile(JinjaTemplatingMixin):
-    """Represents a vsdx file
+class Document(JinjaTemplatingMixin):
+    """A Visio drawing, ``.vsdx`` or ``.vsdm``, read whole into memory.
 
-    :param filename: filename the :class:`VisioFile` was created from
-    :type filename: str
-    :param pages: a list of pages in the VisioFile
-    :type pages: list of :class:`Page`
-    :param master_pages: a list of master pages in the VisioFile
-    :type master_pages: list of :class:`Page`
+    Open one with :meth:`open`. The package is read before ``open`` returns and
+    no file is held, so there is nothing to close; :meth:`save` is the only
+    write.
     """
 
-    def __init__(
-        self,
-        filename: str,
-        debug: bool = False,
-        limits: PackageLimits | None = None,
-        limits_path: str | None = None,
-    ) -> None:
-        """VisioFile constructor
-
-        :param filename: the vsdx file to load and create the VisioFile object from
-        :type filename: str
-        :param debug: enable/disable debugging
-        :type debug: bool, default to False
-        :param limits: package expansion caps; the defaults suit untrusted documents
-        :type limits: PackageLimits, optional
-        :param limits_path: JSON file with the same keys as the PackageLimits fields
-        :type limits_path: str, optional
-        """
-        self.debug = debug
+    def __init__(self, package: PackageStore, filename: str) -> None:
+        """Wrap a package already read into memory. Use :meth:`open` to open a file."""
         self.filename = filename
-        if debug:
-            attach_debug_stream_handler()
-        logger.debug("VisioFile(filename=%s)", filename)
-        file_type = self.filename.split(".")[-1]  # last text after dot
-        if not file_type.lower() == "vsdx" and not file_type.lower() == "vsdm":
-            raise TypeError(f"Invalid File Type:{file_type}")
-
-        if limits_path is not None:
-            limits = PackageLimits.from_json_file(limits_path)
-        self.limits = limits if limits is not None else PackageLimits()
-
         # pages_xml, pages_xml_rels, content_types_xml, app_xml, document_xml,
         # document_xml_rels and masters_xml are store-backed properties, defined
         # below -- there is nothing to initialise here, since the store itself
         # is the state.
-        self._pages: list[Page] = []  # populated by open_vsdx_file()
-        # populated by open_vsdx_file() below; declared here so an attribute
-        # assigned outside __init__ still has a home for pyrefly to check it
-        # against
-        self._package: PackageStore
-        # `filename` as the store was opened from it; see save_vsdx
-        self._opened_filename: str
-        self.open_vsdx_file()
+        self._package = package
+        # `filename` as the store was opened from it; see save
+        self._opened_filename = filename
+        self._pages: list[Page] = []
+        self.load_pages()
+        self._masters = MasterCatalog(self._package, self._master_page)
+        self._masters.load()
+        if logger.isEnabledFor(logging.DEBUG):
+            for master in self._masters.pages:
+                logger.debug("Master(%s, id=%s)\n%s", master.filename, master.page_id, xmlio.pretty_print_element(master.xml))
+
+    @classmethod
+    def open(
+        cls,
+        source: str | os.PathLike[str],
+        *,
+        limits: PackageLimits | None = None,
+        limits_path: str | os.PathLike[str] | None = None,
+    ) -> Document:
+        """Open the drawing at ``source``, a ``.vsdx`` or ``.vsdm`` file.
+
+        :param limits: package expansion caps; the defaults suit untrusted documents
+        :param limits_path: a JSON file with the same keys as the
+            :class:`~vsdxkit.package.PackageLimits` fields, read in place of ``limits``
+        :raises TypeError: if ``source`` does not name a ``.vsdx`` or ``.vsdm`` file
+        """
+        filename = os.fspath(source)
+        logger.debug("Document.open(%s)", filename)
+        suffix = filename.rsplit(".", 1)[-1]
+        if suffix.lower() not in ("vsdx", "vsdm"):
+            raise TypeError(f"Invalid File Type:{suffix}")
+        if limits_path is not None:
+            limits = PackageLimits.from_json_file(os.fspath(limits_path))
+        return cls(PackageStore.open(filename, limits=limits if limits is not None else PackageLimits()), filename)
 
     @staticmethod
     def _part_tree(tree: PartTree | None, description: str) -> PartTree:
@@ -165,7 +163,7 @@ class VisioFile(JinjaTemplatingMixin):
     @staticmethod
     def _part_root(tree: PartTree | None, description: str) -> ET.Element:
         """Root element of a required document part."""
-        return require_element(VisioFile._part_tree(tree, description).getroot(), f"{description} root")
+        return require_element(Document._part_tree(tree, description).getroot(), f"{description} root")
 
     @staticmethod
     def pretty_print_element(xml: Element | PartTree) -> str:
@@ -208,7 +206,7 @@ class VisioFile(JinjaTemplatingMixin):
         """
         if tree is None:
             raise InvalidOperationError(
-                f"VisioFile.{attribute} cannot remove {name} through this property: this "
+                f"Document.{attribute} cannot remove {name} through this property: this "
                 f"property does not also remove the relationship and content-type override "
                 f"that name a document part, so setting it to None would leave the package "
                 f"inconsistent"
@@ -282,20 +280,6 @@ class VisioFile(JinjaTemplatingMixin):
             return
         self._set_document_part_xml("masters_xml", MASTERS_PART, ET.ElementTree(root))
 
-    def open_vsdx_file(self) -> None:
-        self._package = PackageStore.open(self.filename, limits=self.limits)
-        self._opened_filename = self.filename
-
-        # load each page file into an ElementTree object
-        self.load_pages()
-        self._masters = MasterCatalog(self._package, self._master_page)
-        self._masters.load()
-        if self.debug:
-            for master in self._masters.pages:
-                logger.debug(
-                    "Master(%s, id=%s)\n%s", master.filename, master.page_id, VisioFile.pretty_print_element(master.xml)
-                )
-
     def _master_page(self, tree: PartTree, part_name: str, name: str, master_id: str, rel_id: str) -> Page:
         """The page a master is read as; the factory this document hands its catalog."""
         return Page(tree, part_name, name, master_id, rel_id, self)
@@ -325,7 +309,7 @@ class VisioFile(JinjaTemplatingMixin):
         """The master page with this ID, as :attr:`Shape.master_page_ID` names it, or None."""
         return self._masters.by_id(id)
 
-    def _masters_for(self, master_ids: list[str], source: VisioFile) -> dict[str, Page]:
+    def _masters_for(self, master_ids: list[str], source: Document) -> dict[str, Page]:
         """This document's master for each of `master_ids`, as `source` numbers its masters.
 
         From another document, a master this one lacks is imported, and listed
@@ -352,8 +336,8 @@ class VisioFile(JinjaTemplatingMixin):
         rels_name = relationships_part_name(PAGES_PART)
         pages_xml_rels = self._require_part_xml(rels_name, "pages.xml.rels")
         rels = require_element(pages_xml_rels.getroot(), "pages.xml.rels")
-        if self.debug:
-            logger.debug("Relationships(%s)\n%s", rels_name, VisioFile.pretty_print_element(rels))
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("Relationships(%s)\n%s", rels_name, Document.pretty_print_element(rels))
         relid_page_dict = {}
 
         for rel in rels:
@@ -364,8 +348,8 @@ class VisioFile(JinjaTemplatingMixin):
         # pages.xml contains Page name, width, height, mapped to Id
         pages_xml = self._require_part_xml(PAGES_PART, "pages.xml")
         pages = require_element(pages_xml.getroot(), "pages.xml")
-        if self.debug:
-            logger.debug("Pages(%s)\n%s", PAGES_PART, VisioFile.pretty_print_element(pages))
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("Pages(%s)\n%s", PAGES_PART, Document.pretty_print_element(pages))
 
         for page in pages:  # type: Element
             rel_id = require_attribute(
@@ -392,8 +376,8 @@ class VisioFile(JinjaTemplatingMixin):
                 new_page._rels_xml = self._package.read_xml(page_rels_path)
             self._pages.append(new_page)
 
-            if self.debug:
-                logger.debug("Page(%s)\n%s", new_page.filename, VisioFile.pretty_print_element(new_page.xml))
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Page(%s)\n%s", new_page.filename, Document.pretty_print_element(new_page.xml))
 
         # content_types_xml, app_xml, document_xml and document_xml_rels are
         # store-backed properties, but promoted here rather than left to the
@@ -426,7 +410,7 @@ class VisioFile(JinjaTemplatingMixin):
         return [p.name for p in self.pages]
 
     def get_page_by_name(self, name: str) -> Page | None:
-        """Get page from VisioFile with matching name
+        """Get page from Document with matching name
 
         :param name: The name of the required page
         :type name: str
@@ -439,7 +423,7 @@ class VisioFile(JinjaTemplatingMixin):
 
     @override
     def remove_page_by_index(self, index: int) -> None:
-        """Remove zero-based nth page from VisioFile object
+        """Remove zero-based nth page from Document object
 
         :param index: Zero-based index of the page
         :type index: int
@@ -475,7 +459,7 @@ class VisioFile(JinjaTemplatingMixin):
                 del self._pages[index]
 
     def remove_page_by_name(self, page_name: str) -> None:
-        """Remove first page from VisioFile object that matches the page_name
+        """Remove first page from Document object that matches the page_name
 
         :param page_name: page of page to delete
         :type page_name: str
@@ -847,12 +831,12 @@ class VisioFile(JinjaTemplatingMixin):
         vector.attrib["size"] = str(int(vector.attrib.get("size", 0)) + 2)
 
     def _add_page_to_app_xml(self, new_page_name: str) -> None:
-        self._titles_of_parts_insert(new_page_name, VisioFile.PAGES)
+        self._titles_of_parts_insert(new_page_name, Document.PAGES)
 
     def _remove_page_from_app_xml(self, page_name: str) -> None:
         if self.app_xml is not None:
             logger.debug("_remove_page_from_app_xml()")
-            self._titles_of_parts_remove(page_name, VisioFile.PAGES)
+            self._titles_of_parts_remove(page_name, Document.PAGES)
 
     def _rename_page_in_app_xml(self, old_page_name: str, new_page_name: str) -> None:
         """Keep app.xml's list of page names in step with a page that was renamed.
@@ -873,7 +857,7 @@ class VisioFile(JinjaTemplatingMixin):
         # one, so the titles to look for are today's with that swap undone. On a
         # one-page document nothing else identifies the section.
         expected = (self._page_titles() - {new_page_name}) | {old_page_name}
-        self._titles_of_parts_rename(old_page_name, new_page_name, VisioFile.PAGES, expected)
+        self._titles_of_parts_rename(old_page_name, new_page_name, Document.PAGES, expected)
 
     def _create_page(
         self,
@@ -913,7 +897,7 @@ class VisioFile(JinjaTemplatingMixin):
         if self.app_xml:
             self._add_page_to_app_xml(page_name)
 
-        # Update VisioFile object; the page carries its real ID and relationship
+        # Update Document object; the page carries its real ID and relationship
         # id immediately (issue #7: they were blank until a reload)
         page_id = new_page_element.attrib["ID"]
         # written into the store before the Page is constructed, so `Page.xml`'s
@@ -936,7 +920,7 @@ class VisioFile(JinjaTemplatingMixin):
         return new_page
 
     def add_page_at(self, index: int, name: str | None = None) -> Page:
-        """Add a new page at the specified index of the VisioFile
+        """Add a new page at the specified index of the Document
 
         :param index: zero-based index where the new page will be placed
         :type index: int
@@ -1007,7 +991,7 @@ class VisioFile(JinjaTemplatingMixin):
         return new_page
 
     def add_page(self, name: str | None = None) -> Page:
-        """Add a new page at the end of the VisioFile
+        """Add a new page at the end of the Document
 
         :param name: The name of the new page
         :type name: str, optional
@@ -1018,7 +1002,7 @@ class VisioFile(JinjaTemplatingMixin):
         return self.add_page_at(PagePosition.LAST, name)
 
     def copy_page(self, page: Page, *, index: int | PagePosition = PagePosition.AFTER, name: str | None = None) -> Page:
-        """Copy an existing page and insert in VisioFile
+        """Copy an existing page and insert in Document
 
         :param page: the page to copy
         :type page: Page
@@ -1068,7 +1052,7 @@ class VisioFile(JinjaTemplatingMixin):
     def get_sub_shapes(self, shape: Element, nth: int = 1) -> Element | None:
         """The `nth` ``<Shapes>`` element directly inside `shape`, or None. Deprecated; nothing here uses it."""
         warnings.warn(
-            "VisioFile.get_sub_shapes() is deprecated and will be removed in 1.0.0. "
+            "Document.get_sub_shapes() is deprecated and will be removed in 1.0.0. "
             "Use Shape.children for the shapes inside a group.",
             DeprecationWarning,
             stacklevel=2,
@@ -1147,7 +1131,7 @@ class VisioFile(JinjaTemplatingMixin):
         :param text: label text; the palette sentinel name is cleared when None
         :return: the new Shape
         """
-        # vsdxkit.media opens its donors as VisioFiles, so importing it at
+        # vsdxkit.media opens its donors as Documents, so importing it at
         # module level would be a cycle
         from vsdxkit import media
 
@@ -1393,23 +1377,22 @@ class VisioFile(JinjaTemplatingMixin):
         self._check_destination_kind(self.filename)
         return self.filename
 
-    def save_vsdx(self, new_filename: str | None = None) -> None:
-        """save the VisioFile object as new vsdx file
+    def save(self, target: str | os.PathLike[str] | None = None) -> Path:
+        """Write the document, and return the absolute path it was written to.
 
-        :param new_filename: path to save vsdx file. A `.vsdx` or `.vsdm`
-            extension must match the package's own kind; any other name gets the
-            matching extension appended. Omit it to save over the source file,
-            or over `filename` if that has been reassigned since the document
-            was opened; that name is checked the same way but never renamed.
-        :type new_filename: str
+        :param target: where to write. A ``.vsdx`` or ``.vsdm`` extension must
+            match the package's own kind; any other name gets the matching
+            extension appended. Omit it to save over the source file, or over
+            ``filename`` if that has been reassigned since the document was
+            opened; that name is checked the same way but never renamed.
         :raises InvalidOperationError: if the extension contradicts the package kind
-
         """
         if not self._package.names():
             raise InvalidOperationError("cannot save an empty package")
 
+        new_filename = None if target is None else os.fspath(target)
         # resolve the destination first, so a refused extension writes nothing
-        target = self._in_place_filename() if new_filename is None else self._destination_filename(new_filename)
+        destination = self._in_place_filename() if new_filename is None else self._destination_filename(new_filename)
 
         # every change is already in the store -- the trees this document edits
         # are the store's own -- so saving is writing it, once, member by member.
@@ -1421,4 +1404,4 @@ class VisioFile(JinjaTemplatingMixin):
         # new one is where the caller means the save to go. It goes there as an
         # explicit target, which leaves the store's source where it was.
         redirected = new_filename is None and self.filename != self._opened_filename
-        self._package.save(target if new_filename is not None or redirected else None)
+        return self._package.save(destination if new_filename is not None or redirected else None)

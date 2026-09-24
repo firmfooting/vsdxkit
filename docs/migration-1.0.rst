@@ -4,6 +4,44 @@ Migrating to 1.0
 1.0 removes the names and behaviour listed here. Each entry gives the 0.x call
 and what replaces it. The guide grows with each 1.0 change until the release.
 
+``Document`` replaces ``VisioFile``
+-----------------------------------
+
+The class is :class:`vsdxkit.document.Document`, in the module
+``vsdxkit.document``. ``vsdxkit.vsdxfile`` is gone.
+
+``from vsdxkit.vsdxfile import VisioFile``
+   ``from vsdxkit.document import Document``
+
+``VisioFile(path)``, ``VisioFile(path, limits=..., limits_path=...)``
+   ``Document.open(path)``, with the same keyword arguments. ``path`` may be
+   a ``str`` or a :class:`pathlib.Path`.
+
+``VisioFile(path, debug=True)``
+   Configure logging instead. The library logs under ``vsdxkit`` and never
+   configures a handler itself:
+
+   .. code-block:: python
+
+      import logging
+
+      logging.basicConfig()
+      logging.getLogger("vsdxkit").setLevel(logging.DEBUG)
+
+``VisioFile.save_vsdx(new_filename=None)``
+   ``Document.save(target=None)``, which returns the absolute
+   :class:`pathlib.Path` it wrote. ``target`` may be a ``str`` or a ``Path``.
+
+``VisioFile.jinja_render_vsdx(context)``
+   ``Document.render(context)``.
+
+``VisioFile.open_vsdx_file()``
+   ``Document.open(path)`` opens a fresh document from the file.
+
+``VisioFile.debug``, ``VisioFile.limits``
+   Gone. The limits a document was opened with are applied at open and not
+   kept.
+
 A document has no close state
 -----------------------------
 
@@ -24,9 +62,9 @@ as you hold it.
           vis.save_vsdx()
 
       # 1.0
-      vis = VisioFile("diagram.vsdx")
+      vis = Document.open("diagram.vsdx")
       vis.pages[0].name = "Current state"
-      vis.save_vsdx()
+      vis.save()
 
 ``VisioFile.close_vsdx()``
    Delete the call. Nothing needs releasing.

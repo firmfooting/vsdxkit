@@ -12,9 +12,9 @@ document's pages in order, with lookup by name.
 
 .. code-block:: python
 
-   from vsdxkit.vsdxfile import VisioFile
+   from vsdxkit.document import Document
 
-   vis = VisioFile("diagram.vsdx")
+   vis = Document.open("diagram.vsdx")
    first_page = vis.pages[0]
    current = vis.pages.require_name("Current state")
    draft = vis.pages.by_name("Draft")  # None if there is no such page
@@ -54,7 +54,7 @@ is live: it sees shapes added or removed after it was taken.
 
 .. code-block:: python
 
-   vis = VisioFile("diagram.vsdx")
+   vis = Document.open("diagram.vsdx")
    page = vis.pages[0]
 
    start = page.shapes.require_text("Start")

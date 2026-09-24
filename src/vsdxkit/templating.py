@@ -1,7 +1,7 @@
 """Jinja templating for vsdx documents.
 
-Static methods defined here are bound onto VisioFile at import time so the
-public API (vis.jinja_render_vsdx(context)) is unchanged.
+`Document.render(context)` comes from the mixin here. Phase 6 replaces the
+mixin with a module function (#113).
 """
 
 from __future__ import annotations
@@ -38,22 +38,21 @@ def _template(source: str):
 
 
 class JinjaTemplatingMixin:
-    # attributes provided by the VisioFile host class
+    # attributes provided by the Document host class
     @property
     def pages(self) -> PageCollection: ...
 
     def increment_sub_shape_ids(self, shape: Shape, page: Page, id_map: dict[str, int] | None = None) -> dict[str, int]: ...
     def remove_page_by_index(self, index: int) -> None: ...
 
-    def jinja_render_vsdx(self, context: dict[str, object]) -> None:
-        """Transform a template VisioFile object using the Jinja language
-        The method updates the VisioFile object loaded from the template file, so does not return any value
-        Note: vsdx specific extensions are available such as `{% for item in list %}` statements with no `{% endfor %}`
+    def render(self, context: dict[str, object]) -> None:
+        """Render the document as a Jinja template, in place.
 
-        :param context: A dictionary containing values that can be accessed by the Jinja processor
-        :type context: dict
+        Shape text, and page names, are Jinja templates. vsdx-specific
+        extensions are available, such as `{% for item in list %}` statements
+        with no `{% endfor %}`.
 
-        :return: None
+        :param context: the values the templates can refer to
         """
         # parse each shape in each page as Jinja2 template with context
         pages_to_remove: list[Page] = []

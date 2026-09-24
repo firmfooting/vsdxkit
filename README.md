@@ -9,7 +9,7 @@ Create, edit and analyse Microsoft Visio `.vsdx` files with Python. Visio is not
 
 > **0.x API notice.** The 0.x line carries the inherited API and is changing under it: 0.8 alone made seven breaking changes, each listed in the [changelog](CHANGELOG.md). 1.0 renames `VisioFile` to `Document` and `Container` to `SwimlaneDiagram`, splits `Connect` into an internal `ConnectionRecord` and a public `Connector`, and drops the context manager: opening closes the archive before it returns, and `save()` is the only write. The [1.0 design](https://github.com/firmfooting/vsdxkit/blob/main/.hermes/plans/2026-09-12_simplification-usability-refactor.md) lists every change. Pin `vsdxkit<1` to stay on the 0.x names.
 
-The distribution and the import package are both named **`vsdxkit`**. Import each name from the module that defines it, for example `from vsdxkit.vsdxfile import VisioFile`; the package root re-exports nothing.
+The distribution and the import package are both named **`vsdxkit`**. Import each name from the module that defines it, for example `from vsdxkit.document import Document`; the package root re-exports nothing.
 
 vsdxkit adds shape creation, Visio-faithful connectors, connector re-anchoring, cross-functional flowchart swimlanes, stricter package handling, current Python tooling and typed public APIs. It began as a fork of [`dave-howard/vsdx`](https://github.com/dave-howard/vsdx) and is now developed as its own project; see [Provenance and licence](#provenance-and-licence).
 
@@ -60,24 +60,24 @@ or later.
 Opening reads the whole package into memory and holds no file, so there is nothing to close. Saving is explicit.
 
 ```python
-from vsdxkit.vsdxfile import VisioFile
+from vsdxkit.document import Document
 
-vis = VisioFile("diagram.vsdx")
+vis = Document.open("diagram.vsdx")
 page = vis.pages[0]
 shape = page.shapes.by_text("Shape to remove")
 
 if shape is not None:
     shape.text = "Renamed shape"
 
-vis.save_vsdx("edited.vsdx")
+vis.save("edited.vsdx")
 ```
 
-Call `save_vsdx()` without a filename to replace the source file in place:
+Call `save()` without a filename to replace the source file in place:
 
 ```python
-vis = VisioFile("diagram.vsdx")
+vis = Document.open("diagram.vsdx")
 vis.pages[0].name = "Current state"
-vis.save_vsdx()
+vis.save()
 ```
 
 A save writes every part you did not change exactly as it arrived. A part you did change is written as equivalent XML, but not in Visio's own spelling: the XML declaration, attribute quotes, empty-element form and namespace declarations can differ, and a CRLF inside text becomes LF. Visio and LibreOffice open both.
@@ -87,9 +87,9 @@ A save writes every part you did not change exactly as it arrived. A part you di
 Shape coordinates are in Visio page units, normally inches. `x` and `y` identify the shape centre.
 
 ```python
-from vsdxkit.vsdxfile import VisioFile
+from vsdxkit.document import Document
 
-vis = VisioFile("diagram.vsdx")
+vis = Document.open("diagram.vsdx")
 page = vis.pages[0]
 
 start = vis.create_shape(
@@ -104,7 +104,7 @@ decision = vis.create_shape(
 
 page.connect_shapes(start, work)
 page.connect_shapes(work, decision, route="rightangle")
-vis.save_vsdx("flow.vsdx")
+vis.save("flow.vsdx")
 ```
 
 Bundled palette names are:
@@ -131,7 +131,7 @@ Connector `route` combines glue and routing behaviour:
 Pass only the end that should move. A `None` endpoint keeps the current shape.
 
 ```python
-vis = VisioFile("flow.vsdx")
+vis = Document.open("flow.vsdx")
 page = vis.pages[0]
 store = vis.create_shape(
     page, "PALETTE_DATABASE", 10.0, 2.0, text="Store"
@@ -141,7 +141,7 @@ store = vis.create_shape(
 connector = page.shapes.require_id(page.connects[0].from_id)
 page.reanchor_connector(connector, to_shape=store)
 
-vis.save_vsdx("reanchored.vsdx")
+vis.save("reanchored.vsdx")
 ```
 
 Deleting a shape through `page.delete_shape(shape)` also removes incident connectors and their `Connect` records.
@@ -151,7 +151,7 @@ Deleting a shape through `page.delete_shape(shape)` also removes incident connec
 Swimlane operations require an existing Visio cross-functional flowchart (CFF) page. `add_swimlane()` clones the current top lane and updates the CFF container geometry.
 
 ```python
-vis = VisioFile("cross-functional-flow.vsdx")
+vis = Document.open("cross-functional-flow.vsdx")
 page = vis.pages[0]
 container = page.get_container()
 
@@ -165,7 +165,7 @@ check = vis.create_shape(
 page.add_shape_to_lane(check, review_lane)
 
 assert container.lane_of(check) is not None
-vis.save_vsdx("with-review-lane.vsdx")
+vis.save("with-review-lane.vsdx")
 ```
 
 Visio CFF membership is geometric. Shapes are associated with the lane whose vertical band contains their centre; there is no separate membership field to write.
@@ -175,11 +175,11 @@ Visio CFF membership is geometric. Shapes are associated with the lane whose ver
 Jinja expressions can be stored in shape text and rendered into a new file:
 
 ```python
-vis = VisioFile("template.vsdx")
-vis.jinja_render_vsdx(
+vis = Document.open("template.vsdx")
+vis.render(
     context={"project": "Ward refurbishment", "owner": "Facilities"}
 )
-vis.save_vsdx("rendered.vsdx")
+vis.save("rendered.vsdx")
 ```
 
 The package also supports its existing group-shape loop and `showif` conventions. See `docs/templating.rst` and the `tests/test_jinja*.py` cases for the exact template structure.
@@ -187,10 +187,10 @@ The package also supports its existing group-shape loop and `showif` conventions
 ## Limits
 
 - The library starts from an existing `.vsdx`; it does not create a complete Visio document package from nothing.
-- `.vsdm` files can be read and saved, but only back to a `.vsdm` destination. The package kind is decided by the content type of `visio/document.xml`, not by the filename, so `save_vsdx()` refuses a `.vsdx` destination for a macro-enabled package and a `.vsdm` destination for one that is not — either would produce a file whose extension and `[Content_Types].xml` disagree, which Visio reports as corrupt. Stripping macros to convert a `.vsdm` into a `.vsdx` is not supported. A destination with no extension, or with an unrelated one, gets the matching Visio extension appended.
+- `.vsdm` files can be read and saved, but only back to a `.vsdm` destination. The package kind is decided by the content type of `visio/document.xml`, not by the filename, so `save()` refuses a `.vsdx` destination for a macro-enabled package and a `.vsdm` destination for one that is not — either would produce a file whose extension and `[Content_Types].xml` disagree, which Visio reports as corrupt. Stripping macros to convert a `.vsdm` into a `.vsdx` is not supported. A destination with no extension, or with an unrelated one, gets the matching Visio extension appended.
 - Swimlane creation works on existing Visio CFF diagrams. It does not convert an ordinary page into a CFF diagram.
 - Visio may recalculate layout when a generated file opens. The library writes the glue and route cells but does not reproduce Visio's entire layout engine.
-- Loading enforces package expansion limits before any archive member is read: at most 512 members, 64 MiB per member, 256 MiB total uncompressed, and a 100:1 compression ratio, plus rejection of duplicate and path-unsafe member names. A hostile or accidental archive is refused with `vsdxkit.errors.PackageLimitError` instead of exhausting process memory. The defaults suit documents from unknown sources; trusted callers can relax the caps with `VisioFile(filename, limits=PackageLimits(...))` or `limits_path="vsdxkit.limits.json"` (same keys, JSON object).
+- Loading enforces package expansion limits before any archive member is read: at most 512 members, 64 MiB per member, 256 MiB total uncompressed, and a 100:1 compression ratio, plus rejection of duplicate and path-unsafe member names. A hostile or accidental archive is refused with `vsdxkit.errors.PackageLimitError` instead of exhausting process memory. The defaults suit documents from unknown sources; trusted callers can relax the caps with `Document.open(filename, limits=PackageLimits(...))` or `limits_path="vsdxkit.limits.json"` (same keys, JSON object).
 
 ## Development and verification
 

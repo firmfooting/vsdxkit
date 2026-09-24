@@ -130,7 +130,7 @@ def _text_runs_of(text_element: Element | None) -> tuple[list[Element], str, lis
     that writing the text back puts it there again.
 
     Module level rather than a Shape method because it is also needed where
-    there is no Shape to ask: `VisioFile.apply_text_context` is handed bare
+    there is no Shape to ask: `Document.apply_text_context` is handed bare
     elements.
 
     A run between two pieces of content is folded into the content string and
@@ -605,7 +605,7 @@ class Shape:
         Read-only. An id is not the shape's alone to change: the element
         attribute, the page's ``Connect`` records and the ``Sheet.N!``
         references in other shapes' formulas all name it, and only
-        :meth:`VisioFile.renumber_shape_ids` moves the three together.
+        :meth:`Document.renumber_shape_ids` moves the three together.
         """
         return self.xml.attrib.get("ID")
 
@@ -616,7 +616,7 @@ class Shape:
         A sub-shape of a group usually carries no ``Master`` of its own and
         instances whatever its group does, so it falls back to the parent's.
         Note this is the master page's id, not its index in
-        :attr:`VisioFile.master_pages`.
+        :attr:`Document.master_pages`.
         """
         own = self.xml.attrib.get("Master")
         if own is None and isinstance(self.parent, Shape):

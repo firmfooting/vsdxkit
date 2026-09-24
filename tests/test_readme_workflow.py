@@ -18,7 +18,7 @@ import zipfile
 
 import pytest
 
-from vsdxkit.vsdxfile import VisioFile
+from vsdxkit.document import Document
 
 README = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "README.md")
 
@@ -54,10 +54,10 @@ def readme_workspace(tmp_path, basedir):
     # instead would fail on a variable the README never mentions, which says
     # nothing about whether the example works.
     template = str(tmp_path / "template.vsdx")
-    document = VisioFile(template)
+    document = Document.open(template)
     shape = document.pages[0].child_shapes[0]
     shape.text = "{{ project }} for {{ owner }}"
-    document.save_vsdx(template)
+    document.save(template)
     return tmp_path
 
 
@@ -115,12 +115,12 @@ def test_every_readme_example_does_what_it_says(readme_workspace, monkeypatch):
 
 def _texts(path) -> set[str]:
     """Every shape's text, exactly, so a longer string does not match a shorter."""
-    document = VisioFile(str(path))
+    document = Document.open(str(path))
     return {shape.text.strip() for page in document.pages for shape in page.all_shapes}
 
 
 def _page_names(path) -> list[str]:
-    document = VisioFile(str(path))
+    document = Document.open(str(path))
     return [page.name for page in document.pages]
 
 
@@ -131,13 +131,13 @@ def _connector_count(path) -> int:
     reports two for one connector and invites an off-by-one in the test rather
     than in the code.
     """
-    document = VisioFile(str(path))
+    document = Document.open(str(path))
     page = document.pages[0]
     return len({record.from_id for record in page.connects})
 
 
 def _is_glued_to(path, text: str) -> bool:
-    document = VisioFile(str(path))
+    document = Document.open(str(path))
     page = document.pages[0]
     target = next((s for s in page.shapes if text in s.text), None)
     if target is None:

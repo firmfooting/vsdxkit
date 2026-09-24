@@ -15,8 +15,8 @@ import time
 from collections.abc import Callable
 
 from vsdxkit import namespace
+from vsdxkit.document import Document
 from vsdxkit.pages import Page
-from vsdxkit.vsdxfile import VisioFile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 S05 = os.path.join(HERE, "..", "tests", "fixtures", "com_reference", "s05_swimlanes_cfflow.vsdx")
@@ -91,7 +91,7 @@ def main() -> None:
     workdir = tempfile.mkdtemp()
     try:
         path = shutil.copy(S05, workdir)
-        vis = VisioFile(path)
+        vis = Document.open(path)
         _report("s05 page 1", vis.pages[0])
         _grow(vis.pages[0], 1000)
         _report("s05 page 1 grown", vis.pages[0])

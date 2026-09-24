@@ -22,7 +22,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 
 from vsdxkit import namespace
-from vsdxkit.vsdxfile import VisioFile
+from vsdxkit.document import Document
 
 # a three-level group: 7 contains 3 and 4, which each contain a pair of leaves
 NESTED = "test10_nested_shapes.vsdx"
@@ -58,12 +58,12 @@ def _structure(shape: ET.Element) -> tuple:
 def _copy_nested_group(vsdx_copy, tmp_path, out_name: str) -> str:
     """Copy the three-level group onto its own page and save."""
     out_file = os.path.join(str(tmp_path), out_name)
-    vis = VisioFile(vsdx_copy(NESTED))
+    vis = Document.open(vsdx_copy(NESTED))
     page = vis.pages[0]
     group = page.shapes.by_id(GROUP_ID)
     assert group is not None, f"fixture has no shape {GROUP_ID}"
     group.copy()
-    vis.save_vsdx(out_file)
+    vis.save(out_file)
     return out_file
 
 
@@ -107,7 +107,7 @@ def test_copied_subtree_matches_the_original_and_shares_no_ids_with_it(vsdx_copy
 def test_formulas_referencing_a_grandchild_follow_it_to_its_new_id(vsdx_copy, tmp_path):
     """`update_ids` can only remap an id that the walk reallocated."""
     out_file = os.path.join(str(tmp_path), "grandchild_formula.vsdx")
-    vis = VisioFile(vsdx_copy(NESTED))
+    vis = Document.open(vsdx_copy(NESTED))
     page = vis.pages[0]
     group = page.shapes.by_id(GROUP_ID)
     assert group is not None
@@ -118,7 +118,7 @@ def test_formulas_referencing_a_grandchild_follow_it_to_its_new_id(vsdx_copy, tm
 
     original_ids = set(_shape_ids(page.xml.getroot()))
     group.copy()
-    vis.save_vsdx(out_file)
+    vis.save(out_file)
 
     root = _page_root(out_file)
     # the fixture's own Width formulas all carry a `*factor`, so this picks out

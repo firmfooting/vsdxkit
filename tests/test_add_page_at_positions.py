@@ -4,8 +4,8 @@ import os
 
 import pytest
 
+from vsdxkit.document import Document
 from vsdxkit.pages import PagePosition
-from vsdxkit.vsdxfile import VisioFile
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
@@ -20,16 +20,16 @@ def test_add_page_at_rejects_relative_position_without_reference_page(vsdx_copy,
     path = os.path.join(FIXTURES, "test1.vsdx")
     copy_path = vsdx_copy("test1.vsdx")
     output = os.path.join(str(tmp_path), "out.vsdx")
-    reference = VisioFile(path)
+    reference = Document.open(path)
     names_before = [p.name for p in reference.pages]
     reference_rels = [rel for rel in _pages_rels_root(reference) if "page" in rel.attrib.get("Target", "")]
-    vis = VisioFile(copy_path)
+    vis = Document.open(copy_path)
     with pytest.raises(ValueError, match="requires a reference page"):
         vis.add_page_at(position, "new")
     assert [p.name for p in vis.pages] == names_before  # nothing appended
-    vis.save_vsdx(output)  # a rejected call must leave nothing to persist
+    vis.save(output)  # a rejected call must leave nothing to persist
 
-    reloaded = VisioFile(output)
+    reloaded = Document.open(output)
     assert [p.name for p in reloaded.pages] == names_before
     page_rels = [rel for rel in _pages_rels_root(reloaded) if "page" in rel.attrib.get("Target", "")]
     assert len(page_rels) == len(reference_rels)  # no dangling relationship
@@ -37,7 +37,7 @@ def test_add_page_at_rejects_relative_position_without_reference_page(vsdx_copy,
 
 def test_add_page_at_integer_and_relative_positions_place_correctly(vsdx_copy):
     path = vsdx_copy("test1.vsdx")
-    vis = VisioFile(path)
+    vis = Document.open(path)
     first = vis.add_page_at(PagePosition.FIRST, "first-added")
     assert vis.pages.index(first) == 0
 

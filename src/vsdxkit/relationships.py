@@ -8,7 +8,7 @@ implementations of "declare a content type" disagreed on whether declaring the
 same part twice was safe - one appended a duplicate, which is invalid OPC.
 
 Everything here takes an element and returns a value or mutates that element.
-Nothing reaches for a `VisioFile`, so these can be tested against a tree built
+Nothing reaches for a `Document`, so these can be tested against a tree built
 in three lines.
 """
 

@@ -7,8 +7,8 @@ match anywhere in the text, a property value compared as text.
 
 import pytest
 
+from vsdxkit.document import Document
 from vsdxkit.shapes import Shape
-from vsdxkit.vsdxfile import VisioFile
 
 # test2.vsdx: group 9 holds 1 ("Shape Text"), 7 ("Sub-shape 1") and 8 ("Sub-shape 2")
 PAGE_FINDERS = [
@@ -32,7 +32,7 @@ def _ids(found):
 @pytest.mark.parametrize(("finder", "args", "expected"), PAGE_FINDERS)
 def test_a_page_finder_warns_and_answers_as_it_did(vsdx_copy, finder, args, expected):
     """Fails if a Page finder stops warning, or starts matching whole text or refusing a second match."""
-    vis = VisioFile(vsdx_copy("test2.vsdx"))
+    vis = Document.open(vsdx_copy("test2.vsdx"))
     page = vis.pages[0]
     with pytest.warns(
         DeprecationWarning, match=rf"Page\.{finder}\(\) is deprecated .* Use (a comprehension over )?page\.shapes"
@@ -53,7 +53,7 @@ def test_a_page_finder_warns_and_answers_as_it_did(vsdx_copy, finder, args, expe
 )
 def test_a_shape_finder_searches_inside_the_shape(vsdx_copy, finder, args, expected):
     """Fails if a Shape finder warns about the wrong owner or searches beyond the shape's descendants."""
-    vis = VisioFile(vsdx_copy("test2.vsdx"))
+    vis = Document.open(vsdx_copy("test2.vsdx"))
     group = vis.pages[0].shapes.require_id("9")
     with pytest.warns(
         DeprecationWarning, match=rf"Shape\.{finder}\(\) is deprecated .* Use (a comprehension over )?shape\.descendants"
@@ -64,7 +64,7 @@ def test_a_shape_finder_searches_inside_the_shape(vsdx_copy, finder, args, expec
 
 def test_the_property_finders_forward_to_the_collection(vsdx_copy):
     """Fails if a property finder stops comparing the value as text, or drops the first-match form."""
-    vis = VisioFile(vsdx_copy("test6_shape_properties.vsdx"))
+    vis = Document.open(vsdx_copy("test6_shape_properties.vsdx"))
     page = vis.pages[0]
     with pytest.warns(DeprecationWarning):
         assert _ids(page.find_shape_by_property_label("my_property_label")) == "1"
@@ -80,7 +80,7 @@ def test_the_property_finders_forward_to_the_collection(vsdx_copy):
 
 def test_the_master_finders_match_both_ids(vsdx_copy):
     """Fails if a master finder matches on the master page alone."""
-    vis = VisioFile(vsdx_copy("test5_master.vsdx"))
+    vis = Document.open(vsdx_copy("test5_master.vsdx"))
     page = vis.pages[0]
     sub_shape = page.shapes.require_id("2")
     with pytest.warns(DeprecationWarning, match=r"Page\.find_shapes_with_same_master\(\)"):
@@ -91,10 +91,10 @@ def test_the_master_finders_match_both_ids(vsdx_copy):
 
 
 def test_get_sub_shapes_warns(vsdx_copy):
-    """Fails if `VisioFile.get_sub_shapes` goes quietly, or before 1.0.0."""
-    vis = VisioFile(vsdx_copy("test2.vsdx"))
+    """Fails if `Document.get_sub_shapes` goes quietly, or before 1.0.0."""
+    vis = Document.open(vsdx_copy("test2.vsdx"))
     group = vis.pages[0].shapes.require_id("9")
-    with pytest.warns(DeprecationWarning, match=r"VisioFile\.get_sub_shapes\(\)"):
+    with pytest.warns(DeprecationWarning, match=r"Document\.get_sub_shapes\(\)"):
         shapes = vis.get_sub_shapes(group.xml)
     assert shapes is not None
     assert [child.attrib["ID"] for child in shapes] == ["1", "7", "8"]
@@ -102,7 +102,7 @@ def test_get_sub_shapes_warns(vsdx_copy):
 
 def test_the_warning_points_at_the_caller(vsdx_copy):
     """Fails if the warning names a line inside vsdxkit rather than the code that called the finder."""
-    vis = VisioFile(vsdx_copy("test2.vsdx"))
+    vis = Document.open(vsdx_copy("test2.vsdx"))
     page = vis.pages[0]
     with pytest.warns(DeprecationWarning) as caught:
         page.find_shape_by_id("7")
@@ -119,7 +119,7 @@ def test_a_first_match_property_finder_stops_at_the_first_match(vsdx_copy, monke
         read.append(shape.ID)
         return data_properties.fget(shape)
 
-    vis = VisioFile(vsdx_copy("test6_shape_properties.vsdx"))
+    vis = Document.open(vsdx_copy("test6_shape_properties.vsdx"))
     page = vis.pages[0]
     order = [shape.ID for shape in page.shapes]
     monkeypatch.setattr(Shape, "data_properties", property(recording))

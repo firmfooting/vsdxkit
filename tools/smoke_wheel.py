@@ -71,7 +71,7 @@ def main() -> int:
 
     import vsdxkit
     from vsdxkit import media
-    from vsdxkit.vsdxfile import VisioFile
+    from vsdxkit.document import Document
 
     ok(f"vsdxkit {vsdxkit.__version__} imports cleanly")
 
@@ -93,7 +93,7 @@ def main() -> int:
             handle.write(payload)
 
         try:
-            vis = VisioFile(document)
+            vis = Document.open(document)
             page = vis.pages[0]
             shape = vis.create_shape(page, "PALETTE_DECISION", 4.0, 6.0, w=1.5, h=1.0, text="smoke")
             if shape is None:
@@ -106,9 +106,9 @@ def main() -> int:
                 fail("create_connect returned None")
             else:
                 ok("create_connect between created shapes")
-            vis.save_vsdx(document)
+            vis.save(document)
 
-            reloaded = VisioFile(document)
+            reloaded = Document.open(document)
             found = reloaded.pages[0].shapes.by_text("smoke")
             if found is None:
                 fail("saved document lost the created shape")
