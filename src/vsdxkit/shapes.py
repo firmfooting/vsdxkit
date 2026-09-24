@@ -1791,6 +1791,7 @@ class Shape:
         many connectors there are. Only a record from ``BeginX`` or ``EndX``
         glues an end.
         """
+        self._require_attached("reading the connectors glued to a shape")
         ends: dict[str, dict[str, str]] = {}
         for record in self.page.connects:
             if record.from_rel in ("BeginX", "EndX"):
@@ -1799,12 +1800,30 @@ class Shape:
         if not glued:
             return []
         shapes = list(self.page.shapes)
-        by_id = {shape.ID: shape for shape in shapes}
-        return [
-            (shape, (by_id.get(ends[shape.ID].get("BeginX", "")), by_id.get(ends[shape.ID].get("EndX", ""))))
-            for shape in shapes
-            if isinstance(shape, Connector) and shape.ID in glued
-        ]
+        by_id: dict[str | None, list[Shape]] = {}
+        for shape in shapes:
+            by_id.setdefault(shape.ID, []).append(shape)
+
+        def resolve(shape_id: str | None) -> Shape | None:
+            found = by_id.get(shape_id, [])
+            if len(found) > 1:
+                # as ShapeCollection.by_id reports it: a page with two shapes
+                # of one ID is invalid, and neither is the one a record names
+                raise PackageError(
+                    f"page {self.page.name!r} holds {len(found)} shapes with ID {shape_id}; "
+                    "shape IDs are unique on a page, so the page is not valid"
+                )
+            return found[0] if found else None
+
+        resolve(self.ID)
+        incidence: list[tuple[Connector, tuple[Shape | None, Shape | None]]] = []
+        for connector_id in glued:
+            connector = resolve(connector_id)
+            if isinstance(connector, Connector):
+                named = ends[connector_id]
+                incidence.append((connector, (resolve(named.get("BeginX")), resolve(named.get("EndX")))))
+        order = {shape: position for position, shape in enumerate(shapes)}
+        return sorted(incidence, key=lambda item: order[item[0]])
 
 
 class Connector(Shape):
@@ -1821,12 +1840,14 @@ class Connector(Shape):
     @property
     def source(self) -> Shape | None:
         """The shape the connector's begin end is glued to, or None when that end is floating."""
+        self._require_attached("Connector.source")
         begin, _ = _glued_ends(self)
         return None if begin is None else begin[0]
 
     @property
     def target(self) -> Shape | None:
         """The shape the connector's end is glued to, or None when that end is floating."""
+        self._require_attached("Connector.target")
         _, end = _glued_ends(self)
         return None if end is None else end[0]
 

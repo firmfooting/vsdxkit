@@ -1,12 +1,13 @@
 """Connector: the 1-D shape, its ends, and the graph queries over them (#109)."""
 
+import copy
 import os
 import xml.etree.ElementTree as ET
 
 import pytest
 
 from vsdxkit.document import Document
-from vsdxkit.errors import InvalidOperationError
+from vsdxkit.errors import InvalidOperationError, PackageError
 from vsdxkit.glue import ConnectorOptions, Glue, Routing
 from vsdxkit.pages import Page
 from vsdxkit.shape_kind import ShapeKind
@@ -167,6 +168,50 @@ def test_a_master_edited_into_a_line_makes_its_instances_connectors(vsdx_copy):
     master.xml.remove(master.xml.find(f'{NS}Cell[@N="BeginX"]'))
 
     assert page.connectors == ()
+
+
+def test_a_master_whose_shape_is_replaced_is_read_anew(vsdx_copy):
+    """Fails if the master shape an instance inherits from is remembered past its replacement."""
+    page = _page(vsdx_copy, WIRED)
+    connectors = page.connectors
+    master = connectors[0].master_shape
+    for connector in connectors:
+        connector.xml.remove(connector.xml.find(f'{NS}Cell[@N="BeginX"]'))
+    assert page.connectors == connectors
+    holder = master.page.xml.getroot().find(f"{NS}Shapes")
+    replacement = copy.deepcopy(master.xml)
+    replacement.remove(replacement.find(f'{NS}Cell[@N="BeginX"]'))
+    holder.remove(master.xml)
+    holder.insert(0, replacement)
+
+    assert page.connectors == ()
+
+
+def test_a_duplicate_id_makes_the_graph_refuse(vsdx_copy):
+    """Fails if the endpoint index picks one of two shapes sharing an ID rather than reporting the invalid page."""
+    page = _page(vsdx_copy)
+    a, b = _ends(page)
+    page.connect(a, b)
+    twin = copy.deepcopy(b.xml)
+    page.xml.getroot().find(f"{NS}Shapes").append(twin)
+
+    with pytest.raises(PackageError, match=f"ID {b.ID}"):
+        a.connected_shapes  # noqa: B018
+
+
+@pytest.mark.parametrize("query", ["connectors", "connected_shapes", "source", "target"])
+def test_a_detached_shape_refuses_graph_queries(vsdx_copy, query):
+    """Fails if a shape on a deleted page still reports that page's connectors as live."""
+    vis = Document.open(vsdx_copy(BASE))
+    page = vis.add_page("Doomed")
+    start = page.create_shape(ShapeKind.PROCESS, x=1.0, y=1.0, text="Start")
+    finish = page.create_shape(ShapeKind.PROCESS, x=4.0, y=1.0, text="Finish")
+    connector = page.connect(start, finish)
+    vis.pages.delete(page)
+
+    subject = connector if query in ("source", "target") else start
+    with pytest.raises(InvalidOperationError):
+        getattr(subject, query)
 
 
 def test_retarget_moves_the_named_end_and_keeps_the_other(vsdx_copy):

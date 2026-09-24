@@ -81,10 +81,10 @@ class MasterCatalog:
         # source's ID: an import renamed to avoid a collision no longer
         # matches by name, and would be imported again by every later copy
         self._imported: weakref.WeakKeyDictionary[MasterCatalog, dict[str, str]] = weakref.WeakKeyDictionary()
-        # every wrapper a walk builds asks whether its master shape is 1-D, so
-        # each master shape is found once per revision rather than once per wrapper
-        self._shape_elements: dict[tuple[str, str | None], Element | None] = {}
-        self._shape_elements_revision = self._revision
+        # every wrapper a walk builds looks its master up by id; which page has
+        # an id changes only when the revision does
+        self._by_id: dict[str, Page] = {}
+        self._by_id_revision = -1
 
     @property
     def pages(self) -> list[Page]:
@@ -107,10 +107,12 @@ class MasterCatalog:
         return None if tree is None else tree.getroot()
 
     def by_id(self, master_id: str) -> Page | None:
-        for page in self._pages:
-            if page.page_id == master_id:
-                return page
-        return None
+        if self._by_id_revision != self._revision:
+            self._by_id = {}
+            for page in self._pages:
+                self._by_id.setdefault(page.page_id, page)
+            self._by_id_revision = self._revision
+        return self._by_id.get(master_id)
 
     def by_name(self, name: str) -> Page | None:
         """The first master whose `NameU` (or `Name`, where it has no `NameU`) is `name`."""
@@ -148,17 +150,10 @@ class MasterCatalog:
     def is_one_d(self, master_id: str, master_shape_id: str | None) -> bool:
         """Whether the master shape an instance inherits from is 1-D: the master's top shape, or the one `master_shape_id` names.
 
-        Every wrapper a walk builds asks this, so the master shape's element is
-        found once and held until :attr:`revision` moves. Its cells are read on
-        every call, so a master edited in place is seen at once.
+        The master shape is looked up afresh on every call, and its cells read,
+        so a master edited or replaced in place is seen at once.
         """
-        if self._shape_elements_revision != self._revision:
-            self._shape_elements.clear()
-            self._shape_elements_revision = self._revision
-        key = (master_id, master_shape_id)
-        if key not in self._shape_elements:
-            self._shape_elements[key] = self._find_shape_element(master_id, master_shape_id)
-        element = self._shape_elements[key]
+        element = self._find_shape_element(master_id, master_shape_id)
         return element is not None and is_connector_element(element)
 
     def _find_shape_element(self, master_id: str, master_shape_id: str | None) -> Element | None:
