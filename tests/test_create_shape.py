@@ -110,6 +110,32 @@ def test_a_glued_connector_prototype_is_copied_with_both_ends_floating(vsdx_copy
     assert {name: glued.cells[name].formula for name in formulas} == formulas
 
 
+def test_a_prototype_whose_pin_is_a_formula_is_placed_where_asked(vsdx_copy):
+    """Fails if placement writes only the cached value beside a formula Visio recalculates on open."""
+    page = Document.open(vsdx_copy("test_jinja_loop_showif.vsdx")).pages[0]
+    member = page.shapes.require_id("7")  # a group member: PinX is Sheet.9!Width*0.5
+    assert "Sheet.9!" in member.cells["PinX"].formula
+
+    copy = page.create_shape(member, x=3.0, y=4.0, width=1.25, height=0.75)
+
+    for name, value in (("PinX", 3.0), ("PinY", 4.0), ("Width", 1.25), ("Height", 0.75)):
+        assert copy.cells[name].formula is None, name
+        assert float(copy.cells[name].value) == pytest.approx(value), name
+
+
+def test_a_masterless_connector_keeps_what_kind_of_connector_it_is(vsdx_copy):
+    """Fails if floating the copy's ends drops cells it has no master to inherit from."""
+    page = Document.open(vsdx_copy("test5_master.vsdx")).pages[0]
+    connector = page.shapes.require_id("5")
+    assert connector.master_page_ID is None and "BeginX" in connector.cells
+    kinds = {name: connector.cells[name].value for name in ("ObjType", "GlueType") if name in connector.cells}
+    assert kinds.get("ObjType") == "2"
+
+    copy = page.create_shape(connector, x=3.0, y=4.0)
+
+    assert {name: copy.cells[name].value for name in kinds} == kinds
+
+
 def test_a_prototype_is_copied_with_its_text(vsdx_copy):
     page = Document.open(vsdx_copy(BASE)).pages[0]
     prototype = page.shapes.require_text("Shape A")

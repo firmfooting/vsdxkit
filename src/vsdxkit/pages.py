@@ -52,6 +52,17 @@ def _dimension_value(value: float | str | None) -> str:
     return xml_value(number)
 
 
+def _drop_formula(shape: Shape, name: str) -> None:
+    """Keep the value just written to a cell and drop its formula, which Visio would recalculate over it on open.
+
+    A prototype's pin can be a formula of the group it sat in, such as
+    ``Sheet.9!Width*0.5``.
+    """
+    cell = shape._cell(name)
+    if cell is not None:
+        cell.xml.attrib.pop("F", None)
+
+
 def _place_one_d(shape: Shape, x: float, y: float, length: float | None) -> None:
     """Centre a 1-D shape on `x`, `y` by moving its ends, keeping its direction and, without `length`, its length.
 
@@ -650,10 +661,14 @@ class Page:
             # a 2-D shape is drawn around its pin
             shape.get_or_create_cell("PinX", v=str(x))
             shape.get_or_create_cell("PinY", v=str(y))
+            _drop_formula(shape, "PinX")
+            _drop_formula(shape, "PinY")
             if width is not None:
                 shape.width = width
+                _drop_formula(shape, "Width")
         if height is not None:
             shape.height = height
+            _drop_formula(shape, "Height")
         if label is not None:
             shape.text = label
         return shape

@@ -351,6 +351,11 @@ class Connect:
         return f"Connect: from={self.from_id} to={self.to_id} connector_id={self.connector_shape_id} shape_id={self.shape_id}"
 
 
+# what kind of connector a shape is, which floating its ends does not change:
+# a masterless connector has no master to take them back from
+_CONNECTOR_KIND_CELLS = frozenset({"GlueType", "ObjType"})
+
+
 def _float_ends(connector: Shape) -> None:
     """Leave both of a 1-D shape's ends unglued: the cells a floating end has, and no records.
 
@@ -358,4 +363,7 @@ def _float_ends(connector: Shape) -> None:
     original is glued to, but none of its records, and Visio would pull it
     back to them.
     """
-    Connect._write(connector, None, None, ())
+    for change in glue_cells(None, None):
+        if change.name not in _CONNECTOR_KIND_CELLS:
+            Connect._change_cell(connector, change)
+    connector.page.remove_connect_records({_id(connector)})
