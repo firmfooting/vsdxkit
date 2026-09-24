@@ -72,11 +72,35 @@ Connector glue and routing
        to_cp=2,
    )
 
+The same choice can be passed as a :class:`vsdxkit.glue.ConnectorOptions`
+instead of a ``route`` string. Pass one or the other:
+
+.. code-block:: python
+
+   from vsdxkit.glue import ConnectorOptions, Glue, Routing
+
+   connector = page.connect_shapes(
+       source,
+       target,
+       options=ConnectorOptions(glue=Glue.POINT, routing=Routing.CURVED, to_point=2),
+   )
+
+A connection point counts whether the shape holds it or inherits it from its
+master. Both shapes must be on the page. Everything is checked before the
+connector is created, so a refused call leaves the page as it was.
+
 Re-anchor a connector
 ---------------------
 
 :meth:`vsdxkit.pages.Page.reanchor_connector` moves either or both endpoints.
 Pass ``None`` to retain an existing endpoint.
+
+Without ``options`` or ``route``, the connector keeps its glue and routing. A
+moved end keeps the connection point it was glued to, and a point the new shape
+does not have raises :class:`vsdxkit.errors.InvalidOperationError`. It does not
+fall back to dynamic glue. An end that was floating, or glued dynamically, is
+glued dynamically. An end left as ``None`` stays where it is, floating if it
+was. ``options`` or ``route`` replace the glue and routing of both ends.
 
 .. code-block:: python
 

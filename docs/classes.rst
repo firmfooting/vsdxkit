@@ -52,6 +52,17 @@ Connect and Container
    :members: connector_shape, connector_shape_id, shape, shape_id
    :undoc-members:
 
+.. autoclass:: vsdxkit.glue.ConnectorOptions
+   :members: from_route, end_point
+
+.. autoclass:: vsdxkit.glue.Glue
+   :members:
+   :undoc-members:
+
+.. autoclass:: vsdxkit.glue.Routing
+   :members:
+   :undoc-members:
+
 Connection records also expose the raw ``from_id``, ``to_id``, ``from_rel``
 and ``to_rel`` values from the Visio ``Connect`` element. ``from_id`` is the
 connector shape ID. ``to_id`` is the connected shape ID. The relationship

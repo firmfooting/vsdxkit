@@ -22,6 +22,7 @@ from vsdxkit import namespace, relationships, retired_finders
 from vsdxkit.connectors import Connect
 from vsdxkit.containers import Container
 from vsdxkit.errors import InvalidOperationError, MissingPartError, NotFoundError, PackageError
+from vsdxkit.glue import ConnectorOptions
 from vsdxkit.package import XmlPart
 from vsdxkit.partnames import relationship_target, relationships_part_name
 from vsdxkit.shape_tree import iter_descendants
@@ -510,20 +511,31 @@ class Page:
         return retired_finders.all_by_master(self.shapes, shape.master_page_ID, shape.master_shape_ID)
 
     def connect_shapes(
-        self, from_shape: Shape, to_shape: Shape, route: str = "dynamic", from_cp: int = 0, to_cp: int = 0
+        self,
+        from_shape: Shape,
+        to_shape: Shape,
+        route: str | None = None,
+        from_cp: int = 0,
+        to_cp: int = 0,
+        *,
+        options: ConnectorOptions | None = None,
     ) -> Shape:
-        """Create a Visio-faithful dynamic connector between two shapes on this page.
+        """Create a Visio-faithful connector between two shapes on this page.
 
-        route: 'dynamic' (shape glue, default), 'point' (connection-point glue
-        using from_cp/to_cp 0-based connection point indexes), optionally with
+        ``options`` (a :class:`~vsdxkit.glue.ConnectorOptions`) says how it is
+        glued and routed; the default is dynamic glue. ``route`` is the older
+        spelling: 'dynamic' (shape glue), 'point' (connection-point glue using
+        from_cp/to_cp 0-based connection point indexes), optionally with
         routing behaviour 'straight', 'rightangle' or 'curved' - e.g.
-        route='straight' or route='point|curved'.
+        route='straight' or route='point|curved'. Pass one or the other.
 
         :returns: the new connector Shape
         :rtype: Shape
         """
         self.vis._require_open("Page.connect_shapes()")
-        return Connect.create(page=self, from_shape=from_shape, to_shape=to_shape, route=route, from_cp=from_cp, to_cp=to_cp)
+        return Connect.create(
+            page=self, from_shape=from_shape, to_shape=to_shape, route=route, from_cp=from_cp, to_cp=to_cp, options=options
+        )
 
     def get_container(self) -> Container | None:
         """Return the page's CFF Container (swimlane diagram root), or None."""
@@ -553,12 +565,18 @@ class Page:
         connector_shape: Shape,
         from_shape: Shape | None = None,
         to_shape: Shape | None = None,
-        route: str = "dynamic",
+        route: str | None = None,
         from_cp: int = 0,
         to_cp: int = 0,
+        *,
+        options: ConnectorOptions | None = None,
     ) -> Shape:
-        """Retarget an existing connector to new endpoints (either end may be
-        kept by passing None).
+        """Glue one or both ends of an existing connector to other shapes.
+
+        An end passed as None stays where it is. Without ``options`` or
+        ``route`` the connector keeps its glue and routing; with either, they
+        replace the glue and routing of both ends. See
+        :meth:`vsdxkit.connectors.Connect.retarget`.
 
         :returns: the connector Shape
         """
@@ -571,6 +589,7 @@ class Page:
             route=route,
             from_cp=from_cp,
             to_cp=to_cp,
+            options=options,
         )
 
     def delete_shape(self, shape: Shape) -> None:

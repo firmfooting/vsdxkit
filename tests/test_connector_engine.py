@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import shutil
@@ -226,3 +227,113 @@ def test_master_import_is_idempotent(tmp_path, basedir):
         # one master part per declared master, so a re-import would leave an orphan
         master_parts = [n for n in z.namelist() if re.fullmatch(r"visio/masters/master\d+\.xml", n)]
         assert len(master_parts) == len(masters_root)
+
+
+COM_REFERENCE = os.path.join(os.path.dirname(os.path.realpath(__file__)), "fixtures", "com_reference")
+S05 = os.path.join(COM_REFERENCE, "s05_swimlanes_cfflow.vsdx")
+# every cell the manifest records that glue or routing sets, bar the two triggers
+GLUE_CELLS = ("BeginX", "BeginY", "EndX", "EndY", "GlueType", "ObjType", "ShapeRouteStyle", "ConLineRouteExt", "ConFixedCode")
+VISIO_ROLES = {"1": "A", "2": "B"}
+
+
+def _manifest_connectors(scenario: str) -> list[dict[str, str | None]]:
+    with open(os.path.join(COM_REFERENCE, "manifest.json"), encoding="utf-8") as handle:
+        manifest = json.load(handle)
+    (entry,) = [entry for entry in manifest["scenarios"] if entry["scenario"] == scenario]
+    return [shape["cells"] for shape in entry["shapes"] if shape["one_d"]]
+
+
+def _as_visio_records(cell) -> str | None:
+    """A cell as the manifest records it: its formula, or its value where it has none."""
+    return None if cell is None else cell.formula or cell.value
+
+
+def _by_role(formula: str, roles: dict[str, str]) -> str:
+    """The formula with each sheet reference named by the role of the shape it names.
+
+    The engine writes `Sheet90!` where Visio writes `Sheet.1!`. The missing dot
+    is #400, so this reads both. A reference to a shape outside
+    `roles` keeps its id, so a stray one still shows.
+    """
+    return re.sub(r"Sheet\.?(\d+)!", lambda match: f"{roles.get(match.group(1), 'Sheet.' + match.group(1))}!", formula)
+
+
+@pytest.mark.parametrize(
+    ("route", "scenario", "style"),
+    [
+        ("dynamic", "s01_autoconnect_right", "0"),
+        ("rightangle", "s03_route_variants", "1"),
+        ("straight", "s03_route_variants", "16"),
+        ("curved", "s03_route_variants", "17"),
+    ],
+)
+def test_each_route_writes_what_visio_writes(route, scenario, style):
+    (expected,) = [cells for cells in _manifest_connectors(scenario) if cells["ShapeRouteStyle"] == style]
+    with VisioFile(S05) as vis:
+        page = vis.pages[0]
+        source, target = page.shapes.by_id("90"), page.shapes.by_id("97")
+        connector = page.connect_shapes(source, target, route=route)
+        written = {name: _as_visio_records(connector.cells.get(name)) for name in GLUE_CELLS}
+        roles = {source.ID: "A", target.ID: "B"}
+        triggers = {name: _by_role(connector.cells[name].formula, roles) for name in ("BegTrigger", "EndTrigger")}
+    assert written == {name: expected[name] for name in GLUE_CELLS}
+    assert triggers == {name: _by_role(str(expected[name]), VISIO_ROLES) for name in ("BegTrigger", "EndTrigger")}
+
+
+def _s07_connector() -> tuple[dict[str, str], list[tuple[str, ...]]]:
+    """The point-glued connector of s07 and its records, as Visio wrote them."""
+    with VisioFile(os.path.join(COM_REFERENCE, "s07_point_glue_masters.vsdx")) as vis:
+        page = vis.pages[0]
+        (connector,) = [shape for shape in page.shapes if "BeginX" in shape.cells]
+        names = ("BegTrigger", "EndTrigger", "BeginX", "BeginY", "EndX", "EndY")
+        cells = {name: _by_role(connector.cells[name].formula, VISIO_ROLES) for name in names}
+        records = sorted(
+            (c.from_rel, c.xml.attrib["FromPart"], VISIO_ROLES[c.to_id], c.to_rel, c.xml.attrib["ToPart"])
+            for c in page.connects
+        )
+    return cells, records
+
+
+def test_point_glue_writes_what_visio_writes():
+    expected_cells, expected_records = _s07_connector()
+    with VisioFile(S05) as vis:
+        page = vis.pages[0]
+        source, target = page.shapes.by_id("90"), page.shapes.by_id("97")
+        connector = page.connect_shapes(source, target, route="point", from_cp=0, to_cp=1)
+        roles = {source.ID: "A", target.ID: "B"}
+        cells = {name: _by_role(connector.cells[name].formula, roles) for name in expected_cells}
+        records = sorted(
+            (c.from_rel, c.xml.attrib["FromPart"], roles[c.to_id], c.to_rel, c.xml.attrib["ToPart"])
+            for c in page.connects
+            if c.from_id == connector.ID
+        )
+    assert cells == expected_cells
+    assert records == expected_records
+
+
+def test_point_glue_names_only_the_shapes_it_glues():
+    """The donor's `BegTrigger` named its own shape 1: point glue left it there, and wrote `BeginTrigger`."""
+    with VisioFile(S05) as vis:
+        page = vis.pages[0]
+        source, target = page.shapes.by_id("90"), page.shapes.by_id("97")
+        connector = page.connect_shapes(source, target, route="point")
+        named = {
+            match.group(1)
+            for cell in connector.cells.values()
+            if cell.formula
+            for match in re.finditer(r"Sheet\.?(\d+)!", cell.formula)
+        }
+        assert named == {source.ID, target.ID}
+        assert "BeginTrigger" not in connector.cells
+
+
+def test_point_glue_reaches_the_points_a_shape_inherits():
+    """Shape 53 is a flowchart Decision: its four connection points are its master's."""
+    with VisioFile(S05) as vis:
+        page = vis.pages[0]
+        source, decision = page.shapes.by_id("90"), page.shapes.by_id("53")
+        connector = page.connect_shapes(source, decision, route="point", to_cp=3)
+        (record,) = [c for c in page.connects if c.from_id == connector.ID and c.from_rel == "EndX"]
+        assert (record.to_id, record.to_rel) == ("53", "Connections.X4")
+        with pytest.raises(ValueError, match="connection point"):
+            page.connect_shapes(source, decision, route="point", to_cp=4)

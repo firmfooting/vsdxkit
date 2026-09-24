@@ -54,7 +54,7 @@ def test_update_ids_remaps_point_glue_formulas():
 
         assert _formula(connector, "BeginX") == "PAR(PNT(Sheet900!Connections.X1,Sheet900!Connections.Y1))"
         assert _formula(connector, "EndY") == "PAR(PNT(Sheet901!Connections.X1,Sheet901!Connections.Y1))"
-        assert _formula(connector, "BeginTrigger") == "_XFTRIGGER(Sheet900!EventXFMod)"
+        assert _formula(connector, "BegTrigger") == "_XFTRIGGER(Sheet900!EventXFMod)"
 
 
 def test_update_ids_leaves_references_outside_the_copy_untouched(vsdx_copy):
