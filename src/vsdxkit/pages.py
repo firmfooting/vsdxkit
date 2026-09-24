@@ -609,11 +609,20 @@ class Page:
             raise NotFoundError(f"shape ID {shape.ID} is not on page {self.name!r}{collision}")
         # every id that is about to disappear: the shape and, for a group,
         # everything it contains
-        doomed_ids = {shape_id} | {str(s.ID) for s in shape.all_shapes}
+        self._delete(on_this_page, {shape_id} | {str(s.ID) for s in shape.all_shapes})
+
+    def _delete(self, shapes: Iterable[Shape], gone_ids: set[str]) -> None:
+        """The one deletion: `shapes`, the connectors glued to any of `gone_ids`, and every record naming them.
+
+        `gone_ids` are the shapes going away: those in `shapes` and everything
+        inside them, and any already gone from the XML by another route, such
+        as a Jinja ``showif`` that rendered them out. A Shape held for any of
+        them is detached afterwards, since attachment is read from the XML.
+        """
         # connectors are the FromSheet of Connect records whose ToSheet is one
-        # of the doomed shapes, on a begin/end relationship
-        connector_ids = {c.from_id for c in self.connects if c.to_id in doomed_ids and c.from_rel in ("BeginX", "EndX")}
-        doomed = set(on_this_page)
+        # of the shapes going, on a begin/end relationship
+        connector_ids = {c.from_id for c in self.connects if c.to_id in gone_ids and c.from_rel in ("BeginX", "EndX")}
+        doomed = set(shapes)
         for s in self.all_shapes:
             # the master too: a connector may inherit BeginX from it, and one
             # missed here survives as a detached line whose glue record has just
@@ -624,7 +633,7 @@ class Page:
             self._remove_shape_xml(s)
         # a record naming a group child outlives the child otherwise: the child
         # goes with the group element rather than through _remove_shape_xml
-        self.remove_connect_records(doomed_ids, match="either")
+        self.remove_connect_records(gone_ids, match="either")
 
     def _remove_shape_xml(self, shape: Shape) -> None:
         """Remove a shape's xml and every Connect record that names it.
