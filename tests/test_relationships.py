@@ -259,7 +259,7 @@ class TestRemovingAPageThroughTheHelpers:
 
         out = str(tmp_path / "removed.vsdx")
         document = Document.open(respelled)
-        document.remove_page_by_index(0)
+        document.pages.delete(document.pages[0])
         document.save(out)
 
         defects = validate_package(out)

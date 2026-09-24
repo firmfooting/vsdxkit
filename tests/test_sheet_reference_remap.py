@@ -155,7 +155,7 @@ def test_copy_page_keeps_connector_glue(vsdx_copy):
         "EndTrigger": _formula(connector, "EndTrigger"),
     }
 
-    copied = vis.copy_page(page)
+    copied = vis.pages.copy(page)
 
     copied_connector = copied.shapes.by_id(connector.ID)
     assert copied_connector is not None

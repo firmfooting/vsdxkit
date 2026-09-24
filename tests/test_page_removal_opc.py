@@ -41,7 +41,7 @@ def _save_copy(tmp_path, name: str = "doc.vsdx") -> str:
 def test_remove_page_clears_relationship_and_content_type(tmp_path):
     document = _save_copy(tmp_path)
     vis = Document.open(document)
-    vis.remove_page_by_index(1)  # middle page
+    vis.pages.delete(vis.pages[1])  # middle page
     vis.save(document)
 
     names, rel_pairs, _ = _zip_graph(document)
@@ -58,8 +58,8 @@ def test_remove_page_clears_relationship_and_content_type(tmp_path):
 def test_remove_then_add_allocates_unused_part_and_resolves_graph(tmp_path):
     document = _save_copy(tmp_path)
     vis = Document.open(document)
-    vis.remove_page_by_index(1)
-    new_page = vis.add_page("replacement")
+    vis.pages.delete(vis.pages[1])
+    new_page = vis.pages.create("replacement")
     vis.save(document)
 
     names, rel_pairs, rel_ids_in_pages = _zip_graph(document)
@@ -76,8 +76,8 @@ def test_remove_then_add_allocates_unused_part_and_resolves_graph(tmp_path):
 def test_new_page_part_name_is_an_unused_value(tmp_path):
     document = _save_copy(tmp_path)
     vis = Document.open(document)
-    vis.remove_page_by_index(1)  # frees page2.xml
-    new_page = vis.add_page("replacement")
+    vis.pages.delete(vis.pages[1])  # frees page2.xml
+    new_page = vis.pages.create("replacement")
     # page count went 3 -> 2; page-count derivation would say page3.xml (taken);
     # unused-value allocation must pick page2.xml
     assert new_page.filename.endswith("page2.xml")
@@ -86,8 +86,8 @@ def test_new_page_part_name_is_an_unused_value(tmp_path):
 def test_removed_page_reopening_round_trip(tmp_path):
     document = _save_copy(tmp_path)
     vis = Document.open(document)
-    vis.remove_page_by_index(1)
-    vis.add_page("replacement")
+    vis.pages.delete(vis.pages[1])
+    vis.pages.create("replacement")
     vis.save(document)
     vis = Document.open(document)
     assert [p.name for p in vis.pages] == ["Page-1", "Page-3", "replacement"]

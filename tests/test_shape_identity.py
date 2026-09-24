@@ -61,7 +61,7 @@ def test_a_shape_is_attached_until_it_is_deleted(vsdx_copy):
     member = group.children.require_text("Sub-shape to remove")
     other = page.shapes.require_text("Shape Text")
     assert group.is_attached and member.is_attached
-    page.delete_shape(group)
+    group.delete()
     assert not group.is_attached
     assert not member.is_attached
     assert other.is_attached
@@ -94,7 +94,7 @@ def test_a_detached_shape_refuses_reads_and_writes(vsdx_copy):
     page = vis.pages[0]
     shape = page.shapes.require_id("1")
     cell = shape.cells["PinX"]
-    page.delete_shape(shape)
+    shape.delete()
     for read in (
         lambda: shape.text,
         lambda: shape.x,
@@ -118,7 +118,7 @@ def test_a_detached_shape_keeps_its_id_repr_and_hash(vsdx_copy):
     shape = page.shapes.require_id("1")
     members = {shape}
     before = hash(shape)
-    page.delete_shape(shape)
+    shape.delete()
     assert shape.ID == "1"
     assert "ID=1" in repr(shape)
     assert hash(shape) == before

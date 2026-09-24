@@ -8,22 +8,18 @@ Document
 --------
 
 .. autoclass:: vsdxkit.document.Document
-   :members: open, pages, save, render, add_page, add_page_at, copy_page, get_page_by_name, remove_page_by_index, remove_page_by_name
+   :members: open, pages, save, render
    :undoc-members:
 
-Page, PageCollection and PagePosition
--------------------------------------
+Page and PageCollection
+-----------------------
 
 .. autoclass:: vsdxkit.pages.Page
-   :members: children, connect, connectors, connects, create_shape, delete_shape, shapes, swimlanes, require_swimlanes
+   :members: children, connect, connectors, connects, create_shape, shapes, swimlanes, require_swimlanes
    :undoc-members:
 
 .. autoclass:: vsdxkit.pages.PageCollection
    :members: by_name, require_name, create, copy, delete
-
-.. autoclass:: vsdxkit.pages.PagePosition
-   :members:
-   :undoc-members:
 
 ShapeKind
 ---------
@@ -36,7 +32,7 @@ Shape, Connector, ShapeCollection, Cell and DataProperty
 --------------------------------------------------------
 
 .. autoclass:: vsdxkit.shapes.Shape
-   :members: ID, bounds, cell_value, cells, center_x_y, children, connected_shapes, connectors, connects, copy, data_properties, descendants, fill_color, is_attached, find_replace, geometry, get_or_create_cell, height, line_color, line_weight, master_page_ID, master_shape_ID, move, remove, shape_name, shape_type, tag, text, text_color, width, x, y
+   :members: ID, bounds, cell_value, cells, center_x_y, children, connected_shapes, connectors, connects, copy, data_properties, delete, descendants, fill_color, is_attached, find_replace, geometry, get_or_create_cell, height, line_color, line_weight, master_page_ID, master_shape_ID, move, shape_name, shape_type, tag, text, text_color, width, x, y
    :undoc-members:
 
 .. autoclass:: vsdxkit.shapes.Connector

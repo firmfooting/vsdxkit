@@ -140,7 +140,7 @@ def masters_first(basedir, tmp_path) -> str:
 
 def test_the_added_page_is_named_in_the_pages_section(basedir, tmp_path):
     vis = Document.open(os.path.join(basedir, "test4_connectors.vsdx"))
-    vis.add_page("NewPage")
+    vis.pages.create("NewPage")
     saved = _saved(vis, tmp_path)
 
     sections = _sections(_app_xml(saved))
@@ -150,7 +150,7 @@ def test_the_added_page_is_named_in_the_pages_section(basedir, tmp_path):
 
 def test_adding_a_page_counts_the_pages_not_whichever_section_comes_first(masters_first, tmp_path):
     vis = Document.open(masters_first)
-    vis.add_page("NewPage")
+    vis.pages.create("NewPage")
     saved = _saved(vis, tmp_path, "masters-first-add.vsdx")
 
     sections = _sections(_app_xml(saved))
@@ -160,7 +160,7 @@ def test_adding_a_page_counts_the_pages_not_whichever_section_comes_first(master
 
 def test_removing_a_page_counts_the_pages_not_whichever_section_comes_first(masters_first, tmp_path):
     vis = Document.open(masters_first)
-    vis.remove_page_by_name("Page-2")
+    vis.pages.delete(vis.pages.require_name("Page-2"))
     saved = _saved(vis, tmp_path, "masters-first-remove.vsdx")
 
     sections = _sections(_app_xml(saved))
@@ -197,7 +197,7 @@ def test_renaming_a_page_leaves_a_master_of_the_same_name_alone(masters_first, t
 def test_removing_a_page_leaves_a_master_of_the_same_name_alone(masters_first, tmp_path):
     vis = Document.open(masters_first)
     vis.pages[0].name = "Switch"
-    vis.remove_page_by_name("Switch")
+    vis.pages.delete(vis.pages.require_name("Switch"))
     saved = _saved(vis, tmp_path, "masters-first-remove-namesake.vsdx")
 
     sections = _sections(_app_xml(saved))
@@ -270,7 +270,7 @@ def test_a_count_larger_than_the_vector_is_not_read_as_positions(basedir, tmp_pa
     )
 
     vis = Document.open(source)
-    vis.remove_page_by_name("Page-2")
+    vis.pages.delete(vis.pages.require_name("Page-2"))
     saved = _saved(vis, tmp_path, "overcounted-removed.vsdx")
 
     # nothing in the Pages section was named Page-2, so app.xml is left as it
@@ -293,7 +293,7 @@ def test_a_count_read_for_a_later_section_is_not_written_back_to_it(basedir, tmp
     )
 
     vis = Document.open(source)
-    vis.add_page("NewPage")
+    vis.pages.create("NewPage")
     saved = _saved(vis, tmp_path, "overcounted-add.vsdx")
 
     assert _counts(_app_xml(saved)) == {"Masters": 99, "Pages": 4}
@@ -342,7 +342,7 @@ def test_a_variant_that_is_neither_a_name_nor_a_count_moves_no_section(basedir, 
     )
 
     vis = Document.open(source)
-    vis.add_page("NewPage")
+    vis.pages.create("NewPage")
     saved = _saved(vis, tmp_path, "odd-variant-add.vsdx")
 
     app_xml = _app_xml(saved)

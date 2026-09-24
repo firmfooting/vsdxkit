@@ -302,7 +302,7 @@ def test_an_endpoint_on_another_page_is_refused(vsdx_copy):
     vis = Document.open(vsdx_copy(BASE))
     page = vis.pages[0]
     connector = page.connect(page.shapes.by_text("Shape A"), page.shapes.by_text("Shape B"))
-    elsewhere = vis.add_page("Elsewhere").create_shape(ShapeKind.PROCESS, x=1.0, y=1.0, text="Elsewhere")
+    elsewhere = vis.pages.create("Elsewhere").create_shape(ShapeKind.PROCESS, x=1.0, y=1.0, text="Elsewhere")
     assert "not on page" in _refused(page, connector, target=elsewhere)
 
 
@@ -310,7 +310,7 @@ def test_a_connector_on_another_page_is_refused(vsdx_copy):
     vis = Document.open(vsdx_copy(BASE))
     page = vis.pages[0]
     a = page.shapes.by_text("Shape A")
-    other = vis.add_page("Elsewhere")
+    other = vis.pages.create("Elsewhere")
     start = other.create_shape(ShapeKind.PROCESS, x=1.0, y=1.0, text="Start")
     finish = other.create_shape(ShapeKind.PROCESS, x=4.0, y=1.0, text="Finish")
     connector = other.connect(start, finish)
@@ -325,7 +325,7 @@ def test_a_deleted_endpoint_is_refused(vsdx_copy):
     page = vis.pages[0]
     connector = page.connect(page.shapes.by_text("Shape A"), page.shapes.by_text("Shape B"))
     gone = page.create_shape(ShapeKind.PROCESS, x=7.0, y=6.0, text="Gone")
-    page.delete_shape(gone)
+    gone.delete()
     assert "not on page" in _refused(page, connector, target=gone)
 
 
@@ -333,7 +333,7 @@ def test_connecting_to_a_shape_on_another_page_is_refused(vsdx_copy):
     vis = Document.open(vsdx_copy(BASE))
     page = vis.pages[0]
     a = page.shapes.by_text("Shape A")
-    elsewhere = vis.add_page("Elsewhere").create_shape(ShapeKind.PROCESS, x=1.0, y=1.0, text="Elsewhere")
+    elsewhere = vis.pages.create("Elsewhere").create_shape(ShapeKind.PROCESS, x=1.0, y=1.0, text="Elsewhere")
     shapes_before = len(page.shapes)
     with pytest.raises(InvalidOperationError, match="not on page"):
         page.connect(a, elsewhere)

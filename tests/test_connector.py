@@ -219,7 +219,7 @@ def test_a_duplicate_id_makes_the_graph_refuse(vsdx_copy):
 def test_a_detached_shape_refuses_graph_queries(vsdx_copy, query):
     """Fails if a shape on a deleted page still reports that page's connectors as live."""
     vis = Document.open(vsdx_copy(BASE))
-    page = vis.add_page("Doomed")
+    page = vis.pages.create("Doomed")
     start = page.create_shape(ShapeKind.PROCESS, x=1.0, y=1.0, text="Start")
     finish = page.create_shape(ShapeKind.PROCESS, x=4.0, y=1.0, text="Finish")
     connector = page.connect(start, finish)

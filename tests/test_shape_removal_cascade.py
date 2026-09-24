@@ -1,9 +1,8 @@
-"""`Shape.remove()` must not leave a page half-deleted.
+"""`Shape.delete()` must not leave a page half-deleted.
 
-`Page.delete_shape()` already removes incident connectors and their `Connect`
-records; `Shape.remove()` detached the element and nothing else, so the same
-deletion through the other API left dangling records and orphan connectors that
-Visio repairs on open.
+It removes the connectors glued to the shape and their `Connect` records. 0.x's
+`Shape.remove()` once detached the element and nothing else, leaving dangling
+records and orphan connectors that Visio repairs on open.
 """
 
 import os
@@ -40,35 +39,13 @@ def test_removing_a_connected_shape_takes_its_connector_with_it(vsdx_copy):
     connector = page.connect(start, end)
     assert _referencing(page, start.ID)
 
-    with pytest.warns(DeprecationWarning, match="delete_shape"):
-        start.remove()
+    start.delete()
 
     assert _referencing(page, start.ID) == []
     assert _referencing(page, connector.ID) == []
     remaining = {shape.ID for shape in page.shapes}
     assert start.ID not in remaining
     assert connector.ID not in remaining, "the connector was left with nothing to glue to"
-
-
-def test_remove_and_delete_shape_leave_the_page_in_the_same_state(vsdx_copy):
-    """The two APIs are the same deletion and must not disagree."""
-
-    def _state_after(delete):
-        vis = Document.open(vsdx_copy("test1.vsdx"))
-        page = vis.pages[0]
-        start = page.create_shape(ShapeKind.PROCESS, x=2.0, y=2.0, text="A")
-        end = page.create_shape(ShapeKind.PROCESS, x=6.0, y=2.0, text="B")
-        page.connect(start, end)
-        delete(page, start)
-        return (
-            sorted(shape.ID for shape in page.shapes),
-            sorted(ET.tostring(record, encoding="unicode") for record in _connect_records(page)),
-        )
-
-    with pytest.warns(DeprecationWarning):
-        through_remove = _state_after(lambda page, shape: shape.remove())
-    through_delete_shape = _state_after(lambda page, shape: page.delete_shape(shape))
-    assert through_remove == through_delete_shape
 
 
 def test_removing_a_group_child_removes_records_that_reference_it(vsdx_copy):
@@ -89,8 +66,7 @@ def test_removing_a_group_child_removes_records_that_reference_it(vsdx_copy):
     )
     assert _referencing(page, child.ID)
 
-    with pytest.warns(DeprecationWarning):
-        child.remove()
+    child.delete()
 
     assert _referencing(page, child.ID) == []
     assert child.ID not in {shape.ID for shape in group.children}
@@ -118,31 +94,21 @@ def test_deleting_a_group_takes_the_records_naming_its_children(vsdx_copy):
     _add_connect(page, "99", child.ID)
     _add_connect(page, "99", survivor.ID)
 
-    page.delete_shape(group)
+    group.delete()
 
     assert _referencing(page, child.ID) == []
     assert _referencing(page, survivor.ID), "an unrelated record must survive"
 
 
-def test_deleting_a_shape_that_is_not_on_the_page_is_an_error(vsdx_copy):
+def test_deleting_the_same_shape_twice_is_an_error(vsdx_copy):
     """Silently doing nothing would hide a caller's mistake."""
     vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
     shape = page.create_shape(ShapeKind.PROCESS, x=2.0, y=2.0, text="A")
-    page.delete_shape(shape)
+    shape.delete()
 
-    with pytest.raises(ValueError, match="not on page"):
-        page.delete_shape(shape)
-
-
-def test_removing_the_same_shape_twice_is_an_error(vsdx_copy):
-    vis = Document.open(vsdx_copy("test1.vsdx"))
-    page = vis.pages[0]
-    shape = page.create_shape(ShapeKind.PROCESS, x=2.0, y=2.0, text="A")
-    with pytest.warns(DeprecationWarning):
-        shape.remove()
-    with pytest.warns(DeprecationWarning), pytest.raises(ValueError, match="not on page"):
-        shape.remove()
+    with pytest.raises(InvalidOperationError, match="no longer in the document"):
+        shape.delete()
 
 
 def test_an_inherited_begin_cell_still_marks_a_shape_as_a_connector(vsdx_copy):
@@ -164,29 +130,28 @@ def test_an_inherited_begin_cell_still_marks_a_shape_as_a_connector(vsdx_copy):
     assert master is not None, "fixture connector is expected to have a master"
     master.xml.append(begin_cell)
 
-    page.delete_shape(start)
+    start.delete()
 
     assert connector.ID not in {shape.ID for shape in page.shapes}
 
 
-def test_deleting_a_shape_belonging_to_another_page_is_refused(vsdx_copy):
-    """Shape IDs are page-scoped and collide, so the guard cannot match on ID.
+def test_deleting_a_shape_leaves_a_shape_of_its_id_on_another_page(vsdx_copy):
+    """Shape IDs are page-scoped and collide, so a deletion must not be matched on ID.
 
-    `test1.vsdx` has a shape with ID 1 on both Page-1 and Page-3. Handing one
-    page a shape from the other used to satisfy the guard by ID and then delete
-    whichever shape on *this* page happened to share the number.
+    `test1.vsdx` has a shape with ID 1 on both Page-1 and Page-3. 0.x's
+    `shape.delete()` once matched on the ID and deleted whichever shape
+    on the page it was called on shared the number.
     """
     vis = Document.open(vsdx_copy("test1.vsdx"))
     page1, page3 = vis.pages[0], vis.pages[2]
-    victim = page1.shapes.by_id("1")
+    victim = page1.shapes.require_id("1")
     bystander_ids = [shape.ID for shape in page3.shapes]
-    assert victim is not None and "1" in bystander_ids, "fixture must have colliding ids"
+    assert "1" in bystander_ids, "fixture must have colliding ids"
 
-    with pytest.raises(ValueError, match="not on page"):
-        page3.delete_shape(victim)
+    victim.delete()
 
     assert [shape.ID for shape in page3.shapes] == bystander_ids
-    assert page1.shapes.by_id("1") is not None
+    assert page1.shapes.by_id("1") is None
 
 
 def _three_connected(vis):
@@ -210,7 +175,7 @@ def test_a_half_glued_connector_goes_with_the_shape_it_is_glued_to(vsdx_copy):
     )
     connects.remove(end_record)  # its end now floats; only its begin is glued, to A
 
-    page.delete_shape(a)
+    a.delete()
 
     assert page.shapes.by_id(ab.ID) is None
     assert _referencing(page, ab.ID) == []
@@ -222,7 +187,7 @@ def test_deleting_a_connector_leaves_the_shapes_it_joined_and_their_other_glue(v
     vis = Document.open(vsdx_copy("test1.vsdx"))
     page, (a, b, c), (ab, bc) = _three_connected(vis)
 
-    page.delete_shape(ab)
+    ab.delete()
 
     assert page.shapes.by_id(ab.ID) is None
     assert _referencing(page, ab.ID) == []
@@ -234,9 +199,9 @@ def test_deleting_a_connector_leaves_the_shapes_it_joined_and_their_other_glue(v
 def test_every_shape_a_delete_takes_is_detached(vsdx_copy):
     """Fails if a connector removed by the cascade still answers through a Shape held before the delete (#105)."""
     vis = Document.open(vsdx_copy("test1.vsdx"))
-    page, (_, b, _), (ab, bc) = _three_connected(vis)
+    _page, (_, b, _), (ab, bc) = _three_connected(vis)
 
-    page.delete_shape(b)
+    b.delete()
 
     for gone in (b, ab, bc):
         assert not gone.is_attached
@@ -248,7 +213,7 @@ def test_a_shape_a_showif_hides_takes_its_connectors_and_records(vsdx_copy):
     """Fails if a template that renders a shape out leaves its connector and glue behind (#105).
 
     The shape leaves the page through the template, not through
-    `delete_shape`, and the connector glued to it survived with a record
+    `Shape.delete`, and the connector glued to it survived with a record
     naming a shape no longer there.
     """
     vis = Document.open(vsdx_copy("test1.vsdx"))

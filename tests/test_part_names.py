@@ -38,8 +38,8 @@ def test_loaded_pages_and_masters_are_named_by_part_name(vsdx_copy):
 def test_added_and_copied_pages_are_named_by_part_name(vsdx_copy):
     """Fails if a page the library creates is named by anything but its part name."""
     vis = Document.open(vsdx_copy("test4_connectors.vsdx"))
-    added = vis.add_page("Added")
-    copied = vis.copy_page(vis.pages[0], name="Copied")
+    added = vis.pages.create("Added")
+    copied = vis.pages.copy(vis.pages[0], name="Copied")
     for page in (added, copied):
         assert page.filename.startswith("/visio/pages/page")
         assert vis._package.part(page.filename) is not None
@@ -194,7 +194,7 @@ def test_a_removed_pages_xml_assignment_writes_nothing(vsdx_copy):
     vis = Document.open(vsdx_copy("test2.vsdx"))
     removed = vis.pages[-1]
     name = removed.filename
-    vis.remove_page_by_index(len(vis.pages) - 1)
+    vis.pages.delete(vis.pages[len(vis.pages) - 1])
     removed.xml = ET.ElementTree(ET.fromstring(ET.tostring(removed.xml.getroot())))
     assert vis._package.part(name) is None
 

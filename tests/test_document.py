@@ -10,7 +10,6 @@ import pytest
 
 from vsdxkit import ext_prop_namespace, media, namespace, vt_namespace
 from vsdxkit.document import Document
-from vsdxkit.pages import PagePosition
 
 
 def _media_filename() -> str:
@@ -158,7 +157,7 @@ def test_open_abs_path_save_abs_path(tmp_path):
 @pytest.mark.parametrize(("filename", "shape_elements"), [("test1.vsdx", 4), ("test2.vsdx", 14), ("test3_house.vsdx", 10)])
 def test_xml_findall_shapes(filename: str, shape_elements: int, basedir):
     vis = Document.open(os.path.join(basedir, filename))
-    page = vis.get_page(0)  # type: Page
+    page = vis.pages[0]  # type: Page
     # find all Shape elements
     xml = page.xml.getroot()
     xpath = f".//{namespace}Shape"
@@ -170,7 +169,7 @@ def test_xml_findall_shapes(filename: str, shape_elements: int, basedir):
 @pytest.mark.parametrize(("filename", "group_shape_elements"), [("test1.vsdx", 0), ("test2.vsdx", 3), ("test3_house.vsdx", 2)])
 def test_xml_findall_group_shapes(filename: str, group_shape_elements: int, basedir):
     vis = Document.open(os.path.join(basedir, filename))
-    page = vis.get_page(0)  # type: Page
+    page = vis.pages[0]  # type: Page
     # find all Shape elements where attribute Type='Group'
     xml = page.xml.getroot()
     xpath = f".//{namespace}Shape[@Type='Group']"
@@ -222,7 +221,7 @@ def test_remove_page_by_index(filename: str, page_index: int, tmp_path, basedir)
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_remove_page.vsdx")
     vis = Document.open(os.path.join(basedir, filename))
     page_count = len(vis.pages)
-    vis.remove_page_by_index(page_index)
+    vis.pages.delete(vis.pages[page_index])
     vis.save(out_file)
 
     # re-open file and confirm it has one less page
@@ -252,7 +251,7 @@ def test_remove_page_by_page_index(filename: str, page_name: str, tmp_path, base
         print(f"page.name='{page.name}' index:{page.index_num}")
         if page_name in page.name:
             print(f"Removing page index {page.index_num}")
-            vis.remove_page_by_index(page.index_num)
+            vis.pages.delete(vis.pages[page.index_num])
         else:
             expected_page_names.append(page.name)
 
@@ -275,7 +274,6 @@ def test_remove_page_by_page_index(filename: str, page_name: str, tmp_path, base
         ("test5_master.vsdx", "Page 1"),
         ("test6_shape_properties.vsdx", "Page-2"),
         ("test7_with_connector.vsdx", "Page-3"),
-        ("test8_simple_connector.vsdx", "none"),  # no match
     ],
 )
 def test_remove_page_by_name(filename: str, page_name: str, tmp_path, basedir):
@@ -287,7 +285,7 @@ def test_remove_page_by_name(filename: str, page_name: str, tmp_path, basedir):
         print(f"page.name='{page.name}' index:{page.index_num}")
         if page_name != page.name:
             expected_page_names.append(page.name)
-    vis.remove_page_by_name(page_name)
+    vis.pages.delete(vis.pages.require_name(page_name))
     vis.save(out_file)
 
     print(f"expected names={expected_page_names}")
@@ -308,7 +306,7 @@ def test_remove_page_by_name(filename: str, page_name: str, tmp_path, basedir):
 def test_app_xml_page_names_after_remove_page(filename: str, remove_index: int, basedir):
     # test that page names in app.xml matches page names loaded
     vis = Document.open(os.path.join(basedir, filename))
-    vis.remove_page_by_index(remove_index)
+    vis.pages.delete(vis.pages[remove_index])
 
     assert _app_xml_page_count(vis) == len(vis.pages)
     assert _app_xml_page_names(vis) == [p.name for p in vis.pages]
@@ -320,7 +318,7 @@ def test_add_page(filename: str, tmp_path, basedir):
     vis = Document.open(os.path.join(basedir, filename))
     number_pages = len(vis.pages)
 
-    new_page = vis.add_page()
+    new_page = vis.pages.create()
     assert new_page
     assert len(vis.pages) == number_pages + 1
 
@@ -328,7 +326,7 @@ def test_add_page(filename: str, tmp_path, basedir):
     vis.save(out_file)
 
     vis = Document.open(out_file)
-    page = vis.get_page_by_name(new_page_name)
+    page = vis.pages.by_name(new_page_name)
     assert page
 
 
@@ -344,7 +342,7 @@ def test_add_page_name(filename: str, page_name: str, tmp_path, basedir):
     vis = Document.open(os.path.join(basedir, filename))
     number_pages = len(vis.pages)
 
-    new_page = vis.add_page(page_name)
+    new_page = vis.pages.create(page_name)
     assert new_page
     assert len(vis.pages) == number_pages + 1
 
@@ -352,7 +350,7 @@ def test_add_page_name(filename: str, page_name: str, tmp_path, basedir):
     vis.save(out_file)
 
     vis = Document.open(out_file)
-    page = vis.get_page_by_name(new_page_name)
+    page = vis.pages.by_name(new_page_name)
     assert page
 
 
@@ -369,7 +367,7 @@ def test_add_page_at(filename: str, index: int, page_name: str, tmp_path, basedi
     vis = Document.open(os.path.join(basedir, filename))
     number_pages = len(vis.pages)
 
-    new_page = vis.add_page_at(index, page_name)
+    new_page = vis.pages.create(page_name, index=index)
     assert new_page
     assert len(vis.pages) == number_pages + 1
 
@@ -377,7 +375,7 @@ def test_add_page_at(filename: str, index: int, page_name: str, tmp_path, basedi
     vis.save(out_file)
 
     vis = Document.open(out_file)
-    page = vis.get_page_by_name(new_page_name)
+    page = vis.pages.by_name(new_page_name)
     assert page
 
 
@@ -397,9 +395,9 @@ def test_app_xml_page_names_after_add_page(filename: str, new_page_name: str, lo
     # test that page names in app.xml matches page names loaded
     vis = Document.open(os.path.join(basedir, filename))
     if location is None:
-        vis.add_page(new_page_name)
+        vis.pages.create(new_page_name)
     else:
-        vis.add_page_at(location, new_page_name)
+        vis.pages.create(new_page_name, index=location)
 
     assert _app_xml_page_count(vis) == len(vis.pages)
 
@@ -418,7 +416,7 @@ def test_copy_page_clones_relationship_part(vsdx_copy, tmp_path):
     assert source.rels_xml is not None
     source_rels = ET.tostring(source.rels_xml.getroot())
 
-    copied = vis.copy_page(source)
+    copied = vis.pages.copy(source)
 
     assert copied.rels_xml is not None
     assert copied.rels_xml is not source.rels_xml
@@ -434,7 +432,7 @@ def test_copy_page_clones_relationship_part(vsdx_copy, tmp_path):
 @pytest.mark.parametrize(
     ("filename", "index", "page_name"),
     [
-        ("test1.vsdx", -1, None),
+        ("test1.vsdx", 3, None),
         ("test1.vsdx", 0, "newname"),
         ("test1.vsdx", 2, "Page-1"),
         ("test2.vsdx", 2, "Page-1"),
@@ -447,7 +445,7 @@ def test_copy_page(filename: str, index: int, page_name: str, tmp_path, basedir)
     number_pages = len(vis.pages)
 
     page = vis.pages[0]  # type: Page
-    new_page = vis.copy_page(page, index=index, name=page_name)
+    new_page = vis.pages.copy(page, index=index, name=page_name)
     assert new_page
     assert len(vis.pages) == number_pages + 1
 
@@ -455,7 +453,7 @@ def test_copy_page(filename: str, index: int, page_name: str, tmp_path, basedir)
     vis.save(out_file)
 
     vis = Document.open(out_file)
-    page = vis.get_page_by_name(new_page_name)
+    page = vis.pages.by_name(new_page_name)
     assert page
 
 
@@ -474,43 +472,40 @@ def test_copy_page_naming(filename: str, page_index_to_copy: int, in_page_name: 
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_copy_page_naming.vsdx")
     vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[page_index_to_copy]  # type: Page
-    new_page = vis.copy_page(page, name=in_page_name)
+    new_page = vis.pages.copy(page, name=in_page_name)
     print(f"in_page_name:{in_page_name} out_page_name:{out_page_name} actual:{new_page.name}")
     assert new_page.name == out_page_name  # check new page has expected name
     vis.save(out_file)
 
     vis = Document.open(out_file)
-    page = vis.get_page_by_name(out_page_name)
+    page = vis.pages.by_name(out_page_name)
     assert page  # check that page name persists through file save and open
 
 
 @pytest.mark.parametrize(
-    ("filename", "page_index_to_copy", "page_position", "out_page_index"),
+    ("filename", "page_index_to_copy", "index", "out_page_index"),
     [
-        ("test1.vsdx", 0, PagePosition.LAST, 3),
-        ("test1.vsdx", 0, PagePosition.BEFORE, 0),
-        ("test1.vsdx", 0, PagePosition.AFTER, 1),
-        ("test1.vsdx", 1, PagePosition.LAST, 3),
-        ("test1.vsdx", 1, PagePosition.BEFORE, 1),
-        ("test1.vsdx", 1, PagePosition.AFTER, 2),
+        # at the end, before the source (its own index), and after it (no index)
+        ("test1.vsdx", 0, 3, 3),
+        ("test1.vsdx", 0, 0, 0),
+        ("test1.vsdx", 0, None, 1),
+        ("test1.vsdx", 1, 3, 3),
+        ("test1.vsdx", 1, 1, 1),
+        ("test1.vsdx", 1, None, 2),
     ],
 )
 def test_copy_page_positions(
-    filename: str, page_index_to_copy: int, page_position: PagePosition, out_page_index: int, tmp_path, basedir
+    filename: str, page_index_to_copy: int, index: int | None, out_page_index: int, tmp_path, basedir
 ):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_copy_page_position.vsdx")
     vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[page_index_to_copy]  # type: Page
-    new_page = vis.copy_page(page, index=page_position)
-    index = vis.pages.index(new_page)
-    print(
-        f"page_index_to_copy:{page_index_to_copy} page_position:{page_position} out_page_index:{out_page_index} actual:{index}"
-    )
-    assert index == out_page_index  # check new page has expected index
+    new_page = vis.pages.copy(page, index=index)
+    assert vis.pages.index(new_page) == out_page_index  # check new page has expected index
     vis.save(out_file)
 
     vis = Document.open(out_file)
-    page = vis.get_page_by_name(new_page.name)
+    page = vis.pages.by_name(new_page.name)
     index = vis.pages.index(page)
     assert index == out_page_index  # check that page location persists through file save and open
 

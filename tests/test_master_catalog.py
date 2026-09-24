@@ -278,7 +278,7 @@ def test_a_copy_onto_another_page_of_the_same_document_relates_that_page_to_the_
     """Fails if a page gains a master instance without the page relationship Visio writes for it."""
     vis = Document.open(vsdx_copy("test3_house.vsdx"))
     shape = _master_instance(vis)
-    new_page = vis.add_page()
+    new_page = vis.pages.create()
     shape.copy(new_page)
     target = relationship_target(new_page.filename, shape.master_page.filename)
     assert new_page.rels_xml is not None
@@ -405,7 +405,7 @@ def test_a_master_shape_the_reused_master_lacks_is_dropped(vsdx_copy, tmp_path):
     missing = member.master_shape_ID
     master_shapes = master.xml.getroot().find(f"{{{MAIN_NS}}}Shapes")[0].find(f"{{{MAIN_NS}}}Shapes")
     master_shapes.remove(next(s for s in master_shapes if s.attrib["ID"] == missing))
-    target.pages[0].delete_shape(first)
+    first.delete()
 
     second = group.copy(target.pages[0])
     assert second.master_page is master

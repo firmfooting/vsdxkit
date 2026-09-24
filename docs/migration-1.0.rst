@@ -21,7 +21,8 @@ The package root re-exports nothing. Import each name from the module that
 defines it:
 
 ``from vsdx import Page, PagePosition``
-   ``from vsdxkit.pages import Page, PagePosition``
+   ``from vsdxkit.pages import Page``. ``vsdx.pages.PagePosition`` is gone; see "Pages
+   change through the collection" below.
 
 ``from vsdx import Shape, Cell, DataProperty``
    ``from vsdxkit.shapes import Shape, Cell, DataProperty``
@@ -98,6 +99,10 @@ The class is :class:`vsdxkit.document.Document`, in the module
 
 ``VisioFile.jinja_render_vsdx(context)``
    ``Document.render(context)``.
+
+``JinjaTemplatingMixin.remove_page_by_index``
+   Gone with ``vis.remove_page_by_index``; see "Pages change through the
+   collection" below.
 
 ``VisioFile.open_vsdx_file()``
    ``Document.open(path)`` opens a fresh document from the file.
@@ -305,6 +310,59 @@ Where a list is needed, ``list(page.children)`` makes one.
 
 ``vis.get_sub_shapes(element, nth)``
    Gone. ``shape.children`` holds the shapes inside a group.
+
+Pages change through the collection
+-----------------------------------
+
+``vis.pages`` is the one place pages are looked up, created, copied and
+deleted. The ``VisioFile`` methods that did the same are gone.
+
+``vis.get_page(n)``
+   ``vis.pages[n]``, which raises ``IndexError`` where ``get_page`` returned
+   ``None``.
+
+``vis.get_page_by_name(name)``
+   ``vis.pages.by_name(name)``, or ``vis.pages.require_name(name)``, which
+   raises :class:`vsdxkit.errors.NotFoundError`.
+
+``vis.get_page_names()``
+   ``[page.name for page in vis.pages]``.
+
+``vis.add_page(name)``
+   ``vis.pages.create(name)``.
+
+``vis.add_page_at(index, name)``
+   ``vis.pages.create(name, index=index)``. ``index`` runs from 0 to
+   ``len(vis.pages)``.
+
+``vis.copy_page(page, index=..., name=...)``
+   ``vis.pages.copy(page, name=..., index=...)``. With no ``index`` the copy
+   goes straight after ``page``. A page of another document is refused.
+
+``vis.remove_page_by_index(index)``
+   ``vis.pages.delete(vis.pages[index])``.
+
+``vis.remove_page_by_name(name)``
+   ``vis.pages.delete(vis.pages.require_name(name))``. A name no page has
+   raises :class:`vsdxkit.errors.NotFoundError`, where 0.x did nothing.
+
+``PagePosition.FIRST``, ``PagePosition.LAST``, ``PagePosition.END``, ``PagePosition.BEFORE``, ``PagePosition.AFTER``
+   An index instead: ``index=0`` for the first page, ``len(vis.pages)`` (or no
+   index, for ``create``) for the end, ``vis.pages.index(page)`` for before a
+   page, and no index, for ``copy``, for after it.
+
+Shapes delete themselves
+------------------------
+
+``page.delete_shape(shape)``, ``shape.remove()``
+   ``shape.delete()``. It deletes the shape from its own page, with every
+   connector glued to it and every ``Connect`` record naming it; a group takes
+   its members with them. A shape can no longer be handed to the wrong page,
+   so the ``NotFoundError`` for a shape from elsewhere is gone. Deleting a
+   shape twice raises :class:`vsdxkit.errors.InvalidOperationError`.
+
+``Shape.remove`` warned with ``DeprecationWarning`` in 0.8; ``shape.delete()``
+does not warn.
 
 The finders are gone
 --------------------

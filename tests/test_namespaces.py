@@ -269,7 +269,7 @@ def test_a_copied_page_keeps_the_prefixes_its_source_declared(tmp_path):
     """
     out = os.path.join(str(tmp_path), "copied.vsdx")
     vis = Document.open(os.path.join(FIXTURES, "test5_master.vsdx"))
-    vis.copy_page(vis.pages[0])
+    vis.pages.copy(vis.pages[0])
     vis.save(out)
     assert f'xmlns:lc="{LUCIDCHART}"' in _page_part(out, "visio/pages/page2.xml")
     assert "lucidchartcom" not in _page_part(out, "visio/pages/page2.xml")

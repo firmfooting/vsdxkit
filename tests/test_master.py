@@ -47,7 +47,7 @@ def test_find_master_shape(filename: str, shape_text: str, basedir):
 @pytest.mark.parametrize(("filename"), [("test5_master.vsdx")])
 def test_master_inheritance(filename: str, basedir):
     vis = Document.open(os.path.join(basedir, filename))
-    page = vis.get_page(0)  # type: Page
+    page = vis.pages[0]  # type: Page
     shape_a = page.shapes.by_text("Shape A")  # type: Shape
     shape_b = page.shapes.by_text("Shape B")  # type: Shape
 
@@ -68,7 +68,7 @@ def test_set_master_child_property(filename: str, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_set_master_child_property.vsdx")
 
     vis = Document.open(os.path.join(basedir, filename))
-    page = vis.get_page(0)
+    page = vis.pages[0]
     # find shape with master and set a child property
     sub_shape_b = next(iter(page.shapes.require_text("Shape B").children))
 
@@ -77,7 +77,7 @@ def test_set_master_child_property(filename: str, tmp_path, basedir):
     vis.save(out_file)
 
     vis = Document.open(out_file)
-    page = vis.get_page(0)
+    page = vis.pages[0]
 
     sub_shape_b = next(iter(page.shapes.require_text("Shape B").children))
     assert sub_shape_b.master_shape  # shape has a master
@@ -89,7 +89,7 @@ def test_master_property_change_is_inherited(filename: str, weight, tmp_path, ba
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_master_property_change_is_inherited.vsdx")
 
     vis = Document.open(os.path.join(basedir, filename))
-    page = vis.get_page(0)
+    page = vis.pages[0]
 
     sub_shape_a = next(iter(page.shapes.require_text("Shape A").children))
     master = sub_shape_a.master_shape
@@ -98,7 +98,7 @@ def test_master_property_change_is_inherited(filename: str, weight, tmp_path, ba
     vis.save(out_file)
 
     vis = Document.open(out_file)
-    page = vis.get_page(0)
+    page = vis.pages[0]
 
     sub_shape_a = next(iter(page.shapes.require_text("Shape A").children))
     sub_shape_b = next(iter(page.shapes.require_text("Shape B").children))
@@ -113,7 +113,7 @@ def test_child_property_change_is_not_inherited(filename: str, weight, tmp_path,
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_child_property_change_is_not_inherited.vsdx")
 
     vis = Document.open(os.path.join(basedir, filename))
-    page = vis.get_page(0)
+    page = vis.pages[0]
 
     shape_a = page.shapes.by_text("Shape A")
     sub_shape_a = next(iter(shape_a.children))
@@ -126,7 +126,7 @@ def test_child_property_change_is_not_inherited(filename: str, weight, tmp_path,
     vis.save(out_file)
 
     vis = Document.open(out_file)
-    page = vis.get_page(0)
+    page = vis.pages[0]
 
     sub_shape_a = next(iter(page.shapes.require_text("Shape A").children))
     master = sub_shape_a.master_shape
@@ -149,7 +149,7 @@ def test_child_property_change_is_not_inherited(filename: str, weight, tmp_path,
 def test_master_find_shapes(filename: str, shape_text: str, basedir):
     # Check that shape with text can be found - whether in page, master or overridden in master
     vis = Document.open(os.path.join(basedir, filename))
-    page = vis.get_page(0)  # type: Page
+    page = vis.pages[0]  # type: Page
     shape = page.shapes.by_text(shape_text)
     assert shape  # shape found
 
@@ -167,7 +167,7 @@ def test_master_find_shapes(filename: str, shape_text: str, basedir):
 def test_shape_has_master(filename: str, shape_text: str, has_master: bool, basedir):
     # Check that shape.master_shape returns a shape or None as expected
     vis = Document.open(os.path.join(basedir, filename))
-    page = vis.get_page(0)  # type: Page
+    page = vis.pages[0]  # type: Page
     shape = page.shapes.by_text(shape_text)
     assert shape  # shape found
     if has_master:
@@ -189,7 +189,7 @@ def test_shape_has_master(filename: str, shape_text: str, has_master: bool, base
 def test_master_check_text_inheritance(filename: str, shape_text: str, has_master: bool, inherits_text: bool, basedir):
     # Check that shape with text can be found and that it has a master (or not) and inherits text (or not)
     vis = Document.open(os.path.join(basedir, filename))
-    page = vis.get_page(0)  # type: Page
+    page = vis.pages[0]  # type: Page
     shape = page.shapes.by_text(shape_text)
 
     if shape.master_shape:
@@ -209,7 +209,7 @@ def test_master_check_text_inheritance(filename: str, shape_text: str, has_maste
 def test_find_shapes_by_master_id(filename: str, master_shape_text: str, number_shapes: int, basedir):
     # test that a shapes master has 'number_shapes' shapes that inherit from it
     vis = Document.open(os.path.join(basedir, filename))
-    page = vis.get_page(0)
+    page = vis.pages[0]
     shape = page.shapes.by_text(master_shape_text)  # get shape which has a master
     # print(f"master_shape: {master_shape} {master_shape_.master_shape_ID}")
     shapes = [
@@ -241,7 +241,7 @@ def test_master_inheritance_master_shape_set_text(
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_master_inheritance_master_shape_set_text.vsdx")
     master_text = "Updated Master Shape Text"
     vis = Document.open(os.path.join(basedir, filename))
-    page = vis.get_page(0)
+    page = vis.pages[0]
 
     # get master shape of Shape with search text
     master_shape = page.shapes.by_text(master_shape_search_text).master_shape
@@ -258,7 +258,7 @@ def test_master_inheritance_master_shape_set_text(
     vis.save(out_file)
 
     vis = Document.open(out_file)
-    page = vis.get_page(0)
+    page = vis.pages[0]
 
     # get same shape and confirm inheritance works as expected
     shape = page.shapes.require_id(shape_id)
