@@ -30,3 +30,11 @@ html_title = f"vsdxkit {release}"
 # Canonical URL, so search engines credit the published site rather than a
 # mirror or a local build.
 html_baseurl = "https://firmfooting.github.io/vsdxkit/"
+
+# The firmfooting brand. The stylesheet, mark and favicon are copied from
+# firmfooting/branding, whose generate.py owns the palette; copy them again
+# from there rather than editing them here.
+html_static_path = ["_static"]
+html_css_files = ["sphinx-rtd.css"]
+html_logo = "_static/mark_white.svg"
+html_favicon = "_static/favicon.ico"
