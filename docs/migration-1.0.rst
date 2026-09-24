@@ -354,9 +354,10 @@ page's finder and ``shape.descendants`` for a shape's.
      - ``[s for s in scope if re.search(regex, s.text)]``
    * - ``page.find_shape_by_attr(attr, value)``, ``shape.find_shape_by_attr(attr, value)``
      - ``next((s for s in scope if s.xml.get(attr) == value), None)``
-   * - ``shape.find_shapes_by_master(page_id, shape_id)``,
-       ``page.find_shapes_with_same_master(shape)``
+   * - ``shape.find_shapes_by_master(page_id, shape_id)``
      - ``[s for s in scope if (s.master_page_ID, s.master_shape_ID) == (page_id, shape_id)]``
+   * - ``page.find_shapes_with_same_master(shape)``
+     - ``[s for s in page.shapes if (s.master_page_ID, s.master_shape_ID) == (shape.master_page_ID, shape.master_shape_ID)]``
 
 ``shape.data_properties``
    Also a new ``dict`` on each read; 0.8 returned the same one while the
