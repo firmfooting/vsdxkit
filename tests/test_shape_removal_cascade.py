@@ -14,6 +14,7 @@ import pytest
 from vsdxkit import namespace
 from vsdxkit.document import Document
 from vsdxkit.errors import InvalidOperationError
+from vsdxkit.shape_kind import ShapeKind
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
@@ -34,8 +35,8 @@ def _referencing(page, shape_id: str):
 def test_removing_a_connected_shape_takes_its_connector_with_it(vsdx_copy):
     vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
-    start = vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="A")
-    end = vis.create_shape(page, "PALETTE_PROCESS", 6.0, 2.0, text="B")
+    start = page.create_shape(ShapeKind.PROCESS, x=2.0, y=2.0, text="A")
+    end = page.create_shape(ShapeKind.PROCESS, x=6.0, y=2.0, text="B")
     connector = page.connect_shapes(start, end)
     assert _referencing(page, start.ID)
 
@@ -55,8 +56,8 @@ def test_remove_and_delete_shape_leave_the_page_in_the_same_state(vsdx_copy):
     def _state_after(delete):
         vis = Document.open(vsdx_copy("test1.vsdx"))
         page = vis.pages[0]
-        start = vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="A")
-        end = vis.create_shape(page, "PALETTE_PROCESS", 6.0, 2.0, text="B")
+        start = page.create_shape(ShapeKind.PROCESS, x=2.0, y=2.0, text="A")
+        end = page.create_shape(ShapeKind.PROCESS, x=6.0, y=2.0, text="B")
         page.connect_shapes(start, end)
         delete(page, start)
         return (
@@ -127,7 +128,7 @@ def test_deleting_a_shape_that_is_not_on_the_page_is_an_error(vsdx_copy):
     """Silently doing nothing would hide a caller's mistake."""
     vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
-    shape = vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="A")
+    shape = page.create_shape(ShapeKind.PROCESS, x=2.0, y=2.0, text="A")
     page.delete_shape(shape)
 
     with pytest.raises(ValueError, match="not on page"):
@@ -137,7 +138,7 @@ def test_deleting_a_shape_that_is_not_on_the_page_is_an_error(vsdx_copy):
 def test_removing_the_same_shape_twice_is_an_error(vsdx_copy):
     vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
-    shape = vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="A")
+    shape = page.create_shape(ShapeKind.PROCESS, x=2.0, y=2.0, text="A")
     with pytest.warns(DeprecationWarning):
         shape.remove()
     with pytest.warns(DeprecationWarning), pytest.raises(ValueError, match="not on page"):
@@ -153,8 +154,8 @@ def test_an_inherited_begin_cell_still_marks_a_shape_as_a_connector(vsdx_copy):
     """
     vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
-    start = vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="A")
-    end = vis.create_shape(page, "PALETTE_PROCESS", 6.0, 2.0, text="B")
+    start = page.create_shape(ShapeKind.PROCESS, x=2.0, y=2.0, text="A")
+    end = page.create_shape(ShapeKind.PROCESS, x=6.0, y=2.0, text="B")
     connector = page.connect_shapes(start, end)
     # move BeginX off the connector so it can only be found via the master
     begin_cell = connector.xml.find(f'{namespace}Cell[@N="BeginX"]')
@@ -191,9 +192,9 @@ def test_deleting_a_shape_belonging_to_another_page_is_refused(vsdx_copy):
 def _three_connected(vis):
     """A-B and B-C joined by connectors: the page, the shapes and the connectors."""
     page = vis.pages[0]
-    a = vis.create_shape(page, "PALETTE_PROCESS", 1.0, 2.0, text="A")
-    b = vis.create_shape(page, "PALETTE_PROCESS", 4.0, 2.0, text="B")
-    c = vis.create_shape(page, "PALETTE_PROCESS", 7.0, 2.0, text="C")
+    a = page.create_shape(ShapeKind.PROCESS, x=1.0, y=2.0, text="A")
+    b = page.create_shape(ShapeKind.PROCESS, x=4.0, y=2.0, text="B")
+    c = page.create_shape(ShapeKind.PROCESS, x=7.0, y=2.0, text="C")
     return page, (a, b, c), (page.connect_shapes(a, b), page.connect_shapes(b, c))
 
 

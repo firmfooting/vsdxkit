@@ -40,6 +40,9 @@ class Glue(Enum):
 class Routing(Enum):
     """The path a connector takes between its ends."""
 
+    DEFAULT = "default"
+    """Visio's own: dynamic glue reroutes at right angles, point glue stays straight."""
+
     STRAIGHT = "straight"
     RIGHT_ANGLE = "rightangle"
     CURVED = "curved"
@@ -54,20 +57,20 @@ class ConnectorOptions:
 
     ``from_point`` and ``to_point`` are 0-based rows of each shape's
     ``Connection`` section, and are read only when ``glue`` is
-    :attr:`Glue.POINT`. ``routing`` of ``None`` is Visio's own: dynamic glue
-    reroutes at right angles, and point glue keeps the connector straight.
+    :attr:`Glue.POINT`.
     """
 
     glue: Glue = Glue.DYNAMIC
-    routing: Routing | None = None
+    routing: Routing = Routing.DEFAULT
     from_point: int = 0
     to_point: int = 0
 
     def __post_init__(self) -> None:
         if not isinstance(self.glue, Glue):
             raise TypeError(f"glue must be a Glue, not {self.glue!r}")
-        if self.routing is not None and not isinstance(self.routing, Routing):
-            raise TypeError(f"routing must be a Routing or None, not {self.routing!r}")
+        if not isinstance(self.routing, Routing):
+            members = ", ".join(f"Routing.{member.name}" for member in Routing)
+            raise TypeError(f"routing must be one of {members}, not {self.routing!r}")
         for point in (self.from_point, self.to_point):
             if type(point) is not int or point < 0:
                 raise InvalidOperationError(f"a connection point is a 0-based row index, not {point!r}")
@@ -80,7 +83,7 @@ class ConnectorOptions:
         glue, and at most one of ``straight``, ``rightangle`` and ``curved``.
         """
         parts: list[str] = route.split("|") if route else []
-        unknown = set(parts) - {"dynamic", "point", *(routing.value for routing in Routing)}
+        unknown = set(parts) - {"dynamic", "point", *(routing.value for routing in _ROUTE_STYLE)}
         if unknown:
             raise ValueError(f"unknown connector route part(s): {', '.join(sorted(unknown))}")
         routings = [Routing(part) for part in parts if part not in ("dynamic", "point")]
@@ -88,7 +91,7 @@ class ConnectorOptions:
             raise ValueError("connector route may specify only one routing behaviour")
         return cls(
             glue=Glue.POINT if "point" in parts else Glue.DYNAMIC,
-            routing=routings[0] if routings else None,
+            routing=routings[0] if routings else Routing.DEFAULT,
             from_point=from_point,
             to_point=to_point,
         )
@@ -191,17 +194,17 @@ def _any_dynamic(begin: EndGlue | None, end: EndGlue | None) -> bool:
     return any(glued is not None and glued.point is None for glued in (begin, end))
 
 
-def routing_cells(routing: Routing | None, *, dynamic: bool) -> tuple[CellWrite, ...]:
+def routing_cells(routing: Routing, *, dynamic: bool) -> tuple[CellWrite, ...]:
     """Every cell that sets a connector's routing, so the routing replaces whatever the connector had.
 
-    With no ``routing``, dynamic glue takes Visio's defaults (s01) and point
-    glue the straight connector's (the bundled donor's own cells).
+    With :attr:`Routing.DEFAULT`, dynamic glue takes Visio's defaults (s01)
+    and point glue the straight connector's (the bundled donor's own cells).
     """
     if dynamic:
         cells = {"ShapeRouteStyle": "0", "ConLineRouteExt": "0", "ConFixedCode": "6"}
     else:
         cells = {"ShapeRouteStyle": "16", "ConLineRouteExt": "1", "ConFixedCode": "6"}
-    if routing is not None:
+    if routing is not Routing.DEFAULT:
         cells["ShapeRouteStyle"] = _ROUTE_STYLE[routing]
     if routing is Routing.CURVED:
         # Visio sets ConFixedCode itself when a connector is made curved (s03)

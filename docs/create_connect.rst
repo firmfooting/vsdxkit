@@ -4,44 +4,47 @@ Create shapes and connectors
 Create shapes
 -------------
 
-:meth:`vsdxkit.document.Document.create_shape` copies a masterless shape from
-the bundled palette into an existing page. Coordinates are Visio page units,
-normally inches, and identify the centre of the shape.
+:meth:`vsdxkit.pages.Page.create_shape` places a new shape on the page, either
+one of the built-in :class:`vsdxkit.shape_kind.ShapeKind` shapes or a copy of a
+shape already in the document. Coordinates are Visio page units, normally
+inches, and identify the centre of the shape. ``x`` and ``y`` are keyword-only;
+``width``, ``height`` and ``text`` are optional.
 
 .. code-block:: python
 
    from vsdxkit.document import Document
+   from vsdxkit.shape_kind import ShapeKind
 
    vis = Document.open("diagram.vsdx")
    page = vis.pages[0]
 
-   start = vis.create_shape(
-       page, "PALETTE_START_END", 2.0, 6.0, text="Start"
+   start = page.create_shape(ShapeKind.START_END, x=2.0, y=6.0, text="Start")
+   work = page.create_shape(
+       ShapeKind.PROCESS, x=6.0, y=6.0, width=2.0, height=1.0, text="Do the thing"
    )
-   work = vis.create_shape(
-       page, "PALETTE_PROCESS", 6.0, 6.0,
-       w=2.0, h=1.0, text="Do the thing"
-   )
-   decision = vis.create_shape(
-       page, "PALETTE_DECISION", 10.0, 6.0, text="OK?"
-   )
+   decision = page.create_shape(ShapeKind.DECISION, x=10.0, y=6.0, text="OK?")
 
    page.connect_shapes(start, work)
    page.connect_shapes(work, decision, route="rightangle")
    vis.save("flow.vsdx")
 
-Palette names
--------------
+Shape kinds
+-----------
 
-The bundled palette exposes these names:
+:class:`vsdxkit.shape_kind.ShapeKind` names the built-in shapes:
+``PROCESS``, ``DECISION``, ``START_END``, ``PARALLELOGRAM``, ``DATABASE``,
+``RECTANGLE``, ``CIRCLE`` and ``LINE``. A string is refused with ``TypeError``.
 
-* ``PALETTE_PROCESS``
-* ``PALETTE_DECISION``
-* ``PALETTE_START_END``
-* ``PALETTE_PARALLELOGRAM``
-* ``PALETTE_DATABASE``
+Copy a shape
+------------
 
-An unknown name raises ``vsdxkit.errors.NotFoundError``.
+Pass a shape instead of a kind to place a copy of it, with its text, at the
+new position. The shape must belong to the same document; a shape from another
+document raises ``vsdxkit.errors.InvalidOperationError``.
+
+.. code-block:: python
+
+   again = page.create_shape(work, x=6.0, y=3.0, text="Do it again")
 
 Connector glue and routing
 --------------------------

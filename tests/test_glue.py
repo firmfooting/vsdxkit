@@ -30,9 +30,9 @@ WALKGLUE_END = "_WALKGLUE(EndTrigger,BegTrigger,WalkPreference)"
 @pytest.mark.parametrize(
     ("route", "glue", "routing"),
     [
-        ("", Glue.DYNAMIC, None),
-        ("dynamic", Glue.DYNAMIC, None),
-        ("point", Glue.POINT, None),
+        ("", Glue.DYNAMIC, Routing.DEFAULT),
+        ("dynamic", Glue.DYNAMIC, Routing.DEFAULT),
+        ("point", Glue.POINT, Routing.DEFAULT),
         ("straight", Glue.DYNAMIC, Routing.STRAIGHT),
         ("rightangle", Glue.DYNAMIC, Routing.RIGHT_ANGLE),
         ("curved", Glue.DYNAMIC, Routing.CURVED),
@@ -71,9 +71,15 @@ def test_options_refuse_a_glue_that_is_not_a_glue():
         ConnectorOptions(glue="point")  # type: ignore[arg-type]
 
 
-def test_options_refuse_a_routing_that_is_not_a_routing():
-    with pytest.raises(TypeError, match="Routing"):
-        ConnectorOptions(routing="curved")  # type: ignore[arg-type]
+@pytest.mark.parametrize("routing", ["curved", None])
+def test_options_refuse_a_routing_that_is_not_a_routing(routing):
+    """A route string, or the 0.x `None` for Visio's routing, is refused naming the members to use."""
+    with pytest.raises(TypeError, match=r"Routing\.DEFAULT, Routing\.STRAIGHT, Routing\.RIGHT_ANGLE, Routing\.CURVED"):
+        ConnectorOptions(routing=routing)  # type: ignore[arg-type]
+
+
+def test_options_default_to_visio_routing():
+    assert ConnectorOptions().routing is Routing.DEFAULT
 
 
 def test_options_are_frozen():
@@ -138,7 +144,7 @@ def test_a_floating_end_stays_where_it_is():
 
 
 def test_dynamic_routing_starts_from_visio_defaults():
-    assert routing_cells(None, dynamic=True) == (
+    assert routing_cells(Routing.DEFAULT, dynamic=True) == (
         CellWrite("ShapeRouteStyle", value="0"),
         CellWrite("ConLineRouteExt", value="0"),
         CellWrite("ConFixedCode", value="6"),
@@ -147,7 +153,7 @@ def test_dynamic_routing_starts_from_visio_defaults():
 
 def test_point_routing_is_the_straight_connector():
     """Every routing cell is written, so options replace what a connector had rather than add to it."""
-    assert routing_cells(None, dynamic=False) == (
+    assert routing_cells(Routing.DEFAULT, dynamic=False) == (
         CellWrite("ShapeRouteStyle", value="16"),
         CellWrite("ConLineRouteExt", value="1"),
         CellWrite("ConFixedCode", value="6"),

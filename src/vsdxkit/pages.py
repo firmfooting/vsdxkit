@@ -25,6 +25,7 @@ from vsdxkit.errors import InvalidOperationError, MissingPartError, NotFoundErro
 from vsdxkit.glue import ConnectorOptions
 from vsdxkit.package import XmlPart
 from vsdxkit.partnames import relationship_target, relationships_part_name
+from vsdxkit.shape_kind import ShapeKind
 from vsdxkit.shape_tree import iter_descendants
 from vsdxkit.shapes import Shape, ShapeCollection, _wrap_children, _wrap_descendants, is_connector, parent_of
 from vsdxkit.xmlio import PartTree, require_element, to_float, xml_value
@@ -577,6 +578,58 @@ class Page:
             to_cp=to_cp,
             options=options,
         )
+
+    def create_shape(
+        self,
+        kind_or_prototype: ShapeKind | Shape,
+        *,
+        x: float,
+        y: float,
+        width: float | None = None,
+        height: float | None = None,
+        text: str | None = None,
+    ) -> Shape:
+        """Create a shape on this page, centred on ``x``, ``y``.
+
+        ``kind_or_prototype`` is a built-in :class:`~vsdxkit.shape_kind.ShapeKind`,
+        or a shape from this document to copy: a prototype is how a shape
+        with a custom master is made. Either way the new shape is a copy made
+        by :meth:`Shape.copy`, the one way a shape is created.
+
+        :param width, height: the new size; the kind's or prototype's when omitted
+        :param text: the label. A kind starts blank; a prototype keeps its text when omitted.
+        :raises TypeError: if ``kind_or_prototype`` is neither a kind nor a shape
+        :raises InvalidOperationError: if a prototype belongs to another document
+        :returns: the new shape
+        """
+        if isinstance(kind_or_prototype, ShapeKind):
+            # vsdxkit.media opens its donors as Documents, which import this
+            # module, so importing it at module level would be a cycle
+            from vsdxkit import media
+
+            shape = media.copy_kind(kind_or_prototype, self)
+            label = "" if text is None else text
+        elif isinstance(kind_or_prototype, Shape):
+            if kind_or_prototype.page.vis is not self.vis:
+                raise InvalidOperationError(
+                    f"shape ID {kind_or_prototype.ID} belongs to another document; "
+                    "a prototype must come from the document it is copied into"
+                )
+            shape = kind_or_prototype.copy(self)
+            label = text
+        else:
+            kinds = ", ".join(f"ShapeKind.{kind.name}" for kind in ShapeKind)
+            raise TypeError(f"create_shape takes a Shape or one of {kinds}, not {kind_or_prototype!r}")
+        # built-in shapes are drawn around their centre: position via PinX/PinY
+        shape.get_or_create_cell("PinX", v=str(x))
+        shape.get_or_create_cell("PinY", v=str(y))
+        if width is not None:
+            shape.width = width
+        if height is not None:
+            shape.height = height
+        if label is not None:
+            shape.text = label
+        return shape
 
     def delete_shape(self, shape: Shape) -> None:
         """Delete a shape from this page, removing any incident connectors.

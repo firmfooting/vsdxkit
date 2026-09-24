@@ -17,7 +17,7 @@ vsdxkit adds shape creation, Visio-faithful connectors, connector re-anchoring, 
 
 - Opens, queries and edits existing `.vsdx` files without Microsoft Visio.
 - Finds shapes by ID, text, regular expression or Shape Data.
-- Creates common flowchart shapes from a bundled palette.
+- Creates common flowchart shapes, or copies a shape already on the page.
 - Creates dynamic or connection-point glue with straight, right-angle or curved routing.
 - Re-anchors either end of an existing connector.
 - Reads and extends Visio cross-functional flowchart swimlanes.
@@ -88,32 +88,21 @@ Shape coordinates are in Visio page units, normally inches. `x` and `y` identify
 
 ```python
 from vsdxkit.document import Document
+from vsdxkit.shape_kind import ShapeKind
 
 vis = Document.open("diagram.vsdx")
 page = vis.pages[0]
 
-start = vis.create_shape(
-    page, "PALETTE_START_END", 2.0, 6.0, text="Start"
-)
-work = vis.create_shape(
-    page, "PALETTE_PROCESS", 6.0, 6.0, text="Do the thing"
-)
-decision = vis.create_shape(
-    page, "PALETTE_DECISION", 10.0, 6.0, text="OK?"
-)
+start = page.create_shape(ShapeKind.START_END, x=2.0, y=6.0, text="Start")
+work = page.create_shape(ShapeKind.PROCESS, x=6.0, y=6.0, text="Do the thing")
+decision = page.create_shape(ShapeKind.DECISION, x=10.0, y=6.0, text="OK?")
 
 page.connect_shapes(start, work)
 page.connect_shapes(work, decision, route="rightangle")
 vis.save("flow.vsdx")
 ```
 
-Bundled palette names are:
-
-- `PALETTE_PROCESS`
-- `PALETTE_DECISION`
-- `PALETTE_START_END`
-- `PALETTE_PARALLELOGRAM`
-- `PALETTE_DATABASE`
+`ShapeKind` names the built-in shapes: `PROCESS`, `DECISION`, `START_END`, `PARALLELOGRAM`, `DATABASE`, `RECTANGLE`, `CIRCLE` and `LINE`. Pass a shape from the same document instead of a kind to place a copy of it, text included; `width`, `height` and `text` are optional either way.
 
 Connector `route` combines glue and routing behaviour:
 
@@ -133,9 +122,7 @@ Pass only the end that should move. A `None` endpoint keeps the current shape.
 ```python
 vis = Document.open("flow.vsdx")
 page = vis.pages[0]
-store = vis.create_shape(
-    page, "PALETTE_DATABASE", 10.0, 2.0, text="Store"
-)
+store = page.create_shape(ShapeKind.DATABASE, x=10.0, y=2.0, text="Store")
 
 # a connector is the shape a Connect record points from
 connector = page.shapes.require_id(page.connects[0].from_id)
@@ -159,9 +146,7 @@ if container is None:
     raise ValueError("The page is not a Visio CFF diagram")
 
 review_lane = page.add_swimlane("Review")
-check = vis.create_shape(
-    page, "PALETTE_PROCESS", 6.0, 2.0, text="Check"
-)
+check = page.create_shape(ShapeKind.PROCESS, x=6.0, y=2.0, text="Check")
 page.add_shape_to_lane(check, review_lane)
 
 assert container.lane_of(check) is not None

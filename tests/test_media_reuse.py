@@ -19,6 +19,7 @@ from vsdxkit import media
 from vsdxkit.connectors import Connect
 from vsdxkit.document import Document
 from vsdxkit.package import PackageStore
+from vsdxkit.shape_kind import ShapeKind
 
 BASE = "test8_simple_connector.vsdx"
 
@@ -53,13 +54,13 @@ def test_each_donor_is_opened_once_across_documents(vsdx_copy, monkeypatch, fres
 
     vis = Document.open(path)
     page = vis.pages[0]
-    shapes = [vis.create_shape(page, "PALETTE_PROCESS", 1.0 + i * 0.01, 1.0, text=f"S{i}") for i in range(50)]
+    shapes = [page.create_shape(ShapeKind.PROCESS, x=1.0 + i * 0.01, y=1.0, text=f"S{i}") for i in range(50)]
     for i in range(50):
         assert page.connect_shapes(shapes[i], shapes[(i + 1) % 50]) is not None
     vis.save(path)
     second = Document.open(vsdx_copy("test1.vsdx"))
-    a = second.create_shape(second.pages[0], "PALETTE_DECISION", 1.0, 1.0, text="A")
-    b = second.create_shape(second.pages[0], "PALETTE_DATABASE", 2.0, 1.0, text="B")
+    a = second.pages[0].create_shape(ShapeKind.DECISION, x=1.0, y=1.0, text="A")
+    b = second.pages[0].create_shape(ShapeKind.DATABASE, x=2.0, y=1.0, text="B")
     second.pages[0].connect_shapes(a, b)
 
     for donor in DONORS:
@@ -92,8 +93,8 @@ def test_creation_leaves_the_donors_as_they_were(vsdx_copy, fresh_donors):
     before = _donor_xml()
     vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
-    a = vis.create_shape(page, "PALETTE_PROCESS", 1.0, 1.0, text="A")
-    b = vis.create_shape(page, "PALETTE_START_END", 3.0, 1.0)
+    a = page.create_shape(ShapeKind.PROCESS, x=1.0, y=1.0, text="A")
+    b = page.create_shape(ShapeKind.START_END, x=3.0, y=1.0)
     page.connect_shapes(a, b, route="curved")
     assert _donor_xml() == before
 

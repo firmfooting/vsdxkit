@@ -1106,50 +1106,6 @@ class Document(JinjaTemplatingMixin):
     def get_shape_id(shape: Element) -> str:
         return shape.attrib["ID"]
 
-    def create_shape(
-        self,
-        page: Page,
-        palette_name: str,
-        x: float,
-        y: float,
-        w: float | None = None,
-        h: float | None = None,
-        text: str | None = None,
-    ) -> Shape:
-        """Create a new shape on a page from the extended shape palette.
-
-        The palette shape is copied with :meth:`Shape.copy`, the one way a
-        shape is created, and then placed, sized and labelled through the
-        ordinary setters.
-
-        :param page: destination page
-        :param palette_name: sentinel name, e.g. 'PALETTE_PROCESS',
-            'PALETTE_DECISION', 'PALETTE_START_END', 'PALETTE_PARALLELOGRAM',
-            'PALETTE_DATABASE'
-        :param x, y: centre position of the new shape
-        :param w, h: optional width/height overrides
-        :param text: label text; the palette sentinel name is cleared when None
-        :return: the new Shape
-        """
-        # vsdxkit.media opens its donors as Documents, so importing it at
-        # module level would be a cycle
-        from vsdxkit import media
-
-        new_shape = media.copy_palette_shape(palette_name, page)
-
-        # palette shapes are drawn around their centre: position via PinX/PinY
-        new_shape.get_or_create_cell("PinX", v=str(x))
-        new_shape.get_or_create_cell("PinY", v=str(y))
-        if w is not None:
-            new_shape.width = w
-        if h is not None:
-            new_shape.height = h
-        if text is not None:
-            new_shape.text = text
-        else:
-            new_shape.text = ""
-        return new_shape
-
     @override
     def increment_sub_shape_ids(self, shape: Shape, page: Page, id_map: dict[str, int] | None = None) -> dict[str, int]:
         """Renumber a shape and everything under it, then remap its formulas.

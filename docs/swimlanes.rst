@@ -41,9 +41,9 @@ Add a shape to a lane
 
 .. code-block:: python
 
-   check = vis.create_shape(
-       page, "PALETTE_PROCESS", 6.0, 2.0, text="Check"
-   )
+   from vsdxkit.shape_kind import ShapeKind
+
+   check = page.create_shape(ShapeKind.PROCESS, x=6.0, y=2.0, text="Check")
    page.add_shape_to_lane(check, review_lane)
 
    assert container.lane_of(check) is not None

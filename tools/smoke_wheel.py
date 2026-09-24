@@ -72,6 +72,7 @@ def main() -> int:
     import vsdxkit
     from vsdxkit import media
     from vsdxkit.document import Document
+    from vsdxkit.shape_kind import ShapeKind
 
     ok(f"vsdxkit {vsdxkit.__version__} imports cleanly")
 
@@ -95,12 +96,12 @@ def main() -> int:
         try:
             vis = Document.open(document)
             page = vis.pages[0]
-            shape = vis.create_shape(page, "PALETTE_DECISION", 4.0, 6.0, w=1.5, h=1.0, text="smoke")
+            shape = page.create_shape(ShapeKind.DECISION, x=4.0, y=6.0, width=1.5, height=1.0, text="smoke")
             if shape is None:
                 fail("create_shape returned None")
             else:
                 ok("create_shape from installed palette")
-            other = vis.create_shape(page, "PALETTE_PROCESS", 8.0, 6.0, w=1.5, h=1.0, text="smoke-to")
+            other = page.create_shape(ShapeKind.PROCESS, x=8.0, y=6.0, width=1.5, height=1.0, text="smoke-to")
             connector = page.connect_shapes(shape, other)
             if connector is None:
                 fail("create_connect returned None")
