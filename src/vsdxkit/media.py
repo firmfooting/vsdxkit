@@ -21,6 +21,7 @@ from xml.etree.ElementTree import Element
 from vsdxkit.document import Document
 from vsdxkit.errors import NotFoundError
 from vsdxkit.pages import Page
+from vsdxkit.shape_kind import ShapeKind
 from vsdxkit.shapes import Shape
 
 MEDIA = "media.vsdx"
@@ -28,6 +29,18 @@ PALETTE = "palette_extended.vsdx"
 
 STRAIGHT_CONNECTOR = "STRAIGHT_CONNECTOR"
 CURVED_CONNECTOR = "CURVED_CONNECTOR"
+
+# each built-in kind: the bundled document it is copied from, and its sentinel text there
+_KINDS: dict[ShapeKind, tuple[str, str]] = {
+    ShapeKind.PROCESS: (PALETTE, "PALETTE_PROCESS"),
+    ShapeKind.DECISION: (PALETTE, "PALETTE_DECISION"),
+    ShapeKind.START_END: (PALETTE, "PALETTE_START_END"),
+    ShapeKind.PARALLELOGRAM: (PALETTE, "PALETTE_PARALLELOGRAM"),
+    ShapeKind.DATABASE: (PALETTE, "PALETTE_DATABASE"),
+    ShapeKind.RECTANGLE: (MEDIA, "RECTANGLE"),
+    ShapeKind.CIRCLE: (MEDIA, "CIRCLE"),
+    ShapeKind.LINE: (MEDIA, "LINE"),
+}
 
 # the donors loaded so far, by filename; the lock makes the first load of
 # each happen once even when several threads create shapes at the same time
@@ -59,14 +72,14 @@ def _sentinel(filename: str, text: str) -> Shape:
     return shape
 
 
-def copy_palette_shape(name: str, page: Page) -> Shape:
-    """A copy of the palette shape `name` on `page`, through :meth:`Shape.copy`.
+def _kind_shape(kind: ShapeKind) -> Shape:
+    """The bundled shape a kind is copied from. Not for handing out: see the module docstring."""
+    return _sentinel(*_KINDS[kind])
 
-    `name` is one of ``PALETTE_PROCESS``, ``PALETTE_DECISION``,
-    ``PALETTE_START_END``, ``PALETTE_PARALLELOGRAM`` and ``PALETTE_DATABASE``.
-    The copy still carries the sentinel text.
-    """
-    return _sentinel(PALETTE, name).copy(page)
+
+def copy_kind(kind: ShapeKind, page: Page) -> Shape:
+    """A copy of the built-in shape `kind` on `page`, through :meth:`Shape.copy`. It still carries the sentinel text."""
+    return _kind_shape(kind).copy(page)
 
 
 def copy_connector(page: Page, curved: bool = False) -> Shape:

@@ -8,20 +8,27 @@ Document
 --------
 
 .. autoclass:: vsdxkit.document.Document
-   :members: open, pages, save, render, add_page, add_page_at, copy_page, create_shape, get_page_by_name, remove_page_by_index, remove_page_by_name
+   :members: open, pages, save, render, add_page, add_page_at, copy_page, get_page_by_name, remove_page_by_index, remove_page_by_name
    :undoc-members:
 
 Page, PageCollection and PagePosition
 -------------------------------------
 
 .. autoclass:: vsdxkit.pages.Page
-   :members: all_shapes, child_shapes, children, connect_shapes, connects, delete_shape, get_connectors_between, get_container, shapes, add_swimlane, add_shape_to_lane, reanchor_connector
+   :members: all_shapes, child_shapes, children, connect_shapes, connects, create_shape, delete_shape, get_connectors_between, get_container, shapes, add_swimlane, add_shape_to_lane, reanchor_connector
    :undoc-members:
 
 .. autoclass:: vsdxkit.pages.PageCollection
    :members: by_name, require_name, create, copy, delete
 
 .. autoclass:: vsdxkit.pages.PagePosition
+   :members:
+   :undoc-members:
+
+ShapeKind
+---------
+
+.. autoclass:: vsdxkit.shape_kind.ShapeKind
    :members:
    :undoc-members:
 

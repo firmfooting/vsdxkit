@@ -13,6 +13,7 @@ import xml.etree.ElementTree as ET
 
 from vsdxkit import namespace
 from vsdxkit.document import Document
+from vsdxkit.shape_kind import ShapeKind
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
@@ -30,8 +31,8 @@ def test_update_ids_remaps_shape_glue_trigger_formulas(vsdx_copy):
     """`_XFTRIGGER(SheetN!EventXFMod)` carries no dot and is not at the start."""
     vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
-    start = vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="A")
-    end = vis.create_shape(page, "PALETTE_PROCESS", 6.0, 2.0, text="B")
+    start = page.create_shape(ShapeKind.PROCESS, x=2.0, y=2.0, text="A")
+    end = page.create_shape(ShapeKind.PROCESS, x=6.0, y=2.0, text="B")
     connector = page.connect_shapes(start, end)
 
     shapes_element = page.xml.getroot().find(f"{namespace}Shapes")
@@ -61,8 +62,8 @@ def test_update_ids_leaves_references_outside_the_copy_untouched(vsdx_copy):
     """A reference to a shape that is not being copied must not be rewritten."""
     vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
-    start = vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="A")
-    end = vis.create_shape(page, "PALETTE_PROCESS", 6.0, 2.0, text="B")
+    start = page.create_shape(ShapeKind.PROCESS, x=2.0, y=2.0, text="A")
+    end = page.create_shape(ShapeKind.PROCESS, x=6.0, y=2.0, text="B")
     connector = page.connect_shapes(start, end)
 
     shapes_element = page.xml.getroot().find(f"{namespace}Shapes")
@@ -145,8 +146,8 @@ def test_copy_page_keeps_connector_glue(vsdx_copy):
     """
     vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
-    start = vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="A")
-    end = vis.create_shape(page, "PALETTE_PROCESS", 6.0, 2.0, text="B")
+    start = page.create_shape(ShapeKind.PROCESS, x=2.0, y=2.0, text="A")
+    end = page.create_shape(ShapeKind.PROCESS, x=6.0, y=2.0, text="B")
     connector = page.connect_shapes(start, end)
     expected = {
         "BegTrigger": _formula(connector, "BegTrigger"),

@@ -76,3 +76,27 @@ as you hold it.
    Delete the ``except`` clause. Nothing raises it. A write through a shape
    that has been deleted from its page still raises
    :class:`vsdxkit.errors.InvalidOperationError`.
+
+A page creates its own shapes
+-----------------------------
+
+Shapes are created by the page they go on, from a
+:class:`vsdxkit.shape_kind.ShapeKind` or from a shape already in the document.
+Palette-name strings are gone.
+
+``vis.create_shape(page, "PALETTE_PROCESS", x, y, w, h, text="...")``
+   ``page.create_shape(ShapeKind.PROCESS, x=x, y=y, width=w, height=h, text="...")``,
+   with ``from vsdxkit.shape_kind import ShapeKind``. The position is
+   keyword-only and ``w``/``h`` are now ``width``/``height``. ``PALETTE_X``
+   becomes ``ShapeKind.X`` for ``PROCESS``, ``DECISION``, ``START_END``,
+   ``PARALLELOGRAM`` and ``DATABASE``; ``RECTANGLE``, ``CIRCLE`` and ``LINE``
+   are new. A string raises ``TypeError``.
+
+A copy of an existing shape
+   ``page.create_shape(shape, x=x, y=y)`` places a copy of ``shape``, with its
+   text, on ``page``. ``shape`` must belong to the same document.
+
+``ConnectorOptions(routing=None)``
+   ``ConnectorOptions(routing=Routing.DEFAULT)``, which is also the default:
+   the connector keeps the routing Visio gives it. ``None`` raises
+   ``TypeError``.

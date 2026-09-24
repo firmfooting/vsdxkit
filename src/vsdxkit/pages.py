@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import math
+import re
 import sys
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from enum import IntEnum
 from typing import TYPE_CHECKING, Protocol, overload
 
@@ -18,13 +19,14 @@ else:
 import deprecation
 
 import vsdxkit
-from vsdxkit import namespace, relationships, retired_finders
-from vsdxkit.connectors import Connect
+from vsdxkit import namespace, r_namespace, relationships, retired_finders
+from vsdxkit.connectors import Connect, _float_ends
 from vsdxkit.containers import Container
 from vsdxkit.errors import InvalidOperationError, MissingPartError, NotFoundError, PackageError
 from vsdxkit.glue import ConnectorOptions
 from vsdxkit.package import XmlPart
-from vsdxkit.partnames import relationship_target, relationships_part_name
+from vsdxkit.partnames import relationship_target, relationships_part_name, target_part_name
+from vsdxkit.shape_kind import ShapeKind
 from vsdxkit.shape_tree import iter_descendants
 from vsdxkit.shapes import Shape, ShapeCollection, _wrap_children, _wrap_descendants, is_connector, parent_of
 from vsdxkit.xmlio import PartTree, require_element, to_float, xml_value
@@ -32,6 +34,15 @@ from vsdxkit.xmlio import PartTree, require_element, to_float, xml_value
 # the two places a Connect record names a shape: the connector it leads from,
 # and the shape that connector is glued to
 _CONNECT_SHEET_ATTRIBUTES = ("FromSheet", "ToSheet")
+
+# how a shape names one of its page's relationships: an image's ForeignData Rel
+_RELATIONSHIP_ID = f"{r_namespace}id"
+
+# the cells that size and place a 2-D shape, which a group member ties to its group
+_TRANSFORM_CELLS = ("Width", "Height", "LocPinX", "LocPinY", "Angle", "FlipX", "FlipY")
+
+# a formula names another shape on its page as Sheet.5! (Visio) or Sheet5!
+_SHEET_REFERENCE = re.compile(r"(?<!!)\bSheet\.?(\d+)!")
 
 
 def _dimension_value(value: float | str | None) -> str:
@@ -49,6 +60,71 @@ def _dimension_value(value: float | str | None) -> str:
     if not math.isfinite(number) or number <= 0:
         raise ValueError(f"page dimension must be a finite positive number, got {value!r}")
     return xml_value(number)
+
+
+def _drop_formula(shape: Shape, name: str) -> None:
+    """Keep the value just written to a cell and drop its formula, which Visio would recalculate over it on open.
+
+    A prototype's pin can be a formula of the group it sat in, such as
+    ``Sheet.9!Width*0.5``.
+    """
+    cell = shape._cell(name)
+    if cell is not None:
+        cell.xml.attrib.pop("F", None)
+
+
+def _left_behind(source: Shape, destination: Page) -> Callable[[str], bool]:
+    """Whether a shape id a copy of `source` names is one the copy has left behind.
+
+    A group member's Width can be ``Sheet.9!Width*1``, and at the top level
+    Sheet.9 is not its group. On another page every id is another shape's.
+    A reference to a shape still beside the copy is left alone.
+    """
+    if source.page is not destination:
+        return lambda _: True
+    groups = set()
+    parent = source.parent
+    while isinstance(parent, Shape):
+        groups.add(parent.ID)
+        parent = parent.parent
+    return groups.__contains__
+
+
+def _detach(shape: Shape, left_behind: Callable[[str], bool]) -> None:
+    """Keep the size a copy had, without the formulas that took it from a shape it has left behind.
+
+    Its own shapes, renumbered with it by the copy, are not left behind.
+    """
+    own = {element.attrib.get("ID") for element in shape.xml.iter(f"{namespace}Shape")}
+    for name in _TRANSFORM_CELLS:
+        cell = shape._cell(name)
+        formula = None if cell is None else cell.formula
+        if formula is None:
+            continue
+        named = {match.group(1) for match in _SHEET_REFERENCE.finditer(formula)}
+        if any(sheet not in own and left_behind(sheet) for sheet in named):
+            _drop_formula(shape, name)
+
+
+def _place_one_d(shape: Shape, x: float, y: float, length: float | None) -> None:
+    """Centre a 1-D shape on `x`, `y` by moving its ends, keeping its direction and, without `length`, its length.
+
+    Its pin, width and angle are formulas of its ends, so Visio would put back
+    any of them written directly. Its ends are left floating first: a copy of
+    a glued connector would otherwise be pulled back to the original's shapes.
+    """
+    _float_ends(shape)
+    begin_x, begin_y, end_x, end_y = shape.begin_x, shape.begin_y, shape.end_x, shape.end_y
+    if begin_x is None or begin_y is None or end_x is None or end_y is None:
+        raise InvalidOperationError(f"1-D shape ID {shape.ID} has no begin and end points to place it by")
+    dx, dy = end_x - begin_x, end_y - begin_y
+    if length is not None:
+        current = math.hypot(dx, dy)
+        # a zero-length line has no direction, so it is laid along the x axis
+        dx, dy = (length * dx / current, length * dy / current) if current else (length, 0.0)
+    shape.begin_x, shape.begin_y = x - dx / 2, y - dy / 2
+    shape.end_x, shape.end_y = x + dx / 2, y + dy / 2
+    shape._refresh_formula_values()
 
 
 class PagePosition(IntEnum):
@@ -373,6 +449,14 @@ class Page:
         different id space, and an id free there says nothing here (#357). The
         rels part is created on demand; assigning it writes it into the package.
         """
+        relationships.append_if_absent(
+            self._rels_root(),
+            rel_type="http://schemas.microsoft.com/visio/2010/relationships/master",
+            target=relationship_target(self.filename, master_part_name),
+        )
+
+    def _rels_root(self) -> ET.Element:
+        """This page's `<Relationships>` element, creating the part on demand; assigning it writes it into the package."""
         rels_xml: PartTree | None = self.rels_xml
         if rels_xml is None:
             self.rels_xml_filename = relationships_part_name(self.filename)
@@ -380,11 +464,32 @@ class Page:
                 ET.fromstring('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
             )
             self.rels_xml = rels_xml
-        relationships.append_if_absent(
-            require_element(rels_xml.getroot(), f"{self.rels_xml_filename} root"),
-            rel_type="http://schemas.microsoft.com/visio/2010/relationships/master",
-            target=relationship_target(self.filename, master_part_name),
-        )
+        return require_element(rels_xml.getroot(), f"{self.rels_xml_filename} root")
+
+    def _carry_relationships(self, copied: ET.Element, source: Page) -> None:
+        """Relate this page to what each ``r:id`` in `copied` names on `source`, and point the copy at it.
+
+        An image or embedded object reaches its part through its page's
+        relationships, by an id that means nothing on another page. Within one
+        document the part is shared, so the copy needs only a relationship of
+        its own to the same part.
+        """
+        source_rels = source.rels_xml
+        if source_rels is None:
+            return
+        by_id = {rel.attrib.get("Id"): rel for rel in relationships.all_of(source_rels.getroot())}
+        for node in copied.iter():
+            relationship = by_id.get(node.attrib.get(_RELATIONSHIP_ID))
+            if relationship is None:
+                continue  # none, or already dangling on the source page
+            mode = relationship.attrib.get("TargetMode")
+            target = relationship.attrib.get("Target", "")
+            if mode != "External":
+                target = relationship_target(self.filename, target_part_name(source.filename, target))
+            carried = relationships.append_if_absent(
+                self._rels_root(), rel_type=relationship.attrib.get("Type", ""), target=target, mode=mode
+            )
+            node.attrib[_RELATIONSHIP_ID] = carried.attrib["Id"]
 
     def get_connects(self) -> list[Connect]:
         elements = self.xml.findall(f".//{namespace}Connect")  # search recursively
@@ -577,6 +682,86 @@ class Page:
             to_cp=to_cp,
             options=options,
         )
+
+    def create_shape(
+        self,
+        kind_or_prototype: ShapeKind | Shape,
+        *,
+        x: float,
+        y: float,
+        width: float | None = None,
+        height: float | None = None,
+        text: str | None = None,
+    ) -> Shape:
+        """Create a shape on this page, centred on ``x``, ``y``.
+
+        ``kind_or_prototype`` is a built-in :class:`~vsdxkit.shape_kind.ShapeKind`,
+        or a shape from this document to copy: a prototype is how a shape
+        with a custom master is made. Either way the new shape is a copy made
+        by :meth:`Shape.copy`, the one way a shape is created.
+
+        A 1-D shape, such as :attr:`ShapeKind.LINE`, is placed by its ends: it
+        keeps its direction, and ``width`` is its length.
+
+        :param width, height: the new size; the kind's or prototype's when omitted
+        :param text: the label. A kind starts blank; a prototype keeps its text when omitted.
+        :raises TypeError: if ``kind_or_prototype`` is neither a kind nor a shape
+        :raises InvalidOperationError: if a prototype belongs to another document
+        :returns: the new shape
+        """
+        # vsdxkit.media opens its donors as Documents, which import this
+        # module, so importing it at module level would be a cycle
+        from vsdxkit import media
+
+        if not self._attached():
+            raise InvalidOperationError(f"page {self.name!r} is no longer in its document, so nothing can be created on it")
+        if isinstance(kind_or_prototype, ShapeKind):
+            source = media._kind_shape(kind_or_prototype)
+        elif isinstance(kind_or_prototype, Shape):
+            kind_or_prototype._require_attached("Page.create_shape()")
+            if kind_or_prototype.page.vis is not self.vis:
+                raise InvalidOperationError(
+                    f"shape ID {kind_or_prototype.ID} belongs to another document; "
+                    "a prototype must come from the document it is copied into"
+                )
+            source = kind_or_prototype
+        else:
+            kinds = ", ".join(f"ShapeKind.{kind.name}" for kind in ShapeKind)
+            raise TypeError(f"create_shape takes a Shape or one of {kinds}, not {kind_or_prototype!r}")
+        one_d = is_connector(source)
+        if one_d and height is not None:
+            raise InvalidOperationError(f"shape ID {source.ID} is 1-D, so it has no height to set; its width is its length")
+        # what the copy's formulas may no longer name: the groups the prototype
+        # sat in, and on another page, every shape of the page it left
+        left_behind = _left_behind(source, self)
+        if isinstance(kind_or_prototype, ShapeKind):
+            shape = media.copy_kind(kind_or_prototype, self)
+            label = "" if text is None else text
+        else:
+            shape = kind_or_prototype.copy(self)
+            label = text
+        if one_d:
+            _place_one_d(shape, x, y, width)
+        else:
+            # a 2-D shape is drawn around its pin
+            shape.get_or_create_cell("PinX", v=str(x))
+            shape.get_or_create_cell("PinY", v=str(y))
+            _drop_formula(shape, "PinX")
+            _drop_formula(shape, "PinY")
+            _detach(shape, left_behind)
+            if width is not None:
+                shape.width = width
+                _drop_formula(shape, "Width")
+        if height is not None:
+            shape.height = height
+            _drop_formula(shape, "Height")
+        if width is not None or height is not None:
+            # LocPinX is Width*0.5 and the geometry scales with the size: their
+            # values would otherwise describe the old size until Visio opens it
+            shape._refresh_formula_values()
+        if label is not None:
+            shape.text = label
+        return shape
 
     def delete_shape(self, shape: Shape) -> None:
         """Delete a shape from this page, removing any incident connectors.

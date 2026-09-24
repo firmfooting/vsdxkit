@@ -8,6 +8,7 @@ import pytest
 from vsdxkit.document import Document
 from vsdxkit.errors import InvalidOperationError
 from vsdxkit.glue import ConnectorOptions, Glue
+from vsdxkit.shape_kind import ShapeKind
 
 BASE = "test8_simple_connector.vsdx"
 # shapes 90, 97 and 102 have eight connection points of their own; 53 inherits four
@@ -39,8 +40,8 @@ def test_retarget_both_ends(vsdx_copy):
     b = page.shapes.by_text("Shape B")
     connector = page.connect_shapes(a, b)
     # fresh shapes to retarget to
-    c = vis.create_shape(page, "PALETTE_PROCESS", 7.0, 6.0, text="Target C")
-    d = vis.create_shape(page, "PALETTE_PROCESS", 7.0, 3.0, text="Target D")
+    c = page.create_shape(ShapeKind.PROCESS, x=7.0, y=6.0, text="Target C")
+    d = page.create_shape(ShapeKind.PROCESS, x=7.0, y=3.0, text="Target D")
 
     page.reanchor_connector(connector, from_shape=c, to_shape=d)
 
@@ -63,7 +64,7 @@ def test_retarget_one_end_keeps_other(vsdx_copy):
     a = page.shapes.by_text("Shape A")
     b = page.shapes.by_text("Shape B")
     connector = page.connect_shapes(a, b)
-    c = vis.create_shape(page, "PALETTE_PROCESS", 7.0, 6.0, text="Target C")
+    c = page.create_shape(ShapeKind.PROCESS, x=7.0, y=6.0, text="Target C")
 
     page.reanchor_connector(connector, to_shape=c)  # keep begin at A
 
@@ -148,7 +149,7 @@ def test_moving_the_glued_end_leaves_a_floating_end_floating(vsdx_copy):
     a = page.shapes.by_text("Shape A")
     b = page.shapes.by_text("Shape B")
     connector = page.connect_shapes(a, b)
-    c = vis.create_shape(page, "PALETTE_PROCESS", 7.0, 6.0, text="Target C")
+    c = page.create_shape(ShapeKind.PROCESS, x=7.0, y=6.0, text="Target C")
     _drop_record(page, connector, "BeginX")
     begin = (connector.begin_x, connector.begin_y)
 
@@ -164,7 +165,7 @@ def test_retarget_keeps_the_routing(vsdx_copy):
     a = page.shapes.by_text("Shape A")
     b = page.shapes.by_text("Shape B")
     connector = page.connect_shapes(a, b, route="curved")
-    c = vis.create_shape(page, "PALETTE_PROCESS", 7.0, 6.0, text="Target C")
+    c = page.create_shape(ShapeKind.PROCESS, x=7.0, y=6.0, text="Target C")
 
     page.reanchor_connector(connector, to_shape=c)
 
@@ -311,7 +312,7 @@ def test_an_endpoint_on_another_page_is_refused(vsdx_copy):
     vis = Document.open(vsdx_copy(BASE))
     page = vis.pages[0]
     connector = page.connect_shapes(page.shapes.by_text("Shape A"), page.shapes.by_text("Shape B"))
-    elsewhere = vis.create_shape(vis.add_page("Elsewhere"), "PALETTE_PROCESS", 1.0, 1.0, text="Elsewhere")
+    elsewhere = vis.add_page("Elsewhere").create_shape(ShapeKind.PROCESS, x=1.0, y=1.0, text="Elsewhere")
     assert "not on page" in _refused(page, connector, to_shape=elsewhere)
 
 
@@ -320,8 +321,8 @@ def test_a_connector_on_another_page_is_refused(vsdx_copy):
     page = vis.pages[0]
     a = page.shapes.by_text("Shape A")
     other = vis.add_page("Elsewhere")
-    start = vis.create_shape(other, "PALETTE_PROCESS", 1.0, 1.0, text="Start")
-    finish = vis.create_shape(other, "PALETTE_PROCESS", 4.0, 1.0, text="Finish")
+    start = other.create_shape(ShapeKind.PROCESS, x=1.0, y=1.0, text="Start")
+    finish = other.create_shape(ShapeKind.PROCESS, x=4.0, y=1.0, text="Finish")
     connector = other.connect_shapes(start, finish)
     before = _state(other, connector)
     with pytest.raises(InvalidOperationError, match="not on page"):
@@ -333,7 +334,7 @@ def test_a_deleted_endpoint_is_refused(vsdx_copy):
     vis = Document.open(vsdx_copy(BASE))
     page = vis.pages[0]
     connector = page.connect_shapes(page.shapes.by_text("Shape A"), page.shapes.by_text("Shape B"))
-    gone = vis.create_shape(page, "PALETTE_PROCESS", 7.0, 6.0, text="Gone")
+    gone = page.create_shape(ShapeKind.PROCESS, x=7.0, y=6.0, text="Gone")
     page.delete_shape(gone)
     assert "not on page" in _refused(page, connector, to_shape=gone)
 
@@ -342,7 +343,7 @@ def test_connecting_to_a_shape_on_another_page_is_refused(vsdx_copy):
     vis = Document.open(vsdx_copy(BASE))
     page = vis.pages[0]
     a = page.shapes.by_text("Shape A")
-    elsewhere = vis.create_shape(vis.add_page("Elsewhere"), "PALETTE_PROCESS", 1.0, 1.0, text="Elsewhere")
+    elsewhere = vis.add_page("Elsewhere").create_shape(ShapeKind.PROCESS, x=1.0, y=1.0, text="Elsewhere")
     shapes_before = len(page.shapes)
     with pytest.raises(InvalidOperationError, match="not on page"):
         page.connect_shapes(a, elsewhere)

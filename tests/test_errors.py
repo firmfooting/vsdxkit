@@ -20,6 +20,7 @@ import vsdxkit.document
 import vsdxkit.errors
 import vsdxkit.package
 import vsdxkit.xmlio
+from vsdxkit import media
 from vsdxkit.document import Document
 from vsdxkit.errors import (
     InvalidOperationError,
@@ -710,15 +711,14 @@ def test_malformed_shapesheet_number_raises_malformed_package_error(vsdx_copy):
 # --------------------------------------------------------------------------
 
 
-def test_unknown_palette_name_raises_not_found_error(vsdx_copy):
-    """Fails if `Document.create_shape` reports an unknown palette name with anything but `NotFoundError`.
+def test_a_bundled_shape_that_is_missing_raises_not_found_error():
+    """Fails if a sentinel missing from a bundled document is reported with anything but `NotFoundError`.
 
-    The name is a lookup in the palette, and a lookup that finds nothing is
-    what `NotFoundError` is for. It is still a `ValueError`, as it was.
+    Each `ShapeKind` is a lookup in a bundled document, and a lookup that
+    finds nothing is what `NotFoundError` is for. It is still a `ValueError`.
     """
-    vis = Document.open(vsdx_copy("test1.vsdx"))
     with pytest.raises(NotFoundError, match=r"has no shape named 'PALETTE_NOT_A_SHAPE'"):
-        vis.create_shape(vis.pages[0], "PALETTE_NOT_A_SHAPE", 1.0, 1.0)
+        media._sentinel(media.PALETTE, "PALETTE_NOT_A_SHAPE")
 
 
 def test_deleting_a_shape_that_is_not_on_the_page_raises_not_found_error(vsdx_copy):

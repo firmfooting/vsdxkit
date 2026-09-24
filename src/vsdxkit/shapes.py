@@ -761,6 +761,8 @@ class Shape:
         # writes it; a copy onto another page of this document adds one too
         for master in masters.values():
             dst_page._ensure_page_master_rel(master.filename)
+        if not cross_document and dst_page is not self.page:
+            dst_page._carry_relationships(new_shape_xml, self.page)
 
         # copy_shape put it at the page's top level, whatever the source sat in
         return Shape(xml=new_shape_xml, parent=dst_page, page=dst_page)
@@ -1427,26 +1429,30 @@ class Shape:
                 self.set_cell_value(name="Control/TextPosition/Y", value=text_y)
                 self.set_cell_value(name="Control/TextPosition/XDyn", value=text_x)
                 self.set_cell_value(name="Control/TextPosition/YDyn", value=text_y)
-                # print(cp1.cells.keys())
-            cells: list[Cell | GeometryCell] = list(self.cells.values())
-            if self.geometry is not None:
-                cells.extend(self.geometry.cells)
-                for r in self.geometry.rows.values():
-                    cells.extend(r.cells.values())
-            # print(cells)
-            for c in cells:  # type: Cell
-                v = None
-                formula = c.formula
-                if formula and c.name is not None:
-                    master = self.master_shape
-                    if formula == "Inh" and master is not None:
-                        master_c = master._cell(c.name)
-                        formula = master_c.formula if master_c else formula
-                    if formula is None:
-                        continue
-                    v = calc_value(self, formula)
-                    if v is not None:
-                        c.value = v
+            self._refresh_formula_values()
+
+    def _refresh_formula_values(self) -> None:
+        """Recompute the value held beside each formula this shape's cells carry, as Visio would on open.
+
+        A formula this library cannot evaluate keeps the value it had.
+        """
+        cells: list[Cell | GeometryCell] = list(self.cells.values())
+        if self.geometry is not None:
+            cells.extend(self.geometry.cells)
+            for r in self.geometry.rows.values():
+                cells.extend(r.cells.values())
+        for c in cells:
+            formula = c.formula
+            if formula and c.name is not None:
+                master = self.master_shape
+                if formula == "Inh" and master is not None:
+                    master_c = master._cell(c.name)
+                    formula = master_c.formula if master_c else formula
+                if formula is None:
+                    continue
+                v = calc_value(self, formula)
+                if v is not None:
+                    c.value = v
 
     @property
     def text_raw(self) -> str:
