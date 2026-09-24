@@ -4,8 +4,8 @@ import copy
 import html
 import sys
 import xml.etree.ElementTree as ET
-from collections.abc import Callable, Iterator
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from typing import Protocol
 from xml.etree.ElementTree import Element
 
 if sys.version_info >= (3, 12):
@@ -15,21 +15,120 @@ else:
 
 
 from vsdxkit import namespace
-from vsdxkit.connectors import _glued_ends, _retarget_connector
+from vsdxkit.connectors import _ConnectorPage, _glued_ends, _retarget_connector
 from vsdxkit.errors import InvalidOperationError, NotFoundError, PackageError
 from vsdxkit.formulae import calc_value
 from vsdxkit.geometry import Geometry, GeometryCell
-from vsdxkit.glue import ConnectorOptions
+from vsdxkit.glue import ConnectorOptions, Glue, Routing
 from vsdxkit.inheritance import InheritedRow
 from vsdxkit.logging_support import get_logger
+from vsdxkit.shape_kind import ShapeKind
 from vsdxkit.shape_part import AttachedShape, ShapePart
 from vsdxkit.shape_tree import is_connector_element, iter_children, iter_descendants, iter_edges
-from vsdxkit.xmlio import make_cell_element, to_float, xml_value
-
-if TYPE_CHECKING:
-    from vsdxkit.pages import Page
+from vsdxkit.xmlio import PartTree, make_cell_element, to_float, xml_value
 
 logger = get_logger(__name__)
+
+
+class PageView(Protocol):
+    """A page, as :attr:`Shape.page` gives it.
+
+    The type of a shape's back-reference to its page. It lists the page's
+    public API apart from ``swimlanes``, ``require_swimlanes`` and ``vis``,
+    whose types are declared above this module. At runtime the object is the
+    :class:`vsdxkit.pages.Page` itself.
+    """
+
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def xml(self) -> PartTree: ...
+
+    @property
+    def width(self) -> float: ...
+
+    @property
+    def height(self) -> float: ...
+
+    @property
+    def is_master_page(self) -> bool: ...
+
+    @property
+    def children(self) -> ShapeCollection: ...
+
+    @property
+    def shapes(self) -> ShapeCollection: ...
+
+    @property
+    def connectors(self) -> tuple[Connector, ...]: ...
+
+    def connect(
+        self,
+        source: Shape,
+        target: Shape,
+        *,
+        glue: Glue = ...,
+        routing: Routing = ...,
+        from_point: int = ...,
+        to_point: int = ...,
+    ) -> Connector: ...
+
+    def create_shape(
+        self,
+        kind_or_prototype: ShapeKind | Shape,
+        *,
+        x: float,
+        y: float,
+        width: float | None = ...,
+        height: float | None = ...,
+        text: str | None = ...,
+    ) -> Shape: ...
+
+    def find_replace(self, old: str, new: str) -> None: ...
+
+
+class _PageSeam(PageView, _ConnectorPage, Protocol):
+    """What a shape needs from its page beyond the public view: the page's
+    own bookkeeping, and the document operations the page forwards."""
+
+    @property
+    def page_id(self) -> str: ...
+
+    @property
+    def filename(self) -> str: ...
+
+    @property
+    def rels_xml(self) -> PartTree | None: ...
+
+    @property
+    def _pagesheet_xml(self) -> Element: ...
+
+    def _children(self) -> list[Shape]: ...
+
+    def _attached(self) -> bool: ...
+
+    def _delete(self, shapes: Iterable[Shape], gone_ids: set[str]) -> None: ...
+
+    def _ensure_page_master_rel(self, master_part_name: str) -> None: ...
+
+    def _carry_relationships(self, copied: Element, source: _PageSeam) -> None: ...
+
+    def _peer(self, other: PageView) -> _PageSeam: ...
+
+    def _same_document(self, other: _PageSeam) -> bool: ...
+
+    def _master_by_id(self, master_id: str) -> _PageSeam | None: ...
+
+    def _master_is_one_d(self, master_id: str, master_shape_id: str | None) -> bool: ...
+
+    def _master_revision(self) -> int: ...
+
+    def _masters_for(self, master_ids: list[str], source: _PageSeam) -> Mapping[str, _PageSeam]: ...
+
+    def _copy_shape_xml(self, element: Element) -> Element: ...
+
+    def _renumber_shape_ids(self, element: Element, id_map: dict[str, int] | None = None) -> dict[str, int]: ...
 
 
 def parent_of(root: Element, element: Element) -> Element | None:
@@ -45,7 +144,7 @@ def is_connector(shape: Shape) -> bool:
     return _is_one_d(shape.xml, shape._parent, shape._page)
 
 
-def _is_one_d(xml: Element, parent: Page | Shape, page: Page) -> bool:
+def _is_one_d(xml: Element, parent: _PageSeam | Shape, page: _PageSeam) -> bool:
     """The one test of whether a shape element is 1-D, before or after it has a wrapper.
 
     A sub-shape with no ``Master`` of its own instances its group's, so the
@@ -61,7 +160,7 @@ def _is_one_d(xml: Element, parent: Page | Shape, page: Page) -> bool:
     return page._master_is_one_d(master_id, xml.attrib.get("MasterShape"))
 
 
-def _shape_ids(master: Page) -> frozenset[str]:
+def _shape_ids(master: _PageSeam) -> frozenset[str]:
     """The IDs of every shape a master holds."""
     return frozenset(shape_id for shape in master.xml.iter(f"{namespace}Shape") if (shape_id := shape.attrib.get("ID")))
 
@@ -462,7 +561,7 @@ class DataProperty(InheritedRow, ShapePart):
         return element
 
 
-def _wrap(xml: Element, parent: Page | Shape, page: Page) -> Shape:
+def _wrap(xml: Element, parent: _PageSeam | Shape, page: _PageSeam) -> Shape:
     """The wrapper for a shape element: a `Connector` for a 1-D shape, a `Shape` for any other.
 
     Every wrapper the library hands out is made here, so a connector is a
@@ -473,7 +572,7 @@ def _wrap(xml: Element, parent: Page | Shape, page: Page) -> Shape:
     return Shape(xml=xml, parent=parent, page=page)
 
 
-def _wrap_children(element: Element, parent: Page | Shape, page: Page) -> list[Shape]:
+def _wrap_children(element: Element, parent: _PageSeam | Shape, page: _PageSeam) -> list[Shape]:
     """A Shape for each shape directly inside `element`, a page's contents root or a group."""
     children = []
     for slot, child in enumerate(iter_children(element)):
@@ -483,13 +582,13 @@ def _wrap_children(element: Element, parent: Page | Shape, page: Page) -> list[S
     return children
 
 
-def _wrap_descendants(element: Element, parent: Page | Shape, page: Page) -> list[Shape]:
+def _wrap_descendants(element: Element, parent: _PageSeam | Shape, page: _PageSeam) -> list[Shape]:
     """A Shape for every shape inside `element`, at any depth, depth first and parents first.
 
     Each is given the wrapper of the shape it sits in as its parent, and
     `parent` for those directly inside `element`.
     """
-    wrappers: dict[Element, Page | Shape] = {element: parent}
+    wrappers: dict[Element, _PageSeam | Shape] = {element: parent}
     slots: dict[Element, int] = {}
     shapes: list[Shape] = []
     for holder, child in iter_edges(element):
@@ -515,8 +614,8 @@ class Shape:
     """Represents a single shape, or a group shape containing other shapes"""
 
     xml: Element
-    _parent: Page | Shape
-    _page: Page
+    _parent: _PageSeam | Shape
+    _page: _PageSeam
     _geometry: Geometry | None
     _geometry_xml: Element | None
     _master_shape: Shape | None
@@ -524,7 +623,7 @@ class Shape:
     _master_shape_key: tuple[str | None, str | None, int, tuple[Element, ...] | None] | None
     _slot: int | None
 
-    def __init__(self, xml: Element, parent: Page | Shape, page: Page):
+    def __init__(self, xml: Element, parent: _PageSeam | Shape, page: _PageSeam):
         self.xml = xml
         self._parent = parent
         self._page = page
@@ -644,12 +743,12 @@ class Shape:
         return self.xml.attrib.get("ID")
 
     @property
-    def page(self) -> Page:
+    def page(self) -> PageView:
         """The page this shape is on. Still answers once the shape is deleted."""
         return self._page
 
     @property
-    def parent(self) -> Page | Shape:
+    def parent(self) -> PageView | Shape:
         """The page, or the group shape, this shape sits in."""
         return self._parent
 
@@ -753,7 +852,7 @@ class Shape:
                 name_univ = name_univ_cell.attrib.get("V") or name_univ
         return name_univ
 
-    def copy(self, page: Page | None = None) -> Shape:
+    def copy(self, page: PageView | None = None) -> Shape:
         """Copy this Shape to the specified destination Page, and return the copy.
 
         If the destination page is not specified, the Shape is copied to its containing Page.
@@ -761,10 +860,11 @@ class Shape:
         :param page: The page where the new Shape will be placed.
             If not specified, the copy will be placed in the original shape's page.
         :type page: :class:`Page` (Optional)
+        :raises TypeError: if ``page`` is not a :class:`vsdxkit.pages.Page`
 
         :return: :class:`Shape` the new copy of shape
         """
-        dst_page = page or self._page
+        dst_page = self._page if page is None else self._page._peer(page)
         master_ids = [node.attrib["Master"] for node in self.xml.iter(f"{namespace}Shape") if node.attrib.get("Master")]
         # A sub-shape of a master instance names no master itself: it inherits
         # its group's. Copied onto a page it leaves that group, so the copy has
@@ -864,7 +964,7 @@ class Shape:
         return master_shape
 
     @property
-    def master_page(self) -> Page | None:
+    def master_page(self) -> PageView | None:
         """Get this pages master
 
         Returns this Page's master as a Page object (or None)

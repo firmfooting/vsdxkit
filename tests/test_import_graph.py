@@ -39,7 +39,6 @@ class Edge(NamedTuple):
 ALLOWED = {
     # 6c, the seams: each upward edge becomes a Protocol in the lower module
     Edge("pages", "document", "typing"),
-    Edge("shapes", "pages", "typing"),
 }
 
 

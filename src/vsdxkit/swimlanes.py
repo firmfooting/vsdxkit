@@ -24,22 +24,17 @@ from typing import Protocol
 
 from vsdxkit import namespace
 from vsdxkit.errors import InvalidOperationError
-from vsdxkit.shapes import Shape, ShapeCollection, is_connector
+from vsdxkit.shapes import PageView, Shape, is_connector
 
 
-class _DiagramPage(Protocol):
+class _DiagramPage(PageView, Protocol):
     """What a swimlane diagram needs from its page.
 
     The page sits above this module, so the diagram names only what it reads:
-    the top-level shapes it finds the container and lanes among, the name its
-    messages give, and whether the page is still in its document.
+    the public view, for the top-level shapes it finds the container and
+    lanes among, the name its messages give and the page a new lane is copied
+    onto; and whether the page is still in its document.
     """
-
-    @property
-    def name(self) -> str: ...
-
-    @property
-    def children(self) -> ShapeCollection: ...
 
     def _attached(self) -> bool: ...
 
@@ -170,7 +165,7 @@ class SwimlaneDiagram:
 
     def __init__(self, container: Shape) -> None:
         """Bind to one CFF container shape; the diagram is on the container's page."""
-        self._page = container._page
+        self._page: _DiagramPage = container._page
         self._container = container
 
     def __repr__(self) -> str:

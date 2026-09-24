@@ -26,7 +26,17 @@ from vsdxkit.partnames import relationship_target, relationships_part_name, targ
 from vsdxkit.relationships import all_of, append_if_absent
 from vsdxkit.shape_kind import ShapeKind
 from vsdxkit.shape_tree import iter_descendants
-from vsdxkit.shapes import Connector, Shape, ShapeCollection, _wrap_children, _wrap_descendants, is_connector, parent_of
+from vsdxkit.shapes import (
+    Connector,
+    PageView,
+    Shape,
+    ShapeCollection,
+    _PageSeam,
+    _wrap_children,
+    _wrap_descendants,
+    is_connector,
+    parent_of,
+)
 from vsdxkit.swimlanes import SwimlaneDiagram, _diagram_on
 from vsdxkit.xmlio import PartTree, require_element, to_float, xml_value
 
@@ -151,6 +161,17 @@ def _pages_root(vis: Document) -> ET.Element:
     if pages_xml is None:
         raise MissingPartError("document has no pages.xml part")
     return require_element(pages_xml.getroot(), "Pages root")
+
+
+def _as_page(other: object) -> Page:
+    """`other`, which a seam typed structurally, as the `Page` every caller in the library passes.
+
+    Typed code can hand a look-alike through a `Protocol`; it is refused here
+    rather than failing further in on a member it lacks.
+    """
+    if not isinstance(other, Page):
+        raise TypeError(f"expected a vsdxkit Page, got {type(other).__name__}")
+    return other
 
 
 class Page:
@@ -429,9 +450,13 @@ class Page:
     def _master_revision(self) -> int:
         return self._document._master_revision()
 
-    def _masters_for(self, master_ids: list[str], source: Page) -> dict[str, Page]:
+    def _peer(self, other: PageView) -> Page:
+        """`other` as a page of this library, for a shape copied onto it."""
+        return _as_page(other)
+
+    def _masters_for(self, master_ids: list[str], source: _PageSeam) -> dict[str, Page]:
         """This document's master for each of `master_ids`, as `source`'s document numbers them."""
-        return self._document._masters_for(master_ids, source._document)
+        return self._document._masters_for(master_ids, _as_page(source)._document)
 
     def _copy_shape_xml(self, element: ET.Element) -> ET.Element:
         """A copy of `element` at this page's top level, with IDs unused on this page."""
@@ -440,8 +465,8 @@ class Page:
     def _renumber_shape_ids(self, element: ET.Element, id_map: dict[str, int] | None = None) -> dict[str, int]:
         return self._document.renumber_shape_ids(element, self, id_map)
 
-    def _same_document(self, other: Page) -> bool:
-        return other._document is self._document
+    def _same_document(self, other: _PageSeam) -> bool:
+        return _as_page(other)._document is self._document
 
     def _rels_root(self) -> ET.Element:
         """This page's `<Relationships>` element, creating the part on demand; assigning it writes it into the package."""
@@ -454,7 +479,7 @@ class Page:
             self.rels_xml = rels_xml
         return require_element(rels_xml.getroot(), f"{self.rels_xml_filename} root")
 
-    def _carry_relationships(self, copied: ET.Element, source: Page) -> None:
+    def _carry_relationships(self, copied: ET.Element, source: _PageSeam) -> None:
         """Relate this page to what each ``r:id`` in `copied` names on `source`, and point the copy at it.
 
         An image or embedded object reaches its part through its page's
@@ -569,7 +594,7 @@ class Page:
             source = self._document._kind_source(kind_or_prototype)
         elif isinstance(kind_or_prototype, Shape):
             kind_or_prototype._require_attached("Page.create_shape()")
-            if kind_or_prototype._page._document is not self._document:
+            if not self._same_document(kind_or_prototype._page):
                 raise InvalidOperationError(
                     f"shape ID {kind_or_prototype.ID} belongs to another document; "
                     "a prototype must come from the document it is copied into"

@@ -8,7 +8,7 @@ from helpers.connect_records import records_naming
 
 from vsdxkit import namespace
 from vsdxkit.document import Document
-from vsdxkit.shapes import DataProperty, Shape
+from vsdxkit.shapes import DataProperty, Shape, _as_shape
 
 
 def _first_shape_containing(shapes, text: str):
@@ -947,3 +947,20 @@ def test_a_group_member_copied_onto_its_own_page_names_its_master(vsdx_copy):
     rewalked = page.children.require_id(copy.ID)
     assert rewalked.master_shape is not None
     assert rewalked.master_shape.ID == member.master_shape.ID
+
+
+def test_copy_onto_something_that_is_not_a_page_is_refused(vsdx_copy):
+    """Fails if a look-alike page gets past `copy` and breaks somewhere inside it."""
+
+    class LooksLikeAPage:
+        name = "Fake"
+
+    shape = next(iter(Document.open(vsdx_copy("test1.vsdx")).pages[0].children))
+    with pytest.raises(TypeError, match="LooksLikeAPage"):
+        shape.copy(LooksLikeAPage())
+
+
+def test_an_end_that_is_not_a_shape_is_refused():
+    """Fails if a look-alike end gets past the narrowing `Connector.source` and `target` rely on."""
+    with pytest.raises(TypeError, match="object"):
+        _as_shape(object())

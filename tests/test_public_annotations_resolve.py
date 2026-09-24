@@ -24,14 +24,6 @@ UNRESOLVED = {
     "vsdxkit.pages.Page.__init__",
     # Phase 6, Task 9: typed by pages.DocumentView
     "vsdxkit.pages.Page.vis",
-    # Phase 2 moves master lookup to `MasterCatalog`; Phase 3 replaces the
-    # page back-reference with a document token.
-    "vsdxkit.shapes.Shape.__init__",
-    "vsdxkit.shapes.Shape.copy",
-    "vsdxkit.shapes.Shape.master_page",
-    # Phase 6, Task 8: typed by shapes.PageView
-    "vsdxkit.shapes.Shape.page",
-    "vsdxkit.shapes.Shape.parent",
 }
 
 
