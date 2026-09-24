@@ -97,12 +97,12 @@ from two documents are never equal, even two opens of one file.
 
 A shape deleted from its page, or on a page removed from the document, is
 detached: ``shape.is_attached`` is ``False``, and reading or changing it raises
-:class:`vsdxkit.errors.InvalidOperationError`. Its ``ID`` and its ``repr`` stay
-readable, so it can still be named in a message.
+:class:`vsdxkit.errors.InvalidOperationError`. Its ``ID``, ``xml``,
+``page``, ``parent``, ``repr`` and hash stay readable, so it can still be named
+in a message; ``page`` and ``parent`` are where it was.
 
 Earlier finders
 ---------------
 
-The 0.x ``find_shape_*`` and ``find_shapes_*`` methods, ``child_shapes`` and
-``all_shapes`` are gone. :doc:`migration-1.0` gives the collection call for
-each.
+:doc:`migration-1.0` gives the collection call for each 0.x finder and
+traversal method.

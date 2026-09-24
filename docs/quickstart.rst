@@ -44,8 +44,9 @@ whole package into memory and holds no file, so there is nothing to close.
 Find and edit a shape
 ---------------------
 
-Finder methods return ``None`` when there is no match. Check the result before
-editing it.
+A ``by_*`` lookup returns ``None`` when nothing matches, so check the result
+before editing it. A ``require_*`` lookup raises
+:class:`vsdxkit.errors.NotFoundError` instead.
 
 .. code-block:: python
 

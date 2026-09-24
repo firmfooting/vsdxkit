@@ -668,7 +668,7 @@ class Page:
     def _shape_ids(self) -> set[str]:
         """Every shape id the page's xml declares right now.
 
-        Read off the elements rather than through ``all_shapes``, which builds a
+        Read off the elements rather than through ``shapes``, which builds a
         ``Shape`` per element to answer a question about the xml.
         """
         root = self.xml.getroot()

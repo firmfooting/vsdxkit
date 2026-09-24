@@ -1597,7 +1597,7 @@ class Shape:
         when the group has none. Appending to the group's own ``<Shape>``
         element instead made the new shape a sibling of that container, which
         the schema does not allow and which this library's own traversal cannot
-        see, neither through ``child_shapes`` nor through ``Page._descendants()``.
+        see, neither through ``children`` nor through ``Page._descendants()``.
 
         This places a shape, it does not move one. An element already in a page
         gains a second parent rather than changing parent, because

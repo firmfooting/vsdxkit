@@ -264,7 +264,7 @@ def _page_part(path: str, member: str = "visio/pages/page1.xml") -> str:
 def test_a_copied_page_keeps_the_prefixes_its_source_declared(tmp_path):
     """Otherwise one package spells the same vocabulary two ways.
 
-    `copy_page` serialises the source page and parses the string back, which
+    `pages.copy` serialises the source page and parses the string back, which
     loses what `parse_part` recorded about it.
     """
     out = os.path.join(str(tmp_path), "copied.vsdx")

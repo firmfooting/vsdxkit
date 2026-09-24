@@ -130,9 +130,9 @@ replaces the glue and routing of both ends.
 Delete a connected shape
 ------------------------
 
-:meth:`vsdxkit.shapes.Shape.delete` removes the shape, the connectors glued
-to it and their ``Connect`` records. A group takes its members with it, and
-the connectors glued to them.
+:meth:`vsdxkit.shapes.Shape.delete` removes the shape and the connectors
+glued to it. A group takes its members with it, and the connectors glued to
+them.
 
 .. code-block:: python
 

@@ -124,7 +124,7 @@ def test_assigning_page_xml_replaces_the_page_part(vsdx_copy):
 
 def test_a_removed_page_does_not_write_its_part_back(vsdx_copy):
     """Fails if the `Page.xml` setter writes through even when the page's own
-    part is no longer in the package, resurrecting a part `remove_page_by_index`
+    part is no longer in the package, resurrecting a part `pages.delete`
     already removed."""
     vis = Document.open(vsdx_copy("test4_connectors.vsdx"))
     page = vis.pages[1]

@@ -385,7 +385,7 @@ def test_add_page_at(filename: str, index: int, page_name: str, tmp_path, basedi
         ("test1.vsdx", "new_page", 0),
         ("test1.vsdx", "new_page", 1),
         ("test2.vsdx", "new_page", 0),
-        # `None` means append, through `add_page` rather than `add_page_at`.
+        # `None` means append, rather than insert at an index.
         # No row reached that branch before.
         ("test1.vsdx", "new_page", None),
         ("test2.vsdx", "new_page", None),
