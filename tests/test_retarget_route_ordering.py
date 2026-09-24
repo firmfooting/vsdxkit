@@ -9,6 +9,7 @@ target lacks.
 import os
 
 import pytest
+from helpers.connect_records import page_records
 
 from vsdxkit.document import Document
 from vsdxkit.errors import InvalidOperationError
@@ -26,13 +27,13 @@ def test_a_refused_retarget_keeps_connect_records(vsdx_copy, tmp_path):
     assert connectors
     connector = connectors[0]
     other = next(s for s in page.shapes if "BeginX" not in s.cells)
-    records_before = sorted((c.from_id, c.to_id, c.from_rel) for c in page.connects)
+    records_before = sorted((c.from_id, c.to_id, c.from_rel) for c in page_records(page))
     with pytest.raises(InvalidOperationError, match="connection point"):
         connector.retarget(target=other, options=ConnectorOptions(glue=Glue.POINT, to_point=99))
-    records_after = sorted((c.from_id, c.to_id, c.from_rel) for c in page.connects)
+    records_after = sorted((c.from_id, c.to_id, c.from_rel) for c in page_records(page))
     assert records_after == records_before, "rejected retarget removed the connector's records"
     vis.save(output)
 
     reloaded = Document.open(output)
-    records_reloaded = sorted((c.from_id, c.to_id, c.from_rel) for c in reloaded.pages[0].connects)
+    records_reloaded = sorted((c.from_id, c.to_id, c.from_rel) for c in page_records(reloaded.pages[0]))
     assert records_reloaded == records_before, "rejected retarget corrupted saved connectivity"

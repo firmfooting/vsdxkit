@@ -8,11 +8,10 @@ against the installed distribution.
 
 from pathlib import Path
 
-from vsdxkit.connectors import Connect
 from vsdxkit.document import Document
 from vsdxkit.package import PackageLimits
 from vsdxkit.pages import Page
-from vsdxkit.shapes import Shape
+from vsdxkit.shapes import Connector, Shape
 
 
 def open_document(path: str) -> Document:
@@ -31,13 +30,13 @@ def coordinate(shape: Shape) -> float | None:
     return shape.x
 
 
-def connector_endpoint(connect: Connect) -> str | None:
-    return connect.shape_id
+def connector_endpoint(connector: Connector) -> Shape | None:
+    return connector.target
 
 
-def shape_connects(shape: Shape) -> list[Connect]:
-    # the quoted 'Connect' annotation must resolve for Mypy consumers too
-    return shape.connects
+def shape_connectors(shape: Shape) -> tuple[Connector, ...]:
+    # the quoted 'Connector' annotation must resolve for Mypy consumers too
+    return shape.connectors
 
 
 def relaxed_limits() -> PackageLimits:

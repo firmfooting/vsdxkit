@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 
 import pytest
+from helpers.connect_records import page_records
 
 from vsdxkit.document import Document
 from vsdxkit.glue import Glue, Routing
@@ -55,7 +56,7 @@ def test_connect_shapes_glue_records(basedir):
     a = page.shapes.by_text("Shape A")
     b = page.shapes.by_text("Shape B")
     connector = page.connect(a, b)
-    connects = {c.from_rel: c for c in page.connects if c.from_id == str(connector.ID)}
+    connects = {c.from_rel: c for c in page_records(page) if c.from_id == str(connector.ID)}
     assert "BeginX" in connects and "EndX" in connects
     begin = connects["BeginX"]
     assert begin.to_id == str(a.ID)
@@ -106,7 +107,7 @@ def test_connect_shapes_combines_point_glue_and_curved_routing(basedir):
     assert connector.cells["EndX"].formula == target_point
     assert connector.cells["ShapeRouteStyle"].value == "17"
     assert connector.cells["ConLineRouteExt"].value == "2"
-    records = {connect.from_rel: connect for connect in page.connects if connect.from_id == str(connector.ID)}
+    records = {connect.from_rel: connect for connect in page_records(page) if connect.from_id == str(connector.ID)}
     assert records["BeginX"].to_rel == "Connections.X1"
     assert records["EndX"].to_rel == "Connections.X3"
 
@@ -119,13 +120,13 @@ def test_a_routing_string_fails_before_mutating_page(basedir):
     target = page.shapes.by_text("Shape B")
     assert source is not None and target is not None
     before_shapes = len(page.shapes)
-    before_connects = len(page.connects)
+    before_connects = len(page_records(page))
 
     with pytest.raises(TypeError, match="routing must be one of"):
         page.connect(source, target, routing="curved")  # type: ignore[arg-type]
 
     assert len(page.shapes) == before_shapes
-    assert len(page.connects) == before_connects
+    assert len(page_records(page)) == before_connects
 
 
 def test_connector_round_trip_and_zip_validity(basedir):
@@ -154,7 +155,7 @@ def test_delete_cascades_connectors(basedir):
         src = get_copy(basedir, "test4_connectors.vsdx", tmp)
         vis = Document.open(src)
         page = vis.pages[0]
-        before_connects = len(list(page.connects))
+        before_connects = len(list(page_records(page)))
         assert before_connects > 0
         doomed = page.shapes.by_id("2")
         assert doomed is not None
@@ -170,7 +171,7 @@ def test_delete_cascades_connectors(basedir):
         assert "6" not in remaining_ids
         assert "7" not in remaining_ids
         # no Connect records may reference removed shapes
-        for c in page.connects:
+        for c in page_records(page):
             assert c.from_id not in ("2", "6", "7")
             assert c.to_id not in ("2", "6", "7")
 
@@ -290,7 +291,8 @@ def _s07_connector() -> tuple[dict[str, str], list[tuple[str, ...]]]:
     names = ("BegTrigger", "EndTrigger", "BeginX", "BeginY", "EndX", "EndY")
     cells = {name: _by_role(connector.cells[name].formula, VISIO_ROLES) for name in names}
     records = sorted(
-        (c.from_rel, c.xml.attrib["FromPart"], VISIO_ROLES[c.to_id], c.to_rel, c.xml.attrib["ToPart"]) for c in page.connects
+        (c.from_rel, c.xml.attrib["FromPart"], VISIO_ROLES[c.to_id], c.to_rel, c.xml.attrib["ToPart"])
+        for c in page_records(page)
     )
     return cells, records
 
@@ -305,7 +307,7 @@ def test_point_glue_writes_what_visio_writes():
     cells = {name: _by_role(connector.cells[name].formula, roles) for name in expected_cells}
     records = sorted(
         (c.from_rel, c.xml.attrib["FromPart"], roles[c.to_id], c.to_rel, c.xml.attrib["ToPart"])
-        for c in page.connects
+        for c in page_records(page)
         if c.from_id == connector.ID
     )
     assert cells == expected_cells
@@ -334,7 +336,7 @@ def test_point_glue_reaches_the_points_a_shape_inherits():
     page = vis.pages[0]
     source, decision = page.shapes.by_id("90"), page.shapes.by_id("53")
     connector = page.connect(source, decision, glue=Glue.POINT, to_point=3)
-    (record,) = [c for c in page.connects if c.from_id == connector.ID and c.from_rel == "EndX"]
+    (record,) = [c for c in page_records(page) if c.from_id == connector.ID and c.from_rel == "EndX"]
     assert (record.to_id, record.to_rel) == ("53", "Connections.X4")
     with pytest.raises(ValueError, match="connection point"):
         page.connect(source, decision, glue=Glue.POINT, to_point=4)

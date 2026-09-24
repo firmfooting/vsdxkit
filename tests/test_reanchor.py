@@ -4,6 +4,7 @@ import os
 import zipfile
 
 import pytest
+from helpers.connect_records import page_records, unglue
 
 from vsdxkit.document import Document
 from vsdxkit.errors import InvalidOperationError
@@ -17,18 +18,18 @@ S05 = os.path.join("fixtures", "com_reference", "s05_swimlanes_cfflow.vsdx")
 
 def _records(page, connector):
     """The connector's records, by the end they glue: the shape and the cell each names."""
-    return {c.from_rel: (c.to_id, c.to_rel) for c in page.connects if c.from_id == connector.ID}
+    return {c.from_rel: (c.to_id, c.to_rel) for c in page_records(page) if c.from_id == connector.ID}
 
 
 def _state(page, connector):
     """Everything a refused retarget must leave alone."""
     cells = sorted((name, cell.formula, cell.value) for name, cell in connector.cells.items())
-    records = sorted((c.from_id, c.from_rel, c.to_id, c.to_rel) for c in page.connects)
+    records = sorted((c.from_id, c.from_rel, c.to_id, c.to_rel) for c in page_records(page))
     return cells, records
 
 
 def _drop_record(page, connector, end):
-    (record,) = [c for c in page.connects if c.from_id == connector.ID and c.from_rel == end]
+    (record,) = [c for c in page_records(page) if c.from_id == connector.ID and c.from_rel == end]
     page.xml.find(".//{http://schemas.microsoft.com/office/visio/2012/main}Connects").remove(record.xml)
 
 
@@ -45,7 +46,7 @@ def test_retarget_both_ends(vsdx_copy):
 
     connector.retarget(source=c, target=d)
 
-    records = [rc for rc in page.connects if rc.from_id == str(connector.ID)]
+    records = [rc for rc in page_records(page) if rc.from_id == str(connector.ID)]
     endpoints = {(rc.from_rel, rc.to_id) for rc in records}
     assert ("BeginX", str(c.ID)) in endpoints
     assert ("EndX", str(d.ID)) in endpoints
@@ -68,7 +69,7 @@ def test_retarget_one_end_keeps_other(vsdx_copy):
 
     connector.retarget(target=c)  # keep begin at A
 
-    records = [rc for rc in page.connects if rc.from_id == str(connector.ID)]
+    records = [rc for rc in page_records(page) if rc.from_id == str(connector.ID)]
     endpoints = {(rc.from_rel, rc.to_id) for rc in records}
     assert ("BeginX", str(a.ID)) in endpoints  # kept
     assert ("EndX", str(c.ID)) in endpoints  # moved
@@ -80,27 +81,13 @@ def test_retarget_a_connector_glued_at_neither_end_glues_the_end_named(vsdx_copy
     a = page.shapes.by_text("Shape A")
     b = page.shapes.by_text("Shape B")
     connector = page.connect(a, b)
-    page.remove_connect_records([connector.ID])
+    unglue(page, connector.ID)
     begin = (connector.begin_x, connector.begin_y)
 
     connector.retarget(target=b)
 
     assert _records(page, connector) == {"EndX": (b.ID, "PinX")}
     assert (connector.begin_x, connector.begin_y) == begin
-
-
-def test_remove_connect_records_normalises_integer_ids(vsdx_copy):
-    vis = Document.open(vsdx_copy(BASE))
-    page = vis.pages[0]
-    a = page.shapes.by_text("Shape A")
-    b = page.shapes.by_text("Shape B")
-    assert a is not None and b is not None
-    connector = page.connect(a, b)
-    connector_id = str(connector.ID)
-
-    assert any(record.from_id == connector_id for record in page.connects)
-    page.remove_connect_records([int(connector_id)])
-    assert all(record.from_id != connector_id for record in page.connects)
 
 
 def test_moving_one_end_of_a_point_glued_connector_keeps_point_glue(vsdx_copy):
@@ -256,7 +243,7 @@ def test_a_record_without_toparts_keeps_its_point_glue(vsdx_copy):
     page = vis.pages[0]
     source, target, other = (page.shapes.by_id(i) for i in ("90", "97", "102"))
     connector = page.connect(source, target, glue=Glue.POINT, from_point=1, to_point=2)
-    for record in page.connects:
+    for record in page_records(page):
         if record.from_id == connector.ID:
             del record.xml.attrib["ToPart"]
 

@@ -571,6 +571,57 @@ are gone; glue and routing are :class:`vsdxkit.glue.Glue` and
 ``ConnectorOptions.from_route(route)``
    Gone with the route strings.
 
+The ``<Connect>`` records are internal
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The records that glue a connector's ends are how the package stores the graph,
+and the library keeps them in step with every connect, retarget, copy and
+delete. The graph is read through connectors and shapes instead.
+
+``connectors.Connect``, and ``page.connects`` or ``page.get_connects()``
+   The records are no longer objects. ``page.connectors`` lists the page's
+   connectors; ``connector.source`` and ``connector.target`` are the shapes
+   its ends are glued to, or ``None`` for a floating end.
+
+``shape.connects``
+   ``shape.connectors`` for the connectors glued to ``shape``, and
+   ``shape.connected_shapes`` for what is at their other ends. On a
+   connector, ``shape.connects`` returned the connector's own records; use
+   ``connector.source`` and ``connector.target`` there, because
+   ``connector.connectors`` lists the connectors glued to the connector,
+   which is normally none.
+
+``Connect.connector_shape``, ``Connect.connector_shape_id``, ``Connect.from_id``
+   The connector itself, and its ``ID``.
+
+``Connect.shape``, ``Connect.shape_id``, ``Connect.to_id``
+   ``connector.source`` or ``connector.target``, and its ``ID``.
+
+``Connect.from_rel``, ``Connect.to_rel``
+   ``connector.source`` and ``connector.target`` are the shapes each end is
+   glued to. The record's exact ``FromCell`` and ``ToCell``, such as
+   ``BeginX`` and ``PinX`` for dynamic glue or a ``Connections.X<n>`` row for
+   glue to a point, are only on the raw ``<Connect>`` element, found as under
+   ``Connect.xml`` below. For dynamic glue the ``BeginX`` and ``EndX``
+   formulas are ``_WALKGLUE`` expressions that name no shape.
+
+``Connect.page``
+   ``connector.page``.
+
+``Connect.xml``
+   The ``<Connect>`` element itself, with ``FromSheet``, ``ToSheet``,
+   ``FromPart`` and ``ToPart``, is a child of the ``Connects`` element in
+   ``page.xml``, for code that needs the raw record:
+   ``[c for c in page.xml.getroot().iter(f"{ns}Connect") if c.get("FromSheet") == connector.ID]``,
+   where ``ns`` is ``"{http://schemas.microsoft.com/office/visio/2012/main}"``.
+   ``connector.xml`` is the connector's ``<Shape>`` element, not a record.
+
+``page.add_connect(connect)``, ``page.remove_connect_records(ids)``
+   ``page.connect(a, b)`` writes a connector with its records,
+   ``connector.retarget(...)`` rewrites them, and ``shape.delete()`` removes
+   those that name the shape. A record written by hand is not checked
+   against the shapes it names.
+
 A swimlane diagram replaces the container
 -----------------------------------------
 

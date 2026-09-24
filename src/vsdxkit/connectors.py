@@ -87,7 +87,7 @@ def _check_point(end: _End) -> None:
         )
 
 
-def _record_point(connect: Connect) -> int | None:
+def _record_point(connect: _Connect) -> int | None:
     """The connection point a record glues to, or ``None`` for dynamic glue.
 
     ``ToPart`` is 100 plus the point's row. It is optional, and without it
@@ -104,28 +104,25 @@ def _end_glue(end: _End) -> EndGlue | None:
     return None if end is None else EndGlue(_id(end[0]), end[1])
 
 
-class Connect:
-    """Connect class to represent a connection between two `Shape` objects"""
+class _Connect:
+    """A read view over one ``<Connect>`` element of a page: which end of which connector is glued to what.
 
-    def __init__(self, xml: Element | None = None, page: Page | None = None):
-        if page is None:
-            raise ValueError("Connect requires the page containing the connection")
-        if xml is None:
-            raise ValueError("Connect requires the connection's XML element")
-        if type(xml) is not Element or xml.tag != f"{namespace}Connect":
-            raise ValueError(f"Connect requires a {namespace}Connect element, got {xml.tag!r}")
-        # Not an argument check like the three above: these attributes come from
-        # the package, and `page.connects` builds a Connect per element in it.
+    Internal: the public graph is :class:`vsdxkit.shapes.Connector` and its
+    queries. Every attribute is read from the element on each access, because
+    renumbering a shape rewrites these very attributes, and a copy made before
+    it would keep naming the vacated ID (#320).
+    """
+
+    def __init__(self, xml: Element) -> None:
+        # the attributes come from the package, so a record without them is a
+        # malformed package rather than a bad argument
         missing = [name for name in ("FromSheet", "ToSheet") if name not in xml.attrib]
         if missing:
             raise MalformedPackageError(f"Connect element is missing required attribute(s): {', '.join(missing)}")
         self.xml = xml
-        self.page = page
 
-    # Read from the element on each access, not copied in. `_remap_connect_records`
-    # rewrites these very attributes when a shape is renumbered, so a Connect
-    # built before the renumber would otherwise keep naming the vacated id - the
-    # same second-store drift that #320 fixed on Shape.
+    def __repr__(self) -> str:
+        return f"<Connect from={self.from_id} {self.from_rel} to={self.to_id} {self.to_rel}>"
 
     @property
     def from_id(self) -> str:
@@ -134,7 +131,7 @@ class Connect:
 
     @property
     def to_id(self) -> str:
-        """The shape this record's connector terminates at."""
+        """The shape this record's connector is glued to."""
         return self.xml.attrib["ToSheet"]
 
     @property
@@ -146,27 +143,6 @@ class Connect:
     def to_rel(self) -> str | None:
         """What the connector is glued to: ``PinX``, a ``Connections.Xn`` row, or absent."""
         return self.xml.attrib.get("ToCell")
-
-    @property
-    def shape_id(self) -> str | None:
-        # ref to the shape where the connector terminates - convenience property
-        return self.to_id
-
-    @property
-    def shape(self) -> Shape | None:
-        return self.page.shapes.by_id(self.shape_id) if self.shape_id else None
-
-    @property
-    def connector_shape_id(self) -> str | None:
-        # ref to the connector shape - convenience property
-        return self.from_id
-
-    @property
-    def connector_shape(self) -> Shape | None:
-        return self.page.shapes.by_id(self.connector_shape_id) if self.connector_shape_id else None
-
-    def __repr__(self):
-        return f"Connect: from={self.from_id} to={self.to_id} connector_id={self.connector_shape_id} shape_id={self.shape_id}"
 
 
 def _create_connector(page: Page, source: Shape, target: Shape, options: ConnectorOptions) -> Connector:
@@ -234,7 +210,7 @@ def _glued_ends(connector: Shape) -> tuple[_End, _End]:
     """Each end as the connector's records have it glued; `None` for an end no record names a shape on the page for."""
     page = connector.page
     ends: dict[str, tuple[Shape, int | None]] = {}
-    for connect in page.connects:
+    for connect in page._connects():
         if connect.from_id != connector.ID or connect.from_rel not in ("BeginX", "EndX"):
             continue
         shape = page.shapes.by_id(connect.to_id)
@@ -261,9 +237,9 @@ def _write(connector: Shape, begin: _End, end: _End, routing: tuple[CellWrite, .
     for change in (*glue_cells(begin_glue, end_glue), *routing):
         _change_cell(connector, change)
     page = connector.page
-    page.remove_connect_records({connector_id})
+    page._remove_connect_records({connector_id})
     for record in connection_records(connector_id, begin_glue, end_glue):
-        page.add_connect(Connect(xml=record_element(record), page=page))
+        page._add_connect(record_element(record))
 
 
 def _change_cell(connector: Shape, change: CellChange) -> None:
@@ -297,4 +273,4 @@ def _float_ends(connector: Shape) -> None:
     for change in glue_cells(None, None):
         if change.name not in _CONNECTOR_KIND_CELLS:
             _change_cell(connector, change)
-    connector.page.remove_connect_records({_id(connector)})
+    connector.page._remove_connect_records({_id(connector)})

@@ -11,6 +11,8 @@ shapes and Visio silently dropped the glue.
 import os
 import xml.etree.ElementTree as ET
 
+from helpers.connect_records import page_records
+
 from vsdxkit import namespace
 from vsdxkit.document import Document
 from vsdxkit.glue import Glue
@@ -160,5 +162,5 @@ def test_copy_page_keeps_connector_glue(vsdx_copy):
     copied_connector = copied.shapes.by_id(connector.ID)
     assert copied_connector is not None
     assert {name: _formula(copied_connector, name) for name in expected} == expected
-    connects = [c for c in copied.connects if c.from_id == connector.ID]
+    connects = [c for c in page_records(copied) if c.from_id == connector.ID]
     assert len(connects) == 2

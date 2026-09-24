@@ -186,17 +186,6 @@ def test_eocd_preflight_reads_zip64_entry_count(tmp_path):
     assert "40000" in str(excinfo.value)
 
 
-def test_get_type_hints_resolves_connect_to_class():
-    """get_type_hints must resolve the quoted annotation to the real class."""
-    import typing
-
-    from vsdxkit.connectors import Connect
-    from vsdxkit.shapes import Shape
-
-    hints = typing.get_type_hints(Shape.connects.fget)
-    assert hints["return"].__args__[0] is Connect
-
-
 def test_diff_chunk_boundary_crlf_is_one_newline(tmp_path):
     """A CRLF pair split across the 1 MiB chunk boundary must not double-count."""
 
