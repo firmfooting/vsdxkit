@@ -149,6 +149,13 @@ from :class:`vsdxkit.errors.VsdxError`, and every such class is defined in
 ``vsdxkit.errors``. A class that replaced a ``ValueError`` is still a
 ``ValueError``, so ``except ValueError:`` keeps working.
 
+The guarantee covers what the library checks. Opening a document validates
+the parts and attributes it reads on the way in, but a package that is
+well-formed and breaks the schema somewhere the library only reaches later,
+such as a shape element missing an attribute it reads, can still raise a
+plain ``KeyError`` or ``AttributeError``. ``except VsdxError:`` is not
+exhaustive for such a package.
+
 An argument of the wrong type or out of range usually raises a plain
 ``TypeError`` or ``ValueError``, not a ``VsdxError``, and ``except VsdxError:``
 does not catch it. Examples are ``Document.open("file.txt")``, a page width
@@ -220,13 +227,18 @@ OPC name, and the file-system view of 0.x is gone.
    which they were copies of.
 
 ``vsdx.document_part.DocumentPart``
-   Gone. The document parts are properties of ``Document``, such as
-   ``document.pages_xml``.
+   Gone. It was not a package part: it was the base that gave ``Shape``,
+   ``Cell``, ``DataProperty`` and the geometry and container classes their
+   closed-document guard. A document has no close state now, so a subclass
+   that implemented ``_document`` and called ``_require_open`` drops the base
+   and the guard, and has nothing to replace them with.
 
 ``vsdx.masters.MastersImportMixin``
    Gone as a base class. The document's masters are
    ``document.master_pages`` and ``document.master_index``, which are now
-   read-only.
+   read-only. Each read builds a new list or dict: one kept from before a
+   master is imported does not show it, and changing the list or dict changes
+   nothing in the document. Read the property again after a master changes.
 
 ``vis.masters_xml``
    Unchanged, as ``document.masters_xml``: it was the mixin's, and is now the
@@ -321,8 +333,10 @@ A copy of an existing shape
      ``page.create_shape(ShapeKind.LINE, x=..., y=..., width=...)`` for a
      free-standing straight line;
    - ``Media.curved_connector``: ``page.connect(a, b,
-     routing=Routing.CURVED)``. There is no free-standing curved connector;
-     ``connector.retarget`` can move its ends later;
+     routing=Routing.CURVED)`` for a connector glued at both ends. For a
+     free-standing one, place a copy of such a connector:
+     ``page.create_shape(connector, x=..., y=..., width=...)`` floats both of
+     the copy's ends and keeps its curved routing;
    - ``Media.rectangle_text``, ``Media.circle_text``,
      ``Media.straight_connector_text``, ``Media.curved_connector_text``: the
      strings ``"RECTANGLE"``, ``"CIRCLE"``, ``"STRAIGHT_CONNECTOR"`` and
@@ -387,9 +401,15 @@ are gone; glue and routing are :class:`vsdxkit.glue.Glue` and
    names neither end raises :class:`vsdxkit.errors.InvalidOperationError`.
 
 ``page.get_connectors_between(shape_a_id=..., shape_b_id=...)``
-   ``set(a.connectors) & set(b.connectors)``. The text form matched a
-   substring of the first shape's text; use ``page.shapes.require_text`` or
-   ``matching_text`` to choose the shapes.
+   ``set(a.connectors) & set(b.connectors)``.
+
+``page.get_connectors_between(shape_a_text=..., shape_b_text=...)``
+   The text form took the first shape whose text contained each string. A
+   comprehension keeps that:
+   ``a = next(s for s in page.shapes if shape_a_text in s.text)``, and the
+   same for ``b``, then ``set(a.connectors) & set(b.connectors)``.
+   ``page.shapes.require_text`` and ``matching_text`` compare the whole text
+   instead.
 
 ``shape.connected_shapes``
    It now returns the shapes at the other end of each connector glued to
