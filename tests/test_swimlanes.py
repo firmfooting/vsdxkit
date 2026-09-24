@@ -136,6 +136,9 @@ def test_a_diagram_whose_container_is_deleted_refuses_before_writing(vsdx_copy):
         diagram.add_lane("Late")
     with pytest.raises(InvalidOperationError, match="no longer in the document"):
         diagram.lanes  # noqa: B018
+    with pytest.raises(InvalidOperationError, match="no longer in the document"):
+        diagram.container  # noqa: B018
+    assert "detached" in repr(diagram)
 
     assert _xml(before) == _xml(snapshot)
 

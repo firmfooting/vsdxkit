@@ -155,12 +155,22 @@ class SwimlaneDiagram:
         self._container = container
 
     def __repr__(self) -> str:
+        if not self._container.is_attached:
+            return f"<SwimlaneDiagram page={self._page.name!r} container={self._container.ID} detached>"
         return f"<SwimlaneDiagram page={self._page.name!r} container={self._container.ID} lanes={len(self.lanes)}>"
 
     @property
     def container(self) -> Shape:
-        """The CFF container shape the diagram is bound to."""
+        """The CFF container shape the diagram is bound to.
+
+        :raises InvalidOperationError: the container is no longer in the document
+        """
+        self._require_container("reading a swimlane diagram's container")
         return self._container
+
+    def _require_container(self, operation: str) -> None:
+        """Refuse `operation` on a diagram whose container, or page, has left the document."""
+        self._container._require_attached(operation)
 
     @property
     def lanes(self) -> tuple[Shape, ...]:
@@ -172,7 +182,7 @@ class SwimlaneDiagram:
 
         :raises InvalidOperationError: the container is no longer in the document
         """
-        self._container._require_attached("reading a swimlane diagram's lanes")
+        self._require_container("reading a swimlane diagram's lanes")
         lanes = [shape for shape in self._page.children if _is_lane(shape)]
         lanes.sort(key=lambda lane: -(lane.y or 0.0))
         return tuple(lanes)

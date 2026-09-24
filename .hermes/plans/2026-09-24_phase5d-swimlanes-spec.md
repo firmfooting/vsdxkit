@@ -50,7 +50,7 @@ where `<n>` is a number: `CFF Container.backup` is not a copy Visio made.
 
 A diagram whose container has been deleted, or whose page has, refuses every
 operation with `InvalidOperationError`, before anything is written. `lanes`,
-which every operation reads first, checks it.
+which every operation reads first, checks it, and so does `container`; the diagram's `repr` says it is detached.
 The 0.x finder searched every shape at any depth for an exact name, while the
 container property searched the top level by prefix; there is now one rule.
 
