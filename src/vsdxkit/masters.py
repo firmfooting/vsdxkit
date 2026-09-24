@@ -14,7 +14,7 @@ import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterable
 from xml.etree.ElementTree import Element
 
-from vsdxkit import namespace, r_namespace, relationships
+from vsdxkit import namespace, r_namespace
 from vsdxkit.errors import MissingPartError
 from vsdxkit.package import PackageStore, check_relationship_target
 from vsdxkit.pages import Page
@@ -27,6 +27,7 @@ from vsdxkit.partnames import (
     relationships_part_name,
     target_part_name,
 )
+from vsdxkit.relationships import all_of, append_if_absent, ensure_override
 from vsdxkit.shape_tree import is_connector_element, iter_children, iter_descendants
 from vsdxkit.xmlio import PartTree, require_attribute, require_element
 
@@ -180,9 +181,7 @@ class MasterCatalog:
         """Read every master from the package. Idempotent: it rebuilds rather than appends."""
         rels_tree = self._store.read_xml(relationships_part_name(MASTERS_PART))
         targets: dict[str, str] = {}
-        for relationship in (
-            [] if rels_tree is None else relationships.all_of(require_element(rels_tree.getroot(), "masters.xml.rels"))
-        ):
+        for relationship in [] if rels_tree is None else all_of(require_element(rels_tree.getroot(), "masters.xml.rels")):
             subject = "masters.xml.rels Relationship"
             targets[require_attribute(relationship, "Id", subject)] = require_attribute(relationship, "Target", subject)
 
@@ -235,7 +234,7 @@ class MasterCatalog:
         if self._store.part(rels_name) is None:
             self._store.write_xml(rels_name, _empty_relationships())
         self._declare(MASTERS_PART, MASTERS_CONTENT_TYPE)
-        relationships.append_if_absent(
+        append_if_absent(
             self._required_root(relationships_part_name(DOCUMENT_PART)),
             rel_type=MASTERS_RELATIONSHIP,
             target=relationship_target(DOCUMENT_PART, MASTERS_PART),
@@ -311,7 +310,7 @@ class MasterCatalog:
         assert masters_root is not None  # the caller bootstrapped
         numeric_ids = [int(m.attrib["ID"]) for m in masters_root if m.attrib.get("ID", "").isdigit()]
         new_id = str(max(max(numeric_ids, default=1) + 1, 2))
-        relationship = relationships.append_if_absent(
+        relationship = append_if_absent(
             rels_root, rel_type=MASTER_RELATIONSHIP, target=relationship_target(MASTERS_PART, part_name)
         )
         element = copy.deepcopy(source_element)
@@ -359,14 +358,14 @@ class MasterCatalog:
         """The first `masterN.xml` neither the store nor `masters.xml.rels` already names."""
         prefix = folder_of(MASTERS_PART) + "master"
         taken = set(self._store.names())
-        taken |= {target_part_name(MASTERS_PART, r.attrib.get("Target", "")) for r in relationships.all_of(rels_root)}
+        taken |= {target_part_name(MASTERS_PART, r.attrib.get("Target", "")) for r in all_of(rels_root)}
         number = 1
         while f"{prefix}{number}.xml" in taken:
             number += 1
         return f"{prefix}{number}.xml"
 
     def _declare(self, part_name: str, content_type: str) -> None:
-        relationships.ensure_override(self._required_root(CONTENT_TYPES_PART), part_name, content_type)
+        ensure_override(self._required_root(CONTENT_TYPES_PART), part_name, content_type)
 
     def _required_root(self, part_name: str) -> Element:
         tree = self._store.read_xml(part_name)

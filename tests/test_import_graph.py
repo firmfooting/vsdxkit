@@ -42,11 +42,6 @@ ALLOWED = {
     Edge("connectors", "media", "root"),
     Edge("pages", "media", "function"),
     Edge("pages", "media", "root"),
-    # 6b: each module imports its siblings by their own names
-    Edge("document", "relationships", "root"),
-    Edge("document", "xmlio", "root"),
-    Edge("masters", "relationships", "root"),
-    Edge("pages", "relationships", "root"),
     # 6c, the seams: each upward edge becomes a Protocol in the lower module
     Edge("connectors", "pages", "typing"),
     Edge("connectors", "shapes", "typing"),

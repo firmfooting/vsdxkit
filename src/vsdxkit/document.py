@@ -17,9 +17,7 @@ from vsdxkit import (
     ext_prop_namespace,
     namespace,
     r_namespace,
-    relationships,
     vt_namespace,
-    xmlio,
 )
 from vsdxkit.errors import InvalidOperationError, MissingPartError
 from vsdxkit.logging_support import get_logger
@@ -35,9 +33,18 @@ from vsdxkit.partnames import (
     relationships_part_name,
     target_part_name,
 )
+from vsdxkit.relationships import append_if_absent, ensure_override, remove, remove_override
 from vsdxkit.shapes import Shape, _text_runs_of, _write_text, find_or_create_shapes_tag, substitute
 from vsdxkit.templating import render_document
-from vsdxkit.xmlio import PartTree, adopt_prefixes, register_namespaces, require_attribute, require_element, require_tree
+from vsdxkit.xmlio import (
+    PartTree,
+    adopt_prefixes,
+    pretty_print_element,
+    register_namespaces,
+    require_attribute,
+    require_element,
+    require_tree,
+)
 
 logger = get_logger(__name__)
 
@@ -119,7 +126,7 @@ class Document:
         self._masters.load()
         if logger.isEnabledFor(logging.DEBUG):
             for master in self._masters.pages:
-                logger.debug("Master(%s, id=%s)\n%s", master.filename, master.page_id, xmlio.pretty_print_element(master.xml))
+                logger.debug("Master(%s, id=%s)\n%s", master.filename, master.page_id, pretty_print_element(master.xml))
 
     @classmethod
     def open(
@@ -161,7 +168,7 @@ class Document:
 
     @staticmethod
     def pretty_print_element(xml: Element | PartTree) -> str:
-        return xmlio.pretty_print_element(xml)
+        return pretty_print_element(xml)
 
     def _require_part_xml(self, name: str, description: str) -> PartTree:
         """The store's own tree for a required part, or a MissingPartError naming it."""
@@ -419,8 +426,8 @@ class Document:
 
                 # issue #7: a dangling rId pointing at a deleted part corrupts
                 # the OPC graph, and so does an Override naming one
-                relationships.remove(self._part_root(self.pages_xml_rels, "pages.xml.rels"), page.rel_id or "")
-                relationships.remove_override(
+                remove(self._part_root(self.pages_xml_rels, "pages.xml.rels"), page.rel_id or "")
+                remove_override(
                     self._part_root(self.content_types_xml, "[Content_Types].xml"),
                     page.filename,
                 )
@@ -437,7 +444,7 @@ class Document:
         """Updates the pages.xml.rels file with a reference to the new page and returns the new relid"""
 
         rels_root = self._part_root(self.pages_xml_rels, "pages.xml.rels")
-        relationship = relationships.append_if_absent(
+        relationship = append_if_absent(
             rels_root,
             rel_type="http://schemas.microsoft.com/visio/2010/relationships/page",
             target=new_page_filename,
@@ -504,9 +511,7 @@ class Document:
         return index
 
     def _add_content_types_override(self, part_name_path: str, content_type: str) -> None:
-        relationships.ensure_override(
-            self._part_root(self.content_types_xml, "[Content_Types].xml"), part_name_path, content_type
-        )
+        ensure_override(self._part_root(self.content_types_xml, "[Content_Types].xml"), part_name_path, content_type)
 
     def document_rels(self) -> list[Element]:
         rels_root = self._part_root(self.document_xml_rels, "visio/_rels/document.xml.rels")

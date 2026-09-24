@@ -17,12 +17,13 @@ else:
     from typing_extensions import override
 
 
-from vsdxkit import namespace, r_namespace, relationships
+from vsdxkit import namespace, r_namespace
 from vsdxkit.connectors import _Connect, _create_connector, _float_ends
 from vsdxkit.errors import InvalidOperationError, MissingPartError, NotFoundError, PackageError
 from vsdxkit.glue import ConnectorOptions, Glue, Routing
 from vsdxkit.package import XmlPart
 from vsdxkit.partnames import relationship_target, relationships_part_name, target_part_name
+from vsdxkit.relationships import all_of, append_if_absent
 from vsdxkit.shape_kind import ShapeKind
 from vsdxkit.shape_tree import iter_descendants
 from vsdxkit.shapes import Connector, Shape, ShapeCollection, _wrap_children, _wrap_descendants, is_connector, parent_of
@@ -405,7 +406,7 @@ class Page:
         different id space, and an id free there says nothing here (#357). The
         rels part is created on demand; assigning it writes it into the package.
         """
-        relationships.append_if_absent(
+        append_if_absent(
             self._rels_root(),
             rel_type="http://schemas.microsoft.com/visio/2010/relationships/master",
             target=relationship_target(self.filename, master_part_name),
@@ -433,7 +434,7 @@ class Page:
         source_rels = source.rels_xml
         if source_rels is None:
             return
-        by_id = {rel.attrib.get("Id"): rel for rel in relationships.all_of(source_rels.getroot())}
+        by_id = {rel.attrib.get("Id"): rel for rel in all_of(source_rels.getroot())}
         for node in copied.iter():
             relationship = by_id.get(node.attrib.get(_RELATIONSHIP_ID))
             if relationship is None:
@@ -442,7 +443,7 @@ class Page:
             target = relationship.attrib.get("Target", "")
             if mode != "External":
                 target = relationship_target(self.filename, target_part_name(source.filename, target))
-            carried = relationships.append_if_absent(
+            carried = append_if_absent(
                 self._rels_root(), rel_type=relationship.attrib.get("Type", ""), target=target, mode=mode
             )
             node.attrib[_RELATIONSHIP_ID] = carried.attrib["Id"]
