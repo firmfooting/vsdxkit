@@ -312,15 +312,21 @@ A copy of an existing shape
    Gone. The bundled shapes are loaded once per process and only copies
    leave the library:
 
-   - ``Media.rectangle``, ``Media.rectangle_text``: ``page.create_shape(ShapeKind.RECTANGLE, ...)``;
-   - ``Media.circle``, ``Media.circle_text``: ``page.create_shape(ShapeKind.CIRCLE, ...)``;
-   - ``Media.straight_connector``, ``Media.straight_connector_text``:
-     ``page.connect(a, b, routing=Routing.STRAIGHT)`` for a connector glued
-     at both ends, or ``page.create_shape(ShapeKind.LINE, x=..., y=...,
-     width=...)`` for a free-standing straight line;
-   - ``Media.curved_connector``, ``Media.curved_connector_text``:
-     ``page.connect(a, b, routing=Routing.CURVED)``. There is no free-standing
-     curved connector; ``connector.retarget`` can move its ends later;
+   - ``Media.rectangle``: ``page.create_shape(ShapeKind.RECTANGLE, ...)``;
+   - ``Media.circle``: ``page.create_shape(ShapeKind.CIRCLE, ...)``;
+   - ``Media.straight_connector``: ``page.connect(a, b,
+     routing=Routing.STRAIGHT)`` for a connector glued at both ends, or
+     ``page.create_shape(ShapeKind.LINE, x=..., y=..., width=...)`` for a
+     free-standing straight line;
+   - ``Media.curved_connector``: ``page.connect(a, b,
+     routing=Routing.CURVED)``. There is no free-standing curved connector;
+     ``connector.retarget`` can move its ends later;
+   - ``Media.rectangle_text``, ``Media.circle_text``,
+     ``Media.straight_connector_text``, ``Media.curved_connector_text``: the
+     strings ``"RECTANGLE"``, ``"CIRCLE"``, ``"STRAIGHT_CONNECTOR"`` and
+     ``"CURVED_CONNECTOR"`` that marked each shape in the bundled donor file.
+     They are gone with no replacement, and a created shape does not carry
+     them: ``create_shape`` gives it the text you pass, or none;
    - ``Media.palette``, ``Media.media``, ``Media.rels_xml``: the donor
      documents themselves, no longer handed out;
    - ``Media.close()``: nothing to close.
@@ -418,7 +424,21 @@ which is gone along with its module. Membership is still geometric.
    Gone. A lane's band is its ``y`` plus or minus half its ``height``.
 
 ``vsdxkit.containers.get_user_row``, ``containers.set_user_row_value``
-   Gone. Label a lane with ``diagram.set_lane_label(lane, label)``.
+   Gone. To label a lane, use ``diagram.set_lane_label(lane, label)``, which
+   writes the lane's ``visHeadingText`` row and its heading together. For any
+   other User-section row, or a shape that is not a lane, read and write the
+   row in the shape's XML:
+
+   .. code-block:: python
+
+      from vsdxkit import namespace
+
+      row = shape.xml.find(f"{namespace}Section[@N='User']/{namespace}Row[@N='{name}']")
+      value = None if row is None else row.find(f"{namespace}Cell[@N='Value']")
+      if value is not None:
+          value.set("V", new_value)
+
+   As in 0.x, a row that is absent is not created.
 
 ``vsdx.containers.LANE_PITCH_INCHES``, ``containers.ROW_HEADING_TEXT``, ``containers.ROW_SWIMLANE_GUID``
    ``vsdxkit.swimlanes.LANE_PITCH_INCHES``, ``ROW_HEADING_TEXT`` and
