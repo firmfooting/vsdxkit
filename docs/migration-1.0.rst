@@ -42,9 +42,16 @@ defines it:
 ``from vsdx import get_logger``
    ``from vsdxkit.logging_support import get_logger``
 
-``from vsdx import attach_debug_stream_handler``
+``from vsdx import attach_debug_stream_handler``, ``vsdx.logging_support.attach_debug_stream_handler()``
    Gone. Configure logging for the ``vsdxkit`` logger instead, as shown under
    ``VisioFile(path, debug=True)`` below.
+
+``from vsdx import pretty_print_element``
+   ``from vsdxkit.xmlio import pretty_print_element``
+
+``from vsdx import namespace``, and the other namespace constants
+   ``from vsdxkit import namespace``: the root keeps the XML namespace
+   constants and ``__version__``, and nothing else.
 
 ``from vsdx import VisioFile``
    ``from vsdxkit.document import Document``, below.
@@ -129,7 +136,7 @@ as you hold it.
 ``VisioFile.file_open``
    Delete the check. A document is always open.
 
-``vsdxkit.errors.VisioFileNotOpen``
+``vsdxkit.errors.VisioFileNotOpen``, ``vsdx.vsdxfile.VisioFileNotOpen``
    Delete the ``except`` clause. Nothing raises it. A write through a shape
    that has been deleted from its page still raises
    :class:`vsdxkit.errors.InvalidOperationError`.
@@ -137,10 +144,15 @@ as you hold it.
 Errors are one hierarchy
 ------------------------
 
-Every error the library raises itself derives from
-:class:`vsdxkit.errors.VsdxError`, and every class is defined in
+An error about the package, the document or an operation on it derives
+from :class:`vsdxkit.errors.VsdxError`, and every such class is defined in
 ``vsdxkit.errors``. A class that replaced a ``ValueError`` is still a
 ``ValueError``, so ``except ValueError:`` keeps working.
+
+An argument of the wrong type or out of range raises a plain ``TypeError`` or
+``ValueError``, not a ``VsdxError``. Examples are ``Document.open("file.txt")``,
+a page width that is not positive, and a ``ConnectorOptions`` field of the
+wrong type. ``except VsdxError:`` does not catch these.
 
 ``except zipfile.BadZipFile:``, ``except RuntimeError:``, ``except KeyError:`` around an open
    ``except MalformedPackageError:``. Opening a package that is not a zip,
@@ -186,14 +198,14 @@ OPC name, and the file-system view of 0.x is gone.
    Gone. Work through the object model; to read a part's raw bytes, open
    the saved file with :mod:`zipfile`.
 
-``vsdx.xmlio.file_to_xml``, ``xml_to_file``, ``require_xml_tree``, ``require_root``
+``vsdx.xmlio.file_to_xml``, ``xmlio.xml_to_file``, ``xmlio.require_xml_tree``, ``xmlio.require_root``
    Gone with the file-system view. ``vsdxkit.xmlio.parse_part(bytes)`` and
    ``serialise_part(tree)`` read and write a part.
 
 ``vsdx.shapes.to_float``
    ``vsdxkit.xmlio.to_float``.
 
-``vsdx.vsdxfile.DRAWING_CONTENT_TYPE``, ``MACRO_ENABLED_CONTENT_TYPE``
+``vsdx.vsdxfile.DRAWING_CONTENT_TYPE``, ``vsdxfile.MACRO_ENABLED_CONTENT_TYPE``
    ``vsdxkit.document.DRAWING_CONTENT_TYPE`` and
    ``vsdxkit.document.MACRO_ENABLED_CONTENT_TYPE``.
 
@@ -274,10 +286,18 @@ A copy of an existing shape
    ``page.create_shape(shape, x=x, y=y)`` places a copy of ``shape``, with its
    text, on ``page``. ``shape`` must belong to the same document.
 
-``vsdx.media.Media``, ``Media().rectangle``, ``circle``, ``straight_connector`` and the other donor shapes
+``vsdx.media.Media``
    Gone. The bundled shapes are loaded once per process and only copies
-   leave the library: ``page.create_shape(ShapeKind.RECTANGLE, ...)`` and
-   ``ShapeKind.CIRCLE`` for the shapes, ``page.connect`` for the connectors.
+   leave the library:
+
+   - ``Media.rectangle``, ``Media.rectangle_text``: ``page.create_shape(ShapeKind.RECTANGLE, ...)``;
+   - ``Media.circle``, ``Media.circle_text``: ``page.create_shape(ShapeKind.CIRCLE, ...)``;
+   - ``Media.straight_connector``, ``Media.straight_connector_text``,
+     ``Media.curved_connector``, ``Media.curved_connector_text``:
+     ``page.connect(a, b, routing=...)``;
+   - ``Media.palette``, ``Media.media``, ``Media.rels_xml``: the donor
+     documents themselves, no longer handed out;
+   - ``Media.close()``: nothing to close.
 
 ``shape.copy()`` with no page
    The copy's parent is the page it lands on, not the group the source is
@@ -304,6 +324,11 @@ are gone; glue and routing are :class:`vsdxkit.glue.Glue` and
 
 ``page.connect_shapes(a, b, options=ConnectorOptions(...))``, ``Connect.create(page, a, b, ...)``
    ``page.connect(a, b, ...)`` with the options' fields as keywords.
+
+``Connect.retarget(page, connector_shape, from_shape=a, to_shape=b, route=...)``
+   ``connector.retarget(source=a, target=b, options=...)``, as for
+   ``reanchor_connector`` below. The connector is the shape itself, so the
+   page is not passed.
 
 ``page.reanchor_connector(connector, from_shape=a, to_shape=b, route=...)``
    ``connector.retarget(source=a, target=b, options=ConnectorOptions(...))``.
@@ -363,10 +388,10 @@ which is gone along with its module. Membership is still geometric.
 ``container.lane_band(lane)``, ``container.swimlane_list``, ``container.lane_heading(lane)``, ``Container.find(page)``
    Gone. A lane's band is its ``y`` plus or minus half its ``height``.
 
-``vsdxkit.containers.get_user_row``, ``set_user_row_value``
+``vsdxkit.containers.get_user_row``, ``containers.set_user_row_value``
    Gone. Label a lane with ``diagram.set_lane_label(lane, label)``.
 
-``vsdx.containers.LANE_PITCH_INCHES``, ``ROW_HEADING_TEXT``, ``ROW_SWIMLANE_GUID``
+``vsdx.containers.LANE_PITCH_INCHES``, ``containers.ROW_HEADING_TEXT``, ``containers.ROW_SWIMLANE_GUID``
    ``vsdxkit.swimlanes.LANE_PITCH_INCHES``, ``ROW_HEADING_TEXT`` and
    ``ROW_SWIMLANE_GUID``.
 

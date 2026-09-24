@@ -3,9 +3,14 @@
 The 0.8.0 surface is `tools/api-0.8.0.txt`. Each name is looked up where 1.0
 keeps it: `vsdx` is `vsdxkit`, `VisioFile` is `vsdxkit.document.Document` and
 `Container` is `vsdxkit.swimlanes.SwimlaneDiagram`. A name that is not found
-there must appear in an inline literal or code block of
-`docs/migration-1.0.rst`; a name imported from the package root must appear
-as ``from vsdx import <name>``.
+there must be named, qualified, in an inline literal or code block of
+`docs/migration-1.0.rst`, so an entry for one owner's name never stands in for
+another's:
+
+- a root name as ``from vsdx import <name>``;
+- a module-level name as ``<module>.<name>``;
+- a member as ``<owner>.<member>``, where the owner is the class or the name
+  the guide gives its instances, such as ``page`` for ``Page``.
 """
 
 from __future__ import annotations
@@ -24,8 +29,18 @@ CLASS_RENAMES = {
     ("containers", "Container"): ("swimlanes", "SwimlaneDiagram"),
 }
 
+# how the guide may name the owner of a member, beyond the class's own name
+# and its lower-cased form; a mixin's members were called on the VisioFile
+OWNER_NAMES = {
+    "VisioFile": {"vis"},
+    "JinjaTemplatingMixin": {"VisioFile", "vis"},
+    "MastersImportMixin": {"VisioFile", "vis"},
+}
+
 _INLINE_LITERAL = re.compile(r"``(.+?)``")
-_IDENTIFIER = re.compile(r"[A-Za-z_]\w*")
+# `a.b`, `a().b` and `a[0].b`, overlapping, so `vsdx.xmlio.to_float` gives
+# (vsdx, xmlio) and (xmlio, to_float)
+_QUALIFIED = re.compile(r"(?<!\w)(?=(\w+)(?:\([^()]*\)|\[[^\]]*\])?\.(\w+))")
 _ROOT_IMPORT = re.compile(r"from vsdx import ([\w, ]+)")
 
 
@@ -67,29 +82,36 @@ def moved(name: str, modules: list[str]) -> object | None:
     return found[0] if len(found) == 1 else None
 
 
+def owner_names(class_name: str) -> set[str]:
+    return {class_name, class_name[0].lower() + class_name[1:], *OWNER_NAMES.get(class_name, ())}
+
+
 def unexplained(names: list[str], literals: list[str], modules: list[str]) -> list[str]:
-    identifiers = {identifier for literal in literals for identifier in _IDENTIFIER.findall(literal)}
+    qualified = {pair for literal in literals for pair in _QUALIFIED.findall(literal)}
     root_imports = {
         imported.strip() for literal in literals for match in _ROOT_IMPORT.findall(literal) for imported in match.split(",")
     }
+    root = importlib.import_module("vsdxkit")
     missing = []
     for dotted in names:
         parts = dotted.split(".")[1:]
         if len(parts) == 1:
-            if parts[0] not in root_imports:
+            if not hasattr(root, parts[0]) and parts[0] not in root_imports:
                 missing.append(f"{dotted} (as `from vsdx import {parts[0]}`)")
             continue
         module_name, name = parts[0], parts[1]
         owner = lookup(module_name, name)
         if len(parts) == 2:
-            if owner is None and name not in identifiers:
-                missing.append(dotted)
+            if owner is None and (module_name, name) not in qualified:
+                missing.append(f"{dotted} (as `{module_name}.{name}`)")
             continue
-        # a member of a class that is gone is explained by the class's entry;
+        member = parts[2]
         # a member of a class that moved is looked for where it moved to
         owner = owner or moved(name, modules)
-        if owner is not None and not hasattr(owner, parts[2]) and parts[2] not in identifiers:
-            missing.append(dotted)
+        if owner is not None and hasattr(owner, member):
+            continue
+        if not any((qualifier, member) in qualified for qualifier in owner_names(name)):
+            missing.append(f"{dotted} (as `{name}.{member}`)")
     return missing
 
 

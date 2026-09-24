@@ -1,6 +1,7 @@
 # The public surface of vsdx 0.8.0, the last release before 1.0: every name in
-# vsdx.__all__, every public name a vsdx module defined, and every public member
-# of a class it defined. tools/check_migration_guide.py reads it; it never changes.
+# vsdx.__all__ and every other name the package root defined, every public name
+# a vsdx module defined, and every public member of a class it defined.
+# tools/check_migration_guide.py reads it; it never changes.
 vsdx.Cell
 vsdx.Connect
 vsdx.Container
@@ -19,6 +20,13 @@ vsdx.VisioFileNotOpen
 vsdx.attach_debug_stream_handler
 vsdx.calc_value
 vsdx.get_logger
+vsdx.namespace
+vsdx.ext_prop_namespace
+vsdx.vt_namespace
+vsdx.r_namespace
+vsdx.document_rels_namespace
+vsdx.cont_types_namespace
+vsdx.pretty_print_element
 vsdx.connectors.Connect
 vsdx.connectors.Connect.connector_shape
 vsdx.connectors.Connect.connector_shape_id

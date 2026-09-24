@@ -21,6 +21,8 @@ everything since the `v0.8.0` tag is unreleased. The package imported as
 `tools/api-0.8.0.txt` is 0.8.0's public surface, generated once from the tag:
 
 - every name in `vsdx.__all__`;
+- every other name the root defined: the namespace constants and
+  `pretty_print_element`;
 - every public name a `vsdx` module defined (not ones it imported, loggers or
   type variables);
 - every public class-level member of a class it defined, including
@@ -35,18 +37,24 @@ visible to the snapshot, so the guide covers them by hand.
 
 - `vsdx.<m>.<name>` is looked up as `vsdxkit.<m>.<name>`. The exceptions are
   `VisioFile`, which becomes `vsdxkit.document.Document`, and `Container`,
-  which becomes `vsdxkit.swimlanes.SwimlaneDiagram`.
-- A name 1.0 does not have must appear as an identifier in an inline literal
-  or a code-block line of `docs/migration-1.0.rst`.
-- A member of a class that is gone is covered by the class's own entry.
-- A member of a class that moved to another module is looked up there.
-- A root name must appear as `from vsdx import <name>`.
+  which becomes `vsdxkit.swimlanes.SwimlaneDiagram`. A member of a class that
+  moved is looked up where it moved to.
+- A name 1.0 does not have must be named, qualified, in an inline literal or
+  a code-block line of `docs/migration-1.0.rst`. A bare token is not enough,
+  so an entry for one owner's name never stands in for another's (Codex on
+  #409: `connector.retarget` hid `Connect.retarget`). The forms are:
+  - a root name as `from vsdx import <name>`, unless the `vsdxkit` root still
+    has it;
+  - a module-level name as `<module>.<name>`;
+  - a member as `<owner>.<member>`. The owner is the class, its lower-cased
+    form, or a listed instance name: `vis` for `VisioFile` and its mixins.
+  Each member of a gone class is named too.
 
 ## Guide entries added
 
 - The import package rename, and the root imports with one entry per
   `vsdx.__all__` name.
-- Errors are one hierarchy (#365).
+- Errors are one hierarchy (#365), limited to package, document and operation errors; argument errors stay built-ins.
 - A save writes only what changed, and document parts refuse `None` (#373).
 - Parts are named by part name, covering:
   - `filename` (#380);

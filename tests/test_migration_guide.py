@@ -32,15 +32,34 @@ def test_the_guide_names_every_removed_name(monkeypatch):
 
 
 def test_a_removed_member_the_guide_does_not_name_is_reported(modules):
-    assert check.unexplained(["vsdx.pages.Page.gone_in_one_oh"], [], modules) == ["vsdx.pages.Page.gone_in_one_oh"]
+    assert check.unexplained(["vsdx.pages.Page.gone_in_one_oh"], [], modules) == [
+        "vsdx.pages.Page.gone_in_one_oh (as `Page.gone_in_one_oh`)"
+    ]
 
 
-def test_a_removed_member_the_guide_names_is_accepted(modules):
+def test_a_removed_member_named_on_its_owner_is_accepted(modules):
     assert check.unexplained(["vsdx.pages.Page.gone_in_one_oh"], ["page.gone_in_one_oh()"], modules) == []
+    assert check.unexplained(["vsdx.pages.Page.gone_in_one_oh"], ["vis.pages[0].gone_in_one_oh"], modules) != []
+    assert check.unexplained(["vsdx.pages.Page.gone_in_one_oh"], ["Page.gone_in_one_oh"], modules) == []
+
+
+def test_a_member_named_bare_or_on_another_owner_is_reported(modules):
+    """Fails if an entry for one owner's member stands in for another's, as `connector.retarget` did for `Connect.retarget`."""
+    for literals in (["gone_in_one_oh()"], ["shape.gone_in_one_oh()"]):
+        assert check.unexplained(["vsdx.pages.Page.gone_in_one_oh"], literals, modules) != []
+
+
+def test_a_mixin_member_is_named_on_the_document(modules):
+    assert check.unexplained(["vsdx.templating.JinjaTemplatingMixin.gone"], ["vis.gone(context)"], modules) == []
+
+
+def test_a_module_level_name_is_named_with_its_module(modules):
+    assert check.unexplained(["vsdx.xmlio.gone_fn"], ["gone_fn(tree)"], modules) == ["vsdx.xmlio.gone_fn (as `xmlio.gone_fn`)"]
+    assert check.unexplained(["vsdx.xmlio.gone_fn"], ["vsdx.xmlio.gone_fn(tree)"], modules) == []
 
 
 def test_a_name_1_0_keeps_needs_no_entry(modules):
-    assert check.unexplained(["vsdx.pages.Page.name", "vsdx.shapes.Shape.text"], [], modules) == []
+    assert check.unexplained(["vsdx.pages.Page.name", "vsdx.shapes.Shape.text", "vsdx.namespace"], [], modules) == []
 
 
 def test_a_renamed_class_is_looked_up_under_its_new_name(modules):
@@ -51,11 +70,16 @@ def test_a_renamed_class_is_looked_up_under_its_new_name(modules):
 def test_a_moved_class_is_named_but_its_kept_members_are_not(modules):
     names = ["vsdx.vsdxfile.PackageLimits", "vsdx.vsdxfile.PackageLimits.max_members", "vsdx.vsdxfile.PackageLimits.gone"]
 
-    assert check.unexplained(names, ["vsdxkit.package.PackageLimits"], modules) == ["vsdx.vsdxfile.PackageLimits.gone"]
+    assert check.unexplained(names, ["vsdx.vsdxfile.PackageLimits"], modules) == [
+        "vsdx.vsdxfile.PackageLimits.gone (as `PackageLimits.gone`)"
+    ]
 
 
-def test_a_gone_class_explains_its_members(modules):
-    assert check.unexplained(["vsdx.media.Media", "vsdx.media.Media.rectangle"], ["vsdx.media.Media"], modules) == []
+def test_each_member_of_a_gone_class_is_named(modules):
+    names = ["vsdx.media.Media", "vsdx.media.Media.rectangle"]
+
+    assert check.unexplained(names, ["vsdx.media.Media"], modules) == ["vsdx.media.Media.rectangle (as `Media.rectangle`)"]
+    assert check.unexplained(names, ["vsdx.media.Media", "Media.rectangle"], modules) == []
 
 
 def test_a_root_name_needs_its_root_import(modules):
