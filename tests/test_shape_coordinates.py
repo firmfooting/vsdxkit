@@ -95,7 +95,7 @@ def test_connector_coordinates_reject_none_before_mutation(vsdx_copy):
     source = page.shapes.by_text("Shape A")
     target = page.shapes.by_text("Shape B")
     assert source is not None and target is not None
-    connector = page.connect_shapes(source, target)
+    connector = page.connect(source, target)
     before = (connector.x, connector.y, connector.begin_x, connector.begin_y, connector.end_x, connector.end_y)
 
     with pytest.raises(ValueError, match="start and finish coordinates cannot be None"):

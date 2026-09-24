@@ -19,10 +19,10 @@ from pathlib import Path
 from xml.etree.ElementTree import Element
 
 from vsdxkit.document import Document
-from vsdxkit.errors import NotFoundError
+from vsdxkit.errors import MalformedPackageError, NotFoundError
 from vsdxkit.pages import Page
 from vsdxkit.shape_kind import ShapeKind
-from vsdxkit.shapes import Shape
+from vsdxkit.shapes import Connector, Shape
 
 MEDIA = "media.vsdx"
 PALETTE = "palette_extended.vsdx"
@@ -82,9 +82,12 @@ def copy_kind(kind: ShapeKind, page: Page) -> Shape:
     return _kind_shape(kind).copy(page)
 
 
-def copy_connector(page: Page, curved: bool = False) -> Shape:
+def copy_connector(page: Page, curved: bool = False) -> Connector:
     """A copy of the bundled dynamic connector on `page`, its master imported. It still carries the sentinel text."""
-    return _sentinel(MEDIA, CURVED_CONNECTOR if curved else STRAIGHT_CONNECTOR).copy(page)
+    connector = _sentinel(MEDIA, CURVED_CONNECTOR if curved else STRAIGHT_CONNECTOR).copy(page)
+    if not isinstance(connector, Connector):
+        raise MalformedPackageError(f"the bundled connector in {MEDIA} is not a 1-D shape")
+    return connector
 
 
 def media_style(style_id: str) -> Element | None:

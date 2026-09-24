@@ -20,15 +20,15 @@ import deprecation
 
 import vsdxkit
 from vsdxkit import namespace, r_namespace, relationships, retired_finders
-from vsdxkit.connectors import Connect, _float_ends
+from vsdxkit.connectors import Connect, _create_connector, _float_ends
 from vsdxkit.containers import Container
 from vsdxkit.errors import InvalidOperationError, MissingPartError, NotFoundError, PackageError
-from vsdxkit.glue import ConnectorOptions
+from vsdxkit.glue import ConnectorOptions, Glue, Routing
 from vsdxkit.package import XmlPart
 from vsdxkit.partnames import relationship_target, relationships_part_name, target_part_name
 from vsdxkit.shape_kind import ShapeKind
 from vsdxkit.shape_tree import iter_descendants
-from vsdxkit.shapes import Shape, ShapeCollection, _wrap_children, _wrap_descendants, is_connector, parent_of
+from vsdxkit.shapes import Connector, Shape, ShapeCollection, _wrap_children, _wrap_descendants, is_connector, parent_of
 from vsdxkit.xmlio import PartTree, require_element, to_float, xml_value
 
 # the two places a Connect record names a shape: the connector it leads from,
@@ -496,26 +496,6 @@ class Page:
         connects = [Connect(xml=e, page=self) for e in elements]
         return connects
 
-    def get_connectors_between(
-        self, shape_a_id: str = "", shape_a_text: str = "", shape_b_id: str = "", shape_b_text: str = ""
-    ) -> set[Shape]:
-        shape_a = self.shapes.by_id(shape_a_id) if shape_a_id else self._first_containing(shape_a_text)
-        shape_b = self.shapes.by_id(shape_b_id) if shape_b_id else self._first_containing(shape_b_text)
-        if shape_a is None or shape_b is None:
-            raise NotFoundError("get_connectors_between() requires two shapes that exist on this page")
-        connector_ids = {a.ID for a in shape_a.connected_shapes}.intersection({b.ID for b in shape_b.connected_shapes})
-
-        connectors: set[Shape] = set()
-        for connector_id in connector_ids:
-            found = self.shapes.by_id(connector_id or "")
-            if found is not None:
-                connectors.add(found)
-        return connectors
-
-    def _first_containing(self, text: str) -> Shape | None:
-        """The first shape on the page whose text contains `text`, as ``get_connectors_between`` has always matched."""
-        return next((shape for shape in self.shapes if text in shape.text), None)
-
     def apply_text_context(self, context: dict[str, object]) -> None:
         for shape in self.child_shapes:
             shape.apply_text_filter(context)
@@ -605,31 +585,33 @@ class Page:
         retired_finders.warn("Page.find_shapes_with_same_master", "a comprehension over page.shapes")
         return retired_finders.all_by_master(self.shapes, shape.master_page_ID, shape.master_shape_ID)
 
-    def connect_shapes(
+    def connect(
         self,
-        from_shape: Shape,
-        to_shape: Shape,
-        route: str | None = None,
-        from_cp: int = 0,
-        to_cp: int = 0,
+        source: Shape,
+        target: Shape,
         *,
-        options: ConnectorOptions | None = None,
-    ) -> Shape:
-        """Create a Visio-faithful connector between two shapes on this page.
+        glue: Glue = Glue.DYNAMIC,
+        routing: Routing = Routing.DEFAULT,
+        from_point: int = 0,
+        to_point: int = 0,
+    ) -> Connector:
+        """Create a connector glued from ``source`` to ``target``, both shapes on this page.
 
-        ``options`` (a :class:`~vsdxkit.glue.ConnectorOptions`) says how it is
-        glued and routed; the default is dynamic glue. ``route`` is the older
-        spelling: 'dynamic' (shape glue), 'point' (connection-point glue using
-        from_cp/to_cp 0-based connection point indexes), optionally with
-        routing behaviour 'straight', 'rightangle' or 'curved' - e.g.
-        route='straight' or route='point|curved'. Pass one or the other.
-
-        :returns: the new connector Shape
-        :rtype: Shape
+        :param glue: :attr:`Glue.DYNAMIC` walks each end round its shape to the
+            nearest side; :attr:`Glue.POINT` glues the ends to ``from_point``
+            and ``to_point``, 0-based rows of each shape's ``Connection`` section
+        :param routing: the path between the ends; :attr:`Routing.DEFAULT` is Visio's own
+        :raises InvalidOperationError: a shape is not on this page, or a connection point does not exist;
+            nothing is written
+        :returns: the new connector
         """
-        return Connect.create(
-            page=self, from_shape=from_shape, to_shape=to_shape, route=route, from_cp=from_cp, to_cp=to_cp, options=options
-        )
+        options = ConnectorOptions(glue=glue, routing=routing, from_point=from_point, to_point=to_point)
+        return _create_connector(self, source, target, options)
+
+    @property
+    def connectors(self) -> tuple[Connector, ...]:
+        """Every connector on the page, at any depth, glued at both ends, one or neither."""
+        return tuple(shape for shape in self.shapes if isinstance(shape, Connector))
 
     def get_container(self) -> Container | None:
         """Return the page's CFF Container (swimlane diagram root), or None."""
@@ -651,37 +633,6 @@ class Page:
         if container is None:
             raise InvalidOperationError("page has no CFF Container")
         container.add_shape_to_lane(shape, lane)
-
-    def reanchor_connector(
-        self,
-        connector_shape: Shape,
-        from_shape: Shape | None = None,
-        to_shape: Shape | None = None,
-        route: str | None = None,
-        from_cp: int = 0,
-        to_cp: int = 0,
-        *,
-        options: ConnectorOptions | None = None,
-    ) -> Shape:
-        """Glue one or both ends of an existing connector to other shapes.
-
-        An end passed as None stays where it is. Without ``options`` or
-        ``route`` the connector keeps its glue and routing; with either, they
-        replace the glue and routing of both ends. See
-        :meth:`vsdxkit.connectors.Connect.retarget`.
-
-        :returns: the connector Shape
-        """
-        return Connect.retarget(
-            page=self,
-            connector_shape=connector_shape,
-            from_shape=from_shape,
-            to_shape=to_shape,
-            route=route,
-            from_cp=from_cp,
-            to_cp=to_cp,
-            options=options,
-        )
 
     def create_shape(
         self,

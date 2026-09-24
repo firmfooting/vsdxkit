@@ -75,27 +75,6 @@ class ConnectorOptions:
             if type(point) is not int or point < 0:
                 raise InvalidOperationError(f"a connection point is a 0-based row index, not {point!r}")
 
-    @classmethod
-    def from_route(cls, route: str, from_point: int = 0, to_point: int = 0) -> ConnectorOptions:
-        """Read the ``route`` string the connector methods have always taken.
-
-        ``route`` joins tokens with ``|``: ``dynamic`` or ``point`` for the
-        glue, and at most one of ``straight``, ``rightangle`` and ``curved``.
-        """
-        parts: list[str] = route.split("|") if route else []
-        unknown = set(parts) - {"dynamic", "point", *(routing.value for routing in _ROUTE_STYLE)}
-        if unknown:
-            raise ValueError(f"unknown connector route part(s): {', '.join(sorted(unknown))}")
-        routings = [Routing(part) for part in parts if part not in ("dynamic", "point")]
-        if len(routings) > 1:
-            raise ValueError("connector route may specify only one routing behaviour")
-        return cls(
-            glue=Glue.POINT if "point" in parts else Glue.DYNAMIC,
-            routing=routings[0] if routings else Routing.DEFAULT,
-            from_point=from_point,
-            to_point=to_point,
-        )
-
     def end_point(self, *, begin: bool) -> int | None:
         """The connection point one end glues to, or ``None`` for dynamic glue."""
         if self.glue is Glue.DYNAMIC:

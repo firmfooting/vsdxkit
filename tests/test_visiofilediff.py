@@ -3,7 +3,6 @@ import pprint
 
 import pytest
 
-from vsdxkit.connectors import Connect
 from vsdxkit.document import Document
 from vsdxkit.vsdxdiff import VisioFileDiff
 
@@ -53,7 +52,7 @@ def test_visiodiff_detects_added_connector(vsdx_copy, tmp_path):
     page = vis.pages[0]
     shapes = page.all_shapes
     assert len(shapes) >= 2
-    Connect.create(page=page, from_shape=shapes[0], to_shape=shapes[1])
+    page.connect(shapes[0], shapes[1])
     vis.save(filepath_b)
 
     file_diff = VisioFileDiff(filepath_a, filepath_b)

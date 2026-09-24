@@ -445,11 +445,12 @@ def test_find_shape_by_data_property_label(
 @pytest.mark.parametrize(
     ("filename", "shape_id", "expected_shape_ids"),
     [
-        ("test4_connectors.vsdx", "1", ["6"]),
-        ("test4_connectors.vsdx", "2", ["6", "7"]),
+        ("test4_connectors.vsdx", "1", ["2"]),
+        ("test4_connectors.vsdx", "2", ["1", "5"]),
     ],
 )
 def test_find_connected_shapes(filename: str, shape_id: str, expected_shape_ids: list, basedir):
+    """The shapes at the other end of each connector glued to the shape: 6 runs 1 to 2, and 7 runs 5 to 2."""
     vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[0]  # type: Page
     actual_connect_shape_ids = list()
@@ -462,10 +463,11 @@ def test_find_connected_shapes(filename: str, shape_id: str, expected_shape_ids:
 @pytest.mark.parametrize(
     ("filename", "shape_id", "expected_shape_ids", "expected_from", "expected_to", "expected_from_rels", "expected_to_rels"),
     [
-        ("test4_connectors.vsdx", "1", ["6"], ["6"], ["1"], ["BeginX"], ["PinX"]),
-        ("test4_connectors.vsdx", "2", ["6", "7"], ["6", "7"], ["2", "2"], ["BeginX", "EndX"], ["PinX", "PinX"]),
-        ("test4_connectors.vsdx", "6", ["1", "2"], ["6", "6"], ["1", "2"], ["BeginX", "EndX"], ["PinX", "PinX"]),
-        ("test4_connectors.vsdx", "7", ["5", "2"], ["7", "7"], ["5", "2"], ["BeginX", "EndX"], ["PinX", "PinX"]),
+        ("test4_connectors.vsdx", "1", ["2"], ["6"], ["1"], ["BeginX"], ["PinX"]),
+        ("test4_connectors.vsdx", "2", ["1", "5"], ["6", "7"], ["2", "2"], ["BeginX", "EndX"], ["PinX", "PinX"]),
+        # nothing is glued to a connector, so it is connected to nothing, though its own records name it
+        ("test4_connectors.vsdx", "6", [], ["6", "6"], ["1", "2"], ["BeginX", "EndX"], ["PinX", "PinX"]),
+        ("test4_connectors.vsdx", "7", [], ["7", "7"], ["5", "2"], ["BeginX", "EndX"], ["PinX", "PinX"]),
     ],
 )
 def test_find_connected_shape_relationships(

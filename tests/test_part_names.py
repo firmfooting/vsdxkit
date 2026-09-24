@@ -16,7 +16,6 @@ import zipfile
 import pytest
 
 from vsdxkit import media
-from vsdxkit.connectors import Connect
 from vsdxkit.document import Document
 from vsdxkit.errors import MalformedPackageError
 from vsdxkit.partnames import relationships_part_name
@@ -70,7 +69,7 @@ def test_a_page_rels_created_under_a_visio_pages_directory_lands_in_the_package(
     vis = Document.open(str(path))
     page = vis.pages[0]
     shapes = page.child_shapes
-    page.connect_shapes(shapes[0], shapes[1])
+    page.connect(shapes[0], shapes[1])
     assert page.rels_xml_filename == "/visio/pages/_rels/page1.xml.rels"
     vis.save(str(out))
     with zipfile.ZipFile(out) as archive:
@@ -119,7 +118,7 @@ def test_the_connector_master_is_imported_from_the_donor_not_the_target(vsdx_cop
     target_before = {master.filename: vis._package.read_bytes(master.filename) for master in vis.master_pages}
     page = vis.pages[0]
     shapes = page.child_shapes
-    Connect.create(page=page, from_shape=shapes[0], to_shape=shapes[1])
+    page.connect(shapes[0], shapes[1])
     donor = media._donor(media.MEDIA)
     master_page_id = media._sentinel(media.MEDIA, media.STRAIGHT_CONNECTOR).master_page_ID
     assert master_page_id is not None
@@ -162,7 +161,7 @@ def test_a_connector_reaches_a_master_kept_in_a_subfolder_of_the_masters_folder(
     assert "Dynamic connector" in vis.master_index, "the fixture has changed: it should hold the connector master"
     page = vis.pages[0]
     shapes = page.child_shapes
-    Connect.create(page=page, from_shape=shapes[0], to_shape=shapes[1])
+    page.connect(shapes[0], shapes[1])
     rels_root = page.rels_xml.getroot()
     assert rels_root is not None
     targets = [rel.attrib["Target"] for rel in rels_root]

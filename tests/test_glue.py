@@ -27,39 +27,6 @@ WALKGLUE_BEGIN = "_WALKGLUE(BegTrigger,EndTrigger,WalkPreference)"
 WALKGLUE_END = "_WALKGLUE(EndTrigger,BegTrigger,WalkPreference)"
 
 
-@pytest.mark.parametrize(
-    ("route", "glue", "routing"),
-    [
-        ("", Glue.DYNAMIC, Routing.DEFAULT),
-        ("dynamic", Glue.DYNAMIC, Routing.DEFAULT),
-        ("point", Glue.POINT, Routing.DEFAULT),
-        ("straight", Glue.DYNAMIC, Routing.STRAIGHT),
-        ("rightangle", Glue.DYNAMIC, Routing.RIGHT_ANGLE),
-        ("curved", Glue.DYNAMIC, Routing.CURVED),
-        ("point|curved", Glue.POINT, Routing.CURVED),
-        ("dynamic|straight", Glue.DYNAMIC, Routing.STRAIGHT),
-    ],
-)
-def test_from_route_reads_every_legacy_token(route, glue, routing):
-    options = ConnectorOptions.from_route(route)
-    assert (options.glue, options.routing) == (glue, routing)
-
-
-def test_from_route_carries_the_point_indexes():
-    options = ConnectorOptions.from_route("point", from_point=1, to_point=2)
-    assert (options.from_point, options.to_point) == (1, 2)
-
-
-def test_from_route_refuses_an_unknown_token():
-    with pytest.raises(ValueError, match="unknown connector route part"):
-        ConnectorOptions.from_route("diagonal")
-
-
-def test_from_route_refuses_two_routings():
-    with pytest.raises(ValueError, match="only one routing"):
-        ConnectorOptions.from_route("straight|curved")
-
-
 @pytest.mark.parametrize("point", [-1, 1.0, "0", True])
 def test_options_refuse_a_point_that_is_not_a_row_index(point):
     with pytest.raises(InvalidOperationError, match="connection point"):

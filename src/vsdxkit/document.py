@@ -305,6 +305,10 @@ class Document(JinjaTemplatingMixin):
         """The catalog's :attr:`MasterCatalog.revision`: a master resolved at one count holds until the next."""
         return self._masters.revision
 
+    def _master_is_one_d(self, master_id: str, master_shape_id: str | None) -> bool:
+        """Whether the master shape an instance inherits from is 1-D; see :meth:`MasterCatalog.is_one_d`."""
+        return self._masters.is_one_d(master_id, master_shape_id)
+
     def get_master_page_by_id(self, id: str) -> Page | None:
         """The master page with this ID, as :attr:`Shape.master_page_ID` names it, or None."""
         return self._masters.by_id(id)

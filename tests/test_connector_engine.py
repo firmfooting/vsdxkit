@@ -9,6 +9,7 @@ import zipfile
 import pytest
 
 from vsdxkit.document import Document
+from vsdxkit.glue import Glue, Routing
 
 
 def _any_shape_containing(shapes, text: str):
@@ -29,7 +30,7 @@ def test_connect_shapes_dynamic_glue_formulas(basedir):
     a = page.shapes.by_text("Shape A")
     b = page.shapes.by_text("Shape B")
     assert a is not None and b is not None
-    connector = page.connect_shapes(a, b)
+    connector = page.connect(a, b)
     assert connector is not None
 
     beg_trigger = connector.cells.get("BegTrigger")
@@ -53,7 +54,7 @@ def test_connect_shapes_glue_records(basedir):
     page = vis.pages[0]
     a = page.shapes.by_text("Shape A")
     b = page.shapes.by_text("Shape B")
-    connector = page.connect_shapes(a, b)
+    connector = page.connect(a, b)
     connects = {c.from_rel: c for c in page.connects if c.from_id == str(connector.ID)}
     assert "BeginX" in connects and "EndX" in connects
     begin = connects["BeginX"]
@@ -69,14 +70,14 @@ def test_connect_shapes_route_variants(basedir):
     page = vis.pages[0]
     a = page.shapes.by_text("Shape A")
     b = page.shapes.by_text("Shape B")
-    straight = page.connect_shapes(a, b, route="straight")
+    straight = page.connect(a, b, routing=Routing.STRAIGHT)
     assert straight.cells["ShapeRouteStyle"].value == "16"
-    right = page.connect_shapes(a, b, route="rightangle")
+    right = page.connect(a, b, routing=Routing.RIGHT_ANGLE)
     assert right.cells["ShapeRouteStyle"].value == "1"
-    curved = page.connect_shapes(a, b, route="curved")
+    curved = page.connect(a, b, routing=Routing.CURVED)
     assert curved.cells["ShapeRouteStyle"].value == "17"
     assert curved.cells["ConLineRouteExt"].value == "2"
-    plain = page.connect_shapes(a, b)
+    plain = page.connect(a, b)
     assert plain.cells["ShapeRouteStyle"].value == "0"
 
 
@@ -86,7 +87,7 @@ def test_connect_point_glue_requires_connection_points(basedir):
     a = page.shapes.by_text("Shape A")
     b = page.shapes.by_text("Shape B")
     with pytest.raises(ValueError):
-        page.connect_shapes(a, b, route="point")
+        page.connect(a, b, glue=Glue.POINT)
 
 
 def test_connect_shapes_combines_point_glue_and_curved_routing(basedir):
@@ -97,7 +98,7 @@ def test_connect_shapes_combines_point_glue_and_curved_routing(basedir):
     target = page.shapes.by_id("97")
     assert source is not None and target is not None
 
-    connector = page.connect_shapes(source, target, route="point|curved", from_cp=0, to_cp=2)
+    connector = page.connect(source, target, glue=Glue.POINT, routing=Routing.CURVED, to_point=2)
 
     source_point = f"PAR(PNT(Sheet{source.ID}!Connections.X1,Sheet{source.ID}!Connections.Y1))"
     target_point = f"PAR(PNT(Sheet{target.ID}!Connections.X3,Sheet{target.ID}!Connections.Y3))"
@@ -110,7 +111,8 @@ def test_connect_shapes_combines_point_glue_and_curved_routing(basedir):
     assert records["EndX"].to_rel == "Connections.X3"
 
 
-def test_invalid_route_fails_before_mutating_page(basedir):
+def test_a_routing_string_fails_before_mutating_page(basedir):
+    """Fails if a 0.x route string is taken for a `Routing`, or refused only after the connector is made."""
     vis = Document.open(os.path.join(basedir, "test8_simple_connector.vsdx"))
     page = vis.pages[0]
     source = page.shapes.by_text("Shape A")
@@ -119,8 +121,8 @@ def test_invalid_route_fails_before_mutating_page(basedir):
     before_shapes = len(page.all_shapes)
     before_connects = len(page.connects)
 
-    with pytest.raises(ValueError, match="unknown connector route"):
-        page.connect_shapes(source, target, route="diagonal")
+    with pytest.raises(TypeError, match="routing must be one of"):
+        page.connect(source, target, routing="curved")  # type: ignore[arg-type]
 
     assert len(page.all_shapes) == before_shapes
     assert len(page.connects) == before_connects
@@ -133,7 +135,7 @@ def test_connector_round_trip_and_zip_validity(basedir):
         page = vis.pages[0]
         a = page.shapes.by_text("Shape A")
         b = page.shapes.by_text("Shape B")
-        connector = page.connect_shapes(a, b, route="curved")
+        connector = page.connect(a, b, routing=Routing.CURVED)
         conn_id = connector.ID
         vis.save(src)
         with zipfile.ZipFile(src) as z:
@@ -181,7 +183,7 @@ def test_master_import_on_own_masters_document(tmp_path, basedir):
     a = page.shapes.by_property("Network Name", "House01")
     b = page.shapes.by_property("Network Name", "Box01")
     assert a is not None and b is not None
-    connector = page.connect_shapes(a, b)
+    connector = page.connect(a, b)
     assert connector is not None
     # the connector now references a master that exists in THIS document
     assert vis.get_master_page_by_id(connector.master_page_ID) is not None
@@ -209,7 +211,7 @@ def test_master_import_is_idempotent(tmp_path, basedir):
     b = page.shapes.by_property("Network Name", "Box01")
     c = page.shapes.by_id("1")
     assert a is not None and b is not None and c is not None
-    connectors = [page.connect_shapes(a, b), page.connect_shapes(b, c), page.connect_shapes(c, a)]
+    connectors = [page.connect(a, b), page.connect(b, c), page.connect(c, a)]
     # all three connectors resolve to the one imported master
     master_ids = {connector.master_page_ID for connector in connectors}
     assert None not in master_ids, "connector was created without a master reference"
@@ -259,20 +261,20 @@ def _by_role(formula: str, roles: dict[str, str]) -> str:
 
 
 @pytest.mark.parametrize(
-    ("route", "scenario", "style"),
+    ("routing", "scenario", "style"),
     [
-        ("dynamic", "s01_autoconnect_right", "0"),
-        ("rightangle", "s03_route_variants", "1"),
-        ("straight", "s03_route_variants", "16"),
-        ("curved", "s03_route_variants", "17"),
+        (Routing.DEFAULT, "s01_autoconnect_right", "0"),
+        (Routing.RIGHT_ANGLE, "s03_route_variants", "1"),
+        (Routing.STRAIGHT, "s03_route_variants", "16"),
+        (Routing.CURVED, "s03_route_variants", "17"),
     ],
 )
-def test_each_route_writes_what_visio_writes(route, scenario, style):
+def test_each_routing_writes_what_visio_writes(routing, scenario, style):
     (expected,) = [cells for cells in _manifest_connectors(scenario) if cells["ShapeRouteStyle"] == style]
     vis = Document.open(S05)
     page = vis.pages[0]
     source, target = page.shapes.by_id("90"), page.shapes.by_id("97")
-    connector = page.connect_shapes(source, target, route=route)
+    connector = page.connect(source, target, routing=routing)
     written = {name: _as_visio_records(connector.cells.get(name)) for name in GLUE_CELLS}
     roles = {source.ID: "A", target.ID: "B"}
     triggers = {name: _by_role(connector.cells[name].formula, roles) for name in ("BegTrigger", "EndTrigger")}
@@ -298,7 +300,7 @@ def test_point_glue_writes_what_visio_writes():
     vis = Document.open(S05)
     page = vis.pages[0]
     source, target = page.shapes.by_id("90"), page.shapes.by_id("97")
-    connector = page.connect_shapes(source, target, route="point", from_cp=0, to_cp=1)
+    connector = page.connect(source, target, glue=Glue.POINT, to_point=1)
     roles = {source.ID: "A", target.ID: "B"}
     cells = {name: _by_role(connector.cells[name].formula, roles) for name in expected_cells}
     records = sorted(
@@ -315,7 +317,7 @@ def test_point_glue_names_only_the_shapes_it_glues():
     vis = Document.open(S05)
     page = vis.pages[0]
     source, target = page.shapes.by_id("90"), page.shapes.by_id("97")
-    connector = page.connect_shapes(source, target, route="point")
+    connector = page.connect(source, target, glue=Glue.POINT)
     named = {
         match.group(1)
         for cell in connector.cells.values()
@@ -331,8 +333,8 @@ def test_point_glue_reaches_the_points_a_shape_inherits():
     vis = Document.open(S05)
     page = vis.pages[0]
     source, decision = page.shapes.by_id("90"), page.shapes.by_id("53")
-    connector = page.connect_shapes(source, decision, route="point", to_cp=3)
+    connector = page.connect(source, decision, glue=Glue.POINT, to_point=3)
     (record,) = [c for c in page.connects if c.from_id == connector.ID and c.from_rel == "EndX"]
     assert (record.to_id, record.to_rel) == ("53", "Connections.X4")
     with pytest.raises(ValueError, match="connection point"):
-        page.connect_shapes(source, decision, route="point", to_cp=4)
+        page.connect(source, decision, glue=Glue.POINT, to_point=4)

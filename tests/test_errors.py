@@ -32,6 +32,7 @@ from vsdxkit.errors import (
     PartParseError,
     VsdxError,
 )
+from vsdxkit.glue import Glue
 from vsdxkit.package import PackageLimits
 
 BASEDIR = os.path.dirname(os.path.realpath(__file__))
@@ -756,7 +757,7 @@ def test_gluing_to_a_connection_point_a_shape_does_not_have_raises_invalid_opera
     page = vis.pages[0]
     a, b = page.child_shapes[0], page.child_shapes[1]
     with pytest.raises(InvalidOperationError, match="connection point"):
-        page.connect_shapes(a, b, route="point", from_cp=99)
+        page.connect(a, b, glue=Glue.POINT, from_point=99)
 
 
 def test_connecting_a_shape_with_no_pin_coordinates_raises_invalid_operation(vsdx_copy):
@@ -779,7 +780,7 @@ def test_connecting_a_shape_with_no_pin_coordinates_raises_invalid_operation(vsd
     assert source.x is None, "the fixture has changed: Shape A still has a PinX"
 
     with pytest.raises(InvalidOperationError, match="start and finish coordinates cannot be None") as caught:
-        page.connect_shapes(source, target)
+        page.connect(source, target)
     assert isinstance(caught.value, ValueError)
 
 

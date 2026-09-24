@@ -102,7 +102,7 @@ def main() -> int:
             else:
                 ok("create_shape from installed palette")
             other = page.create_shape(ShapeKind.PROCESS, x=8.0, y=6.0, width=1.5, height=1.0, text="smoke-to")
-            connector = page.connect_shapes(shape, other)
+            connector = page.connect(shape, other)
             if connector is None:
                 fail("create_connect returned None")
             else:

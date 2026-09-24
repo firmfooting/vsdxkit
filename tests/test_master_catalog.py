@@ -12,7 +12,6 @@ import zipfile
 
 import pytest
 
-from vsdxkit.connectors import Connect
 from vsdxkit.document import Document
 from vsdxkit.errors import MissingPartError
 from vsdxkit.masters import MasterCatalog
@@ -143,7 +142,7 @@ def test_a_connector_in_a_masterless_document_brings_one_master(vsdx_copy, tmp_p
     vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
     shapes = page.child_shapes
-    connector = Connect.create(page=page, from_shape=shapes[0], to_shape=shapes[1])
+    connector = page.connect(shapes[0], shapes[1])
     master_name = connector.master_page.name
     vis.save(saved)
 
@@ -168,7 +167,7 @@ def test_a_page_master_relationship_takes_an_id_the_page_rels_does_not_hold(vsdx
             ET.SubElement(rels_root, f"{RELS_NS}Relationship", Id=f"rId{number}", Type="urn:unrelated", Target="unrelated.xml")
     prefilled = {r.attrib["Id"] for r in rels_root}
     shapes = page.child_shapes
-    connector = Connect.create(page=page, from_shape=shapes[0], to_shape=shapes[1])
+    connector = page.connect(shapes[0], shapes[1])
 
     target = relationship_target(page.filename, connector.master_page.filename)
     master_relationships = [r for r in rels_root if r.attrib["Type"] == MASTER_RELATIONSHIP and r.attrib["Target"] == target]
@@ -259,7 +258,7 @@ def test_a_document_without_app_xml_still_takes_a_master(vsdx_copy, tmp_path):
     page = target.pages[0]
     _master_instance(source).copy(page)
     shapes = page.child_shapes
-    Connect.create(page=page, from_shape=shapes[0], to_shape=shapes[1])
+    page.connect(shapes[0], shapes[1])
     target.save(saved)
 
 

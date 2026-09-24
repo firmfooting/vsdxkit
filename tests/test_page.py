@@ -6,7 +6,6 @@ from datetime import datetime
 import pytest
 
 from vsdxkit import namespace
-from vsdxkit.connectors import Connect
 from vsdxkit.document import Document
 from vsdxkit.formulae import calc_value
 from vsdxkit.shapes import Shape
@@ -387,9 +386,11 @@ def test_find_page_connects(filename: str, expected_connects: list, basedir):
     ],
 )
 def test_find_connectors_between_ids(filename: str, shape_a_id: str, shape_b_id: str, expected_connector_ids: list, basedir):
+    """The connectors between two shapes are the ones both shapes list."""
     vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[0]  # type: Page
-    connectors = page.get_connectors_between(shape_a_id=shape_a_id, shape_b_id=shape_b_id)
+    shape_a, shape_b = page.shapes.require_id(shape_a_id), page.shapes.require_id(shape_b_id)
+    connectors = set(shape_a.connectors) & set(shape_b.connectors)
     actual_connector_ids = sorted([c.ID for c in connectors])
     assert sorted(expected_connector_ids) == list(actual_connector_ids)
 
@@ -406,7 +407,8 @@ def test_find_connectors_between_shapes(
 ):
     vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[0]  # type: Page
-    connectors = page.get_connectors_between(shape_a_text=shape_a_text, shape_b_text=shape_b_text)
+    shape_a, shape_b = page.shapes.require_text(shape_a_text), page.shapes.require_text(shape_b_text)
+    connectors = set(shape_a.connectors) & set(shape_b.connectors)
     actual_connector_ids = sorted([c.ID for c in connectors])
     assert sorted(expected_connector_ids) == list(actual_connector_ids)
 
@@ -432,7 +434,7 @@ def test_add_connect_between_shapes(filename: str, page_index: int, shape_a_text
     page = vis.pages[page_index]  # type: Page
     from_shape = page.shapes.by_text(shape_a_text)
     to_shape = page.shapes.by_text(shape_b_text)
-    c = Connect.create(page=page, from_shape=from_shape, to_shape=to_shape)
+    c = page.connect(from_shape, to_shape)
     c.end_arrow = True
     new_connector_id = c.ID
 
@@ -461,10 +463,10 @@ def test_add_multiple_connectors(filename: str, tmp_path, basedir):
     new_shape1.text = "new shape 1"
     new_shape2 = block_shape.copy(new_page)
     new_shape2.text = "new shape 2"
-    Connect.create(page=new_page, from_shape=new_shape1, to_shape=new_shape2)
+    new_page.connect(new_shape1, new_shape2)
     new_shape3 = block_shape.copy(new_page)
     new_shape3.text = "new shape 3"
-    Connect.create(page=new_page, from_shape=new_shape2, to_shape=new_shape3)
+    new_page.connect(new_shape2, new_shape3)
     vis.save(out_file)
 
     # the contract is persistence: connector shapes and their Connect records
@@ -518,7 +520,7 @@ def test_add_connect_between_shapes_by_property(
     from_shape = page.shapes.by_property(shape_a_label, shape_a_value)
     to_shape = page.shapes.by_property(shape_b_label, shape_b_value)
 
-    c = Connect.create(page=page, from_shape=from_shape, to_shape=to_shape)
+    c = page.connect(from_shape, to_shape)
     c.end_arrow = True
     new_connector_id = c.ID
 

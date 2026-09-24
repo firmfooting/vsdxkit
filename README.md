@@ -88,6 +88,7 @@ Shape coordinates are in Visio page units, normally inches. `x` and `y` identify
 
 ```python
 from vsdxkit.document import Document
+from vsdxkit.glue import Routing
 from vsdxkit.shape_kind import ShapeKind
 
 vis = Document.open("diagram.vsdx")
@@ -97,36 +98,33 @@ start = page.create_shape(ShapeKind.START_END, x=2.0, y=6.0, text="Start")
 work = page.create_shape(ShapeKind.PROCESS, x=6.0, y=6.0, text="Do the thing")
 decision = page.create_shape(ShapeKind.DECISION, x=10.0, y=6.0, text="OK?")
 
-page.connect_shapes(start, work)
-page.connect_shapes(work, decision, route="rightangle")
+page.connect(start, work)
+page.connect(work, decision, routing=Routing.RIGHT_ANGLE)
 vis.save("flow.vsdx")
 ```
 
 `ShapeKind` names the built-in shapes: `PROCESS`, `DECISION`, `START_END`, `PARALLELOGRAM`, `DATABASE`, `RECTANGLE`, `CIRCLE` and `LINE`. Pass a shape from the same document instead of a kind to place a copy of it, text included; `width`, `height` and `text` are optional either way.
 
-Connector `route` combines glue and routing behaviour:
+`page.connect(source, target)` returns a `Connector`, a shape whose `source` and `target` are the shapes its ends are glued to. Two keywords say how:
 
-| Value | Meaning |
+| Keyword | Values |
 |---|---|
-| `dynamic` | Dynamic shape glue. This is the default. |
-| `point` | Glue to zero-based connection points selected with `from_cp` and `to_cp`. |
-| `straight` | Dynamic glue with straight routing. |
-| `rightangle` | Dynamic glue with right-angle routing. |
-| `curved` | Dynamic glue with curved routing. |
-| `point|curved` | Connection-point glue with curved routing. |
+| `glue` | `Glue.DYNAMIC` (the default) walks each end round its shape to the nearest side. `Glue.POINT` glues the ends to the zero-based connection points `from_point` and `to_point`. |
+| `routing` | `Routing.DEFAULT` (Visio's own), `Routing.STRAIGHT`, `Routing.RIGHT_ANGLE` or `Routing.CURVED`. |
+
+`page.connectors` lists every connector on the page, and `shape.connectors` and `shape.connected_shapes` the ones glued to a shape and the shapes at their other ends.
 
 ## Re-anchor a connector
 
-Pass only the end that should move. A `None` endpoint keeps the current shape.
+Name only the end that should move; the other stays where it is. The connector keeps its glue and routing unless you pass `options`.
 
 ```python
 vis = Document.open("flow.vsdx")
 page = vis.pages[0]
 store = page.create_shape(ShapeKind.DATABASE, x=10.0, y=2.0, text="Store")
 
-# a connector is the shape a Connect record points from
-connector = page.shapes.require_id(page.connects[0].from_id)
-page.reanchor_connector(connector, to_shape=store)
+connector = page.connectors[0]
+connector.retarget(target=store)
 
 vis.save("reanchored.vsdx")
 ```

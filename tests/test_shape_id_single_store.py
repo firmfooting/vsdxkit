@@ -27,7 +27,7 @@ def test_glue_written_after_a_renumber_names_the_shape_that_is_there(vsdx_copy, 
     other = page.shapes.require_id("5")
 
     vis.increment_sub_shape_ids(shape, page)
-    page.connect_shapes(shape, other)
+    page.connect(shape, other)
 
     assert "2" not in [to_id for _, to_id in _records(page)]
     vis.save(str(tmp_path / "connected_after_renumber.vsdx"))

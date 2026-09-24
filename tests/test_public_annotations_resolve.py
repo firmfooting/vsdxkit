@@ -24,8 +24,6 @@ UNRESOLVED = {
     # public `Connector(Shape)`, so the record stops reaching up to a Page.
     "vsdxkit.connectors.Connect.__init__",
     "vsdxkit.connectors.Connect.connector_shape",
-    "vsdxkit.connectors.Connect.create",
-    "vsdxkit.connectors.Connect.retarget",
     "vsdxkit.connectors.Connect.shape",
     # Phase 5: `Container` becomes `SwimlaneDiagram`, reached as `page.swimlanes`.
     "vsdxkit.containers.Container.__init__",

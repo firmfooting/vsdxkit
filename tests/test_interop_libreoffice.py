@@ -17,7 +17,6 @@ import subprocess
 
 import pytest
 
-from vsdxkit.connectors import Connect
 from vsdxkit.document import Document
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
@@ -77,11 +76,7 @@ def test_created_connector_package_converts_in_libreoffice(tmp_path):
     out = os.path.join(str(tmp_path), "created_connector.vsdx")
     vis = Document.open(os.path.join(FIXTURES, "test3_house.vsdx"))
     page = vis.pages[0]
-    connector = Connect.create(
-        page=page,
-        from_shape=page.shapes.by_text("Shape to copy"),
-        to_shape=page.shapes.by_text("Shape to remove"),
-    )
+    connector = page.connect(page.shapes.by_text("Shape to copy"), page.shapes.by_text("Shape to remove"))
     connector.text = "created by vsdx"
     vis.save(out)
 
