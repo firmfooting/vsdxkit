@@ -646,3 +646,14 @@ def test_the_0x_names_are_gone(vsdx_copy):
         assert not hasattr(vis, name), name
     with pytest.raises(TypeError):
         Document.open(vsdx_copy("test1.vsdx"), debug=True)  # type: ignore[call-arg]
+
+
+def test_masters_from_something_that_is_not_a_document_are_refused(vsdx_copy):
+    """Fails if a look-alike source document gets past `_masters_for` and breaks on the master catalog it lacks."""
+
+    class LooksLikeADocument:
+        pages = ()
+
+    vis = Document.open(vsdx_copy("test1.vsdx"))
+    with pytest.raises(TypeError, match="LooksLikeADocument"):
+        vis._masters_for(["1"], LooksLikeADocument())

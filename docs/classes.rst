@@ -11,11 +11,19 @@ Document
    :members: open, pages, save, render
    :undoc-members:
 
+.. autoclass:: vsdxkit.pages.DocumentView
+   :members:
+   :undoc-members:
+
 Page and PageCollection
 -----------------------
 
 .. autoclass:: vsdxkit.pages.Page
    :members: name, width, height, background, children, shapes, connect, connectors, create_shape, find_replace, swimlanes, require_swimlanes
+   :undoc-members:
+
+.. autoclass:: vsdxkit.shapes.PageView
+   :members:
    :undoc-members:
 
 .. autoclass:: vsdxkit.pages.PageCollection

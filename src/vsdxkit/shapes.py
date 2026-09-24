@@ -870,7 +870,7 @@ class Shape:
 
         :param page: The page where the new Shape will be placed.
             If not specified, the copy will be placed in the original shape's page.
-        :type page: :class:`Page` (Optional)
+        :type page: :class:`PageView` (Optional), which must be a :class:`vsdxkit.pages.Page` at runtime
         :raises TypeError: if ``page`` is not a :class:`vsdxkit.pages.Page`
 
         :return: :class:`Shape` the new copy of shape

@@ -13,8 +13,7 @@ reads every `import` in `src/vsdxkit` with `ast` and fails:
   type checker sees and the runtime does not;
 - on an import inside a function, which is how a cycle is hidden.
 
-`ALLOWED` lists the edges that break these rules today. The check fails both
-ways, so the list only shrinks.
+There is no list of exceptions.
 """
 
 from __future__ import annotations
@@ -34,12 +33,6 @@ class Edge(NamedTuple):
     # "module", "typing" (under TYPE_CHECKING), "function", or "root": the
     # import reached the module through the package root
     how: str
-
-
-ALLOWED = {
-    # 6c, the seams: each upward edge becomes a Protocol in the lower module
-    Edge("pages", "document", "typing"),
-}
 
 
 def _is_type_checking(test: ast.expr) -> bool:
@@ -164,14 +157,12 @@ def test_the_package_root_imports_nothing_from_the_package():
 
 
 def test_every_import_points_down_in_plain_sight():
-    found = violations(package_edges())
-    assert found - ALLOWED == set(), "imports that hide an edge or point up"
-    assert ALLOWED - found == set(), "these are gone: remove them from ALLOWED"
+    assert violations(package_edges()) == set(), "imports that hide an edge or point up"
 
 
 def test_the_imports_form_no_cycle():
-    """Every edge counts, whether typing-only or inside a function, except those still ALLOWED."""
-    assert cycle(package_edges() - ALLOWED) is None
+    """Every edge counts: typing-only, inside a function, or at module level."""
+    assert cycle(package_edges()) is None
 
 
 # the checker's own cases, on made-up modules

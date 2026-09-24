@@ -82,3 +82,8 @@ def page_shapes_through_back_reference(shape: Shape) -> list[Shape]:
 
 def page_state_through_back_reference(shape: Shape) -> tuple[bool, int | None]:
     return shape.page.background, shape.page.index_num
+
+
+def save_through_back_reference(page: Page, destination: Path) -> Path:
+    # `page.vis` is a DocumentView, which lists `pages`, `save` and `render`
+    return page.vis.save(destination)

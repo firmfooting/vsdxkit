@@ -470,13 +470,19 @@ Reading or writing a deleted shape
    one only ever made the wrapper lie. Move a shape into a group with
    ``group.append_shape(shape)``.
 
-``shape.page.swimlanes``, ``shape.page.vis``, ``shape.page.filename``
-   Typed code sees ``shape.page`` as ``vsdxkit.shapes.PageView``, which
+``shape.page.swimlanes``, ``shape.page.vis``, ``shape.page.filename``, ``page.vis``
+   Typed code sees ``shape.page`` as :class:`vsdxkit.shapes.PageView`, which
    lists the page's API apart from ``swimlanes``, ``require_swimlanes`` and
    ``vis``, whose types are declared above ``shapes``, and apart from the
    page's part-level attributes, such as ``filename``, ``page_id`` and
    ``rel_id``. At runtime it is the same ``Page``. For all of those, use the
    ``Page`` you hold, such as ``document.pages[0]``.
+
+   The same holds one level up. Typed code sees ``page.vis`` as
+   :class:`vsdxkit.pages.DocumentView`, which lists the document's
+   ``pages``, ``save`` and ``render``. At runtime it is the same
+   ``Document``. For the rest of the document's API, use the ``Document``
+   you opened.
 
 A page creates its own shapes
 -----------------------------

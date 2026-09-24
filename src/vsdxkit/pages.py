@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import math
+import os
 import re
 import sys
+import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from enum import IntEnum
-from typing import TYPE_CHECKING, Protocol, overload
-
-if TYPE_CHECKING:
-    from vsdxkit.document import Document
-import xml.etree.ElementTree as ET
+from pathlib import Path
+from typing import Protocol, overload
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -21,7 +20,7 @@ from vsdxkit import namespace, r_namespace
 from vsdxkit.connectors import _Connect, _float_ends, _glue_connector, _plan_connector
 from vsdxkit.errors import InvalidOperationError, MissingPartError, NotFoundError, PackageError
 from vsdxkit.glue import ConnectorOptions, Glue, Routing
-from vsdxkit.package import XmlPart
+from vsdxkit.package import PackageStore, XmlPart
 from vsdxkit.partnames import relationship_target, relationships_part_name, target_part_name
 from vsdxkit.relationships import all_of, append_if_absent
 from vsdxkit.shape_kind import ShapeKind
@@ -155,7 +154,7 @@ def _page_dimension(cell: ET.Element, name: str) -> float:
     return 0.0 if value is None else value
 
 
-def _pages_root(vis: Document) -> ET.Element:
+def _pages_root(vis: _DocumentSeam) -> ET.Element:
     """The required root element of the document's pages.xml part."""
     pages_xml = vis.pages_xml
     if pages_xml is None:
@@ -174,6 +173,63 @@ def _as_page(other: object) -> Page:
     return other
 
 
+class DocumentView(Protocol):
+    """A document, as :attr:`Page.vis` gives it.
+
+    The type of a page's back-reference to its document. It lists the
+    document's ``pages``, ``save`` and ``render``; for the rest of the
+    document's API, use the :class:`vsdxkit.document.Document` you opened.
+    At runtime the object is that ``Document`` itself.
+    """
+
+    @property
+    def pages(self) -> PageCollection: ...
+
+    def save(self, target: str | os.PathLike[str] | None = None) -> Path: ...
+
+    def render(self, context: Mapping[str, object]) -> None: ...
+
+
+class _DocumentSeam(DocumentView, Protocol):
+    """What a page needs from its document beyond the public view.
+
+    A page's part, its entry in pages.xml and its title in app.xml live in
+    the document's package. The masters, shape-ID allocation and the shapes
+    a new shape is copied from are the document's. `document` imports this
+    module, so the page declares what it reads rather than importing
+    `Document`.
+    """
+
+    @property
+    def pages_xml(self) -> PartTree | None: ...
+
+    @property
+    def masters_xml(self) -> ET.Element | None: ...
+
+    @property
+    def _package(self) -> PackageStore: ...
+
+    def _set_part_xml(self, name: str, tree: PartTree | None) -> None: ...
+
+    def _rename_page_in_app_xml(self, old_page_name: str, new_page_name: str) -> None: ...
+
+    def get_master_page_by_id(self, id: str) -> Page | None: ...
+
+    def copy_shape(self, shape: ET.Element, page: Page) -> ET.Element: ...
+
+    def renumber_shape_ids(self, shape: ET.Element, page: Page, id_map: dict[str, int] | None = None) -> dict[str, int]: ...
+
+    def _master_is_one_d(self, master_id: str, master_shape_id: str | None) -> bool: ...
+
+    def _master_revision(self) -> int: ...
+
+    def _masters_for(self, master_ids: list[str], source: _DocumentSeam) -> Mapping[str, Page]: ...
+
+    def _kind_source(self, kind: ShapeKind) -> Shape: ...
+
+    def _copy_connector(self, page: Page) -> Connector: ...
+
+
 class Page:
     """Represents a page or a master page in a vsdx file
 
@@ -185,7 +241,7 @@ class Page:
 
     xml: PartTree
 
-    def __init__(self, xml: PartTree, filename: str, page_name: str, page_id: str, rel_id: str, vis: Document):
+    def __init__(self, xml: PartTree, filename: str, page_name: str, page_id: str, rel_id: str, vis: _DocumentSeam):
         self._xml = xml
         self.filename = filename
         self._name = page_name
@@ -203,7 +259,7 @@ class Page:
         return f"<Page name={self.name} file={self.filename} >"
 
     @property
-    def vis(self) -> Document:
+    def vis(self) -> DocumentView:
         """The document this page belongs to."""
         return self._document
 
@@ -454,7 +510,7 @@ class Page:
         """`other` as a page of this library, for a shape copied onto it."""
         return _as_page(other)
 
-    def _masters_for(self, master_ids: list[str], source: _PageSeam) -> dict[str, Page]:
+    def _masters_for(self, master_ids: list[str], source: _PageSeam) -> Mapping[str, Page]:
         """This document's master for each of `master_ids`, as `source`'s document numbers them."""
         return self._document._masters_for(master_ids, _as_page(source)._document)
 

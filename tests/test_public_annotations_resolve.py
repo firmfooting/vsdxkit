@@ -1,14 +1,9 @@
-"""Every public signature's annotations resolve at runtime, apart from a shrinking list.
+"""Every public signature's annotations resolve at runtime.
 
 The 1.0 design (amended 2026-09-23) turns each upward dependency into a
-`Protocol` declared by the lower module, so `typing.get_type_hints` can resolve
-every public signature: introspection, documentation and runtime validators
-all go through it. The entries in `UNRESOLVED` still name an owner the lower
-module cannot import without a cycle. Each comment names the phase that
-retires the owner reference.
-
-The check fails both ways. A new unresolved annotation fails it, and so does a
-listed one that has started resolving, so the list only shrinks.
+`Protocol` declared by the lower module, so every public signature names only
+types its own module can import, and `typing.get_type_hints` resolves them all:
+introspection, documentation and runtime validators all go through it.
 """
 
 import importlib
@@ -18,13 +13,6 @@ import typing
 from collections.abc import Callable, Iterator
 
 import vsdxkit
-
-UNRESOLVED = {
-    # Phase 3: a page holds a document token rather than its `Document`.
-    "vsdxkit.pages.Page.__init__",
-    # Phase 6, Task 9: typed by pages.DocumentView
-    "vsdxkit.pages.Page.vis",
-}
 
 
 def _public_signatures() -> Iterator[tuple[str, Callable[..., object]]]:
@@ -56,5 +44,4 @@ def test_public_annotations_resolve_at_runtime():
             typing.get_type_hints(function)
         except (NameError, TypeError, AttributeError):
             unresolved.add(qualified_name)
-    assert unresolved - UNRESOLVED == set(), "new annotations that do not resolve at runtime"
-    assert UNRESOLVED - unresolved == set(), "these resolve now: remove them from UNRESOLVED"
+    assert unresolved == set(), "public annotations that do not resolve at runtime"
