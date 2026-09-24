@@ -191,6 +191,60 @@ def test_a_deleted_prototype_is_refused(vsdx_copy):
     assert [shape.ID for shape in page.shapes] == before
 
 
+def test_a_top_level_prototype_keeps_a_reference_to_another_shape_on_its_page(vsdx_copy):
+    """Fails if a transform formula naming a shape still on the page is frozen, when only a former group is gone."""
+    page = Document.open(vsdx_copy(BASE)).pages[0]
+    a, b = page.shapes.require_text("Shape A"), page.shapes.require_text("Shape B")
+    a.set_cell_formula("Width", f"Sheet.{b.ID}!Width")
+
+    copy = page.create_shape(a, x=5.0, y=5.0)
+
+    assert copy.cells["Width"].formula == f"Sheet.{b.ID}!Width"
+
+
+def test_a_copy_onto_another_page_drops_references_to_the_page_it_left(vsdx_copy):
+    vis = Document.open(vsdx_copy(BASE))
+    page = vis.pages[0]
+    a, b = page.shapes.require_text("Shape A"), page.shapes.require_text("Shape B")
+    a.set_cell_formula("Width", f"Sheet.{b.ID}!Width")
+    elsewhere = vis.add_page("Elsewhere")
+
+    copy = elsewhere.create_shape(a, x=5.0, y=5.0)
+
+    assert copy.cells["Width"].formula is None
+    assert copy.width == pytest.approx(a.width)
+
+
+@pytest.mark.parametrize("make", [lambda page: ShapeKind.LINE, lambda page: page.create_shape(ShapeKind.LINE, x=1.0, y=1.0)])
+def test_a_one_d_shape_takes_no_height(vsdx_copy, make):
+    """Fails if a height is written to a line, which shifts it off the y it was centred on."""
+    page = Document.open(vsdx_copy(BASE)).pages[0]
+    kind_or_prototype = make(page)
+    before = [shape.ID for shape in page.shapes]
+
+    with pytest.raises(InvalidOperationError, match="height"):
+        page.create_shape(kind_or_prototype, x=4.0, y=6.0, height=1.0)
+
+    assert [shape.ID for shape in page.shapes] == before
+
+
+@pytest.mark.parametrize("kind_or_prototype", [ShapeKind.PROCESS, "prototype"])
+def test_a_removed_page_creates_nothing(vsdx_copy, kind_or_prototype):
+    """Fails if a page no longer in its document takes a copy, or imports a master into the document, before refusing."""
+    vis = Document.open(vsdx_copy(BASE))
+    prototype = vis.pages[0].shapes.require_text("Shape A")
+    removed = vis.add_page("Removed")
+    vis.pages.delete(removed)
+    masters = len(vis.master_pages)
+    children = len(removed.xml.getroot())
+
+    with pytest.raises(InvalidOperationError):
+        removed.create_shape(prototype if kind_or_prototype == "prototype" else kind_or_prototype, x=1.0, y=1.0)
+
+    assert len(vis.master_pages) == masters
+    assert len(removed.xml.getroot()) == children
+
+
 def test_a_masterless_connector_keeps_what_kind_of_connector_it_is(vsdx_copy):
     """Fails if floating the copy's ends drops cells it has no master to inherit from."""
     page = Document.open(vsdx_copy("test5_master.vsdx")).pages[0]

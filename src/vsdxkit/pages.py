@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import math
+import re
 import sys
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from enum import IntEnum
 from typing import TYPE_CHECKING, Protocol, overload
 
@@ -40,6 +41,9 @@ _RELATIONSHIP_ID = f"{r_namespace}id"
 # the cells that size and place a 2-D shape, which a group member ties to its group
 _TRANSFORM_CELLS = ("Width", "Height", "LocPinX", "LocPinY", "Angle", "FlipX", "FlipY")
 
+# a formula names another shape on its page as Sheet.5! (Visio) or Sheet5!
+_SHEET_REFERENCE = re.compile(r"(?<!!)\bSheet\.?(\d+)!")
+
 
 def _dimension_value(value: float | str | None) -> str:
     """Return a PageSheet dimension value without serialising nulls or zeros.
@@ -69,15 +73,36 @@ def _drop_formula(shape: Shape, name: str) -> None:
         cell.xml.attrib.pop("F", None)
 
 
-def _detach_from_group(shape: Shape) -> None:
-    """Keep the size and place a copied group member had, without the formulas that took them from its group.
+def _left_behind(source: Shape, destination: Page) -> Callable[[str], bool]:
+    """Whether a shape id a copy of `source` names is one the copy has left behind.
 
-    A member's Width can be ``Sheet.9!Width*1``; on the page the copy lands
-    on, Sheet.9 is another shape or none.
+    A group member's Width can be ``Sheet.9!Width*1``, and at the top level
+    Sheet.9 is not its group. On another page every id is another shape's.
+    A reference to a shape still beside the copy is left alone.
     """
+    if source.page is not destination:
+        return lambda _: True
+    groups = set()
+    parent = source.parent
+    while isinstance(parent, Shape):
+        groups.add(parent.ID)
+        parent = parent.parent
+    return groups.__contains__
+
+
+def _detach(shape: Shape, left_behind: Callable[[str], bool]) -> None:
+    """Keep the size a copy had, without the formulas that took it from a shape it has left behind.
+
+    Its own shapes, renumbered with it by the copy, are not left behind.
+    """
+    own = {element.attrib.get("ID") for element in shape.xml.iter(f"{namespace}Shape")}
     for name in _TRANSFORM_CELLS:
         cell = shape._cell(name)
-        if cell is not None and cell.formula is not None and "!" in cell.formula:
+        formula = None if cell is None else cell.formula
+        if formula is None:
+            continue
+        named = {match.group(1) for match in _SHEET_REFERENCE.finditer(formula)}
+        if any(sheet not in own and left_behind(sheet) for sheet in named):
             _drop_formula(shape, name)
 
 
@@ -684,13 +709,14 @@ class Page:
         :raises InvalidOperationError: if a prototype belongs to another document
         :returns: the new shape
         """
-        if isinstance(kind_or_prototype, ShapeKind):
-            # vsdxkit.media opens its donors as Documents, which import this
-            # module, so importing it at module level would be a cycle
-            from vsdxkit import media
+        # vsdxkit.media opens its donors as Documents, which import this
+        # module, so importing it at module level would be a cycle
+        from vsdxkit import media
 
-            shape = media.copy_kind(kind_or_prototype, self)
-            label = "" if text is None else text
+        if not self._attached():
+            raise InvalidOperationError(f"page {self.name!r} is no longer in its document, so nothing can be created on it")
+        if isinstance(kind_or_prototype, ShapeKind):
+            source = media._kind_shape(kind_or_prototype)
         elif isinstance(kind_or_prototype, Shape):
             kind_or_prototype._require_attached("Page.create_shape()")
             if kind_or_prototype.page.vis is not self.vis:
@@ -698,12 +724,23 @@ class Page:
                     f"shape ID {kind_or_prototype.ID} belongs to another document; "
                     "a prototype must come from the document it is copied into"
                 )
-            shape = kind_or_prototype.copy(self)
-            label = text
+            source = kind_or_prototype
         else:
             kinds = ", ".join(f"ShapeKind.{kind.name}" for kind in ShapeKind)
             raise TypeError(f"create_shape takes a Shape or one of {kinds}, not {kind_or_prototype!r}")
-        if is_connector(shape):
+        one_d = is_connector(source)
+        if one_d and height is not None:
+            raise InvalidOperationError(f"shape ID {source.ID} is 1-D, so it has no height to set; its width is its length")
+        # what the copy's formulas may no longer name: the groups the prototype
+        # sat in, and on another page, every shape of the page it left
+        left_behind = _left_behind(source, self)
+        if isinstance(kind_or_prototype, ShapeKind):
+            shape = media.copy_kind(kind_or_prototype, self)
+            label = "" if text is None else text
+        else:
+            shape = kind_or_prototype.copy(self)
+            label = text
+        if one_d:
             _place_one_d(shape, x, y, width)
         else:
             # a 2-D shape is drawn around its pin
@@ -711,7 +748,7 @@ class Page:
             shape.get_or_create_cell("PinY", v=str(y))
             _drop_formula(shape, "PinX")
             _drop_formula(shape, "PinY")
-            _detach_from_group(shape)
+            _detach(shape, left_behind)
             if width is not None:
                 shape.width = width
                 _drop_formula(shape, "Width")
