@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from vsdxkit import media
-from vsdxkit.errors import NotFoundError, VisioFileNotOpen
+from vsdxkit.errors import NotFoundError
 from vsdxkit.vsdxfile import VisioFile
 
 MEDIA_DIR = Path(__file__).resolve().parents[1] / "src" / "vsdxkit" / "media"
@@ -30,40 +30,31 @@ def test_media_curved_connector_returns_curved():
     curved = media._sentinel(media.MEDIA, media.CURVED_CONNECTOR)
     straight = media._sentinel(media.MEDIA, media.STRAIGHT_CONNECTOR)
     assert curved.ID != straight.ID
-    with VisioFile(str(MEDIA_DIR / "media.vsdx")) as vis:
-        assert curved.ID == vis.pages[0].shapes.require_text("CURVED_CONNECTOR").ID
+    vis = VisioFile(str(MEDIA_DIR / "media.vsdx"))
+    assert curved.ID == vis.pages[0].shapes.require_text("CURVED_CONNECTOR").ID
 
 
 def test_a_truncated_palette_name_is_refused(vsdx_copy):
     """Fails if a palette name is matched as a substring, so "PALETTE_PRO" builds a process shape (#310)."""
-    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
-        page = vis.pages[0]
-        before = [shape.ID for shape in page.shapes]
+    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    page = vis.pages[0]
+    before = [shape.ID for shape in page.shapes]
 
-        with pytest.raises(NotFoundError, match=r"no shape named 'PALETTE_PRO'; it has .*PALETTE_PROCESS"):
-            vis.create_shape(page, "PALETTE_PRO", 1.0, 1.0)
+    with pytest.raises(NotFoundError, match=r"no shape named 'PALETTE_PRO'; it has .*PALETTE_PROCESS"):
+        vis.create_shape(page, "PALETTE_PRO", 1.0, 1.0)
 
-        assert [shape.ID for shape in page.shapes] == before
-
-
-def test_a_donor_refuses_writes():
-    """Fails if a donor can be edited through the library, which would change every later copy of it."""
-    process = media._sentinel(media.PALETTE, "PALETTE_PROCESS")
-    with pytest.raises(VisioFileNotOpen):
-        process.text = "edited"
-    with pytest.raises(VisioFileNotOpen):
-        media._sentinel(media.MEDIA, media.STRAIGHT_CONNECTOR).x = 5.0
+    assert [shape.ID for shape in page.shapes] == before
 
 
 def test_what_the_module_hands_out_is_a_copy(vsdx_copy):
     """Fails if a caller is given a donor's own elements, which it could edit past the closed guard."""
     donor = media._donor(media.PALETTE)
     donor_elements = set(donor.pages[0].xml.getroot().iter())
-    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
-        shape = media.copy_palette_shape("PALETTE_PROCESS", vis.pages[0])
-        connector = media.copy_connector(vis.pages[0])
-        assert not donor_elements & set(shape.xml.iter())
-        assert shape.page is vis.pages[0] and connector.page is vis.pages[0]
+    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    shape = media.copy_palette_shape("PALETTE_PROCESS", vis.pages[0])
+    connector = media.copy_connector(vis.pages[0])
+    assert not donor_elements & set(shape.xml.iter())
+    assert shape.page is vis.pages[0] and connector.page is vis.pages[0]
     style_id = next(iter(media._donor(media.MEDIA)._style_sheets())).attrib["ID"]
     assert media.media_style(style_id) is not media._donor(media.MEDIA)._get_style_by_id(style_id)
 

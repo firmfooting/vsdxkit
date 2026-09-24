@@ -43,8 +43,8 @@ def _write_limits(tmp_path, limits: dict) -> str:
 
 def test_default_limits_accept_real_documents(tmp_path):
     path = _copy("test1.vsdx", tmp_path)
-    with VisioFile(path) as visio:
-        assert visio.file_open
+    visio = VisioFile(path)
+    assert len(visio.pages) > 0
 
 
 def test_default_compression_ratio_guard_rejects_highly_compressible_payload(tmp_path):
@@ -118,8 +118,8 @@ def test_explicit_limits_relax_caps_for_trusted_documents(tmp_path):
         tmp_path,
         {"max_member_size": 1_048_576, "max_total_uncompressed": 4_194_304, "max_ratio": 1_000},
     )
-    with VisioFile(path, limits_path=limits_path) as visio:
-        assert visio.file_open
+    visio = VisioFile(path, limits_path=limits_path)
+    assert len(visio.pages) > 0
 
 
 def test_non_finite_limit_values_are_rejected(tmp_path):

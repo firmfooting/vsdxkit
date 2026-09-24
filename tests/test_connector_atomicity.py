@@ -32,8 +32,8 @@ def _snapshot(page):
 @pytest.fixture
 def atomicity_page(vsdx_copy):
     path = vsdx_copy("test8_simple_connector.vsdx")
-    with VisioFile(path) as vis:
-        yield vis.pages[0]
+    vis = VisioFile(path)
+    yield vis.pages[0]
 
 
 def test_create_rejects_invalid_connection_point_without_mutating_package(atomicity_page):
@@ -58,34 +58,34 @@ def test_create_rejects_negative_connection_point_without_mutating_package(atomi
 def test_retarget_rejects_invalid_connection_point_without_mutating_package(vsdx_copy):
     """A rejected retarget must keep the connector's original records intact."""
     path = vsdx_copy("test4_connectors.vsdx")
-    with VisioFile(path) as vis:
-        page = vis.pages[0]
-        connectors = [s for s in page.all_shapes if "BeginX" in s.cells]
-        assert connectors, "fixture must contain a connector"
-        connector = connectors[0]
-        other = next(s for s in page.all_shapes if "BeginX" not in s.cells)
-        records_before = sorted((c.from_id, c.to_id, c.from_rel, c.to_rel) for c in page.connects)
-        with pytest.raises(ValueError, match="connection point"):
-            Connect.retarget(
-                page,
-                connector,
-                to_shape=other,
-                route="point",
-                to_cp=999,
-            )
-        records_after = sorted((c.from_id, c.to_id, c.from_rel, c.to_rel) for c in page.connects)
-        assert records_after == records_before, "rejected retarget removed the connector's records"
+    vis = VisioFile(path)
+    page = vis.pages[0]
+    connectors = [s for s in page.all_shapes if "BeginX" in s.cells]
+    assert connectors, "fixture must contain a connector"
+    connector = connectors[0]
+    other = next(s for s in page.all_shapes if "BeginX" not in s.cells)
+    records_before = sorted((c.from_id, c.to_id, c.from_rel, c.to_rel) for c in page.connects)
+    with pytest.raises(ValueError, match="connection point"):
+        Connect.retarget(
+            page,
+            connector,
+            to_shape=other,
+            route="point",
+            to_cp=999,
+        )
+    records_after = sorted((c.from_id, c.to_id, c.from_rel, c.to_rel) for c in page.connects)
+    assert records_after == records_before, "rejected retarget removed the connector's records"
 
 
 def test_create_with_valid_point_glue_still_works(vsdx_copy):
     """The atomicity guard must not break the valid path (fixture with real connection points)."""
     path = vsdx_copy("fixtures/com_reference/s05_swimlanes_cfflow.vsdx")
-    with VisioFile(path) as vis:
-        page = vis.pages[0]
-        a = page.shapes.by_id("90")
-        b = page.shapes.by_id("97")
-        assert a is not None and b is not None
-        records_before = len(page.connects)
-        connector = Connect.create(page=page, from_shape=a, to_shape=b, route="point")
-        assert connector is not None
-        assert len(page.connects) == records_before + 2
+    vis = VisioFile(path)
+    page = vis.pages[0]
+    a = page.shapes.by_id("90")
+    b = page.shapes.by_id("97")
+    assert a is not None and b is not None
+    records_before = len(page.connects)
+    connector = Connect.create(page=page, from_shape=a, to_shape=b, route="point")
+    assert connector is not None
+    assert len(page.connects) == records_before + 2

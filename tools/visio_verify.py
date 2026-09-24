@@ -160,8 +160,8 @@ def _apply_transform(transform: str, source: str, destination: str) -> str:
     # in CI, and it should fail on a broken library rather than on an import.
     from vsdxkit.vsdxfile import VisioFile
 
-    with VisioFile(source) as document:
-        document.save_vsdx(destination)
+    document = VisioFile(source)
+    document.save_vsdx(destination)
     return destination
 
 

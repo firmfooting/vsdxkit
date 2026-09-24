@@ -12,15 +12,15 @@ Find the container
 
    from vsdxkit.vsdxfile import VisioFile
 
-   with VisioFile("cross-functional-flow.vsdx") as vis:
-       page = vis.pages[0]
-       container = page.get_container()
+   vis = VisioFile("cross-functional-flow.vsdx")
+   page = vis.pages[0]
+   container = page.get_container()
 
-       if container is None:
-           raise ValueError("The page is not a Visio CFF diagram")
+   if container is None:
+       raise ValueError("The page is not a Visio CFF diagram")
 
-       for lane in container.lanes:
-           print(lane.shape_name, container.members(lane))
+   for lane in container.lanes:
+       print(lane.shape_name, container.members(lane))
 
 :attr:`vsdxkit.containers.Container.lanes` returns the lane shapes in visual order,
 from top to bottom.

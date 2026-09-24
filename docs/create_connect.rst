@@ -12,23 +12,23 @@ normally inches, and identify the centre of the shape.
 
    from vsdxkit.vsdxfile import VisioFile
 
-   with VisioFile("diagram.vsdx") as vis:
-       page = vis.pages[0]
+   vis = VisioFile("diagram.vsdx")
+   page = vis.pages[0]
 
-       start = vis.create_shape(
-           page, "PALETTE_START_END", 2.0, 6.0, text="Start"
-       )
-       work = vis.create_shape(
-           page, "PALETTE_PROCESS", 6.0, 6.0,
-           w=2.0, h=1.0, text="Do the thing"
-       )
-       decision = vis.create_shape(
-           page, "PALETTE_DECISION", 10.0, 6.0, text="OK?"
-       )
+   start = vis.create_shape(
+       page, "PALETTE_START_END", 2.0, 6.0, text="Start"
+   )
+   work = vis.create_shape(
+       page, "PALETTE_PROCESS", 6.0, 6.0,
+       w=2.0, h=1.0, text="Do the thing"
+   )
+   decision = vis.create_shape(
+       page, "PALETTE_DECISION", 10.0, 6.0, text="OK?"
+   )
 
-       page.connect_shapes(start, work)
-       page.connect_shapes(work, decision, route="rightangle")
-       vis.save_vsdx("flow.vsdx")
+   page.connect_shapes(start, work)
+   page.connect_shapes(work, decision, route="rightangle")
+   vis.save_vsdx("flow.vsdx")
 
 Palette names
 -------------

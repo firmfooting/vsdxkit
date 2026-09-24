@@ -23,24 +23,24 @@ def _first_shape_containing(shapes, text: str):
 def test_basic_jinja(filename: str, context: dict, tmp_path, basedir):
 
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_basic_jinja.vsdx")
-    with VisioFile(os.path.join(basedir, filename)) as vis:
-        page = vis.pages[0]
+    vis = VisioFile(os.path.join(basedir, filename))
+    page = vis.pages[0]
 
-        # each key string in context dict will be replaced with value, record against shape Ids for validation
-        shape_id_values = dict()
-        for k, v in context.items():
-            shape_id = _first_shape_containing(page.shapes, k).ID
-            shape_id_values[shape_id] = v
-        vis.jinja_render_vsdx(context=context)
-        vis.save_vsdx(out_file)
+    # each key string in context dict will be replaced with value, record against shape Ids for validation
+    shape_id_values = dict()
+    for k, v in context.items():
+        shape_id = _first_shape_containing(page.shapes, k).ID
+        shape_id_values[shape_id] = v
+    vis.jinja_render_vsdx(context=context)
+    vis.save_vsdx(out_file)
 
     # open file and validate each shape id has expected text
-    with VisioFile(out_file) as vis:
-        page = vis.pages[0]
-        for shape_id, text in shape_id_values.items():
-            if type(text) is str:
-                print(f"Testing that shape {shape_id} has text '{text}' in: {page.shapes.require_id(shape_id).text}")
-                assert str(text) in page.shapes.require_id(shape_id).text
+    vis = VisioFile(out_file)
+    page = vis.pages[0]
+    for shape_id, text in shape_id_values.items():
+        if type(text) is str:
+            print(f"Testing that shape {shape_id} has text '{text}' in: {page.shapes.require_id(shape_id).text}")
+            assert str(text) in page.shapes.require_id(shape_id).text
 
 
 @pytest.mark.parametrize(
@@ -54,16 +54,16 @@ def test_basic_jinja(filename: str, context: dict, tmp_path, basedir):
 def test_jinja_if(filename: str, context: dict, shape_count: int, tmp_path, basedir):
 
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_jinja_if_{context['scenario']}.vsdx")
-    with VisioFile(os.path.join(basedir, filename)) as vis:
-        vis.jinja_render_vsdx(context=context)
-        vis.save_vsdx(out_file)
+    vis = VisioFile(os.path.join(basedir, filename))
+    vis.jinja_render_vsdx(context=context)
+    vis.save_vsdx(out_file)
 
     # open file and validate each shape id has expected text
-    with VisioFile(out_file) as vis:
-        page = vis.pages[1]  # second page has the shapes with if statements
-        count = len(page.child_shapes)
-        print(f"expected {shape_count} and found {count}")
-        assert count == shape_count
+    vis = VisioFile(out_file)
+    page = vis.pages[1]  # second page has the shapes with if statements
+    count = len(page.child_shapes)
+    print(f"expected {shape_count} and found {count}")
+    assert count == shape_count
 
 
 @pytest.mark.parametrize(
@@ -76,16 +76,16 @@ def test_jinja_if(filename: str, context: dict, shape_count: int, tmp_path, base
 )
 def test_jinja_calc(filename: str, context: dict, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_jinja_calc.vsdx")
-    with VisioFile(os.path.join(basedir, filename)) as vis:
-        vis.jinja_render_vsdx(context=context)
-        vis.save_vsdx(out_file)
+    vis = VisioFile(os.path.join(basedir, filename))
+    vis.jinja_render_vsdx(context=context)
+    vis.save_vsdx(out_file)
 
     # open file and validate each shape id has expected text
-    with VisioFile(out_file) as vis:
-        page = vis.pages[0]
-        # check a shape exists with product of x and y values
-        x_y = str(context["x"] * context["y"])
-        assert _first_shape_containing(page.shapes, x_y)
+    vis = VisioFile(out_file)
+    page = vis.pages[0]
+    # check a shape exists with product of x and y values
+    x_y = str(context["x"] * context["y"])
+    assert _first_shape_containing(page.shapes, x_y)
 
 
 @pytest.mark.parametrize(
@@ -98,28 +98,28 @@ def test_jinja_calc(filename: str, context: dict, tmp_path, basedir):
 )
 def test_basic_jinja_loop(filename: str, context: dict, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_{context['scenario']}_test_basic_jinja_loop.vsdx")
-    with VisioFile(os.path.join(basedir, filename)) as vis:
-        page = vis.pages[0]
+    vis = VisioFile(os.path.join(basedir, filename))
+    page = vis.pages[0]
 
-        # each key string in context dict will be replaced with value, record against shape Ids for validation
-        shape_id_values = dict()
-        for k, v in context.items():
-            shape_id = _first_shape_containing(page.shapes, k).ID
-            shape_id_values[shape_id] = v
-        vis.jinja_render_vsdx(context=context)
-        vis.save_vsdx(out_file)
+    # each key string in context dict will be replaced with value, record against shape Ids for validation
+    shape_id_values = dict()
+    for k, v in context.items():
+        shape_id = _first_shape_containing(page.shapes, k).ID
+        shape_id_values[shape_id] = v
+    vis.jinja_render_vsdx(context=context)
+    vis.save_vsdx(out_file)
 
     # open file and validate each shape id has expected text, and that a shape exists with each loop value
-    with VisioFile(out_file) as vis:
-        page = vis.pages[0]
-        for shape_id, text in shape_id_values.items():
-            if type(text) is str:
-                print(f"Testing that shape {shape_id} has text '{text}' in: {page.shapes.require_id(shape_id).text}")
-                assert str(text) in page.shapes.require_id(shape_id).text
-            if type(text) is list:
-                for item in text:
-                    print(f"Testing that shape with text '{item}' exists")
-                    assert _first_shape_containing(page.shapes, str(item))
+    vis = VisioFile(out_file)
+    page = vis.pages[0]
+    for shape_id, text in shape_id_values.items():
+        if type(text) is str:
+            print(f"Testing that shape {shape_id} has text '{text}' in: {page.shapes.require_id(shape_id).text}")
+            assert str(text) in page.shapes.require_id(shape_id).text
+        if type(text) is list:
+            for item in text:
+                print(f"Testing that shape with text '{item}' exists")
+                assert _first_shape_containing(page.shapes, str(item))
 
 
 @pytest.mark.parametrize(
@@ -131,19 +131,19 @@ def test_basic_jinja_loop(filename: str, context: dict, tmp_path, basedir):
 )
 def test_jinja_inner_loop(filename: str, context: dict, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_jinja_inner_loop.vsdx")
-    with VisioFile(os.path.join(basedir, filename)) as vis:
-        vis.jinja_render_vsdx(context=context)
-        vis.save_vsdx(out_file)
+    vis = VisioFile(os.path.join(basedir, filename))
+    vis.jinja_render_vsdx(context=context)
+    vis.save_vsdx(out_file)
 
     # open file and validate each shape id has expected text, and that a shape exists with each loop value
     test_list = context["test_list"]
-    with VisioFile(out_file) as vis:
-        page = vis.pages[0]
-        for o in test_list:
-            for p in o:
-                print(f"p={p}")
-                s = _first_shape_containing(page.shapes, str(p))
-                assert s
+    vis = VisioFile(out_file)
+    page = vis.pages[0]
+    for o in test_list:
+        for p in o:
+            print(f"p={p}")
+            s = _first_shape_containing(page.shapes, str(p))
+            assert s
 
 
 @pytest.mark.parametrize(
@@ -155,20 +155,20 @@ def test_jinja_inner_loop(filename: str, context: dict, tmp_path, basedir):
 )
 def test_jinja_loop_showif(filename: str, out_name: str, context: dict, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}{out_name}.vsdx")
-    with VisioFile(os.path.join(basedir, filename)) as vis:
-        vis.jinja_render_vsdx(context=context)
-        vis.save_vsdx(out_file)
+    vis = VisioFile(os.path.join(basedir, filename))
+    vis.jinja_render_vsdx(context=context)
+    vis.save_vsdx(out_file)
 
-    with VisioFile(out_file) as vis:
-        page = vis.pages[0]
-        for o in context["test_list"]:
-            s = _first_shape_containing(page.shapes, f"In this instance, o={o}")
-            # test that {% show if o > 2 %} has worked
-            print(f"for {o} found {s}")
-            if o > 2:
-                assert s  # check that shape is found (not removed by showif)
-            else:
-                assert not s  # check that shape is not found (has been removed by showif)
+    vis = VisioFile(out_file)
+    page = vis.pages[0]
+    for o in context["test_list"]:
+        s = _first_shape_containing(page.shapes, f"In this instance, o={o}")
+        # test that {% show if o > 2 %} has worked
+        print(f"for {o} found {s}")
+        if o > 2:
+            assert s  # check that shape is found (not removed by showif)
+        else:
+            assert not s  # check that shape is not found (has been removed by showif)
 
 
 @pytest.mark.parametrize(
@@ -182,23 +182,23 @@ def test_jinja_loop_showif(filename: str, out_name: str, context: dict, tmp_path
 )
 def test_jinja_self_refs(filename: str, context: dict, shape_id, expected_x, expected_text, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_jinja_self_refs.vsdx")
-    with VisioFile(os.path.join(basedir, filename)) as vis:
-        page = vis.pages[0]  # type: Page
-        # there should be one shape on page 0
-        shape = page.shapes.require_id(shape_id)  # type: Shape
-        print(f"DEBUG: ID={shape.ID} shape.text={shape.text}")
-        print(f"DEBUG: ID={shape.ID} shape.x={shape.x}")
-        vis.jinja_render_vsdx(context=context)
-        vis.save_vsdx(out_file)
+    vis = VisioFile(os.path.join(basedir, filename))
+    page = vis.pages[0]  # type: Page
+    # there should be one shape on page 0
+    shape = page.shapes.require_id(shape_id)  # type: Shape
+    print(f"DEBUG: ID={shape.ID} shape.text={shape.text}")
+    print(f"DEBUG: ID={shape.ID} shape.x={shape.x}")
+    vis.jinja_render_vsdx(context=context)
+    vis.save_vsdx(out_file)
 
     # open file and check shape has moved
-    with VisioFile(out_file) as vis:
-        page = vis.pages[0]
-        shape = page.shapes.require_id(shape_id)  # type: Shape
-        print(f"DEBUG: ID={shape.ID} shape.text='{shape.text}' expected='{expected_text}'")
-        print(f"DEBUG: ID={shape.ID} shape.x={shape.x}")
-        assert shape.x == expected_x
-        assert shape.text == expected_text
+    vis = VisioFile(out_file)
+    page = vis.pages[0]
+    shape = page.shapes.require_id(shape_id)  # type: Shape
+    print(f"DEBUG: ID={shape.ID} shape.text='{shape.text}' expected='{expected_text}'")
+    print(f"DEBUG: ID={shape.ID} shape.x={shape.x}")
+    assert shape.x == expected_x
+    assert shape.text == expected_text
 
 
 @pytest.mark.parametrize(
@@ -211,24 +211,24 @@ def test_jinja_self_refs(filename: str, context: dict, shape_id, expected_x, exp
 )
 def test_jinja_self_ref_calculations(filename: str, context: dict, shape_id, expected_y, expected_text, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_jinja_self_ref_calcs.vsdx")
-    with VisioFile(os.path.join(basedir, filename)) as vis:
-        page = vis.pages[0]  # type: Page
-        # there should be one shape on page 0
-        shape = page.shapes.by_id(shape_id)  # type: Shape
-        if shape:
-            print(f"DEBUG: ID={shape.ID} shape.text={shape.text}")
-            print(f"DEBUG: ID={shape.ID} shape.y={shape.y}")
-        vis.jinja_render_vsdx(context=context)
-        vis.save_vsdx(out_file)
+    vis = VisioFile(os.path.join(basedir, filename))
+    page = vis.pages[0]  # type: Page
+    # there should be one shape on page 0
+    shape = page.shapes.by_id(shape_id)  # type: Shape
+    if shape:
+        print(f"DEBUG: ID={shape.ID} shape.text={shape.text}")
+        print(f"DEBUG: ID={shape.ID} shape.y={shape.y}")
+    vis.jinja_render_vsdx(context=context)
+    vis.save_vsdx(out_file)
 
     # open file and check shape has moved
-    with VisioFile(out_file) as vis:
-        page = vis.pages[0]
-        shape = page.shapes.require_id(shape_id)  # type: Shape
-        print(f"DEBUG: ID={shape.ID} shape.text='{shape.text}' expected='{expected_text}'")
-        print(f"DEBUG: ID={shape.ID} shape.x={shape.y}")
-        assert shape.y == expected_y
-        assert shape.text == expected_text
+    vis = VisioFile(out_file)
+    page = vis.pages[0]
+    shape = page.shapes.require_id(shape_id)  # type: Shape
+    print(f"DEBUG: ID={shape.ID} shape.text='{shape.text}' expected='{expected_text}'")
+    print(f"DEBUG: ID={shape.ID} shape.x={shape.y}")
+    assert shape.y == expected_y
+    assert shape.text == expected_text
 
 
 @pytest.mark.parametrize(
@@ -245,21 +245,21 @@ def test_jinja_self_ref_calculations(filename: str, context: dict, shape_id, exp
 )
 def test_jinja_page_showif(filename: str, context: dict, expected_page_count, expected_page_names, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_show_{context['show']}.vsdx")
-    with VisioFile(os.path.join(basedir, filename)) as vis:
-        print(f"len(vis.pages)={len(vis.pages)} context={context}")
-        print("BEFORE", [(p.index_num, p.name) for p in vis.pages])
-        vis.jinja_render_vsdx(context=context)
-        print("AFTER", [(p.index_num, p.name) for p in vis.pages])
-        vis.save_vsdx(out_file)
+    vis = VisioFile(os.path.join(basedir, filename))
+    print(f"len(vis.pages)={len(vis.pages)} context={context}")
+    print("BEFORE", [(p.index_num, p.name) for p in vis.pages])
+    vis.jinja_render_vsdx(context=context)
+    print("AFTER", [(p.index_num, p.name) for p in vis.pages])
+    vis.save_vsdx(out_file)
 
     # open file and check shape has moved
-    with VisioFile(out_file) as vis:
-        page_names = []
-        for p in vis.pages:  # type: Page
-            print(f"page:{p.name}")
-            page_names.append(p.name)
-        assert len(vis.pages) == expected_page_count
-        assert page_names == expected_page_names
+    vis = VisioFile(out_file)
+    page_names = []
+    for p in vis.pages:  # type: Page
+        print(f"page:{p.name}")
+        page_names.append(p.name)
+    assert len(vis.pages) == expected_page_count
+    assert page_names == expected_page_names
 
 
 # --------------------------------------------------------------------------
@@ -276,11 +276,11 @@ def test_jinja_page_showif(filename: str, context: dict, expected_page_count, ex
 
 def _render_one_self_statement(path: str, shape_id: str, statement: str, context: dict) -> Shape:
     """Put `statement` on a real shape, run the self-ref pass, return the shape."""
-    with VisioFile(path) as vis:
-        shape = vis.pages[0].shapes.require_id(shape_id)
-        shape.text = statement
-        VisioFile.jinja_set_selfs(shape, context)
-        return shape
+    vis = VisioFile(path)
+    shape = vis.pages[0].shapes.require_id(shape_id)
+    shape.text = statement
+    VisioFile.jinja_set_selfs(shape, context)
+    return shape
 
 
 def test_a_self_reference_to_a_multi_character_attribute_reads_the_whole_name(basedir):
@@ -290,8 +290,8 @@ def test_a_self_reference_to_a_multi_character_attribute_reads_the_whole_name(ba
     returns strings rather than the tuples the old annotation claimed.
     """
     path = os.path.join(basedir, "test_jinja_self_refs.vsdx")
-    with VisioFile(path) as vis:
-        expected = vis.pages[0].shapes.require_id("4").width
+    vis = VisioFile(path)
+    expected = vis.pages[0].shapes.require_id("4").width
     shape = _render_one_self_statement(path, "4", "{% set self.y=self.width %}", {})
     assert shape.y == expected
 
@@ -304,9 +304,9 @@ def test_every_self_reference_in_one_expression_is_resolved(basedir):
     resolves `self` to its own `TemplateReference`.
     """
     path = os.path.join(basedir, "test_jinja_self_refs.vsdx")
-    with VisioFile(path) as vis:
-        start = vis.pages[0].shapes.require_id("4")
-        expected = start.x + start.y
+    vis = VisioFile(path)
+    start = vis.pages[0].shapes.require_id("4")
+    expected = start.x + start.y
     shape = _render_one_self_statement(path, "4", "{% set self.x=self.x+self.y %}", {})
     assert shape.x == pytest.approx(expected)
 

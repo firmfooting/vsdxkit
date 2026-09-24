@@ -9,8 +9,8 @@ from vsdxkit.vsdxfile import VisioFile
 
 @pytest.fixture
 def page(vsdx_copy):
-    with VisioFile(vsdx_copy("test1.vsdx")) as visio:
-        yield visio.pages[0]
+    visio = VisioFile(vsdx_copy("test1.vsdx"))
+    yield visio.pages[0]
 
 
 @pytest.mark.parametrize("setter", ["width", "height"])

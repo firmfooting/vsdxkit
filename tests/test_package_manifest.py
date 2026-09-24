@@ -402,8 +402,8 @@ def round_trip(tmp_path_factory):
         if package_path not in saved:
             source = os.path.join(BASEDIR, package_path)
             destination = tmp_path_factory.mktemp("round_trip") / os.path.basename(package_path)
-            with VisioFile(source) as vis:
-                vis.save_vsdx(str(destination))
+            vis = VisioFile(source)
+            vis.save_vsdx(str(destination))
             saved[package_path] = (
                 PackageManifest.from_path(source),
                 PackageManifest.from_path(str(destination)),

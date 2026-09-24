@@ -6,7 +6,6 @@ import re
 import sys
 import warnings
 import xml.etree.ElementTree as ET
-from types import TracebackType
 from typing import NamedTuple
 from xml.etree.ElementTree import Element
 
@@ -25,7 +24,7 @@ from vsdxkit import (
     vt_namespace,
     xmlio,
 )
-from vsdxkit.errors import InvalidOperationError, MissingPartError, VisioFileNotOpen
+from vsdxkit.errors import InvalidOperationError, MissingPartError
 from vsdxkit.logging_support import attach_debug_stream_handler, get_logger
 from vsdxkit.masters import MasterCatalog
 from vsdxkit.package import PackageLimits, PackageStore, XmlPart, check_relationship_target
@@ -146,7 +145,6 @@ class VisioFile(JinjaTemplatingMixin):
         # below -- there is nothing to initialise here, since the store itself
         # is the state.
         self._pages: list[Page] = []  # populated by open_vsdx_file()
-        self.file_open = False
         # populated by open_vsdx_file() below; declared here so an attribute
         # assigned outside __init__ still has a home for pyrefly to check it
         # against
@@ -154,29 +152,6 @@ class VisioFile(JinjaTemplatingMixin):
         # `filename` as the store was opened from it; see save_vsdx
         self._opened_filename: str
         self.open_vsdx_file()
-
-    def __enter__(self) -> VisioFile:
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        self.close_vsdx()
-
-    @override
-    def _require_open(self, operation: str) -> None:
-        """Refuse a mutation on a closed document, whose result no save can reach.
-
-        Ask this of the document the operation would change, which is not
-        always the receiver: a cross-document copy runs `copy_shape` on the
-        source but edits the destination page, so those methods ask `page.vis`
-        (issue #242).
-        """
-        if not self.file_open:
-            raise VisioFileNotOpen(f"{operation} is not available once the document is closed")
 
     @staticmethod
     def _part_tree(tree: PartTree | None, description: str) -> PartTree:
@@ -320,7 +295,6 @@ class VisioFile(JinjaTemplatingMixin):
                 logger.debug(
                     "Master(%s, id=%s)\n%s", master.filename, master.page_id, VisioFile.pretty_print_element(master.xml)
                 )
-        self.file_open = True
 
     def _master_page(self, tree: PartTree, part_name: str, name: str, master_id: str, rel_id: str) -> Page:
         """The page a master is read as; the factory this document hands its catalog."""
@@ -361,7 +335,6 @@ class VisioFile(JinjaTemplatingMixin):
         be found in stops the import cleanly. An ID `source` cannot resolve is
         left out.
         """
-        self._require_open("importing a master")
         if source is self:
             return {master_id: master for master_id in master_ids if (master := self._masters.by_id(master_id)) is not None}
         lists_titles = self._lists_titles()
@@ -473,7 +446,6 @@ class VisioFile(JinjaTemplatingMixin):
 
         :return: None
         """
-        self._require_open("VisioFile.remove_page_by_index()")
 
         # remove Page element from pages.xml file - zero based index
         if isinstance(index, int):
@@ -510,7 +482,6 @@ class VisioFile(JinjaTemplatingMixin):
 
         :return: None
         """
-        self._require_open("VisioFile.remove_page_by_name()")
 
         # get index and then pass to remove_page_by_index() to perform deletion
         for p in self.pages:
@@ -975,7 +946,6 @@ class VisioFile(JinjaTemplatingMixin):
 
         :return: :class:`Page` object representing the new page
         """
-        self._require_open("VisioFile.add_page_at()")
 
         # Determine the new page's name
         new_page_name = self._get_new_page_name(name or f"Page-{len(self.pages) + 1}")
@@ -1059,7 +1029,6 @@ class VisioFile(JinjaTemplatingMixin):
 
         :return: the newly created page
         """
-        self._require_open("VisioFile.copy_page()")
         # Determine the new page's name
         new_page_name = self._get_new_page_name(name or page.name)
 
@@ -1178,8 +1147,6 @@ class VisioFile(JinjaTemplatingMixin):
         :param text: label text; the palette sentinel name is cleared when None
         :return: the new Shape
         """
-        # ahead of the donor: a closed document loads nothing
-        page.vis._require_open("VisioFile.create_shape()")
         # vsdxkit.media opens its donors as VisioFiles, so importing it at
         # module level would be a cycle
         from vsdxkit import media
@@ -1207,7 +1174,6 @@ class VisioFile(JinjaTemplatingMixin):
         allocation walk that stopped short, and gave every child a second ID it
         then threw away. ``increment_shape_ids`` now reaches the whole subtree.
         """
-        page.vis._require_open("VisioFile.increment_sub_shape_ids()")
         return self.renumber_shape_ids(shape.xml, page, id_map)
 
     def copy_shape(self, shape: Element, page: Page) -> Element:
@@ -1224,7 +1190,6 @@ class VisioFile(JinjaTemplatingMixin):
             ElementTree: The new shape ElementTree
 
         """
-        page.vis._require_open("VisioFile.copy_shape()")
 
         new_shape = ET.fromstring(ET.tostring(shape))
 
@@ -1236,7 +1201,6 @@ class VisioFile(JinjaTemplatingMixin):
         return new_shape
 
     def insert_shape(self, shape: Element, shapes: Element, page: Page, page_path: str) -> Element:
-        page.vis._require_open("VisioFile.insert_shape()")
         # Keep page_path for the current API, but never let it select a different
         # page from the typed Page argument that owns ID allocation.
         if _normalise_page_path(page.filename) != _normalise_page_path(page_path):
@@ -1285,10 +1249,6 @@ class VisioFile(JinjaTemplatingMixin):
             together share one map; a new one is started when omitted
         :return: the ID map, old ID -> new ID
         """
-        # its own, rather than the one it inherits from increment_shape_ids:
-        # this is the documented primitive and could not name itself in its own
-        # error (issue #329)
-        page.vis._require_open("VisioFile.renumber_shape_ids()")
         before = page._shape_ids()
         id_map = self.increment_shape_ids(shape, page, id_map)
         self.update_ids(shape, id_map)
@@ -1330,7 +1290,6 @@ class VisioFile(JinjaTemplatingMixin):
             share one map; a new one is started when omitted
         :return: the ID map, old ID -> new ID, for ``update_ids`` to apply
         """
-        page.vis._require_open("VisioFile.increment_shape_ids()")
         page._set_max_ids()
         if id_map is None:
             id_map = {}
@@ -1366,9 +1325,6 @@ class VisioFile(JinjaTemplatingMixin):
             if remapped != formula:
                 cell.attrib["F"] = remapped
         return shape
-
-    def close_vsdx(self) -> None:
-        self.file_open = False
 
     def _main_part_content_type(self) -> str:
         """The declared content type of `/visio/document.xml`."""
@@ -1449,7 +1405,6 @@ class VisioFile(JinjaTemplatingMixin):
         :raises InvalidOperationError: if the extension contradicts the package kind
 
         """
-        self._require_open("VisioFile.save_vsdx()")
         if not self._package.names():
             raise InvalidOperationError("cannot save an empty package")
 

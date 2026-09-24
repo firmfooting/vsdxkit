@@ -121,15 +121,15 @@ def _seed_some(path: str) -> int:
     local text and dissolve the one case where the two routes differ - leaving
     a parity assertion that cannot fail.
     """
-    with VisioFile(path) as document:
-        seeded = 0
-        for shape in document.pages[0].all_shapes:
-            if shape.xml.find(f"{namespace}Text") is None:
-                continue
-            shape.text = f"shape {shape.ID} {{{{tok}}}}"
-            seeded += 1
-        document.save_vsdx(path)
-        return seeded
+    document = VisioFile(path)
+    seeded = 0
+    for shape in document.pages[0].all_shapes:
+        if shape.xml.find(f"{namespace}Text") is None:
+            continue
+        shape.text = f"shape {shape.ID} {{{{tok}}}}"
+        seeded += 1
+    document.save_vsdx(path)
+    return seeded
 
 
 def test_the_two_entry_points_agree_on_shapes_that_hold_their_own_text(vsdx_copy):
@@ -141,17 +141,17 @@ def test_the_two_entry_points_agree_on_shapes_that_hold_their_own_text(vsdx_copy
     seeded = _seed_some(through_page)
     assert seeded > 1, "the fixture has to have shapes with text for this to compare anything"
 
-    with VisioFile(through_page) as document:
-        page = document.pages[0]
-        page.apply_text_context({"tok": "SUBSTITUTED"})
-        by_page = sorted(shape.text for shape in page.all_shapes)
+    document = VisioFile(through_page)
+    page = document.pages[0]
+    page.apply_text_context({"tok": "SUBSTITUTED"})
+    by_page = sorted(shape.text for shape in page.all_shapes)
 
     through_static = vsdx_copy("test2.vsdx")
     _seed_some(through_static)
-    with VisioFile(through_static) as document:
-        page = document.pages[0]
-        VisioFile.apply_text_context(page.xml.getroot(), {"tok": "SUBSTITUTED"})
-        by_static = sorted(shape.text for shape in page.all_shapes)
+    document = VisioFile(through_static)
+    page = document.pages[0]
+    VisioFile.apply_text_context(page.xml.getroot(), {"tok": "SUBSTITUTED"})
+    by_static = sorted(shape.text for shape in page.all_shapes)
 
     assert all("{{tok}}" not in text for text in by_page), "a placeholder was left behind"
     assert by_static == by_page

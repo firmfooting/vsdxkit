@@ -190,7 +190,6 @@ class Connect:
             raise ValueError("Connect.create() requires a page")
         if from_shape is None or to_shape is None:
             raise ValueError("Connect.create() requires both from_shape and to_shape")
-        page.vis._require_open("Connect.create()")
         chosen = _options(route, from_cp, to_cp, options) or ConnectorOptions()
         begin = (from_shape, chosen.end_point(begin=True))
         end = (to_shape, chosen.end_point(begin=False))
@@ -246,7 +245,7 @@ class Connect:
             return
         # the two below edit the element: a Cell cannot drop a formula, and
         # nothing removes one of a shape's cells
-        connector_shape._require_open(f"writing shape cell {change.name!r}")
+        connector_shape._require_attached(f"writing shape cell {change.name!r}")
         cell = connector_shape._cell(change.name)
         if cell is None:
             return
@@ -294,9 +293,6 @@ class Connect:
 
         :returns: the connector
         """
-        # its own guard: the first write is a cell, so without this the error
-        # names a method the caller never called
-        page.vis._require_open("Connect.retarget()")
         if from_shape is None and to_shape is None:
             raise InvalidOperationError("retargeting a connector needs at least one endpoint")
         chosen = _options(route, from_cp, to_cp, options)

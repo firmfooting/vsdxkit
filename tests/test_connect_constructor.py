@@ -15,8 +15,8 @@ namespace = "{http://schemas.microsoft.com/office/visio/2012/main}"
 @pytest.fixture
 def page_with_connector(vsdx_copy):
     path = vsdx_copy("test8_simple_connector.vsdx")
-    with VisioFile(path) as visio:
-        yield visio.pages[0]
+    visio = VisioFile(path)
+    yield visio.pages[0]
 
 
 def _valid_connect_xml() -> ET.Element:

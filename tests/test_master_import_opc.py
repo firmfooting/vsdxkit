@@ -139,15 +139,15 @@ def imported_master(vsdx_copy, tmp_path) -> ImportedMaster:
     """
     source = vsdx_copy("test3_house.vsdx")
     document = os.path.join(str(tmp_path), "imported_master.vsdx")
-    with VisioFile(source) as vis:
-        page = vis.pages[0]
-        connector = Connect.create(
-            page=page,
-            from_shape=page.shapes.by_text("Shape to copy"),
-            to_shape=page.shapes.by_text("Shape to remove"),
-        )
-        master_id = connector.xml.attrib["Master"]
-        vis.save_vsdx(document)
+    vis = VisioFile(source)
+    page = vis.pages[0]
+    connector = Connect.create(
+        page=page,
+        from_shape=page.shapes.by_text("Shape to copy"),
+        to_shape=page.shapes.by_text("Shape to remove"),
+    )
+    master_id = connector.xml.attrib["Master"]
+    vis.save_vsdx(document)
     return ImportedMaster(document=document, master_id=master_id, master_name="Dynamic connector")
 
 
@@ -248,11 +248,11 @@ def test_every_master_name_is_listed_in_titles_of_parts(imported_master: Importe
 
 def test_imported_master_survives_a_reopen(imported_master: ImportedMaster):
     """Reopening must find the imported master where the saved graph says it is."""
-    with VisioFile(imported_master.document) as vis:
-        master_page = vis.get_master_page_by_id(imported_master.master_id)
-        assert master_page is not None, f"master {imported_master.master_id} did not survive the round trip"
-        assert master_page.name == imported_master.master_name
-        assert vis._package.part(master_page.filename) is not None
+    vis = VisioFile(imported_master.document)
+    master_page = vis.get_master_page_by_id(imported_master.master_id)
+    assert master_page is not None, f"master {imported_master.master_id} did not survive the round trip"
+    assert master_page.name == imported_master.master_name
+    assert vis._package.part(master_page.filename) is not None
 
 
 def test_import_survives_masters_declared_with_no_masters_parts(vsdx_copy):
@@ -290,23 +290,23 @@ def test_import_survives_masters_declared_with_no_masters_parts(vsdx_copy):
                     )
                 zout.writestr(info, data)
 
-        with VisioFile(crafted_path) as vis:
-            page = vis.pages[0]
-            shapes = page.child_shapes
-            connector = Connect.create(page=page, from_shape=shapes[0], to_shape=shapes[1])
-            master_id = connector.xml.attrib["Master"]
-            document = os.path.join(os.path.dirname(crafted_path), "reopened.vsdx")
-            vis.save_vsdx(document)
+        vis = VisioFile(crafted_path)
+        page = vis.pages[0]
+        shapes = page.child_shapes
+        connector = Connect.create(page=page, from_shape=shapes[0], to_shape=shapes[1])
+        master_id = connector.xml.attrib["Master"]
+        document = os.path.join(os.path.dirname(crafted_path), "reopened.vsdx")
+        vis.save_vsdx(document)
 
         # the reopen itself is the assertion the fixture's own KeyError made:
         # a dangling relationship id there raises before this line returns
-        with VisioFile(document) as reopened:
-            masters_root = reopened.masters_xml
-            assert masters_root is not None
-            master = next(m for m in masters_root if m.attrib.get("ID") == master_id)
-            rel = master.find(f"{VISIO_NS}Rel")
-            assert rel is not None, f"master {master_id} has no Rel element"
-            rel_id = rel.attrib[f"{R_NS}id"]
+        reopened = VisioFile(document)
+        masters_root = reopened.masters_xml
+        assert masters_root is not None
+        master = next(m for m in masters_root if m.attrib.get("ID") == master_id)
+        rel = master.find(f"{VISIO_NS}Rel")
+        assert rel is not None, f"master {master_id} has no Rel element"
+        rel_id = rel.attrib[f"{R_NS}id"]
 
         master_rels = _master_relationships(document, "visio/masters/_rels/masters.xml.rels")
         assert rel_id in master_rels, (
@@ -327,10 +327,11 @@ def test_a_source_master_that_cannot_be_read_fails_before_the_target_changes(vsd
     until the file is opened; the import has to stop, and stop before it has
     changed the target package.
     """
-    with VisioFile(vsdx_copy("test4_connectors.vsdx")) as source, VisioFile(vsdx_copy("test1.vsdx")) as target:
-        shape = next(shape for shape in source.pages[0].all_shapes if shape.xml.attrib.get("Master"))
-        before = target._package.names()
-        monkeypatch.setattr(source._package, "read_bytes", lambda name: None)
-        with pytest.raises(ValueError, match="could not be read"):
-            shape.copy(target.pages[0])
-        assert target._package.names() == before
+    source = VisioFile(vsdx_copy("test4_connectors.vsdx"))
+    target = VisioFile(vsdx_copy("test1.vsdx"))
+    shape = next(shape for shape in source.pages[0].all_shapes if shape.xml.attrib.get("Master"))
+    before = target._package.names()
+    monkeypatch.setattr(source._package, "read_bytes", lambda name: None)
+    with pytest.raises(ValueError, match="could not be read"):
+        shape.copy(target.pages[0])
+    assert target._package.names() == before

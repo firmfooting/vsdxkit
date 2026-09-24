@@ -140,9 +140,9 @@ def masters_first(basedir, tmp_path) -> str:
 
 
 def test_the_added_page_is_named_in_the_pages_section(basedir, tmp_path):
-    with VisioFile(os.path.join(basedir, "test4_connectors.vsdx")) as vis:
-        vis.add_page("NewPage")
-        saved = _saved(vis, tmp_path)
+    vis = VisioFile(os.path.join(basedir, "test4_connectors.vsdx"))
+    vis.add_page("NewPage")
+    saved = _saved(vis, tmp_path)
 
     sections = _sections(_app_xml(saved))
     assert sections["Pages"] == ["Page-1", "Page-2", "Page-3", "NewPage"]
@@ -150,9 +150,9 @@ def test_the_added_page_is_named_in_the_pages_section(basedir, tmp_path):
 
 
 def test_adding_a_page_counts_the_pages_not_whichever_section_comes_first(masters_first, tmp_path):
-    with VisioFile(masters_first) as vis:
-        vis.add_page("NewPage")
-        saved = _saved(vis, tmp_path, "masters-first-add.vsdx")
+    vis = VisioFile(masters_first)
+    vis.add_page("NewPage")
+    saved = _saved(vis, tmp_path, "masters-first-add.vsdx")
 
     sections = _sections(_app_xml(saved))
     assert sections["Pages"] == ["Page-1", "Page-2", "Page-3", "NewPage"]
@@ -160,9 +160,9 @@ def test_adding_a_page_counts_the_pages_not_whichever_section_comes_first(master
 
 
 def test_removing_a_page_counts_the_pages_not_whichever_section_comes_first(masters_first, tmp_path):
-    with VisioFile(masters_first) as vis:
-        vis.remove_page_by_name("Page-2")
-        saved = _saved(vis, tmp_path, "masters-first-remove.vsdx")
+    vis = VisioFile(masters_first)
+    vis.remove_page_by_name("Page-2")
+    saved = _saved(vis, tmp_path, "masters-first-remove.vsdx")
 
     sections = _sections(_app_xml(saved))
     assert sections["Pages"] == ["Page-1", "Page-3"]
@@ -170,9 +170,9 @@ def test_removing_a_page_counts_the_pages_not_whichever_section_comes_first(mast
 
 
 def test_renaming_a_page_renames_its_title(basedir, tmp_path):
-    with VisioFile(os.path.join(basedir, "test4_connectors.vsdx")) as vis:
-        vis.pages[1].name = "Renamed"
-        saved = _saved(vis, tmp_path, "renamed.vsdx")
+    vis = VisioFile(os.path.join(basedir, "test4_connectors.vsdx"))
+    vis.pages[1].name = "Renamed"
+    saved = _saved(vis, tmp_path, "renamed.vsdx")
 
     sections = _sections(_app_xml(saved))
     assert sections["Pages"] == ["Page-1", "Renamed", "Page-3"]
@@ -185,10 +185,10 @@ def test_renaming_a_page_leaves_a_master_of_the_same_name_alone(masters_first, t
     A master and a page can be called the same thing, and here the master's
     title is written first.
     """
-    with VisioFile(masters_first) as vis:
-        vis.pages[0].name = "Switch"
-        vis.pages[0].name = "Renamed"
-        saved = _saved(vis, tmp_path, "masters-first-rename.vsdx")
+    vis = VisioFile(masters_first)
+    vis.pages[0].name = "Switch"
+    vis.pages[0].name = "Renamed"
+    saved = _saved(vis, tmp_path, "masters-first-rename.vsdx")
 
     sections = _sections(_app_xml(saved))
     assert sections["Masters"] == ["Dynamic connector", "Switch", "Router"]
@@ -196,10 +196,10 @@ def test_renaming_a_page_leaves_a_master_of_the_same_name_alone(masters_first, t
 
 
 def test_removing_a_page_leaves_a_master_of_the_same_name_alone(masters_first, tmp_path):
-    with VisioFile(masters_first) as vis:
-        vis.pages[0].name = "Switch"
-        vis.remove_page_by_name("Switch")
-        saved = _saved(vis, tmp_path, "masters-first-remove-namesake.vsdx")
+    vis = VisioFile(masters_first)
+    vis.pages[0].name = "Switch"
+    vis.remove_page_by_name("Switch")
+    saved = _saved(vis, tmp_path, "masters-first-remove-namesake.vsdx")
 
     sections = _sections(_app_xml(saved))
     assert sections["Masters"] == ["Dynamic connector", "Switch", "Router"]
@@ -208,14 +208,14 @@ def test_removing_a_page_leaves_a_master_of_the_same_name_alone(masters_first, t
 
 def test_the_imported_master_is_named_and_counted_in_the_masters_section(vsdx_copy, tmp_path):
     """A document that already has masters gains one when a connector is created."""
-    with VisioFile(vsdx_copy("test3_house.vsdx")) as vis:
-        page = vis.pages[0]
-        Connect.create(
-            page=page,
-            from_shape=page.shapes.by_text("Shape to copy"),
-            to_shape=page.shapes.by_text("Shape to remove"),
-        )
-        saved = _saved(vis, tmp_path, "house-connected.vsdx")
+    vis = VisioFile(vsdx_copy("test3_house.vsdx"))
+    page = vis.pages[0]
+    Connect.create(
+        page=page,
+        from_shape=page.shapes.by_text("Shape to copy"),
+        to_shape=page.shapes.by_text("Shape to remove"),
+    )
+    saved = _saved(vis, tmp_path, "house-connected.vsdx")
 
     sections = _sections(_app_xml(saved))
     assert sections["Pages"] == ["Page-1"]
@@ -223,10 +223,10 @@ def test_the_imported_master_is_named_and_counted_in_the_masters_section(vsdx_co
 
 
 def test_a_document_with_no_masters_heading_gains_one_with_its_first_master(vsdx_copy, tmp_path):
-    with VisioFile(vsdx_copy("test8_simple_connector.vsdx")) as vis:
-        page = vis.pages[0]
-        Connect.create(page=page, from_shape=page.child_shapes[0], to_shape=page.child_shapes[1])
-        saved = _saved(vis, tmp_path, "simple-connected.vsdx")
+    vis = VisioFile(vsdx_copy("test8_simple_connector.vsdx"))
+    page = vis.pages[0]
+    Connect.create(page=page, from_shape=page.child_shapes[0], to_shape=page.child_shapes[1])
+    saved = _saved(vis, tmp_path, "simple-connected.vsdx")
 
     sections = _sections(_app_xml(saved))
     assert sections["Pages"] == ["Page-1"]
@@ -240,11 +240,11 @@ def test_a_master_is_listed_even_when_a_page_is_called_the_same_thing(vsdx_copy,
     question, and a page that happens to share the master's name answers it
     wrongly - leaving a document with a master no section of app.xml names.
     """
-    with VisioFile(vsdx_copy("test8_simple_connector.vsdx")) as vis:
-        page = vis.pages[0]
-        page.name = "Dynamic connector"
-        Connect.create(page=page, from_shape=page.child_shapes[0], to_shape=page.child_shapes[1])
-        saved = _saved(vis, tmp_path, "namesake-page.vsdx")
+    vis = VisioFile(vsdx_copy("test8_simple_connector.vsdx"))
+    page = vis.pages[0]
+    page.name = "Dynamic connector"
+    Connect.create(page=page, from_shape=page.child_shapes[0], to_shape=page.child_shapes[1])
+    saved = _saved(vis, tmp_path, "namesake-page.vsdx")
 
     sections = _sections(_app_xml(saved))
     assert sections["Pages"] == ["Dynamic connector"]
@@ -274,9 +274,9 @@ def test_a_count_larger_than_the_vector_is_not_read_as_positions(basedir, tmp_pa
         },
     )
 
-    with VisioFile(source) as vis:
-        vis.remove_page_by_name("Page-2")
-        saved = _saved(vis, tmp_path, "overcounted-removed.vsdx")
+    vis = VisioFile(source)
+    vis.remove_page_by_name("Page-2")
+    saved = _saved(vis, tmp_path, "overcounted-removed.vsdx")
 
     # nothing in the Pages section was named Page-2, so app.xml is left as it
     # was rather than edited by position
@@ -297,9 +297,9 @@ def test_a_count_read_for_a_later_section_is_not_written_back_to_it(basedir, tmp
         {APP_PART: (PAGES_FIRST_HEADINGS, MASTERS_FIRST[: MASTERS_FIRST.index("<TitlesOfParts>")].replace(">3<", ">99<", 1))},
     )
 
-    with VisioFile(source) as vis:
-        vis.add_page("NewPage")
-        saved = _saved(vis, tmp_path, "overcounted-add.vsdx")
+    vis = VisioFile(source)
+    vis.add_page("NewPage")
+    saved = _saved(vis, tmp_path, "overcounted-add.vsdx")
 
     assert _counts(_app_xml(saved)) == {"Masters": 99, "Pages": 4}
 
@@ -317,9 +317,9 @@ def test_renaming_a_page_in_a_document_that_lists_no_parts_leaves_app_xml_alone(
         {APP_PART: (PAGES_FIRST_TITLES, "")},
     )
 
-    with VisioFile(source) as vis:
-        vis.pages[1].name = "Renamed"
-        saved = _saved(vis, tmp_path, "no-titles-renamed.vsdx")
+    vis = VisioFile(source)
+    vis.pages[1].name = "Renamed"
+    saved = _saved(vis, tmp_path, "no-titles-renamed.vsdx")
 
     assert _page_names(saved) == ["Page-1", "Renamed", "Page-3"]
     assert _app_xml(saved).find(f"{ext_prop_namespace}TitlesOfParts") is None
@@ -346,9 +346,9 @@ def test_a_variant_that_is_neither_a_name_nor_a_count_moves_no_section(basedir, 
         },
     )
 
-    with VisioFile(source) as vis:
-        vis.add_page("NewPage")
-        saved = _saved(vis, tmp_path, "odd-variant-add.vsdx")
+    vis = VisioFile(source)
+    vis.add_page("NewPage")
+    saved = _saved(vis, tmp_path, "odd-variant-add.vsdx")
 
     app_xml = _app_xml(saved)
     assert _heading_pairs_values(app_xml) == ["true", "Pages", "4", "Masters", "3"]

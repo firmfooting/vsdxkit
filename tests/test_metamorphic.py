@@ -89,10 +89,10 @@ def _saved(source: str, destination: str, edit: Callable[[VisioFile], None] | No
     Every relation below is a pair of calls to this, so the only difference
     between the two sides of a comparison is the edit.
     """
-    with VisioFile(source) as vis:
-        if edit is not None:
-            edit(vis)
-        vis.save_vsdx(destination)
+    vis = VisioFile(source)
+    if edit is not None:
+        edit(vis)
+    vis.save_vsdx(destination)
     return destination
 
 
@@ -119,8 +119,8 @@ def _shape_ids(source: str) -> dict[int, list[int]]:
     expectation was built for, so the position and the id have to come from the
     same list.
     """
-    with VisioFile(source) as vis:
-        return {index: [int(shape.ID) for shape in page.all_shapes] for index, page in enumerate(vis.pages)}
+    vis = VisioFile(source)
+    return {index: [int(shape.ID) for shape in page.all_shapes] for index, page in enumerate(vis.pages)}
 
 
 def _page_part_names(source: str) -> dict[int, str]:
@@ -132,8 +132,8 @@ def _page_part_names(source: str) -> dict[int, str]:
     allowed to touch, and that is enough to catch an edit that reaches across
     pages.
     """
-    with VisioFile(source) as vis:
-        return {index: f"visio/pages/{os.path.basename(page.filename)}" for index, page in enumerate(vis.pages)}
+    vis = VisioFile(source)
+    return {index: f"visio/pages/{os.path.basename(page.filename)}" for index, page in enumerate(vis.pages)}
 
 
 def _with_pages_reordered(source: str, destination: str, order: list[int]) -> str:
@@ -471,8 +471,8 @@ def test_deleting_a_copy_made_before_the_last_save_restores_the_package(package_
         "deleting a copy from an earlier session is a no-op", package_path, untouched, restored, with_copy
     )
 
-    with VisioFile(restored) as vis:
-        next_id = int(vis.pages[0].child_shapes[0].copy().ID)
+    vis = VisioFile(restored)
+    next_id = int(vis.pages[0].child_shapes[0].copy().ID)
     assert next_id == copied_id, (
         f"the next copy on page 1 of {package_path} got id {next_id}, not the {copied_id} the deleted "
         "copy had: the id mark rebuilt from the file is not where it was"

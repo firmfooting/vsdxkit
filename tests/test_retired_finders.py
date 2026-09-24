@@ -32,13 +32,13 @@ def _ids(found):
 @pytest.mark.parametrize(("finder", "args", "expected"), PAGE_FINDERS)
 def test_a_page_finder_warns_and_answers_as_it_did(vsdx_copy, finder, args, expected):
     """Fails if a Page finder stops warning, or starts matching whole text or refusing a second match."""
-    with VisioFile(vsdx_copy("test2.vsdx")) as vis:
-        page = vis.pages[0]
-        with pytest.warns(
-            DeprecationWarning, match=rf"Page\.{finder}\(\) is deprecated .* Use (a comprehension over )?page\.shapes"
-        ):
-            found = getattr(page, finder)(*args)
-        assert _ids(found) == expected
+    vis = VisioFile(vsdx_copy("test2.vsdx"))
+    page = vis.pages[0]
+    with pytest.warns(
+        DeprecationWarning, match=rf"Page\.{finder}\(\) is deprecated .* Use (a comprehension over )?page\.shapes"
+    ):
+        found = getattr(page, finder)(*args)
+    assert _ids(found) == expected
 
 
 @pytest.mark.parametrize(
@@ -53,60 +53,60 @@ def test_a_page_finder_warns_and_answers_as_it_did(vsdx_copy, finder, args, expe
 )
 def test_a_shape_finder_searches_inside_the_shape(vsdx_copy, finder, args, expected):
     """Fails if a Shape finder warns about the wrong owner or searches beyond the shape's descendants."""
-    with VisioFile(vsdx_copy("test2.vsdx")) as vis:
-        group = vis.pages[0].shapes.require_id("9")
-        with pytest.warns(
-            DeprecationWarning, match=rf"Shape\.{finder}\(\) is deprecated .* Use (a comprehension over )?shape\.descendants"
-        ):
-            found = getattr(group, finder)(*args)
-        assert _ids(found) == expected
+    vis = VisioFile(vsdx_copy("test2.vsdx"))
+    group = vis.pages[0].shapes.require_id("9")
+    with pytest.warns(
+        DeprecationWarning, match=rf"Shape\.{finder}\(\) is deprecated .* Use (a comprehension over )?shape\.descendants"
+    ):
+        found = getattr(group, finder)(*args)
+    assert _ids(found) == expected
 
 
 def test_the_property_finders_forward_to_the_collection(vsdx_copy):
     """Fails if a property finder stops comparing the value as text, or drops the first-match form."""
-    with VisioFile(vsdx_copy("test6_shape_properties.vsdx")) as vis:
-        page = vis.pages[0]
-        with pytest.warns(DeprecationWarning):
-            assert _ids(page.find_shape_by_property_label("my_property_label")) == "1"
-        with pytest.warns(DeprecationWarning):
-            assert _ids(page.find_shapes_by_property_label("my_property_label")) == ["1", "2"]
-        with pytest.warns(DeprecationWarning):
-            found = page.find_shape_by_property_label_value("my_property_label", "a different value")
-        assert _ids(found) == "2"
-        with pytest.warns(DeprecationWarning):
-            found = page.find_shapes_by_property_label_value("my_second_property_label", "a different value")
-        assert _ids(found) == ["5"]
+    vis = VisioFile(vsdx_copy("test6_shape_properties.vsdx"))
+    page = vis.pages[0]
+    with pytest.warns(DeprecationWarning):
+        assert _ids(page.find_shape_by_property_label("my_property_label")) == "1"
+    with pytest.warns(DeprecationWarning):
+        assert _ids(page.find_shapes_by_property_label("my_property_label")) == ["1", "2"]
+    with pytest.warns(DeprecationWarning):
+        found = page.find_shape_by_property_label_value("my_property_label", "a different value")
+    assert _ids(found) == "2"
+    with pytest.warns(DeprecationWarning):
+        found = page.find_shapes_by_property_label_value("my_second_property_label", "a different value")
+    assert _ids(found) == ["5"]
 
 
 def test_the_master_finders_match_both_ids(vsdx_copy):
     """Fails if a master finder matches on the master page alone."""
-    with VisioFile(vsdx_copy("test5_master.vsdx")) as vis:
-        page = vis.pages[0]
-        sub_shape = page.shapes.require_id("2")
-        with pytest.warns(DeprecationWarning, match=r"Page\.find_shapes_with_same_master\(\)"):
-            assert _ids(page.find_shapes_with_same_master(sub_shape)) == ["2", "4"]
-        group = page.shapes.require_id("1")
-        with pytest.warns(DeprecationWarning, match=r"Shape\.find_shapes_by_master\(\)"):
-            assert _ids(group.find_shapes_by_master("1", "6")) == ["2"]
+    vis = VisioFile(vsdx_copy("test5_master.vsdx"))
+    page = vis.pages[0]
+    sub_shape = page.shapes.require_id("2")
+    with pytest.warns(DeprecationWarning, match=r"Page\.find_shapes_with_same_master\(\)"):
+        assert _ids(page.find_shapes_with_same_master(sub_shape)) == ["2", "4"]
+    group = page.shapes.require_id("1")
+    with pytest.warns(DeprecationWarning, match=r"Shape\.find_shapes_by_master\(\)"):
+        assert _ids(group.find_shapes_by_master("1", "6")) == ["2"]
 
 
 def test_get_sub_shapes_warns(vsdx_copy):
     """Fails if `VisioFile.get_sub_shapes` goes quietly, or before 1.0.0."""
-    with VisioFile(vsdx_copy("test2.vsdx")) as vis:
-        group = vis.pages[0].shapes.require_id("9")
-        with pytest.warns(DeprecationWarning, match=r"VisioFile\.get_sub_shapes\(\)"):
-            shapes = vis.get_sub_shapes(group.xml)
-        assert shapes is not None
-        assert [child.attrib["ID"] for child in shapes] == ["1", "7", "8"]
+    vis = VisioFile(vsdx_copy("test2.vsdx"))
+    group = vis.pages[0].shapes.require_id("9")
+    with pytest.warns(DeprecationWarning, match=r"VisioFile\.get_sub_shapes\(\)"):
+        shapes = vis.get_sub_shapes(group.xml)
+    assert shapes is not None
+    assert [child.attrib["ID"] for child in shapes] == ["1", "7", "8"]
 
 
 def test_the_warning_points_at_the_caller(vsdx_copy):
     """Fails if the warning names a line inside vsdxkit rather than the code that called the finder."""
-    with VisioFile(vsdx_copy("test2.vsdx")) as vis:
-        page = vis.pages[0]
-        with pytest.warns(DeprecationWarning) as caught:
-            page.find_shape_by_id("7")
-        assert caught[0].filename == __file__
+    vis = VisioFile(vsdx_copy("test2.vsdx"))
+    page = vis.pages[0]
+    with pytest.warns(DeprecationWarning) as caught:
+        page.find_shape_by_id("7")
+    assert caught[0].filename == __file__
 
 
 @pytest.mark.parametrize("finder", ["find_shape_by_property_label", "find_shape_by_property_label_value"])
@@ -119,13 +119,13 @@ def test_a_first_match_property_finder_stops_at_the_first_match(vsdx_copy, monke
         read.append(shape.ID)
         return data_properties.fget(shape)
 
-    with VisioFile(vsdx_copy("test6_shape_properties.vsdx")) as vis:
-        page = vis.pages[0]
-        order = [shape.ID for shape in page.shapes]
-        monkeypatch.setattr(Shape, "data_properties", property(recording))
-        args = ("my_property_label",) if finder == "find_shape_by_property_label" else ("my_property_label", "property value")
-        with pytest.warns(DeprecationWarning):
-            found = getattr(page, finder)(*args)
-        assert found is not None
-        assert found.ID == "1"
-        assert read == order[: order.index("1") + 1]
+    vis = VisioFile(vsdx_copy("test6_shape_properties.vsdx"))
+    page = vis.pages[0]
+    order = [shape.ID for shape in page.shapes]
+    monkeypatch.setattr(Shape, "data_properties", property(recording))
+    args = ("my_property_label",) if finder == "find_shape_by_property_label" else ("my_property_label", "property value")
+    with pytest.warns(DeprecationWarning):
+        found = getattr(page, finder)(*args)
+    assert found is not None
+    assert found.ID == "1"
+    assert read == order[: order.index("1") + 1]

@@ -55,11 +55,11 @@ def _assert_converts_to_pdf(document: str, tmp_path) -> None:
 @pytest.mark.parametrize("filename", ["test1.vsdx", "test4_connectors.vsdx", "test3_house.vsdx"])
 def test_edited_package_converts_in_libreoffice(filename, tmp_path):
     out = os.path.join(str(tmp_path), filename)
-    with VisioFile(os.path.join(FIXTURES, filename)) as vis:
-        page = vis.pages[0]
-        shape = page.child_shapes[0]
-        shape.text = "converted by libreoffice"
-        vis.save_vsdx(out)
+    vis = VisioFile(os.path.join(FIXTURES, filename))
+    page = vis.pages[0]
+    shape = page.child_shapes[0]
+    shape.text = "converted by libreoffice"
+    vis.save_vsdx(out)
 
     _assert_converts_to_pdf(out, tmp_path)
 
@@ -75,14 +75,14 @@ def test_created_connector_package_converts_in_libreoffice(tmp_path):
     than copied wholesale with the masters folder.
     """
     out = os.path.join(str(tmp_path), "created_connector.vsdx")
-    with VisioFile(os.path.join(FIXTURES, "test3_house.vsdx")) as vis:
-        page = vis.pages[0]
-        connector = Connect.create(
-            page=page,
-            from_shape=page.shapes.by_text("Shape to copy"),
-            to_shape=page.shapes.by_text("Shape to remove"),
-        )
-        connector.text = "created by vsdx"
-        vis.save_vsdx(out)
+    vis = VisioFile(os.path.join(FIXTURES, "test3_house.vsdx"))
+    page = vis.pages[0]
+    connector = Connect.create(
+        page=page,
+        from_shape=page.shapes.by_text("Shape to copy"),
+        to_shape=page.shapes.by_text("Shape to remove"),
+    )
+    connector.text = "created by vsdx"
+    vis.save_vsdx(out)
 
     _assert_converts_to_pdf(out, tmp_path)

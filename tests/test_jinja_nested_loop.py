@@ -13,26 +13,26 @@ from vsdxkit.vsdxfile import VisioFile
 
 def test_a_loop_on_a_group_s_first_member_repeats_it_inside_the_group(vsdx_copy):
     """Fails if the loop's opening statement lands anywhere but the group's own `<Shapes>`."""
-    with VisioFile(vsdx_copy("test10_nested_shapes.vsdx")) as vis:
-        group = vis.pages[0].shapes.require_text("Shape 1.1")
-        first = group.children.require_text("Shape 1.1.1")
-        first.text = "{% for i in items %}Item {{ i }}"
+    vis = VisioFile(vsdx_copy("test10_nested_shapes.vsdx"))
+    group = vis.pages[0].shapes.require_text("Shape 1.1")
+    first = group.children.require_text("Shape 1.1.1")
+    first.text = "{% for i in items %}Item {{ i }}"
 
-        vis.jinja_render_vsdx({"items": [1, 2, 3]})
+    vis.jinja_render_vsdx({"items": [1, 2, 3]})
 
-        group = vis.pages[0].shapes.require_text("Shape 1.1")
-        assert [shape.text for shape in group.children] == ["Item 1", "Item 2", "Item 3", "Shape 1.1.2"]
-        assert len({shape.ID for shape in vis.pages[0].shapes}) == len(vis.pages[0].shapes)
+    group = vis.pages[0].shapes.require_text("Shape 1.1")
+    assert [shape.text for shape in group.children] == ["Item 1", "Item 2", "Item 3", "Shape 1.1.2"]
+    assert len({shape.ID for shape in vis.pages[0].shapes}) == len(vis.pages[0].shapes)
 
 
 def test_a_loop_on_a_page_s_first_shape_repeats_it_on_the_page(vsdx_copy):
     """Fails if a top-level loop stops landing in the page's `<Shapes>` now that no Shape wraps it."""
-    with VisioFile(vsdx_copy("test10_nested_shapes.vsdx")) as vis:
-        first = vis.pages[0].children.require_text("Shape 1")
-        first.text = "{% for i in items %}Group {{ i }}"
+    vis = VisioFile(vsdx_copy("test10_nested_shapes.vsdx"))
+    first = vis.pages[0].children.require_text("Shape 1")
+    first.text = "{% for i in items %}Group {{ i }}"
 
-        vis.jinja_render_vsdx({"items": ["a", "b"]})
+    vis.jinja_render_vsdx({"items": ["a", "b"]})
 
-        texts = [shape.text for shape in vis.pages[0].children]
-        assert texts == ["Group a", "Group b", "Nested Shape Example"]
-        assert len({shape.ID for shape in vis.pages[0].shapes}) == len(vis.pages[0].shapes)
+    texts = [shape.text for shape in vis.pages[0].children]
+    assert texts == ["Group a", "Group b", "Nested Shape Example"]
+    assert len({shape.ID for shape in vis.pages[0].shapes}) == len(vis.pages[0].shapes)

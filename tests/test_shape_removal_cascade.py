@@ -32,37 +32,37 @@ def _referencing(page, shape_id: str):
 
 
 def test_removing_a_connected_shape_takes_its_connector_with_it(vsdx_copy):
-    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
-        page = vis.pages[0]
-        start = vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="A")
-        end = vis.create_shape(page, "PALETTE_PROCESS", 6.0, 2.0, text="B")
-        connector = page.connect_shapes(start, end)
-        assert _referencing(page, start.ID)
+    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    page = vis.pages[0]
+    start = vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="A")
+    end = vis.create_shape(page, "PALETTE_PROCESS", 6.0, 2.0, text="B")
+    connector = page.connect_shapes(start, end)
+    assert _referencing(page, start.ID)
 
-        with pytest.warns(DeprecationWarning, match="delete_shape"):
-            start.remove()
+    with pytest.warns(DeprecationWarning, match="delete_shape"):
+        start.remove()
 
-        assert _referencing(page, start.ID) == []
-        assert _referencing(page, connector.ID) == []
-        remaining = {shape.ID for shape in page.all_shapes}
-        assert start.ID not in remaining
-        assert connector.ID not in remaining, "the connector was left with nothing to glue to"
+    assert _referencing(page, start.ID) == []
+    assert _referencing(page, connector.ID) == []
+    remaining = {shape.ID for shape in page.all_shapes}
+    assert start.ID not in remaining
+    assert connector.ID not in remaining, "the connector was left with nothing to glue to"
 
 
 def test_remove_and_delete_shape_leave_the_page_in_the_same_state(vsdx_copy):
     """The two APIs are the same deletion and must not disagree."""
 
     def _state_after(delete):
-        with VisioFile(vsdx_copy("test1.vsdx")) as vis:
-            page = vis.pages[0]
-            start = vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="A")
-            end = vis.create_shape(page, "PALETTE_PROCESS", 6.0, 2.0, text="B")
-            page.connect_shapes(start, end)
-            delete(page, start)
-            return (
-                sorted(shape.ID for shape in page.all_shapes),
-                sorted(ET.tostring(record, encoding="unicode") for record in _connect_records(page)),
-            )
+        vis = VisioFile(vsdx_copy("test1.vsdx"))
+        page = vis.pages[0]
+        start = vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="A")
+        end = vis.create_shape(page, "PALETTE_PROCESS", 6.0, 2.0, text="B")
+        page.connect_shapes(start, end)
+        delete(page, start)
+        return (
+            sorted(shape.ID for shape in page.all_shapes),
+            sorted(ET.tostring(record, encoding="unicode") for record in _connect_records(page)),
+        )
 
     with pytest.warns(DeprecationWarning):
         through_remove = _state_after(lambda page, shape: shape.remove())
@@ -72,27 +72,27 @@ def test_remove_and_delete_shape_leave_the_page_in_the_same_state(vsdx_copy):
 
 def test_removing_a_group_child_removes_records_that_reference_it(vsdx_copy):
     """A record pointing into a group must not outlive the shape it points at."""
-    with VisioFile(vsdx_copy("test10_nested_shapes.vsdx")) as vis:
-        page = vis.pages[0]
-        group = next(shape for shape in page.child_shapes if shape.child_shapes)
-        child = group.child_shapes[0]
+    vis = VisioFile(vsdx_copy("test10_nested_shapes.vsdx"))
+    page = vis.pages[0]
+    group = next(shape for shape in page.child_shapes if shape.child_shapes)
+    child = group.child_shapes[0]
 
-        connects = page.xml.find(f".//{namespace}Connects")
-        if connects is None:
-            connects = ET.SubElement(page.xml.getroot(), f"{namespace}Connects")
-        connects.append(
-            ET.fromstring(
-                f'<Connect xmlns="{namespace[1:-1]}" FromSheet="{child.ID}" FromCell="BeginX" '
-                f'FromPart="9" ToSheet="{group.ID}" ToCell="PinX" ToPart="3"/>'
-            )
+    connects = page.xml.find(f".//{namespace}Connects")
+    if connects is None:
+        connects = ET.SubElement(page.xml.getroot(), f"{namespace}Connects")
+    connects.append(
+        ET.fromstring(
+            f'<Connect xmlns="{namespace[1:-1]}" FromSheet="{child.ID}" FromCell="BeginX" '
+            f'FromPart="9" ToSheet="{group.ID}" ToCell="PinX" ToPart="3"/>'
         )
-        assert _referencing(page, child.ID)
+    )
+    assert _referencing(page, child.ID)
 
-        with pytest.warns(DeprecationWarning):
-            child.remove()
+    with pytest.warns(DeprecationWarning):
+        child.remove()
 
-        assert _referencing(page, child.ID) == []
-        assert child.ID not in {shape.ID for shape in group.child_shapes}
+    assert _referencing(page, child.ID) == []
+    assert child.ID not in {shape.ID for shape in group.child_shapes}
 
 
 def _add_connect(page, from_id, to_id):
@@ -109,39 +109,39 @@ def _add_connect(page, from_id, to_id):
 
 def test_deleting_a_group_takes_the_records_naming_its_children(vsdx_copy):
     """A group's children go with it, so records naming them must go too."""
-    with VisioFile(vsdx_copy("test10_nested_shapes.vsdx")) as vis:
-        page = vis.pages[0]
-        group = next(shape for shape in page.child_shapes if shape.child_shapes)
-        child = group.child_shapes[0]
-        survivor = next(shape for shape in page.child_shapes if shape.ID != group.ID)
-        _add_connect(page, "99", child.ID)
-        _add_connect(page, "99", survivor.ID)
+    vis = VisioFile(vsdx_copy("test10_nested_shapes.vsdx"))
+    page = vis.pages[0]
+    group = next(shape for shape in page.child_shapes if shape.child_shapes)
+    child = group.child_shapes[0]
+    survivor = next(shape for shape in page.child_shapes if shape.ID != group.ID)
+    _add_connect(page, "99", child.ID)
+    _add_connect(page, "99", survivor.ID)
 
-        page.delete_shape(group)
+    page.delete_shape(group)
 
-        assert _referencing(page, child.ID) == []
-        assert _referencing(page, survivor.ID), "an unrelated record must survive"
+    assert _referencing(page, child.ID) == []
+    assert _referencing(page, survivor.ID), "an unrelated record must survive"
 
 
 def test_deleting_a_shape_that_is_not_on_the_page_is_an_error(vsdx_copy):
     """Silently doing nothing would hide a caller's mistake."""
-    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
-        page = vis.pages[0]
-        shape = vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="A")
-        page.delete_shape(shape)
+    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    page = vis.pages[0]
+    shape = vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="A")
+    page.delete_shape(shape)
 
-        with pytest.raises(ValueError, match="not on page"):
-            page.delete_shape(shape)
+    with pytest.raises(ValueError, match="not on page"):
+        page.delete_shape(shape)
 
 
 def test_removing_the_same_shape_twice_is_an_error(vsdx_copy):
-    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
-        page = vis.pages[0]
-        shape = vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="A")
-        with pytest.warns(DeprecationWarning):
-            shape.remove()
-        with pytest.warns(DeprecationWarning), pytest.raises(ValueError, match="not on page"):
-            shape.remove()
+    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    page = vis.pages[0]
+    shape = vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="A")
+    with pytest.warns(DeprecationWarning):
+        shape.remove()
+    with pytest.warns(DeprecationWarning), pytest.raises(ValueError, match="not on page"):
+        shape.remove()
 
 
 def test_an_inherited_begin_cell_still_marks_a_shape_as_a_connector(vsdx_copy):
@@ -151,21 +151,21 @@ def test_an_inherited_begin_cell_still_marks_a_shape_as_a_connector(vsdx_copy):
     the shape it is glued to, as a detached line whose glue record has just
     been swept away.
     """
-    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
-        page = vis.pages[0]
-        start = vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="A")
-        end = vis.create_shape(page, "PALETTE_PROCESS", 6.0, 2.0, text="B")
-        connector = page.connect_shapes(start, end)
-        # move BeginX off the connector so it can only be found via the master
-        begin_cell = connector.xml.find(f'{namespace}Cell[@N="BeginX"]')
-        connector.xml.remove(begin_cell)
-        master = connector.master_shape
-        assert master is not None, "fixture connector is expected to have a master"
-        master.xml.append(begin_cell)
+    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    page = vis.pages[0]
+    start = vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="A")
+    end = vis.create_shape(page, "PALETTE_PROCESS", 6.0, 2.0, text="B")
+    connector = page.connect_shapes(start, end)
+    # move BeginX off the connector so it can only be found via the master
+    begin_cell = connector.xml.find(f'{namespace}Cell[@N="BeginX"]')
+    connector.xml.remove(begin_cell)
+    master = connector.master_shape
+    assert master is not None, "fixture connector is expected to have a master"
+    master.xml.append(begin_cell)
 
-        page.delete_shape(start)
+    page.delete_shape(start)
 
-        assert connector.ID not in {shape.ID for shape in page.all_shapes}
+    assert connector.ID not in {shape.ID for shape in page.all_shapes}
 
 
 def test_deleting_a_shape_belonging_to_another_page_is_refused(vsdx_copy):
@@ -175,17 +175,17 @@ def test_deleting_a_shape_belonging_to_another_page_is_refused(vsdx_copy):
     page a shape from the other used to satisfy the guard by ID and then delete
     whichever shape on *this* page happened to share the number.
     """
-    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
-        page1, page3 = vis.pages[0], vis.pages[2]
-        victim = page1.shapes.by_id("1")
-        bystander_ids = [shape.ID for shape in page3.all_shapes]
-        assert victim is not None and "1" in bystander_ids, "fixture must have colliding ids"
+    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    page1, page3 = vis.pages[0], vis.pages[2]
+    victim = page1.shapes.by_id("1")
+    bystander_ids = [shape.ID for shape in page3.all_shapes]
+    assert victim is not None and "1" in bystander_ids, "fixture must have colliding ids"
 
-        with pytest.raises(ValueError, match="not on page"):
-            page3.delete_shape(victim)
+    with pytest.raises(ValueError, match="not on page"):
+        page3.delete_shape(victim)
 
-        assert [shape.ID for shape in page3.all_shapes] == bystander_ids
-        assert page1.shapes.by_id("1") is not None
+    assert [shape.ID for shape in page3.all_shapes] == bystander_ids
+    assert page1.shapes.by_id("1") is not None
 
 
 def _three_connected(vis):
@@ -199,48 +199,48 @@ def _three_connected(vis):
 
 def test_a_half_glued_connector_goes_with_the_shape_it_is_glued_to(vsdx_copy):
     """Fails if a connector whose other end floats survives the one shape it was glued to (#105)."""
-    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
-        page, (a, b, _), (ab, _) = _three_connected(vis)
-        connects = page.xml.find(f".//{namespace}Connects")
-        end_record = next(
-            record
-            for record in _connect_records(page)
-            if record.attrib["FromSheet"] == ab.ID and record.attrib["FromCell"] == "EndX"
-        )
-        connects.remove(end_record)  # its end now floats; only its begin is glued, to A
+    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    page, (a, b, _), (ab, _) = _three_connected(vis)
+    connects = page.xml.find(f".//{namespace}Connects")
+    end_record = next(
+        record
+        for record in _connect_records(page)
+        if record.attrib["FromSheet"] == ab.ID and record.attrib["FromCell"] == "EndX"
+    )
+    connects.remove(end_record)  # its end now floats; only its begin is glued, to A
 
-        page.delete_shape(a)
+    page.delete_shape(a)
 
-        assert page.shapes.by_id(ab.ID) is None
-        assert _referencing(page, ab.ID) == []
-        assert page.shapes.by_id(b.ID) is not None
+    assert page.shapes.by_id(ab.ID) is None
+    assert _referencing(page, ab.ID) == []
+    assert page.shapes.by_id(b.ID) is not None
 
 
 def test_deleting_a_connector_leaves_the_shapes_it_joined_and_their_other_glue(vsdx_copy):
     """Fails if deleting a connector directly cascades into the shapes it joins (#105)."""
-    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
-        page, (a, b, c), (ab, bc) = _three_connected(vis)
+    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    page, (a, b, c), (ab, bc) = _three_connected(vis)
 
-        page.delete_shape(ab)
+    page.delete_shape(ab)
 
-        assert page.shapes.by_id(ab.ID) is None
-        assert _referencing(page, ab.ID) == []
-        for shape in (a, b, c, bc):
-            assert page.shapes.by_id(shape.ID) is not None
-        assert {record.attrib["FromCell"] for record in _referencing(page, bc.ID)} == {"BeginX", "EndX"}
+    assert page.shapes.by_id(ab.ID) is None
+    assert _referencing(page, ab.ID) == []
+    for shape in (a, b, c, bc):
+        assert page.shapes.by_id(shape.ID) is not None
+    assert {record.attrib["FromCell"] for record in _referencing(page, bc.ID)} == {"BeginX", "EndX"}
 
 
 def test_every_shape_a_delete_takes_is_detached(vsdx_copy):
     """Fails if a connector removed by the cascade still answers through a Shape held before the delete (#105)."""
-    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
-        page, (_, b, _), (ab, bc) = _three_connected(vis)
+    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    page, (_, b, _), (ab, bc) = _three_connected(vis)
 
-        page.delete_shape(b)
+    page.delete_shape(b)
 
-        for gone in (b, ab, bc):
-            assert not gone.is_attached
-            with pytest.raises(InvalidOperationError, match="no longer in the document"):
-                _ = gone.text
+    for gone in (b, ab, bc):
+        assert not gone.is_attached
+        with pytest.raises(InvalidOperationError, match="no longer in the document"):
+            _ = gone.text
 
 
 def test_a_shape_a_showif_hides_takes_its_connectors_and_records(vsdx_copy):
@@ -250,33 +250,33 @@ def test_a_shape_a_showif_hides_takes_its_connectors_and_records(vsdx_copy):
     `delete_shape`, and the connector glued to it survived with a record
     naming a shape no longer there.
     """
-    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
-        page, (a, b, c), (ab, bc) = _three_connected(vis)
-        a.text = "{% showif show_a %}A"
+    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    page, (a, b, c), (ab, bc) = _three_connected(vis)
+    a.text = "{% showif show_a %}A"
 
-        vis.jinja_render_vsdx({"show_a": False})
+    vis.jinja_render_vsdx({"show_a": False})
 
-        page = vis.pages[0]
-        ids = {shape.ID for shape in page.shapes}
-        assert a.ID not in ids
-        assert ab.ID not in ids
-        assert _referencing(page, a.ID) == []
-        assert _referencing(page, ab.ID) == []
-        assert {b.ID, c.ID, bc.ID} <= ids
-        assert len(_referencing(page, bc.ID)) == 2
+    page = vis.pages[0]
+    ids = {shape.ID for shape in page.shapes}
+    assert a.ID not in ids
+    assert ab.ID not in ids
+    assert _referencing(page, a.ID) == []
+    assert _referencing(page, ab.ID) == []
+    assert {b.ID, c.ID, bc.ID} <= ids
+    assert len(_referencing(page, bc.ID)) == 2
 
 
 def test_a_connector_a_showif_hides_takes_only_its_own_records(vsdx_copy):
     """Fails if a connector rendered out leaves its glue records naming it (#105)."""
-    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
-        page, (a, b, _), (ab, bc) = _three_connected(vis)
-        ab.text = "{% showif False %}"
+    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    page, (a, b, _), (ab, bc) = _three_connected(vis)
+    ab.text = "{% showif False %}"
 
-        vis.jinja_render_vsdx({})
+    vis.jinja_render_vsdx({})
 
-        page = vis.pages[0]
-        ids = {shape.ID for shape in page.shapes}
-        assert ab.ID not in ids
-        assert _referencing(page, ab.ID) == []
-        assert {a.ID, b.ID, bc.ID} <= ids
-        assert len(_referencing(page, bc.ID)) == 2
+    page = vis.pages[0]
+    ids = {shape.ID for shape in page.shapes}
+    assert ab.ID not in ids
+    assert _referencing(page, ab.ID) == []
+    assert {a.ID, b.ID, bc.ID} <= ids
+    assert len(_referencing(page, bc.ID)) == 2

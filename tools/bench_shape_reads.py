@@ -91,10 +91,10 @@ def main() -> None:
     workdir = tempfile.mkdtemp()
     try:
         path = shutil.copy(S05, workdir)
-        with VisioFile(path) as vis:
-            _report("s05 page 1", vis.pages[0])
-            _grow(vis.pages[0], 1000)
-            _report("s05 page 1 grown", vis.pages[0])
+        vis = VisioFile(path)
+        _report("s05 page 1", vis.pages[0])
+        _grow(vis.pages[0], 1000)
+        _report("s05 page 1 grown", vis.pages[0])
     finally:
         shutil.rmtree(workdir)
 

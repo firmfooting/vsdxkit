@@ -120,7 +120,6 @@ class Page:
         details="Use Page.name property instead",
     )
     def set_name(self, value: str) -> None:
-        self.vis._require_open("Page.set_name()")
         # the `name` setter edits the store's own pages.xml tree, Name and NameU
         # both; this used to go on to overwrite that tree with a fresh parse
         # carrying only Name, which left NameU with the old name
@@ -137,7 +136,6 @@ class Page:
 
     @name.setter
     def name(self, value: str) -> None:
-        self.vis._require_open("Setting Page.name")
         previous = self.name
         page = self._page_xml()
         page.attrib["Name"] = value
@@ -167,7 +165,6 @@ class Page:
 
     @background.setter
     def background(self, value: bool) -> None:
-        self.vis._require_open("Setting Page.background")
         self._page_xml().attrib["Background"] = "1" if value else "0"
 
     def _get_page_name(self) -> str:
@@ -217,7 +214,6 @@ class Page:
 
     @width.setter
     def width(self, value: float | str | None) -> None:
-        self.vis._require_open("Setting Page.width")
         self._pagesheet_cell("PageWidth").attrib["V"] = _dimension_value(value)
 
     @property
@@ -226,7 +222,6 @@ class Page:
 
     @height.setter
     def height(self, value: float | str | None) -> None:
-        self.vis._require_open("Setting Page.height")
         self._pagesheet_cell("PageHeight").attrib["V"] = _dimension_value(value)
 
     @property
@@ -235,7 +230,6 @@ class Page:
 
     @xml.setter
     def xml(self, value: PartTree | None) -> None:
-        self.vis._require_open("Setting Page.xml")
         if value is None:
             raise InvalidOperationError(
                 f"Page.xml cannot be set to None: {self.filename} cannot be removed through "
@@ -296,7 +290,6 @@ class Page:
     def rels_xml(self, value: PartTree | None) -> None:
         # None takes the rels part out of the package as well: the save writes
         # whatever the store holds, so a part left behind would reach the file
-        self.vis._require_open("Setting Page.rels_xml")
         attached = self._rels_attached()
         self._rels_xml = value
         if attached:
@@ -360,7 +353,6 @@ class Page:
         return self.vis.pages.index(self) if self in self.vis.pages else None
 
     def add_connect(self, connect: Connect) -> None:
-        self.vis._require_open("Page.add_connect()")
         connects = self.xml.find(f".//{namespace}Connects")
         if connects is None:
             connects = ET.fromstring(
@@ -420,12 +412,10 @@ class Page:
         return next((shape for shape in self.shapes if text in shape.text), None)
 
     def apply_text_context(self, context: dict[str, object]) -> None:
-        self.vis._require_open("Page.apply_text_context()")
         for shape in self.child_shapes:
             shape.apply_text_filter(context)
 
     def find_replace(self, old: str, new: str) -> None:
-        self.vis._require_open("Page.find_replace()")
         for shape in self.child_shapes:
             shape.find_replace(old, new)
 
@@ -532,7 +522,6 @@ class Page:
         :returns: the new connector Shape
         :rtype: Shape
         """
-        self.vis._require_open("Page.connect_shapes()")
         return Connect.create(
             page=self, from_shape=from_shape, to_shape=to_shape, route=route, from_cp=from_cp, to_cp=to_cp, options=options
         )
@@ -546,7 +535,6 @@ class Page:
 
         :returns: the new lane Shape
         """
-        self.vis._require_open("Page.add_swimlane()")
         container = self.get_container()
         if container is None:
             raise InvalidOperationError("page has no CFF Container")
@@ -554,7 +542,6 @@ class Page:
 
     def add_shape_to_lane(self, shape: Shape, lane: Shape) -> None:
         """Move a shape so its centre lies within a CFF swimlane's geometric band."""
-        self.vis._require_open("Page.add_shape_to_lane()")
         container = self.get_container()
         if container is None:
             raise InvalidOperationError("page has no CFF Container")
@@ -580,7 +567,6 @@ class Page:
 
         :returns: the connector Shape
         """
-        self.vis._require_open("Page.reanchor_connector()")
         return Connect.retarget(
             page=self,
             connector_shape=connector_shape,
@@ -601,7 +587,6 @@ class Page:
 
         :raises NotFoundError: if the shape is not on this page
         """
-        self.vis._require_open("Page.delete_shape()")
         shape_id = str(shape.ID)
         # Identity, not id: Visio shape ids are page-scoped and collide freely
         # across pages, so matching on the number would accept a shape from a
@@ -676,7 +661,6 @@ class Page:
         connector's own glue. ``match="either"`` also removes records pointing
         at them, for a shape that is going away entirely.
         """
-        self.vis._require_open("Page.remove_connect_records()")
         if match not in ("from", "either"):
             raise ValueError(f"match must be 'from' or 'either', not {match!r}")
         connects_el = self.xml.find(f".//{namespace}Connects")
