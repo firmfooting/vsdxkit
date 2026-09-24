@@ -784,15 +784,16 @@ def test_connecting_a_shape_with_no_pin_coordinates_raises_invalid_operation(vsd
     assert isinstance(caught.value, ValueError)
 
 
-def test_a_page_with_no_container_raises_invalid_operation(vsdx_copy):
-    """Fails if `Page.add_swimlane` refuses a page with no CFF container with anything but `InvalidOperationError`.
+def test_a_page_with_no_container_raises_not_found(vsdx_copy):
+    """Fails if `Page.require_swimlanes` reports a page with no CFF container with anything but `NotFoundError`.
 
-    A swimlane needs a container to go into. The call is valid on a page that
-    has one, so this page's state is what refuses it.
+    The diagram is looked up on the page, and a lookup that finds nothing is
+    what `NotFoundError` is for; `Page.swimlanes` answers None instead.
     """
     vis = Document.open(vsdx_copy("test1.vsdx"))
-    with pytest.raises(InvalidOperationError, match="no CFF Container"):
-        vis.pages[0].add_swimlane("Lane")
+    assert vis.pages[0].swimlanes is None
+    with pytest.raises(NotFoundError, match="no CFF container"):
+        vis.pages[0].require_swimlanes()
 
 
 def test_appending_a_shape_to_a_non_group_raises_invalid_operation(vsdx_copy):
