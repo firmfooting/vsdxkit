@@ -187,6 +187,22 @@ def test_a_master_whose_shape_is_replaced_is_read_anew(vsdx_copy):
     assert page.connectors == ()
 
 
+def test_a_floating_end_is_not_a_shape_without_an_id(vsdx_copy):
+    """Fails if an absent end is looked up and resolves to a malformed shape that has no ID."""
+    page = _page(vsdx_copy)
+    a, b = _ends(page)
+    connector = page.connect(a, b)
+    _drop_record(page, connector, "BeginX")
+    shapes = page.xml.getroot().find(f"{NS}Shapes")
+    for _ in range(2):
+        nameless = copy.deepcopy(a.xml)
+        del nameless.attrib["ID"]
+        shapes.append(nameless)
+
+    assert b.connected_shapes == ()
+    assert b.connectors == (connector,)
+
+
 def test_a_duplicate_id_makes_the_graph_refuse(vsdx_copy):
     """Fails if the endpoint index picks one of two shapes sharing an ID rather than reporting the invalid page."""
     page = _page(vsdx_copy)

@@ -1800,11 +1800,15 @@ class Shape:
         if not glued:
             return []
         shapes = list(self.page.shapes)
-        by_id: dict[str | None, list[Shape]] = {}
+        by_id: dict[str, list[Shape]] = {}
         for shape in shapes:
-            by_id.setdefault(shape.ID, []).append(shape)
+            if shape.ID is not None:
+                by_id.setdefault(shape.ID, []).append(shape)
 
         def resolve(shape_id: str | None) -> Shape | None:
+            # an end with no record is floating, whatever shapes lack an ID
+            if shape_id is None:
+                return None
             found = by_id.get(shape_id, [])
             if len(found) > 1:
                 # as ShapeCollection.by_id reports it: a page with two shapes
