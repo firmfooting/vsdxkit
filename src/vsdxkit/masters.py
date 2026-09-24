@@ -82,9 +82,9 @@ class MasterCatalog:
         # matches by name, and would be imported again by every later copy
         self._imported: weakref.WeakKeyDictionary[MasterCatalog, dict[str, str]] = weakref.WeakKeyDictionary()
         # every wrapper a walk builds asks whether its master shape is 1-D, so
-        # each is answered once per revision rather than once per wrapper
-        self._one_d: dict[tuple[str, str | None], bool] = {}
-        self._one_d_revision = self._revision
+        # each master shape is found once per revision rather than once per wrapper
+        self._shape_elements: dict[tuple[str, str | None], Element | None] = {}
+        self._shape_elements_revision = self._revision
 
     @property
     def pages(self) -> list[Page]:
@@ -148,18 +148,18 @@ class MasterCatalog:
     def is_one_d(self, master_id: str, master_shape_id: str | None) -> bool:
         """Whether the master shape an instance inherits from is 1-D: the master's top shape, or the one `master_shape_id` names.
 
-        Every wrapper a walk builds asks this, so each answer is held until
-        :attr:`revision` moves. A master is not edited in place into a line or
-        out of one; one that were would be seen at the next revision.
+        Every wrapper a walk builds asks this, so the master shape's element is
+        found once and held until :attr:`revision` moves. Its cells are read on
+        every call, so a master edited in place is seen at once.
         """
-        if self._one_d_revision != self._revision:
-            self._one_d.clear()
-            self._one_d_revision = self._revision
+        if self._shape_elements_revision != self._revision:
+            self._shape_elements.clear()
+            self._shape_elements_revision = self._revision
         key = (master_id, master_shape_id)
-        if key not in self._one_d:
-            element = self._find_shape_element(master_id, master_shape_id)
-            self._one_d[key] = element is not None and is_connector_element(element)
-        return self._one_d[key]
+        if key not in self._shape_elements:
+            self._shape_elements[key] = self._find_shape_element(master_id, master_shape_id)
+        element = self._shape_elements[key]
+        return element is not None and is_connector_element(element)
 
     def _find_shape_element(self, master_id: str, master_shape_id: str | None) -> Element | None:
         page = self.by_id(master_id)

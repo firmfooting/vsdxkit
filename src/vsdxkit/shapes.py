@@ -1768,8 +1768,7 @@ class Shape:
     @property
     def connectors(self) -> tuple[Connector, ...]:
         """Every connector on the page glued to this shape at either end, in page order."""
-        glued = {record.from_id for record in self.page.connects if record.to_id == self.ID}
-        return tuple(connector for connector in self.page.connectors if connector.ID in glued)
+        return tuple(connector for connector, _ in self._incidence())
 
     @property
     def connected_shapes(self) -> tuple[Shape, ...]:
@@ -1779,11 +1778,33 @@ class Shape:
         leads nowhere else, so neither adds anything.
         """
         shapes: list[Shape] = []
-        for connector in self.connectors:
-            for end in (connector.source, connector.target):
+        for _, ends in self._incidence():
+            for end in ends:
                 if end is not None and end != self and end not in shapes:
                     shapes.append(end)
         return tuple(shapes)
+
+    def _incidence(self) -> list[tuple[Connector, tuple[Shape | None, Shape | None]]]:
+        """Each connector glued to this shape, with the shapes its begin and end are glued to.
+
+        One pass over the page's records and one walk of its shapes, however
+        many connectors there are. Only a record from ``BeginX`` or ``EndX``
+        glues an end.
+        """
+        ends: dict[str, dict[str, str]] = {}
+        for record in self.page.connects:
+            if record.from_rel in ("BeginX", "EndX"):
+                ends.setdefault(record.from_id, {})[record.from_rel] = record.to_id
+        glued = {connector_id for connector_id, named in ends.items() if self.ID in named.values()}
+        if not glued:
+            return []
+        shapes = list(self.page.shapes)
+        by_id = {shape.ID: shape for shape in shapes}
+        return [
+            (shape, (by_id.get(ends[shape.ID].get("BeginX", "")), by_id.get(ends[shape.ID].get("EndX", ""))))
+            for shape in shapes
+            if isinstance(shape, Connector) and shape.ID in glued
+        ]
 
 
 class Connector(Shape):

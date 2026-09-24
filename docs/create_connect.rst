@@ -13,6 +13,7 @@ inches, and identify the centre of the shape. ``x`` and ``y`` are keyword-only;
 .. code-block:: python
 
    from vsdxkit.document import Document
+   from vsdxkit.glue import Routing
    from vsdxkit.shape_kind import ShapeKind
 
    vis = Document.open("diagram.vsdx")
@@ -24,8 +25,8 @@ inches, and identify the centre of the shape. ``x`` and ``y`` are keyword-only;
    )
    decision = page.create_shape(ShapeKind.DECISION, x=10.0, y=6.0, text="OK?")
 
-   page.connect_shapes(start, work)
-   page.connect_shapes(work, decision, route="rightangle")
+   page.connect(start, work)
+   page.connect(work, decision, routing=Routing.RIGHT_ANGLE)
    vis.save("flow.vsdx")
 
 Shape kinds

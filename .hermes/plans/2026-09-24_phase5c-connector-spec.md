@@ -31,13 +31,19 @@ Authority: `.hermes/plans/2026-09-12_simplification-usability-refactor.md`,
 One function, `shapes._wrap(xml, parent, page) -> Shape`, builds every wrapper a
 walk, a copy or a lane lookup returns, and makes a `Connector` exactly when the
 shape is 1-D: it has its own `BeginX`, or the master shape it inherits from
-does. `MasterCatalog.is_one_d(master id, master shape id)` answers the second
-once per catalog revision. Equality and hash stay element identity, so
-`Shape(e) == Connector(e)`.
+does. `MasterCatalog.is_one_d(master id, master shape id)` finds the master
+shape's element once per catalog revision and reads its cells on every call, so
+a master edited in place is seen at once. Equality and hash stay element
+identity, so `Shape(e) == Connector(e)`.
 
-Cost, best of 20 walks of a 1503-shape page: main 3.8 ms, this branch 6.1 ms.
+Cost, best of 20 walks of a 1503-shape page: main 3.8 ms, this branch 7.9 ms.
 The cell test is a plain loop over the element's children; an ElementPath
-attribute predicate made it 12.9 ms.
+attribute predicate made it 12.9 ms. Remembering the master's answer rather
+than its element made it 6.1 ms, but went stale when a master was edited.
+
+`Shape.connectors` and `connected_shapes` read the page's records once and walk
+its shapes once, whatever the number of connectors. Only a record from `BeginX`
+or `EndX` counts as a glued end.
 
 ## Removed
 

@@ -1,6 +1,7 @@
 """Connector: the 1-D shape, its ends, and the graph queries over them (#109)."""
 
 import os
+import xml.etree.ElementTree as ET
 
 import pytest
 
@@ -136,6 +137,36 @@ def test_connected_shapes_are_the_other_ends_once_each(vsdx_copy):
     assert isinstance(a.connectors, tuple)
     assert isinstance(a.connected_shapes, tuple)
     assert isinstance(page.connectors, tuple)
+
+
+def test_a_record_that_glues_no_end_is_not_incidence(vsdx_copy):
+    """Fails if a Connect record from a connector's other cells counts as one of its ends being glued."""
+    page = _page(vsdx_copy)
+    a, b = _ends(page)
+    c = page.create_shape(ShapeKind.PROCESS, x=7.0, y=6.0, text="C")
+    connector = page.connect(a, b)
+    record = ET.SubElement(page.xml.find(f".//{NS}Connects"), f"{NS}Connect")
+    record.attrib.update({"FromSheet": connector.ID, "FromCell": "Controls.Row_1", "ToSheet": c.ID, "ToCell": "PinX"})
+
+    assert connector not in c.connectors
+    assert c.connected_shapes == ()
+    assert c not in a.connected_shapes
+
+
+def test_a_master_edited_into_a_line_makes_its_instances_connectors(vsdx_copy):
+    """Fails if whether a master is 1-D is remembered past an edit to its cells."""
+    page = _page(vsdx_copy, WIRED)
+    connectors = page.connectors
+    assert connectors
+    master = connectors[0].master_shape
+    for connector in connectors:
+        connector.xml.remove(connector.xml.find(f'{NS}Cell[@N="BeginX"]'))
+    # 1-D now only by the master, which this walk asks about
+    assert page.connectors == connectors
+
+    master.xml.remove(master.xml.find(f'{NS}Cell[@N="BeginX"]'))
+
+    assert page.connectors == ()
 
 
 def test_retarget_moves_the_named_end_and_keeps_the_other(vsdx_copy):
