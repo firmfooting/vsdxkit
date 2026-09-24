@@ -18,7 +18,7 @@ else:
 
 
 from vsdxkit import namespace, r_namespace
-from vsdxkit.connectors import _Connect, _create_connector, _float_ends
+from vsdxkit.connectors import _Connect, _float_ends, _glue_connector, _plan_connector
 from vsdxkit.errors import InvalidOperationError, MissingPartError, NotFoundError, PackageError
 from vsdxkit.glue import ConnectorOptions, Glue, Routing
 from vsdxkit.package import XmlPart
@@ -477,7 +477,10 @@ class Page:
         :returns: the new connector
         """
         options = ConnectorOptions(glue=glue, routing=routing, from_point=from_point, to_point=to_point)
-        return _create_connector(self, source, target, options)
+        begin, end = _plan_connector(self, source, target, options)
+        connector = self.vis._copy_connector(self)
+        _glue_connector(connector, begin, end, options)
+        return connector
 
     @property
     def connectors(self) -> tuple[Connector, ...]:
@@ -529,14 +532,10 @@ class Page:
         :raises InvalidOperationError: if a prototype belongs to another document
         :returns: the new shape
         """
-        # vsdxkit.media opens its donors as Documents, which import this
-        # module, so importing it at module level would be a cycle
-        from vsdxkit import media
-
         if not self._attached():
             raise InvalidOperationError(f"page {self.name!r} is no longer in its document, so nothing can be created on it")
         if isinstance(kind_or_prototype, ShapeKind):
-            source = media._kind_shape(kind_or_prototype)
+            source = self.vis._kind_source(kind_or_prototype)
         elif isinstance(kind_or_prototype, Shape):
             kind_or_prototype._require_attached("Page.create_shape()")
             if kind_or_prototype.page.vis is not self.vis:
@@ -554,12 +553,8 @@ class Page:
         # what the copy's formulas may no longer name: the groups the prototype
         # sat in, and on another page, every shape of the page it left
         left_behind = _left_behind(source, self)
-        if isinstance(kind_or_prototype, ShapeKind):
-            shape = media.copy_kind(kind_or_prototype, self)
-            label = "" if text is None else text
-        else:
-            shape = kind_or_prototype.copy(self)
-            label = text
+        shape = source.copy(self)
+        label = ("" if text is None else text) if isinstance(kind_or_prototype, ShapeKind) else text
         if one_d:
             _place_one_d(shape, x, y, width)
         else:

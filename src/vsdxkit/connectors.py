@@ -27,6 +27,9 @@ if TYPE_CHECKING:
     # its connection point, `None` for dynamic glue. A floating end is `None`.
     _End: TypeAlias = "tuple[Shape, int | None] | None"
 
+    # an end that is glued: the shape, and its connection point or `None` for dynamic glue
+    _Glued: TypeAlias = "tuple[Shape, int | None]"
+
 namespace = "{http://schemas.microsoft.com/office/visio/2012/main}"
 
 # a Connect record's ToPart for connection point row n is 100 + n, and its ToCell Connections.X{n + 1}
@@ -145,8 +148,8 @@ class _Connect:
         return self.xml.attrib.get("ToCell")
 
 
-def _create_connector(page: Page, source: Shape, target: Shape, options: ConnectorOptions) -> Connector:
-    """A new connector on `page`, glued from `source` to `target` as `options` say.
+def _plan_connector(page: Page, source: Shape, target: Shape, options: ConnectorOptions) -> tuple[_Glued, _Glued]:
+    """The two ends of a new connector on `page`, glued from `source` to `target` as `options` say.
 
     Everything is checked before anything is written: both shapes are on
     `page`, and each connection point exists.
@@ -157,29 +160,14 @@ def _create_connector(page: Page, source: Shape, target: Shape, options: Connect
         _check_endpoint(page, shape, None)
     for glued in (begin, end):
         _check_point(glued)
+    return begin, end
 
-    # vsdxkit.media opens its donors as Documents, which import this
-    # module, so importing it at module level would be a cycle
-    from vsdxkit import media
 
-    # the copy imports the connector's master, whether or not this
-    # document has masters yet, and relates the page to it (#375)
-    connector = media.copy_connector(page)
-    connector.text = ""  # clear text used to find shape
-
-    # copy style used by new connector shape
-    master_shape = connector.master_shape
-    line_style_id = master_shape.line_style_id if master_shape is not None else None
-    if line_style_id is not None and not isinstance(page.vis._get_style_by_id(line_style_id), Element):
-        # assume same if is ok, todo: use names for match and increment IDs
-        media_style = media.media_style(line_style_id)
-        if media_style is not None:
-            page.vis._style_sheets().append(media_style)  # a copy of the donor's
-
+def _glue_connector(connector: Shape, begin: _Glued, end: _Glued, options: ConnectorOptions) -> None:
+    """Glue a new connector's ends as :func:`_plan_connector` planned them."""
     _write(connector, begin, end, routing_cells(options.routing, dynamic=options.glue is Glue.DYNAMIC))
     # initial endpoints so the file renders sensibly even before Visio recalculates
-    connector.set_start_and_finish(source.center_x_y, target.center_x_y)
-    return connector
+    connector.set_start_and_finish(begin[0].center_x_y, end[0].center_x_y)
 
 
 def _retarget_connector(

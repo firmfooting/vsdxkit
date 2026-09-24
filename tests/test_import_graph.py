@@ -37,11 +37,6 @@ class Edge(NamedTuple):
 
 
 ALLOWED = {
-    # 6b, the donors: media is reached through the document, not imported
-    Edge("connectors", "media", "function"),
-    Edge("connectors", "media", "root"),
-    Edge("pages", "media", "function"),
-    Edge("pages", "media", "root"),
     # 6c, the seams: each upward edge becomes a Protocol in the lower module
     Edge("connectors", "pages", "typing"),
     Edge("connectors", "shapes", "typing"),

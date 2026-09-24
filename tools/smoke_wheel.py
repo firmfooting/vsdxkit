@@ -78,8 +78,8 @@ def main() -> int:
 
     # 4. load the bundled donors, then exercise the creation APIs against a sample document
     try:
-        media._sentinel(media.PALETTE, "PALETTE_PROCESS")
-        media._sentinel(media.MEDIA, media.STRAIGHT_CONNECTOR)
+        media._sentinel(media.PALETTE, "PALETTE_PROCESS", Document.open)
+        media._sentinel(media.MEDIA, media.STRAIGHT_CONNECTOR, Document.open)
     except Exception as error:  # smoke harness reports every failure mode
         fail(f"loading the bundled donors failed from the installed wheel: {error}")
         return 1

@@ -19,9 +19,10 @@ from vsdxkit import (
     r_namespace,
     vt_namespace,
 )
-from vsdxkit.errors import InvalidOperationError, MissingPartError
+from vsdxkit.errors import InvalidOperationError, MalformedPackageError, MissingPartError
 from vsdxkit.logging_support import get_logger
 from vsdxkit.masters import MasterCatalog
+from vsdxkit.media import MEDIA, _connector_shape, _kind_shape, _style_copy
 from vsdxkit.package import PackageLimits, PackageStore, XmlPart, check_relationship_target
 from vsdxkit.pages import Page, PageCollection, _PagePosition
 from vsdxkit.partnames import (
@@ -34,7 +35,8 @@ from vsdxkit.partnames import (
     target_part_name,
 )
 from vsdxkit.relationships import append_if_absent, ensure_override, remove, remove_override
-from vsdxkit.shapes import Shape, _text_runs_of, _write_text, find_or_create_shapes_tag, substitute
+from vsdxkit.shape_kind import ShapeKind
+from vsdxkit.shapes import Connector, Shape, _text_runs_of, _write_text, find_or_create_shapes_tag, substitute
 from vsdxkit.templating import render_document
 from vsdxkit.xmlio import (
     PartTree,
@@ -531,6 +533,31 @@ class Document:
 
     def _get_style_by_id(self, ID: str) -> Element | None:
         return self._style_sheets().find(f"{namespace}StyleSheet[@ID = '{ID}']")
+
+    def _kind_source(self, kind: ShapeKind) -> Shape:
+        """The bundled shape `kind` is copied from; see :mod:`vsdxkit.media`."""
+        return _kind_shape(kind, Document.open)
+
+    def _copy_connector(self, page: Page) -> Connector:
+        """A copy of the bundled dynamic connector on `page`, one of this document's pages.
+
+        The copy imports the connector's master, whether or not this document
+        has masters yet, and relates the page to it (#375). Its sentinel text
+        is cleared, and the line style its master names is imported unless
+        this document already has a style with that ID.
+        """
+        connector = _connector_shape(Document.open).copy(page)
+        if not isinstance(connector, Connector):
+            raise MalformedPackageError(f"the bundled connector in {MEDIA} is not a 1-D shape")
+        connector.text = ""  # the sentinel text it was found by
+        master_shape = connector.master_shape
+        line_style_id = master_shape.line_style_id if master_shape is not None else None
+        # a style with the same ID is taken to be the same style
+        if line_style_id is not None and self._get_style_by_id(line_style_id) is None:
+            style = _style_copy(line_style_id, Document.open)
+            if style is not None:
+                self._style_sheets().append(style)
+        return connector
 
     def _heading_pairs(self) -> Element:
         # return HeadingPairs element from app.xml
