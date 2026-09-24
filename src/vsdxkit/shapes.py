@@ -35,12 +35,20 @@ class PageView(Protocol):
 
     The type of a shape's back-reference to its page. It lists the page's
     public API apart from ``swimlanes``, ``require_swimlanes`` and ``vis``,
-    whose types are declared above this module. At runtime the object is the
-    :class:`vsdxkit.pages.Page` itself.
+    whose types are declared above this module, and apart from the page's
+    part-level attributes, such as ``filename``, ``page_id`` and ``rel_id``.
+    For those, use the :class:`vsdxkit.pages.Page` you hold. At runtime the
+    object is that ``Page`` itself.
     """
 
     @property
     def name(self) -> str: ...
+
+    @property
+    def background(self) -> bool: ...
+
+    @property
+    def index_num(self) -> int | None: ...
 
     @property
     def xml(self) -> PartTree: ...
@@ -85,6 +93,8 @@ class PageView(Protocol):
         text: str | None = ...,
     ) -> Shape: ...
 
+    def apply_text_context(self, context: dict[str, object]) -> None: ...
+
     def find_replace(self, old: str, new: str) -> None: ...
 
 
@@ -98,6 +108,7 @@ class _PageSeam(PageView, _ConnectorPage, Protocol):
     @property
     def filename(self) -> str: ...
 
+    # read by `Page._carry_relationships`, through its `source: _PageSeam`
     @property
     def rels_xml(self) -> PartTree | None: ...
 

@@ -78,3 +78,7 @@ def connect_through_back_reference(shape: Shape, other: Shape) -> Connector:
 
 def page_shapes_through_back_reference(shape: Shape) -> list[Shape]:
     return list(shape.page.shapes)
+
+
+def page_state_through_back_reference(shape: Shape) -> tuple[bool, int | None]:
+    return shape.page.background, shape.page.index_num
