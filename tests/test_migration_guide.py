@@ -100,6 +100,20 @@ def test_a_root_name_needs_its_root_import(modules):
     assert check.unexplained(["vsdx.Page"], ["from vsdx import Page, PagePosition"], modules) == []
 
 
+def test_a_value_0_8_published_under_a_new_name_is_in_the_snapshot(monkeypatch):
+    """Fails if the aliases `relationships` bound with `from vsdx import x as NEW` drop out of the surface checked.
+
+    0.8.0 chose those names, and the guide has an entry for them; without them in
+    the snapshot, deleting the entry would leave the check green.
+    """
+    monkeypatch.chdir(ROOT)
+    with open(check.SNAPSHOT, encoding="utf-8") as snapshot:
+        names = set(snapshot.read().split())
+
+    assert {"vsdx.relationships.CONTENT_TYPES_NS", "vsdx.relationships.RELATIONSHIPS_NS"} <= names
+    assert check.unexplained(["vsdx.relationships.CONTENT_TYPES_NS"], [], check.vsdxkit_modules())
+
+
 def test_code_blocks_count_as_literals():
     text = "Title\n\n.. code-block:: python\n\n   vis.gone_call()\n\nProse gone_prose.\n"
 

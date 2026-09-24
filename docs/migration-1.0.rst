@@ -432,10 +432,20 @@ which is gone along with its module. Membership is still geometric.
    ``diagram.container``.
 
 ``container.page``
-   ``diagram.container.page``.
+   ``diagram.container.page``, or the page you asked for the diagram. A
+   diagram whose container has been deleted raises
+   :class:`vsdxkit.errors.InvalidOperationError` from every operation,
+   ``diagram.container`` included, where 0.x kept ``container.page`` and
+   answered ``None`` for ``container.container_shape``. Keep the page if code
+   that runs after a deletion needs it; ``page.swimlanes`` then says whether
+   the page still has a diagram.
 
 ``container.lane_band(lane)``, ``container.swimlane_list``, ``container.lane_heading(lane)``, ``Container.find(page)``
-   Gone. A lane's band is its ``y`` plus or minus half its ``height``.
+   Gone. A lane's band is its ``y`` plus or minus half its height, where a
+   lane with no height, or a zero one, counts as
+   ``vsdxkit.swimlanes.LANE_PITCH_INCHES`` high:
+   ``half = (lane.height or LANE_PITCH_INCHES) / 2``. ``diagram.lane_for``
+   and ``diagram.shapes_in`` use the same band.
 
 ``vsdxkit.containers.get_user_row``, ``containers.set_user_row_value``
    Gone. To label a lane, use ``diagram.set_lane_label(lane, label)``, which
@@ -447,10 +457,20 @@ which is gone along with its module. Membership is still geometric.
 
       from vsdxkit import namespace
 
-      row = shape.xml.find(f"{namespace}Section[@N='User']/{namespace}Row[@N='{name}']")
+      rows = (
+          row
+          for section in shape.xml.findall(f"{namespace}Section")
+          if section.get("N") == "User"
+          for row in section.findall(f"{namespace}Row")
+          if row.get("N") == name
+      )
+      row = next(rows, None)
       value = None if row is None else row.find(f"{namespace}Cell[@N='Value']")
       if value is not None:
           value.set("V", new_value)
+
+   The row name is compared in Python rather than written into the path, so
+   a name holding a quote, such as ``Owner's``, still matches.
 
    As in 0.x, a row that is absent is not created.
 

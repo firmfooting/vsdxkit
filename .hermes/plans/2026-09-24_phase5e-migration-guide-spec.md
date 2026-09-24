@@ -24,8 +24,10 @@ everything since the `v0.8.0` tag is unreleased. The package imported as
 - every other name the root defined: the namespace constants and
   `pretty_print_element`;
 - every public name a `vsdx` module's own source bound at its top level: a
-  def, class or assignment such as `connectors.namespace`, not an import
-  (loggers and type variables are left out);
+  def, class or assignment such as `connectors.namespace`, not an import,
+  except a value imported under a new name (`relationships.CONTENT_TYPES_NS`
+  is `from vsdx import cont_types_namespace as CONTENT_TYPES_NS`; Codex on
+  #409). Loggers, type variables and modules are left out;
 - every public member of a class it defined, including inherited members
   from `vsdx` bases, and the attributes its methods assign on `self`
   (`container.page`, `vis.zip_file_contents`), read from the class's source.

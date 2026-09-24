@@ -1,6 +1,7 @@
 # The public surface of vsdx 0.8.0, the last release before 1.0: every name in
 # vsdx.__all__ and every other name the package root defined; every public name
-# a vsdx module bound at its top level, not one it imported; and every public
+# a vsdx module bound at its top level, not one it imported, except a value it
+# imported under a new name (`from vsdx import x as NEW`); and every public
 # member of a class it defined, including the attributes its methods assign on
 # self. tools/check_migration_guide.py reads it; it never changes.
 vsdx.Cell
@@ -177,6 +178,8 @@ vsdx.pages.Page.sub_shapes
 vsdx.pages.Page.vis
 vsdx.pages.Page.width
 vsdx.pages.Page.xml
+vsdx.relationships.CONTENT_TYPES_NS
+vsdx.relationships.RELATIONSHIPS_NS
 vsdx.relationships.all_of
 vsdx.relationships.find
 vsdx.relationships.allocate_id
