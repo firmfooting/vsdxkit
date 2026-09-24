@@ -100,10 +100,11 @@ The class is :class:`vsdxkit.document.Document`, in the module
 ``VisioFile.jinja_render_vsdx(context)``
    ``Document.render(context)``.
 
-``vsdxkit.templating.JinjaTemplatingMixin``
+``vsdx.templating.JinjaTemplatingMixin``
    Gone. ``Document`` has no base class. ``Document.render(context)`` calls
-   :func:`vsdxkit.templating.render_document`, which renders any object with
-   ``pages`` and ``increment_sub_shape_ids``. The mixin's
+   ``vsdxkit.templating.render_document(document, context)``, which takes a
+   :class:`~vsdxkit.templating.RenderTarget`. The context may be any mapping,
+   not only a ``dict``. The mixin's
    ``JinjaTemplatingMixin.increment_sub_shape_ids`` was a placeholder for the
    document's own method, which stays.
 

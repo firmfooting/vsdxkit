@@ -71,8 +71,11 @@ Rendering as a function
 -----------------------
 
 :meth:`~vsdxkit.document.Document.render` calls
-:func:`vsdxkit.templating.render_document`. The function takes any object
-with the document's ``pages`` and ``increment_sub_shape_ids``, and a context
-that is any mapping, not only a ``dict``.
+:func:`vsdxkit.templating.render_document`. The function takes a
+:class:`~vsdxkit.templating.RenderTarget`, and a context that is any mapping,
+not only a ``dict``.
 
 .. autofunction:: vsdxkit.templating.render_document
+
+.. autoclass:: vsdxkit.templating.RenderTarget
+   :members:

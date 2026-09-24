@@ -32,4 +32,5 @@ def test_a_read_only_mapping_renders(vsdx_copy):
 
 
 def test_document_has_no_base_but_object():
+    """Fails if Document takes behaviour from a base class again (#94, #113)."""
     assert Document.__bases__ == (object,)
