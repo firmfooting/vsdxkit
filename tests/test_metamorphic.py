@@ -59,7 +59,7 @@ PACKAGE_SUFFIXES = (".vsdx", ".vsdm")
 _MAIN_NS = "{http://schemas.microsoft.com/office/visio/2012/main}"
 _PAGES_PART = "visio/pages/pages.xml"
 
-# The cells a connector glues through. `Page.delete_shape` takes a connector
+# The cells a connector glues through. `Shape.delete` takes a connector
 # with the shape it is glued to, and only on a begin/end relationship, so an
 # expectation built here has to draw the same line.
 _GLUE_CELLS = ("BeginX", "EndX")
@@ -267,7 +267,7 @@ def _shapes_a_delete_takes(page: PageObservation, shape_id: int) -> set[int]:
     The shape's own subtree, plus the connectors glued to any of it - one left
     behind has nothing to glue to - plus whatever those connectors contain.
 
-    This is a transcription of the rule `Page.delete_shape` follows, not an
+    This is a transcription of the rule `Shape.delete` follows, not an
     independent derivation of it: there is no second implementation to derive
     one from. So it catches a delete that does not do what the rule says -
     misses a connector, takes a bystander, forgets a record - and it cannot
@@ -416,7 +416,7 @@ def test_copying_a_shape_and_deleting_the_copy_restores_the_package(package_path
         page = vis.pages[0]
         copy = next(iter(page.children)).copy()
         assert int(copy.ID) not in pages[0], "the copy reused an id the page was already using"
-        page.delete_shape(copy)
+        copy.delete()
 
     restored = _saved(source, _output(tmp_path, package_path, "copy-deleted"), copy_then_delete)
     _assert_same_structure(
@@ -457,7 +457,7 @@ def test_deleting_a_copy_made_before_the_last_save_restores_the_package(package_
         page = vis.pages[0]
         reopened = [shape for shape in page.shapes if int(shape.ID) == copied_id]
         assert reopened, f"the copy with id {copied_id} is not on page 1 after the save"
-        page.delete_shape(reopened[0])
+        reopened[0].delete()
 
     restored = _saved(with_copy, _output(tmp_path, package_path, "copy-deleted-later"), delete_the_copy)
 
@@ -532,7 +532,7 @@ def test_reordering_pages_permutes_them_and_changes_nothing_within_them(package_
         )
 
 
-# `Page.delete_shape` removes the Connect records naming the deleted shape but
+# `Shape.delete` removes the Connect records naming the deleted shape but
 # not the `Sheet.N!` references other shapes make to it, so deleting a swimlane
 # leaves each container's `Relationships` dependency list naming a sheet that has
 # gone. The `stale-sheet-reference` rule added with #328 is what made that
@@ -597,7 +597,7 @@ def test_deleting_a_shape_removes_exactly_it(package_path, vsdx_copy, tmp_path):
                 # earlier session; if they have come apart, this deletes a shape
                 # the expectation below was not built for
                 assert int(target.ID) == shape_id, f"position {position} on page {page_index + 1} is not shape {shape_id}"
-                page.delete_shape(target)
+                target.delete()
 
             after = _saved(source, _output(tmp_path, package_path, f"minus-{page_index}-{shape_id}"), delete)
             doomed = _shapes_a_delete_takes(page, shape_id)

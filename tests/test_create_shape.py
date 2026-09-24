@@ -158,7 +158,7 @@ def test_a_prototype_on_another_page_brings_its_relationships(vsdx_copy):
     image = vis.pages[0].shapes.require_id("79")
     (source_id,) = _relationship_ids(image)
     source_target = _target(vis.pages[0], source_id)
-    page = vis.add_page("Elsewhere")
+    page = vis.pages.create("Elsewhere")
 
     copy = page.create_shape(image, x=2.0, y=2.0)
 
@@ -182,7 +182,7 @@ def _target(page, relationship_id):
 def test_a_deleted_prototype_is_refused(vsdx_copy):
     page = Document.open(vsdx_copy(BASE)).pages[0]
     prototype = page.shapes.require_text("Shape A")
-    page.delete_shape(prototype)
+    prototype.delete()
     before = [shape.ID for shape in page.shapes]
 
     with pytest.raises(InvalidOperationError):
@@ -207,7 +207,7 @@ def test_a_copy_onto_another_page_drops_references_to_the_page_it_left(vsdx_copy
     page = vis.pages[0]
     a, b = page.shapes.require_text("Shape A"), page.shapes.require_text("Shape B")
     a.set_cell_formula("Width", f"Sheet.{b.ID}!Width")
-    elsewhere = vis.add_page("Elsewhere")
+    elsewhere = vis.pages.create("Elsewhere")
 
     copy = elsewhere.create_shape(a, x=5.0, y=5.0)
 
@@ -233,7 +233,7 @@ def test_a_removed_page_creates_nothing(vsdx_copy, kind_or_prototype):
     """Fails if a page no longer in its document takes a copy, or imports a master into the document, before refusing."""
     vis = Document.open(vsdx_copy(BASE))
     prototype = vis.pages[0].shapes.require_text("Shape A")
-    removed = vis.add_page("Removed")
+    removed = vis.pages.create("Removed")
     vis.pages.delete(removed)
     masters = len(vis.master_pages)
     children = len(removed.xml.getroot())

@@ -3,7 +3,6 @@ from __future__ import annotations
 import copy
 import html
 import sys
-import warnings
 import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING
@@ -1576,27 +1575,20 @@ class Shape:
             if rewritten != text:
                 shape.text = rewritten
 
-    def remove(self) -> None:
-        """Remove this shape from its page or group.
+    def delete(self) -> None:
+        """Delete this shape from its page, with every connector glued to it.
 
-        Deprecated in favour of :meth:`Page.delete_shape`, which this now calls:
-        it is the single path that also deletes the connectors glued to the
-        shape and their ``Connect`` records. Detaching the element alone left
-        orphan connectors and dangling records behind, and Visio repairs such a
-        package on open. It also raised ``ValueError`` for a shape inside a
-        group, whose XML is held by the group's ``Shapes`` container rather than
-        by the group element the parent Shape wraps.
+        A group takes its members with it, so a connector glued to a member goes
+        too, and so does every ``Connect`` record naming any of them. A
+        connector deleted directly takes only its own records. Afterwards this
+        shape, and every shape held for one that went with it, is detached.
+
+        :raises InvalidOperationError: if the shape is already detached
         """
-        # Not `@deprecation.deprecated`: that decorator is version-gated and
-        # would stay silent until __version__ reaches the release this landed
-        # in, so nothing would warn during the cycle the replacement is in.
-        warnings.warn(
-            "Shape.remove() is deprecated and will be removed in 1.0.0. Use Page.delete_shape(shape), "
-            "which also removes the connectors glued to the shape and their Connect records.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        self.page.delete_shape(self)
+        self._require_attached("deleting a shape")
+        # every id about to disappear: the shape and, for a group, everything
+        # it contains
+        self.page._delete([self], {str(self.ID)} | {str(shape.ID) for shape in self._descendants()})
 
     def append_shape(self, append_shape: Shape) -> None:
         """Place another shape inside this one, with IDs the page is not using.

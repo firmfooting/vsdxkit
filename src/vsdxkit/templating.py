@@ -43,7 +43,6 @@ class JinjaTemplatingMixin:
     def pages(self) -> PageCollection: ...
 
     def increment_sub_shape_ids(self, shape: Shape, page: Page, id_map: dict[str, int] | None = None) -> dict[str, int]: ...
-    def remove_page_by_index(self, index: int) -> None: ...
 
     def render(self, context: dict[str, object]) -> None:
         """Render the document as a Jinja template, in place.
@@ -100,7 +99,7 @@ class JinjaTemplatingMixin:
         for p in pages_to_remove:
             logger.debug("Removing page:'%s' index:%s", p.name, p.index_num)
             if p.index_num is not None:
-                self.remove_page_by_index(p.index_num)
+                self.pages.delete(p)
 
     @staticmethod
     def jinja_render_shape(shape: Page | Shape, context: dict[str, object], loop_shape_ids: list[str]) -> None:

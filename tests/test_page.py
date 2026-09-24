@@ -20,7 +20,7 @@ def _first_shape_containing(shapes, text: str):
 def test_get_page_child_shapes(filename: str, child_count: int, basedir):
     # Check that page has expected number of top level shapes
     vis = Document.open(os.path.join(basedir, filename))
-    page = vis.get_page(0)  # type: Page
+    page = vis.pages[0]  # type: Page
     # check that page has expected number of child shapes
     assert len(page.children) == child_count
 
@@ -155,7 +155,7 @@ def test_set_page_name(filename: str, page_index: int, page_name: str, tmp_path,
 @pytest.mark.parametrize("filename, shape_id", [("test1.vsdx", "6"), ("test2.vsdx", "6")])
 def test_get_shape_with_text(filename: str, shape_id: str, basedir):
     vis = Document.open(os.path.join(basedir, filename))
-    page = vis.get_page(0)  # type: Page
+    page = vis.pages[0]  # type: Page
     shape = _first_shape_containing(page.shapes, "{{date}}")  # type: Shape
     assert shape_id == shape.ID
 
@@ -166,7 +166,7 @@ def test_apply_context(filename: str, tmp_path, basedir):
     context = {"scenario": "test", "date": date_str}
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_VISfilter_applied.vsdx")
     vis = Document.open(os.path.join(basedir, filename))
-    page = vis.get_page(0)  # type: Page
+    page = vis.pages[0]  # type: Page
     original_shape = _first_shape_containing(page.shapes, "{{date}}")  # type: Shape
     assert original_shape.ID
     page.apply_text_context(context)
@@ -174,7 +174,7 @@ def test_apply_context(filename: str, tmp_path, basedir):
 
     # open and find date_str
     vis = Document.open(out_file)
-    page = vis.get_page(0)  # type: Page
+    page = vis.pages[0]  # type: Page
     updated_shape = _first_shape_containing(page.shapes, date_str)  # type: Shape
     assert updated_shape.ID == original_shape.ID
 
@@ -202,7 +202,7 @@ def test_find_replace(filename: str, tmp_path, basedir):
     new = "Figure"
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_VISfind_replace_applied.vsdx")
     vis = Document.open(os.path.join(basedir, filename))
-    page = vis.get_page(0)  # type: Page
+    page = vis.pages[0]  # type: Page
     original_shapes = [s for s in page.shapes if old in s.text]  # type: List[Shape]
     shape_ids = [s.ID for s in original_shapes]
     page.find_replace(old, new)
@@ -210,7 +210,7 @@ def test_find_replace(filename: str, tmp_path, basedir):
 
     # open and find date_str
     vis = Document.open(out_file)
-    page = vis.get_page(0)  # type: Page
+    page = vis.pages[0]  # type: Page
     # test that each shape if has 'new' str in text
     for shape_id in shape_ids:
         shape = page.shapes.require_id(shape_id)
@@ -458,7 +458,7 @@ def test_add_multiple_connectors(filename: str, tmp_path, basedir):
     vis = Document.open(os.path.join(basedir, filename))
     src_page = vis.pages[0]
     block_shape = next(iter(src_page.children))
-    new_page = vis.add_page("new page")
+    new_page = vis.pages.create("new page")
     new_shape1 = block_shape.copy(new_page)
     new_shape1.text = "new shape 1"
     new_shape2 = block_shape.copy(new_page)

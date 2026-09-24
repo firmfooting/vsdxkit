@@ -271,7 +271,7 @@ def test_a_tree_assigned_after_the_pages_part_is_removed_is_saved(vsdx_copy, tmp
     root = replacement.getroot()
     assert root is not None
     root.set("VsdxkitMarker", "1")
-    vis.remove_page_by_index(0)
+    vis.pages.delete(vis.pages[0])
     assert vis._package.part(second.filename) is None
     second.xml = replacement
     vis.save(target)

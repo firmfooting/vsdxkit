@@ -73,7 +73,7 @@ def test_a_connect_held_across_a_renumber_names_the_new_id(vsdx_copy):
 def test_deleting_a_renumbered_shape_takes_its_connectors_with_it(vsdx_copy, tmp_path):
     """The #278 delete cascade, entered after a renumber.
 
-    `Page.delete_shape` gathers the connectors to remove by matching records
+    `Shape.delete` gathers the connectors to remove by matching records
     against the shape's id, so a stale one left the connector behind as a line
     glued to nothing at one end.
     """
@@ -83,7 +83,7 @@ def test_deleting_a_renumbered_shape_takes_its_connectors_with_it(vsdx_copy, tmp
     connector_id = next(from_id for from_id, to_id in _records(page) if to_id == "2")
 
     vis.increment_sub_shape_ids(shape, page)
-    page.delete_shape(shape)
+    shape.delete()
 
     assert page.shapes.by_id(connector_id) is None
     vis.save(str(tmp_path / "deleted_after_renumber.vsdx"))

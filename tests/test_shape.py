@@ -28,7 +28,7 @@ def _first_shape_containing(shapes, text: str):
 def test_get_shape_text(filename: str, shape_id: str, expected_text: str, basedir):
     # Check that a specific shape on a page has expected text value
     vis = Document.open(os.path.join(basedir, filename))
-    page = vis.get_page(0)  # type: Page
+    page = vis.pages[0]  # type: Page
     shape = page.shapes.require_id(shape_id)
     # check that shape has expected text
     assert shape.text == expected_text
@@ -46,7 +46,7 @@ def test_get_shape_text(filename: str, shape_id: str, expected_text: str, basedi
 def test_set_shape_text(filename: str, shape_id: str, expected_text: str, basedir):
     # Check that a specific shape on a page has expected text value after it is updated
     vis = Document.open(os.path.join(basedir, filename))
-    page = vis.get_page(0)  # type: Page
+    page = vis.pages[0]  # type: Page
     shape = page.shapes.require_id(shape_id)
     # check that shape has expected text
     assert shape.text == expected_text
@@ -64,7 +64,7 @@ def test_set_shape_text(filename: str, shape_id: str, expected_text: str, basedi
 def test_get_shape_attr_value(filename: str, attr: str, attr_value: str, expected_id: str, basedir):
     # Check that a specific shape on a page has expected text value
     vis = Document.open(os.path.join(basedir, filename))
-    page = vis.get_page(0)  # type: Page
+    page = vis.pages[0]  # type: Page
     shape = next((s for s in page.shapes if str(s.xml.attrib.get(attr)) == attr_value), None)
     # check that shape has expected text
     assert expected_id == shape.ID
@@ -82,7 +82,7 @@ def test_get_shape_attr_value(filename: str, attr: str, attr_value: str, expecte
 def test_get_shape_child_shapes(filename: str, shape_id: str, child_count: int, basedir):
     # Check that page has expected number of top level shapes
     vis = Document.open(os.path.join(basedir, filename))
-    page = vis.get_page(0)  # type: Page
+    page = vis.pages[0]  # type: Page
     shape = page.shapes.require_id(shape_id)
 
     # check that page has expected number of child shapes
@@ -101,7 +101,7 @@ def test_get_shape_child_shapes(filename: str, shape_id: str, child_count: int, 
 def test_get_shape_all_shapes(filename: str, shape_id: str, all_count: int, basedir):
     # Check that page has expected number of top level shapes
     vis = Document.open(os.path.join(basedir, filename))
-    page = vis.get_page(0)  # type: Page
+    page = vis.pages[0]  # type: Page
 
     shape_group = page.shapes.require_id(shape_id)
     for shape in shape_group.descendants:
@@ -120,7 +120,7 @@ def test_get_shape_all_shapes(filename: str, shape_id: str, all_count: int, base
 def test_shape_locations(filename: str, expected_locations: str, basedir):
     print("=== list_shape_locations ===")
     vis = Document.open(os.path.join(basedir, filename))
-    page = vis.get_page(0)  # type: Page
+    page = vis.pages[0]  # type: Page
     shapes = list(page.children)
     locations = ""
     for shape in shapes:  # type: Shape
@@ -141,7 +141,7 @@ def test_shape_locations(filename: str, expected_locations: str, basedir):
 def test_shape_center(filename: str, shape_id: str, expected_center: str, basedir):
 
     vis = Document.open(os.path.join(basedir, filename))
-    page = vis.get_page(0)  # type: Page
+    page = vis.pages[0]  # type: Page
     shape = page.shapes.require_id(shape_id)
 
     assert shape.center_x_y == expected_center
@@ -154,7 +154,7 @@ def test_remove_shape(filename: str, tmp_path, basedir):
     # get shape to remove
     shape = vis.pages[0].shapes.by_text("Shape to remove")  # type: Shape
     assert shape  # check shape found
-    shape.remove()
+    shape.delete()
     vis.save(out_file)
 
     vis = Document.open(out_file)

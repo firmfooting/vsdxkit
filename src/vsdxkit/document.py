@@ -30,7 +30,7 @@ from vsdxkit.errors import InvalidOperationError, MissingPartError
 from vsdxkit.logging_support import get_logger
 from vsdxkit.masters import MasterCatalog
 from vsdxkit.package import PackageLimits, PackageStore, XmlPart, check_relationship_target
-from vsdxkit.pages import Page, PageCollection, PagePosition
+from vsdxkit.pages import Page, PageCollection, _PagePosition
 from vsdxkit.partnames import (
     APP_PART,
     CONTENT_TYPES_PART,
@@ -403,29 +403,7 @@ class Document(JinjaTemplatingMixin):
         """The document's pages, in order: see :class:`PageCollection`."""
         return PageCollection(self._pages, self)
 
-    def get_page(self, n: int) -> Page | None:
-        try:
-            return self.pages[n]
-        except IndexError:
-            return None
-
-    def get_page_names(self) -> list[str]:
-        return [p.name for p in self.pages]
-
-    def get_page_by_name(self, name: str) -> Page | None:
-        """Get page from Document with matching name
-
-        :param name: The name of the required page
-        :type name: str
-
-        :return: :class:`Page` object representing the page (or None if not found)
-        """
-        for p in self.pages:
-            if p.name == name:
-                return p
-
-    @override
-    def remove_page_by_index(self, index: int) -> None:
+    def _remove_page_by_index(self, index: int) -> None:
         """Remove zero-based nth page from Document object
 
         :param index: Zero-based index of the page
@@ -461,24 +439,6 @@ class Document(JinjaTemplatingMixin):
                 self._package.remove(self.pages[index].filename)
                 del self._pages[index]
 
-    def remove_page_by_name(self, page_name: str) -> None:
-        """Remove first page from Document object that matches the page_name
-
-        :param page_name: page of page to delete
-        :type page_name: str
-
-        :return: None
-        """
-
-        # get index and then pass to remove_page_by_index() to perform deletion
-        for p in self.pages:
-            if p.name == page_name:
-                index = p.index_num
-                if index is None:  # page is not attached to this document
-                    continue
-                self.remove_page_by_index(index)
-                break  # exit after first match - delete only one page
-
     def _update_pages_xml_rels(self, new_page_filename: str) -> str:
         """Updates the pages.xml.rels file with a reference to the new page and returns the new relid"""
 
@@ -492,7 +452,7 @@ class Document(JinjaTemplatingMixin):
 
     def _get_new_page_name(self, new_page_name: str) -> str:
         i = 1
-        while new_page_name in self.get_page_names():
+        while new_page_name in [page.name for page in self.pages]:
             new_page_name = f"{new_page_name}-{i}"  # Page-X-i
             i += 1
 
@@ -530,18 +490,18 @@ class Document(JinjaTemplatingMixin):
 
         return max_page_id
 
-    def _get_index(self, *, index: int | PagePosition, page: Page | None) -> int:
-        if isinstance(index, PagePosition):  # only update index if it is relative to source page
-            if index == PagePosition.LAST:
+    def _get_index(self, *, index: int | _PagePosition, page: Page | None) -> int:
+        if isinstance(index, _PagePosition):  # only update index if it is relative to source page
+            if index == _PagePosition.LAST:
                 index = len(self.pages)
-            elif index == PagePosition.FIRST:
+            elif index == _PagePosition.FIRST:
                 index = 0
             elif page:  # need page for BEFORE or AFTER
                 orig_page_idx = self.pages.index(page)
-                if index == PagePosition.BEFORE:
+                if index == _PagePosition.BEFORE:
                     # insert new page at the original page's index
                     index = orig_page_idx
-                elif index == PagePosition.AFTER:
+                elif index == _PagePosition.AFTER:
                     # insert new page after the original page
                     index = orig_page_idx + 1
             else:
@@ -868,7 +828,7 @@ class Document(JinjaTemplatingMixin):
         new_page_xml_str: str,
         page_name: str,
         new_page_element: Element,
-        index: int | PagePosition,
+        index: int | _PagePosition,
         source_page: Page | None = None,
         new_page_filename: str,
         new_page_relid: str,
@@ -922,7 +882,7 @@ class Document(JinjaTemplatingMixin):
 
         return new_page
 
-    def add_page_at(self, index: int, name: str | None = None) -> Page:
+    def _add_page_at(self, index: int, name: str | None = None) -> Page:
         """Add a new page at the specified index of the Document
 
         :param index: zero-based index where the new page will be placed
@@ -993,24 +953,13 @@ class Document(JinjaTemplatingMixin):
 
         return new_page
 
-    def add_page(self, name: str | None = None) -> Page:
-        """Add a new page at the end of the Document
-
-        :param name: The name of the new page
-        :type name: str, optional
-
-        :return: Page object representing the new page
-        """
-
-        return self.add_page_at(PagePosition.LAST, name)
-
-    def copy_page(self, page: Page, *, index: int | PagePosition = PagePosition.AFTER, name: str | None = None) -> Page:
+    def _copy_page(self, page: Page, *, index: int | _PagePosition = _PagePosition.AFTER, name: str | None = None) -> Page:
         """Copy an existing page and insert in Document
 
         :param page: the page to copy
         :type page: Page
-        :param index: the specific int or relation PagePosition location for new page
-        :type index: int | PagePosition
+        :param index: the specific int or relation _PagePosition location for new page
+        :type index: int | _PagePosition
         :param name: name of new page (note this may be altered if name already exists)
         :type name: str
 

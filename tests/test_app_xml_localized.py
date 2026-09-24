@@ -64,7 +64,7 @@ def test_adding_a_page_counts_it_in_the_section_that_is_already_there(german, tm
     """
     out = str(tmp_path / "out.vsdx")
     vis = Document.open(german)
-    vis.add_page("NewPage")
+    vis.pages.create("NewPage")
     vis.save(out)
     headings, titles = _app_xml(out)
     assert headings == ["Seiten", "4", "Master", "3"]
@@ -74,7 +74,7 @@ def test_adding_a_page_counts_it_in_the_section_that_is_already_there(german, tm
 def test_removing_a_page_counts_it_in_the_section_that_is_already_there(german, tmp_path):
     out = str(tmp_path / "out.vsdx")
     vis = Document.open(german)
-    vis.remove_page_by_index(1)
+    vis.pages.delete(vis.pages[1])
     vis.save(out)
     headings, titles = _app_xml(out)
     assert headings == ["Seiten", "2", "Master", "3"]
@@ -147,7 +147,7 @@ def test_a_missing_section_is_created_rather_than_taking_one_that_is_named(maste
 
     out = str(tmp_path / "out.vsdx")
     vis = Document.open(stripped)
-    vis.add_page("NewPage")
+    vis.pages.create("NewPage")
     vis.save(out)
     headings, titles = _app_xml(out)
     assert headings == [masters_label, "3", "Pages", "1"]
@@ -222,7 +222,7 @@ def test_a_master_sharing_the_only_page_s_name_does_not_make_the_masters_the_pag
 
     out = str(tmp_path / "out.vsdx")
     vis = Document.open(colliding)
-    vis.add_page("NewPage")
+    vis.pages.create("NewPage")
     vis.save(out)
     headings_out, titles_out = _app_xml(out)
     master_count = int(headings_out[headings_out.index("Master") + 1])
@@ -247,7 +247,7 @@ def test_removing_the_only_page_of_a_localised_document_uncounts_its_title(tmp_p
     _localise(os.path.join(basedir, "test3_house.vsdx"), localised, {"Pages": "Seiten", "Masters": "Master"})
     out = str(tmp_path / "out.vsdx")
     vis = Document.open(localised)
-    vis.remove_page_by_index(0)
+    vis.pages.delete(vis.pages[0])
     vis.save(out)
     headings, titles = _app_xml(out)
     assert headings == ["Seiten", "0", "Master", "1"]

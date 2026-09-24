@@ -129,7 +129,7 @@ connector.retarget(target=store)
 vis.save("reanchored.vsdx")
 ```
 
-Deleting a shape through `page.delete_shape(shape)` also removes incident connectors and their `Connect` records.
+`shape.delete()` also removes the connectors glued to the shape and their `Connect` records.
 
 ## Work with swimlanes
 

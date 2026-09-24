@@ -54,7 +54,7 @@ def test_no_output_on_default_configuration(vsdx_copy, capsys):
     """Default config: NullHandler only; nothing reaches stdout/stderr."""
     path = vsdx_copy(BASE)
     vis = Document.open(path)
-    vis.pages[0].delete_shape(next(iter(vis.pages[0].shapes)))
+    next(iter(vis.pages[0].shapes)).delete()
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == ""
@@ -70,7 +70,7 @@ def test_host_application_can_capture_module_logs(vsdx_copy):
     try:
         path = vsdx_copy(BASE)
         vis = Document.open(path)
-        vis.remove_page_by_index(0)
+        vis.pages.delete(vis.pages[0])
         assert "_remove_page_from_app_xml()" in stream.getvalue()
         assert "Document.open(" in stream.getvalue()
     finally:

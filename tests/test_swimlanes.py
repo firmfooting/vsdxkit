@@ -128,7 +128,7 @@ def test_only_a_numbered_copy_of_the_container_is_a_container(vsdx_copy):
 def test_a_diagram_whose_container_is_deleted_refuses_before_writing(vsdx_copy):
     """Fails if `add_lane` copies a lane and grows the Swimlane List for a container that is gone."""
     page, diagram = _diagram(vsdx_copy)
-    page.delete_shape(diagram.container)
+    diagram.container.delete()
     before = page.xml.getroot()
     snapshot = copy.deepcopy(before)
 

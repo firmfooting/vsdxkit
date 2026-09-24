@@ -130,12 +130,12 @@ replaces the glue and routing of both ends.
 Delete a connected shape
 ------------------------
 
-Use :meth:`vsdxkit.pages.Page.delete_shape` when connector cleanup matters. It
-removes incident connector shapes and their ``Connect`` records before it
-removes the requested shape.
+:meth:`vsdxkit.shapes.Shape.delete` removes the shape, the connectors glued
+to it and their ``Connect`` records. A group takes its members with it, and
+the connectors glued to them.
 
 .. code-block:: python
 
    obsolete = page.shapes.by_text("Obsolete")
    if obsolete is not None:
-       page.delete_shape(obsolete)
+       obsolete.delete()

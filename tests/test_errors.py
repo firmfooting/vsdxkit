@@ -722,17 +722,17 @@ def test_a_bundled_shape_that_is_missing_raises_not_found_error():
         media._sentinel(media.PALETTE, "PALETTE_NOT_A_SHAPE")
 
 
-def test_deleting_a_shape_that_is_not_on_the_page_raises_not_found_error(vsdx_copy):
-    """Fails if `Page.delete_shape` reports a shape from elsewhere with anything but `NotFoundError`.
+def test_deleting_a_detached_shape_raises_invalid_operation_error(vsdx_copy):
+    """Fails if a second `Shape.delete` reports anything but `InvalidOperationError`.
 
-    The shape is looked up on this page and is not found there, which is a
-    missing thing rather than a refused operation.
+    The shape is known and no longer in its document: a refused operation, not
+    a missing thing.
     """
     vis = Document.open(vsdx_copy("test1.vsdx"))
-    other = Document.open(vsdx_copy("test2.vsdx"))
-    stranger = next(iter(other.pages[0].shapes))
-    with pytest.raises(NotFoundError, match="is not on page"):
-        vis.pages[0].delete_shape(stranger)
+    shape = next(iter(vis.pages[0].children))
+    shape.delete()
+    with pytest.raises(InvalidOperationError, match="deleting a shape refused"):
+        shape.delete()
 
 
 # --------------------------------------------------------------------------

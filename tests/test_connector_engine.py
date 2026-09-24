@@ -149,7 +149,7 @@ def test_connector_round_trip_and_zip_validity(basedir):
         assert reopened.cells["ShapeRouteStyle"].value == "17"
 
 
-def test_delete_shape_cascades_connectors(basedir):
+def test_delete_cascades_connectors(basedir):
     with tempfile.TemporaryDirectory() as tmp:
         src = get_copy(basedir, "test4_connectors.vsdx", tmp)
         vis = Document.open(src)
@@ -158,7 +158,7 @@ def test_delete_shape_cascades_connectors(basedir):
         assert before_connects > 0
         doomed = page.shapes.by_id("2")
         assert doomed is not None
-        page.delete_shape(doomed)
+        doomed.delete()
         vis.save(src)
         with zipfile.ZipFile(src) as z:
             assert z.testzip() is None

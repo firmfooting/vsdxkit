@@ -129,7 +129,7 @@ def test_a_removed_page_does_not_write_its_part_back(vsdx_copy):
     vis = Document.open(vsdx_copy("test4_connectors.vsdx"))
     page = vis.pages[1]
     name = page.filename
-    vis.remove_page_by_index(1)
+    vis.pages.delete(vis.pages[1])
     page.xml = ET.ElementTree(ET.Element("PageContents"))
     assert vis._package.part(name) is None
 
@@ -149,7 +149,7 @@ def test_an_added_page_is_in_the_store_before_any_save(vsdx_copy):
     which is the only thing a save writes -- the added page would never reach
     disk at all."""
     vis = Document.open(vsdx_copy("test1.vsdx"))
-    page = vis.add_page("Added")
+    page = vis.pages.create("Added")
     held = vis._package.part(page.filename)
     assert isinstance(held, XmlPart) and held.tree is page.xml
 
@@ -160,7 +160,7 @@ def test_a_copied_page_brings_its_rels_part_into_the_store(vsdx_copy):
     sees a filename and the rels part never reaches the store."""
     vis = Document.open(vsdx_copy("test4_connectors.vsdx"))
     source = next(p for p in vis.pages if p.rels_xml is not None)
-    copy = vis.copy_page(source)
+    copy = vis.pages.copy(source)
     assert copy.rels_xml_filename is not None
     held = vis._package.part(copy.rels_xml_filename)
     assert isinstance(held, XmlPart) and held.tree is copy.rels_xml
@@ -180,7 +180,7 @@ def test_a_copied_page_still_writes_its_rels_past_an_orphan_at_the_next_name(vsd
     candidate = vis._unused_page_part_name()
     orphan_name = f"/visio/pages/_rels/{candidate}.rels"
     vis._package.write_xml(orphan_name, ET.ElementTree(ET.Element("Relationships")))
-    copy = vis.copy_page(source)
+    copy = vis.pages.copy(source)
     held = vis._package.part(copy.rels_xml_filename)
     assert isinstance(held, XmlPart) and held.tree is copy.rels_xml
 
@@ -229,8 +229,8 @@ def test_a_removed_page_does_not_clobber_a_page_that_reuses_its_part_name(vsdx_c
     """
     vis = Document.open(vsdx_copy("test4_connectors.vsdx"))
     removed = vis.pages[0]
-    vis.remove_page_by_index(0)
-    fresh = vis.add_page(name="Fresh")
+    vis.pages.delete(vis.pages[0])
+    fresh = vis.pages.create(name="Fresh")
     assert fresh.filename == removed.filename  # the fixture has changed if this does not hold
     name = fresh.filename
     rels_name = removed.rels_xml_filename

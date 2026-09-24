@@ -20,11 +20,11 @@ def open_document(path: str) -> Document:
 
 
 def page_names(visio_file: Document) -> list[str]:
-    return visio_file.get_page_names()
+    return [page.name for page in visio_file.pages]
 
 
 def find_page(visio_file: Document, name: str) -> Page | None:
-    return visio_file.get_page_by_name(name)
+    return visio_file.pages.by_name(name)
 
 
 def coordinate(shape: Shape) -> float | None:

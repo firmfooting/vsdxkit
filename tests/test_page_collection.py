@@ -122,6 +122,6 @@ def test_the_collection_is_live(vsdx_copy):
     """Fails if a collection taken before a change does not see it."""
     vis = Document.open(vsdx_copy("test1.vsdx"))
     pages = vis.pages
-    vis.add_page("Added")
+    vis.pages.create("Added")
     assert len(pages) == 4
     assert pages.by_name("Added") is pages[-1]

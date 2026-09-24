@@ -125,7 +125,7 @@ def _place_one_d(shape: Shape, x: float, y: float, length: float | None) -> None
     shape._refresh_formula_values()
 
 
-class PagePosition(IntEnum):
+class _PagePosition(IntEnum):
     FIRST = 0
     LAST = -1
     END = -1
@@ -294,7 +294,7 @@ class Page:
         """Whether an assignment to `xml` may write this page's part.
 
         A caller may keep holding a `Page` after it has been removed from the
-        document (`Document.remove_page_by_index`); a later assignment to its
+        document (`PageCollection.delete`); a later assignment to its
         `xml` must not resurrect the part it was removed from. Nor may it
         write over the part of the page added after it: removal frees the part
         name, and the next page takes it. So this asks whether the part at the
@@ -590,43 +590,6 @@ class Page:
             shape.text = label
         return shape
 
-    def delete_shape(self, shape: Shape) -> None:
-        """Delete a shape from this page, removing any incident connectors.
-
-        A group takes its children with it, so connectors glued to a child and
-        records naming one are removed alongside the group's own. Connectors
-        are deleted first (including their Connect records), then the shape.
-
-        :raises NotFoundError: if the shape is not on this page
-        """
-        shape_id = str(shape.ID)
-        # Identity, not id: Visio shape ids are page-scoped and collide freely
-        # across pages, so matching on the number would accept a shape from a
-        # different page and then delete whichever shape here shared its id.
-        # Silently doing nothing would instead hide a double delete.
-        # all_shapes walks the page and builds a Shape per element, so gather
-        # both answers in one pass.
-        on_this_page: list[Shape] = []
-        id_is_taken_by_another_shape = False
-        for candidate in self._descendants():
-            if candidate.xml is shape.xml:
-                on_this_page.append(candidate)
-            elif str(candidate.ID) == shape_id:
-                id_is_taken_by_another_shape = True
-        if not on_this_page:
-            # naming only the id would send a caller looking for it, finding a
-            # different shape wearing the same number, and concluding the
-            # library is wrong
-            collision = (
-                f"; a different shape on this page has id {shape.ID}, because ids are page-scoped"
-                if id_is_taken_by_another_shape
-                else ""
-            )
-            raise NotFoundError(f"shape ID {shape.ID} is not on page {self.name!r}{collision}")
-        # every id that is about to disappear: the shape and, for a group,
-        # everything it contains
-        self._delete(on_this_page, {shape_id} | {str(s.ID) for s in shape._descendants()})
-
     def _delete(self, shapes: Iterable[Shape], gone_ids: set[str]) -> None:
         """The one deletion: `shapes`, the connectors glued to any of `gone_ids`, and every record naming them.
 
@@ -657,7 +620,7 @@ class Page:
         Records naming the shape on either side go: one pointing *at* a shape
         that is gone dangles just as surely as one leading from it. Connectors
         glued to the shape are separate shapes and are passed through here in
-        their own right by :meth:`delete_shape`.
+        their own right by :meth:`vsdxkit.shapes.Shape.delete`.
         """
         self.remove_connect_records({str(shape.ID)}, match="either")
         container = parent_of(self.xml.getroot(), shape.xml)
@@ -723,11 +686,11 @@ class Page:
 class PageLifecycle(Protocol):
     """What a :class:`PageCollection` needs from the document that owns its pages."""
 
-    def add_page_at(self, index: int, name: str | None = None) -> Page: ...
+    def _add_page_at(self, index: int, name: str | None = None) -> Page: ...
 
-    def copy_page(self, page: Page, *, index: int | PagePosition = ..., name: str | None = None) -> Page: ...
+    def _copy_page(self, page: Page, *, index: int | _PagePosition = ..., name: str | None = None) -> Page: ...
 
-    def remove_page_by_index(self, index: int) -> None: ...
+    def _remove_page_by_index(self, index: int) -> None: ...
 
 
 class PageCollection(Sequence[Page]):
@@ -788,8 +751,8 @@ class PageCollection(Sequence[Page]):
         the document already uses gets a numeric suffix, and one is made up
         when `name` is None.
         """
-        position = PagePosition.LAST if index is None else self._insertion_index(index)
-        return self._lifecycle.add_page_at(position, name)
+        position = _PagePosition.LAST if index is None else self._insertion_index(index)
+        return self._lifecycle._add_page_at(position, name)
 
     def copy(self, page: Page, name: str | None = None, index: int | None = None) -> Page:
         """Copy one of this document's pages, and return the copy.
@@ -802,14 +765,14 @@ class PageCollection(Sequence[Page]):
             raise InvalidOperationError(
                 f"page {page.name!r} belongs to another document; pages can be copied only within their own document"
             )
-        position = PagePosition.AFTER if index is None else self._insertion_index(index)
-        return self._lifecycle.copy_page(page, index=position, name=name)
+        position = _PagePosition.AFTER if index is None else self._insertion_index(index)
+        return self._lifecycle._copy_page(page, index=position, name=name)
 
     def delete(self, page: Page) -> None:
         """Remove `page` from the document, with its part, its relationships and its title."""
         if page not in self:
             raise InvalidOperationError(f"page {page.name!r} is not one of this document's pages")
-        self._lifecycle.remove_page_by_index(self.index(page))
+        self._lifecycle._remove_page_by_index(self.index(page))
 
     def _insertion_index(self, index: int) -> int:
         # negative indexes are refused rather than read from the end: the
