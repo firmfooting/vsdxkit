@@ -378,7 +378,8 @@ A shape is its element
 Reading or writing a deleted shape
    Raises :class:`vsdxkit.errors.InvalidOperationError`, as does a shape on
    a deleted page. ``shape.is_attached`` says whether a shape is still in
-   its document. ``ID``, ``xml``, ``repr`` and ``hash`` keep working.
+   its document. ``ID``, ``xml``, ``page``, ``parent``, ``repr`` and
+   ``hash`` keep working: ``page`` and ``parent`` are where the shape was.
 
 ``shape.cells``
    A read-only property that returns a new ``dict`` on each read, from the
