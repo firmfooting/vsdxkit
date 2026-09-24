@@ -8,7 +8,7 @@ virtual environment, so every assertion lands on the installed distribution:
 Raises on any of:
 - vsdxkit not importable, or importable only via the checkout (source shadowing)
 - py.typed or the bundled media .vsdx files missing from the installation
-- Media(), create_shape(), connector creation, save or reopen failing
+- loading the bundled donors, create_shape(), connector creation, save or reopen failing
 """
 
 import glob
@@ -70,18 +70,19 @@ def main() -> int:
             ok(f"installed media/{member_name} present")
 
     import vsdxkit
-    from vsdxkit.media import Media
+    from vsdxkit import media
     from vsdxkit.vsdxfile import VisioFile
 
     ok(f"vsdxkit {vsdxkit.__version__} imports cleanly")
 
-    # 4. exercise Media() and the creation APIs against a sample document
+    # 4. load the bundled donors, then exercise the creation APIs against a sample document
     try:
-        Media()
+        media._sentinel(media.PALETTE, "PALETTE_PROCESS")
+        media._sentinel(media.MEDIA, media.STRAIGHT_CONNECTOR)
     except Exception as error:  # smoke harness reports every failure mode
-        fail(f"Media() failed from the installed wheel: {error}")
+        fail(f"loading the bundled donors failed from the installed wheel: {error}")
         return 1
-    ok("Media() loads from the installed wheel")
+    ok("the bundled donors load from the installed wheel")
 
     source = glob.glob(os.path.join(package_dir, "media", "*.vsdx"))[0]
     with tempfile.TemporaryDirectory() as workdir:

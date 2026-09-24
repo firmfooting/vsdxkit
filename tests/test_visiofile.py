@@ -8,18 +8,13 @@ from xml.etree.ElementTree import Element
 
 import pytest
 
-from vsdxkit import ext_prop_namespace, namespace, vt_namespace
-from vsdxkit.media import Media
+from vsdxkit import ext_prop_namespace, media, namespace, vt_namespace
 from vsdxkit.pages import PagePosition
 from vsdxkit.vsdxfile import VisioFile
 
 
 def _media_filename() -> str:
-    media = Media()
-    try:
-        return media.media.filename
-    finally:
-        media.close()
+    return media.media_path(media.MEDIA)
 
 
 # file structure

@@ -2,8 +2,8 @@
 
 `save_vsdx` refuses a closed document; the operations that build the state it
 would have written did not, so the failure surfaced at the save, or never
-(issue #242). `create_shape` and `Connect.create` were also the only way to
-make a `Media` that nothing would ever close.
+(issue #242). `create_shape` and `Connect.create` refuse before loading a
+bundled donor, too.
 """
 
 import xml.etree.ElementTree as ET
@@ -15,7 +15,6 @@ import vsdxkit.media
 from vsdxkit.connectors import Connect
 from vsdxkit.errors import VisioFileNotOpen
 from vsdxkit.geometry import Geometry, GeometryCell, GeometryRow
-from vsdxkit.media import Media
 from vsdxkit.pages import Page
 from vsdxkit.shapes import Shape
 from vsdxkit.vsdxfile import VisioFile
@@ -150,39 +149,27 @@ def test_the_guard_follows_the_page_not_the_receiver(vsdx_copy):
         into_closed_destination.copy(destination.pages[0])
 
 
-def record_media_builds(monkeypatch) -> list[Media]:
-    """Record every Media built for the duration of a test."""
-    built: list[Media] = []
-    real_media = Media
-
-    class RecordingMedia(real_media):  # type: ignore[misc, valid-type]
-        def __init__(self) -> None:
-            built.append(self)
-            super().__init__()
-
-    monkeypatch.setattr(vsdxkit.media, "Media", RecordingMedia)
-    return built
+def record_donor_loads(monkeypatch) -> dict[str, VisioFile]:
+    """The donors loaded for the duration of a test, starting from none loaded."""
+    loaded: dict[str, VisioFile] = {}
+    monkeypatch.setattr(vsdxkit.media, "_donors", loaded)
+    return loaded
 
 
-def test_create_shape_after_close_builds_no_second_donor(vsdx_copy, monkeypatch):
-    built = record_media_builds(monkeypatch)
+def test_create_shape_after_close_loads_no_donor(vsdx_copy, monkeypatch):
+    loaded = record_donor_loads(monkeypatch)
     vis = VisioFile(vsdx_copy(BASE))
     page = vis.pages[0]
-    vis.create_shape(page, "PALETTE_PROCESS", 1.0, 1.0, text="A")
-    assert len(built) == 1
-
     vis.close_vsdx()
+
     with pytest.raises(VisioFileNotOpen):
         vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="B")
 
-    assert len(built) == 1, "a closed document built a second donor pair that nothing will close"
-    # the pair that does exist was closed, so no donor outlives the document
-    assert built[0]._media_vsdx is None and built[0]._palette_vsdx is None
-    assert vis._media is None
+    assert loaded == {}
 
 
-def test_connect_shapes_after_close_builds_no_donor(vsdx_copy, monkeypatch):
-    built = record_media_builds(monkeypatch)
+def test_connect_shapes_after_close_loads_no_donor(vsdx_copy, monkeypatch):
+    loaded = record_donor_loads(monkeypatch)
     vis = VisioFile(vsdx_copy(BASE))
     page = vis.pages[0]
     shapes = page.child_shapes
@@ -191,8 +178,7 @@ def test_connect_shapes_after_close_builds_no_donor(vsdx_copy, monkeypatch):
     with pytest.raises(VisioFileNotOpen):
         page.connect_shapes(shapes[0], shapes[1])
 
-    assert built == []
-    assert vis._media is None
+    assert loaded == {}
 
 
 def _page_xml(vis: VisioFile) -> list[bytes]:

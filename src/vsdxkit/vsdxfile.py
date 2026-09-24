@@ -7,7 +7,7 @@ import sys
 import warnings
 import xml.etree.ElementTree as ET
 from types import TracebackType
-from typing import TYPE_CHECKING, NamedTuple
+from typing import NamedTuple
 from xml.etree.ElementTree import Element
 
 if sys.version_info >= (3, 12):
@@ -25,7 +25,7 @@ from vsdxkit import (
     vt_namespace,
     xmlio,
 )
-from vsdxkit.errors import InvalidOperationError, MissingPartError, NotFoundError, VisioFileNotOpen
+from vsdxkit.errors import InvalidOperationError, MissingPartError, VisioFileNotOpen
 from vsdxkit.logging_support import attach_debug_stream_handler, get_logger
 from vsdxkit.masters import MasterCatalog
 from vsdxkit.package import PackageLimits, PackageStore, XmlPart, check_relationship_target
@@ -42,9 +42,6 @@ from vsdxkit.partnames import (
 from vsdxkit.shapes import Shape, _text_runs_of, _write_text, find_or_create_shapes_tag, substitute
 from vsdxkit.templating import JinjaTemplatingMixin
 from vsdxkit.xmlio import PartTree, adopt_prefixes, register_namespaces, require_attribute, require_element, require_tree
-
-if TYPE_CHECKING:
-    from vsdxkit.media import Media
 
 logger = get_logger(__name__)
 
@@ -155,9 +152,6 @@ class VisioFile(JinjaTemplatingMixin):
         self._package: PackageStore
         # `filename` as the store was opened from it; see save_vsdx
         self._opened_filename: str
-        # the bundled donor packages are expensive to parse, so one Media is
-        # shared by every create/connect call on this document (issue #65)
-        self._media: Media | None = None
         self.open_vsdx_file()
 
     def __enter__(self) -> VisioFile:
@@ -1158,24 +1152,6 @@ class VisioFile(JinjaTemplatingMixin):
     def get_shape_id(shape: Element) -> str:
         return shape.attrib["ID"]
 
-    def _shared_media(self) -> Media:
-        """The bundled media/palette documents for this VisioFile.
-
-        Created on first use and reused for every subsequent create/connect
-        call, so a loop of N shapes parses the donor packages once rather than
-        N times. Ownership stays here: `close_vsdx` closes and drops it, and a
-        closed document is refused rather than handed a replacement, so the
-        only pair that ever exists is one this document will close (issue #242).
-        """
-        self._require_open("building a shape or connector")
-        if self._media is None:
-            # vsdxkit.media opens bundled documents as VisioFiles, so importing it
-            # at module level would be a cycle
-            from vsdxkit.media import Media
-
-            self._media = Media()
-        return self._media
-
     def create_shape(
         self,
         page: Page,
@@ -1188,9 +1164,9 @@ class VisioFile(JinjaTemplatingMixin):
     ) -> Shape:
         """Create a new shape on a page from the extended shape palette.
 
-        Palette shapes are deliberately masterless, so creation needs no
-        master-import and works on any document. Reuses copy_shape and the
-        existing position/size setters (no second copy or id-rewrite path).
+        The palette shape is copied with :meth:`Shape.copy`, the one way a
+        shape is created, and then placed, sized and labelled through the
+        ordinary setters.
 
         :param page: destination page
         :param palette_name: sentinel name, e.g. 'PALETTE_PROCESS',
@@ -1201,17 +1177,13 @@ class VisioFile(JinjaTemplatingMixin):
         :param text: label text; the palette sentinel name is cleared when None
         :return: the new Shape
         """
+        # ahead of the donor: a closed document loads nothing
         page.vis._require_open("VisioFile.create_shape()")
-        # the donor belongs to the document being changed, which is also the
-        # one that will close it
-        media = page.vis._shared_media()
-        source = next((shape for shape in media.palette.pages[0].shapes if palette_name in shape.text), None)
-        if source is None:
-            raise NotFoundError(f"palette has no shape named {palette_name}")
-        new_shape_xml = self.copy_shape(source.xml, page)
-        new_shape = page.shapes.by_id(new_shape_xml.attrib["ID"])
-        if new_shape is None:
-            raise NotFoundError("newly created shape not found on page")
+        # vsdxkit.media opens its donors as VisioFiles, so importing it at
+        # module level would be a cycle
+        from vsdxkit import media
+
+        new_shape = media.copy_palette_shape(palette_name, page)
 
         # palette shapes are drawn around their centre: position via PinX/PinY
         new_shape.get_or_create_cell("PinX", v=str(x))
@@ -1396,9 +1368,6 @@ class VisioFile(JinjaTemplatingMixin):
 
     def close_vsdx(self) -> None:
         self.file_open = False
-        media, self._media = self._media, None
-        if media is not None:
-            media.close()
 
     def _main_part_content_type(self) -> str:
         """The declared content type of `/visio/document.xml`."""

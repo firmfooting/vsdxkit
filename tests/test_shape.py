@@ -921,3 +921,26 @@ def test_append_shape_rejects_a_shape_built_against_another_page(vsdx_copy):
 
         with pytest.raises(ValueError, match="belongs to page"):
             group.append_shape(_loose_shape(other_page))
+
+
+def test_a_group_member_copied_onto_its_own_page_names_its_master(vsdx_copy):
+    """Fails if `Shape.copy()` with no page leaves the copy leaning on the group it is no longer in (#104).
+
+    The copy lands at the page's top level. It used to keep the source's group
+    as its parent and name no master, so it answered for the group's master
+    until the page was walked again, and was saved with a MasterShape pointing
+    into nothing.
+    """
+    with VisioFile(vsdx_copy("test5_master.vsdx")) as vis:
+        page = vis.pages[0]
+        member = page.shapes.require_id("2")
+        assert member.xml.attrib.get("Master") is None
+        assert member.master_page_ID == "1"  # its group's
+
+        copy = member.copy()
+
+        assert copy.parent is page
+        assert copy.xml.attrib.get("Master") == "1"
+        rewalked = page.children.require_id(copy.ID)
+        assert rewalked.master_shape is not None
+        assert rewalked.master_shape.ID == member.master_shape.ID
