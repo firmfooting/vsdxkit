@@ -1,14 +1,12 @@
 """The bundled documents new shapes and connectors are copied from.
 
-Each donor is opened once per process, on first use, and closed at once. A
-closed ``VisioFile`` still reads, and a shape copies out of it as out of any
-other document, but every write to it through the library raises
-``VisioFileNotOpen``. The package is read into memory with no file held, so
-there is nothing for a document that used a donor to release.
+Each donor is opened once per process, on first use. The package is read
+into memory with no file held, so there is nothing for a document that used a
+donor to release.
 
 Nothing here hands out a donor or anything inside one: every function answers
-a copy. A caller holding a donor's own elements could edit them past the
-closed guard, and every later creation in the process would copy the edit.
+a copy. A caller holding a donor's own elements could edit them, and every
+later creation in the process would copy the edit.
 
 Shapes are found by their sentinel text, matched whole.
 """
@@ -43,12 +41,11 @@ def media_path(filename: str) -> str:
 
 
 def _donor(filename: str) -> VisioFile:
-    """The bundled document `filename`, opened once per process and closed to writes."""
+    """The bundled document `filename`, opened once per process."""
     with _loading:
         document = _donors.get(filename)
         if document is None:
             document = VisioFile(media_path(filename))
-            document.close_vsdx()
             _donors[filename] = document
         return document
 

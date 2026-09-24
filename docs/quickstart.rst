@@ -30,16 +30,16 @@ Python 3.10–3.14 is supported.
 Open a document
 ---------------
 
-Use :class:`vsdxkit.vsdxfile.VisioFile` as a context manager. This closes the
-package and any temporary resources when the block exits.
+Open a document with :class:`vsdxkit.vsdxfile.VisioFile`. Opening reads the
+whole package into memory and holds no file, so there is nothing to close.
 
 .. code-block:: python
 
    from vsdxkit.vsdxfile import VisioFile
 
-   with VisioFile("diagram.vsdx") as vis:
-       page = vis.pages[0]
-       print(page.name)
+   vis = VisioFile("diagram.vsdx")
+   page = vis.pages[0]
+   print(page.name)
 
 Find and edit a shape
 ---------------------
@@ -49,27 +49,26 @@ editing it.
 
 .. code-block:: python
 
-   with VisioFile("diagram.vsdx") as vis:
-       page = vis.pages[0]
-       shape = page.shapes.by_text("Draft")
+   vis = VisioFile("diagram.vsdx")
+   page = vis.pages[0]
+   shape = page.shapes.by_text("Draft")
 
-       if shape is not None:
-           shape.text = "Approved"
+   if shape is not None:
+       shape.text = "Approved"
 
-       vis.save_vsdx("approved.vsdx")
+   vis.save_vsdx("approved.vsdx")
 
 Save in place
 -------------
 
 Call :meth:`vsdxkit.vsdxfile.VisioFile.save_vsdx` without a filename to replace
-the source file. Saving remains explicit; leaving the context manager does not
-save automatically.
+the source file. Nothing is saved until you call it.
 
 .. code-block:: python
 
-   with VisioFile("diagram.vsdx") as vis:
-       vis.pages[0].name = "Current state"
-       vis.save_vsdx()
+   vis = VisioFile("diagram.vsdx")
+   vis.pages[0].name = "Current state"
+   vis.save_vsdx()
 
 Development install
 -------------------

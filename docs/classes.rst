@@ -111,7 +111,6 @@ raised that builtin before the hierarchy existed::
 
    VsdxError
    +-- InvalidOperationError (ValueError)
-   |   +-- VisioFileNotOpen
    +-- NotFoundError (ValueError)
    |   +-- MissingPartError
    +-- PackageError
@@ -122,8 +121,6 @@ raised that builtin before the hierarchy existed::
 .. autoclass:: vsdxkit.errors.VsdxError
 
 .. autoclass:: vsdxkit.errors.InvalidOperationError
-
-.. autoclass:: vsdxkit.errors.VisioFileNotOpen
 
 .. autoclass:: vsdxkit.errors.NotFoundError
 

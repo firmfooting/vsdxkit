@@ -150,10 +150,10 @@ def _com_scenarios():
 def test_connector_classification_agrees_with_visio(scenario):
     """Fails if any shape Visio reported as 1-D (or not) is classified the other way."""
     path = os.path.join(BASEDIR, "fixtures", "com_reference", scenario["file"])
-    with VisioFile(path) as vis:
-        shapes = {shape.ID: shape for page in vis.pages for shape in page.all_shapes}
-        for expected in scenario["shapes"]:
-            shape = shapes[str(expected["id"])]
-            master = shape.master_shape
-            one_d = is_connector_element(shape.xml, None if master is None else master.xml)
-            assert one_d == (expected["one_d"] == -1), (expected["name"], expected["id"])
+    vis = VisioFile(path)
+    shapes = {shape.ID: shape for page in vis.pages for shape in page.all_shapes}
+    for expected in scenario["shapes"]:
+        shape = shapes[str(expected["id"])]
+        master = shape.master_shape
+        one_d = is_connector_element(shape.xml, None if master is None else master.xml)
+        assert one_d == (expected["one_d"] == -1), (expected["name"], expected["id"])

@@ -13,54 +13,54 @@ from vsdxkit.vsdxfile import VisioFile
 
 def test_a_cell_added_through_one_shape_object_is_read_through_another(vsdx_copy):
     """Fails if `Shape.cells` is a snapshot taken when the Shape was built."""
-    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
-        page = vis.pages[0]
-        writer = page.shapes.require_id("1")
-        reader = page.shapes.require_id("1")
-        assert reader.cell_value("Added") is None
+    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    page = vis.pages[0]
+    writer = page.shapes.require_id("1")
+    reader = page.shapes.require_id("1")
+    assert reader.cell_value("Added") is None
 
-        writer.set_cell_value("Added", 7)
+    writer.set_cell_value("Added", 7)
 
-        assert reader.cell_value("Added") == "7"
-        assert "Added" in reader.cells
+    assert reader.cell_value("Added") == "7"
+    assert "Added" in reader.cells
 
 
 def test_a_cell_removed_from_the_xml_is_gone_from_the_shape(vsdx_copy):
     """Fails if a Shape keeps answering from a cell no longer in its XML."""
-    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
-        shape = vis.pages[0].shapes.require_id("1")
-        pin_x = shape.cells["PinX"]
+    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    shape = vis.pages[0].shapes.require_id("1")
+    pin_x = shape.cells["PinX"]
 
-        shape.xml.remove(pin_x.xml)
+    shape.xml.remove(pin_x.xml)
 
-        assert "PinX" not in shape.cells
-        assert shape.cell_value("PinX") is None
+    assert "PinX" not in shape.cells
+    assert shape.cell_value("PinX") is None
 
 
 def test_a_property_relabelled_in_place_is_keyed_under_its_new_label(vsdx_copy):
     """Fails if `data_properties` is held and keyed on its rows' identity, which a relabel leaves alone."""
-    with VisioFile(vsdx_copy("test6_shape_properties.vsdx")) as vis:
-        page = vis.pages[0]
-        writer = page.shapes.require_id("1")
-        reader = page.shapes.require_id("1")
-        assert "my_property_label" in reader.data_properties
+    vis = VisioFile(vsdx_copy("test6_shape_properties.vsdx"))
+    page = vis.pages[0]
+    writer = page.shapes.require_id("1")
+    reader = page.shapes.require_id("1")
+    assert "my_property_label" in reader.data_properties
 
-        writer.data_properties["my_property_label"].set_attribute("Label", "V", "relabelled")
+    writer.data_properties["my_property_label"].set_attribute("Label", "V", "relabelled")
 
-        assert "relabelled" in reader.data_properties
-        assert "my_property_label" not in reader.data_properties
-        assert "relabelled" in writer.data_properties
+    assert "relabelled" in reader.data_properties
+    assert "my_property_label" not in reader.data_properties
+    assert "relabelled" in writer.data_properties
 
 
 def test_a_page_s_background_is_read_from_pages_xml(vsdx_copy):
     """Fails if `Page.background` answers from what it read first."""
-    with VisioFile(vsdx_copy("test1.vsdx")) as vis:
-        page = vis.pages[0]
-        assert page.background is False
+    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    page = vis.pages[0]
+    assert page.background is False
 
-        page._page_xml().attrib["Background"] = "1"
+    page._page_xml().attrib["Background"] = "1"
 
-        assert page.background is True
+    assert page.background is True
 
 
 def test_a_master_added_after_a_shape_missed_it_is_resolved(vsdx_copy):
@@ -71,21 +71,23 @@ def test_a_master_added_after_a_shape_missed_it_is_resolved(vsdx_copy):
     """
     source_path = vsdx_copy("test5_master.vsdx")
     target_path = vsdx_copy("test1.vsdx")
-    with VisioFile(source_path) as source, VisioFile(target_path) as rehearsal:
-        instance = next(shape for shape in source.pages[0].all_shapes if shape.xml.attrib.get("Master"))
-        imported_id = instance.copy(rehearsal.pages[0]).master_page_ID
+    source = VisioFile(source_path)
+    rehearsal = VisioFile(target_path)
+    instance = next(shape for shape in source.pages[0].all_shapes if shape.xml.attrib.get("Master"))
+    imported_id = instance.copy(rehearsal.pages[0]).master_page_ID
 
-    with VisioFile(source_path) as source, VisioFile(target_path) as target:
-        instance = next(shape for shape in source.pages[0].all_shapes if shape.xml.attrib.get("Master"))
-        waiting = target.pages[0].shapes.require_id("1")
-        waiting.master_page_ID = imported_id
-        assert waiting.master_shape is None
+    source = VisioFile(source_path)
+    target = VisioFile(target_path)
+    instance = next(shape for shape in source.pages[0].all_shapes if shape.xml.attrib.get("Master"))
+    waiting = target.pages[0].shapes.require_id("1")
+    waiting.master_page_ID = imported_id
+    assert waiting.master_shape is None
 
-        instance.copy(target.pages[0])
+    instance.copy(target.pages[0])
 
-        master = waiting.master_shape
-        assert master is not None
-        assert master.page.page_id == imported_id
+    master = waiting.master_shape
+    assert master is not None
+    assert master.page.page_id == imported_id
 
 
 def test_a_geometry_section_added_to_a_resolved_master_is_merged(vsdx_copy):
@@ -95,22 +97,22 @@ def test_a_geometry_section_added_to_a_resolved_master_is_merged(vsdx_copy):
     built, so the memo is keyed on the master element's children as well as
     on the catalog's revision.
     """
-    with VisioFile(vsdx_copy("test5_master.vsdx")) as vis:
-        instance = vis.pages[0].shapes.require_id("2")
-        master = instance.master_shape
-        assert master is not None
-        section = master.xml.find(f"{namespace}Section[@N='Geometry']")
-        assert section is not None
-        replacement = copy.deepcopy(section)
-        row = replacement.find(f"{namespace}Row")
-        assert row is not None
-        replacement.remove(row)
+    vis = VisioFile(vsdx_copy("test5_master.vsdx"))
+    instance = vis.pages[0].shapes.require_id("2")
+    master = instance.master_shape
+    assert master is not None
+    section = master.xml.find(f"{namespace}Section[@N='Geometry']")
+    assert section is not None
+    replacement = copy.deepcopy(section)
+    row = replacement.find(f"{namespace}Row")
+    assert row is not None
+    replacement.remove(row)
 
-        position = list(master.xml).index(section)
-        master.xml.remove(section)
-        master.xml.insert(position, replacement)
+    position = list(master.xml).index(section)
+    master.xml.remove(section)
+    master.xml.insert(position, replacement)
 
-        held = instance.master_shape
-        assert held is not None
-        assert held.geometry is not None
-        assert held.geometry.xml is replacement
+    held = instance.master_shape
+    assert held is not None
+    assert held.geometry is not None
+    assert held.geometry.xml is replacement

@@ -14,13 +14,13 @@ document's pages in order, with lookup by name.
 
    from vsdxkit.vsdxfile import VisioFile
 
-   with VisioFile("diagram.vsdx") as vis:
-       first_page = vis.pages[0]
-       current = vis.pages.require_name("Current state")
-       draft = vis.pages.by_name("Draft")  # None if there is no such page
+   vis = VisioFile("diagram.vsdx")
+   first_page = vis.pages[0]
+   current = vis.pages.require_name("Current state")
+   draft = vis.pages.by_name("Draft")  # None if there is no such page
 
-       for page in vis.pages:
-           print(page.name)
+   for page in vis.pages:
+       print(page.name)
 
 Page names are unique in a document, so two pages with one name raise
 :class:`vsdxkit.errors.PackageError`.
@@ -54,15 +54,15 @@ is live: it sees shapes added or removed after it was taken.
 
 .. code-block:: python
 
-   with VisioFile("diagram.vsdx") as vis:
-       page = vis.pages[0]
+   vis = VisioFile("diagram.vsdx")
+   page = vis.pages[0]
 
-       start = page.shapes.require_text("Start")
-       maybe = page.shapes.by_id("12")
-       status = page.shapes.require_property("Status", "Open")
+   start = page.shapes.require_text("Start")
+   maybe = page.shapes.by_id("12")
+   status = page.shapes.require_property("Status", "Open")
 
-       for shape in page.children:
-           print(shape.ID, shape.text)
+   for shape in page.children:
+       print(shape.ID, shape.text)
 
 Each lookup says how many shapes it expects:
 

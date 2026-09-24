@@ -122,7 +122,3 @@ class PackageLimitError(PackageError, OSError):
     def __init__(self, reason: str, message: str) -> None:
         super().__init__(message)
         self.reason = reason
-
-
-class VisioFileNotOpen(InvalidOperationError):
-    """The document is closed, so the change this call would make can never be saved."""

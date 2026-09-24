@@ -11,10 +11,10 @@ if sys.version_info >= (3, 12):
 else:
     from typing_extensions import override
 
-from vsdxkit.document_part import DocumentPart, GuardedDocument
 from vsdxkit.errors import InvalidOperationError
 from vsdxkit.inheritance import InheritedRow
 from vsdxkit.logging_support import get_logger
+from vsdxkit.shape_part import AttachedShape, ShapePart
 from vsdxkit.xmlio import make_cell_element, pretty_print_element, to_float, xml_value
 
 logger = get_logger(__name__)
@@ -35,7 +35,7 @@ class GeometryOwner(Protocol):
     @property
     def master_shape(self) -> GeometryOwner | None: ...
 
-    def _require_open(self, operation: str) -> None: ...
+    def _require_attached(self, operation: str) -> None: ...
 
 
 namespace = "{http://schemas.microsoft.com/office/visio/2012/main}"  # visio file name space
@@ -46,7 +46,7 @@ def _row_index_sort_key(index: str) -> tuple[int, int, str]:
     return (0, int(index), "") if index.isdigit() else (1, 0, index)
 
 
-class Geometry(DocumentPart):
+class Geometry(ShapePart):
     """The geometry of a shape: a Geometry section's cells and rows.
 
     A shape that has a master starts from the master's section and layers its
@@ -106,7 +106,7 @@ class Geometry(DocumentPart):
 
     @property
     @override
-    def _document(self) -> GuardedDocument:
+    def _shape(self) -> AttachedShape:
         # the shape, not its document: a write to a deleted shape's geometry is
         # refused, as a write to the shape itself is
         return self.shape
@@ -140,7 +140,7 @@ class Geometry(DocumentPart):
         """
         # a shape with no absolute rows writes nothing, so leaving this to the
         # row setters would make the refusal depend on the shape
-        self._require_open("Geometry.move()")
+        self._require_attached("Geometry.move()")
         for r in self.rows.values():  # type: GeometryRow
             logger.debug("r=%s %s", type(r), r)
             if str(r.row_type).lower() in ["moveto", "lineto"]:  # todo: include other absolute row types
@@ -163,7 +163,7 @@ class Geometry(DocumentPart):
         formula. A cell this shape already owns keeps its formula, and Visio
         re-evaluates that formula over the value written here.
         """
-        self._require_open("Geometry.set_move_to()")
+        self._require_attached("Geometry.set_move_to()")
         move_tos = [r for r in self.rows.values() if str(r.row_type).lower() == "moveto"]
         if len(move_tos) > move_to_index:
             move_to = move_tos[move_to_index]  # type: GeometryRow
@@ -175,7 +175,7 @@ class Geometry(DocumentPart):
 
         Behaves as :meth:`set_move_to` does, over LineTo rows.
         """
-        self._require_open("Geometry.set_line_to()")
+        self._require_attached("Geometry.set_line_to()")
         line_tos = [r for r in self.rows.values() if str(r.row_type).lower() == "lineto"]
         if len(line_tos) > line_to_index:
             line_to = line_tos[line_to_index]  # type: GeometryRow
@@ -188,7 +188,7 @@ class Geometry(DocumentPart):
         return s
 
 
-class GeometryRow(InheritedRow, DocumentPart):
+class GeometryRow(InheritedRow, ShapePart):
     """A row with type(T) and index(IX), each containing a list of Cells"""
 
     """See: https://docs.microsoft.com/en-us/office/client-developer/visio/row-element-geometry-sectionvisio-xml """
@@ -214,8 +214,8 @@ class GeometryRow(InheritedRow, DocumentPart):
 
     @property
     @override
-    def _document(self) -> GuardedDocument:
-        return self.geometry._document
+    def _shape(self) -> AttachedShape:
+        return self.geometry._shape
 
     def inherited_by(self, geometry: Geometry) -> GeometryRow:
         """This row as an instance's Geometry sees it, marked inherited.
@@ -242,7 +242,7 @@ class GeometryRow(InheritedRow, DocumentPart):
         """
         # make_local() is public and reaches here directly, not only through
         # the guarded x/y setters, and this is the only materialisation path
-        self._require_open("materialising an inherited geometry row")
+        self._require_attached("materialising an inherited geometry row")
         row_type, index = self.row_type, self.index
         self.xml = self.create_row_xml(row_type or "", str(index))
         logger.debug("materialised inherited row on the instance: %s", self)
@@ -260,7 +260,7 @@ class GeometryRow(InheritedRow, DocumentPart):
         ``IX=None`` arrives as the literal ``"None"`` and passes the
         emptiness check.
         """
-        self._require_open("GeometryRow.create_row_xml()")
+        self._require_attached("GeometryRow.create_row_xml()")
         if not T or not IX:
             raise ValueError(f"cannot create a geometry row without T and IX (got T={T!r}, IX={IX!r})")
         # Create new row xml
@@ -286,7 +286,7 @@ class GeometryRow(InheritedRow, DocumentPart):
 
     @row_type.setter
     def row_type(self, value: str | int) -> None:
-        self._require_open("writing a geometry row's type")
+        self._require_attached("writing a geometry row's type")
         self.xml.attrib["T"] = str(value)
 
     @property
@@ -300,7 +300,7 @@ class GeometryRow(InheritedRow, DocumentPart):
 
     @index.setter
     def index(self, value: str | int) -> None:
-        self._require_open("writing a geometry row's index")
+        self._require_attached("writing a geometry row's index")
         self.xml.attrib["IX"] = str(value)
 
     @property
@@ -318,7 +318,7 @@ class GeometryRow(InheritedRow, DocumentPart):
     def x(self, value: float | str) -> None:
         # ahead of make_local(): a refused write must not leave an empty
         # override row behind on the shape
-        self._require_open("writing a geometry row's X coordinate")
+        self._require_attached("writing a geometry row's X coordinate")
         self.make_local()  # an inherited row gets one of its own before it is written
         cell_value = xml_value(value)
         x_cell = self.cells.get("X")  # type: GeometryCell
@@ -336,7 +336,7 @@ class GeometryRow(InheritedRow, DocumentPart):
 
     @y.setter
     def y(self, value: float | str) -> None:
-        self._require_open("writing a geometry row's Y coordinate")
+        self._require_attached("writing a geometry row's Y coordinate")
         self.make_local()
         cell_value = xml_value(value)
         y_cell = self.cells.get("Y")
@@ -357,7 +357,7 @@ class GeometryRow(InheritedRow, DocumentPart):
 
     @del_bool.setter
     def del_bool(self, value: object) -> None:
-        self._require_open("writing a geometry row's Del flag")
+        self._require_attached("writing a geometry row's Del flag")
         if value:
             self.xml.attrib["Del"] = "1"  # set to 1 if truthy
         else:
@@ -368,7 +368,7 @@ class GeometryRow(InheritedRow, DocumentPart):
         return s
 
 
-class GeometryCell(DocumentPart):
+class GeometryCell(ShapePart):
     """class to represent a Cell element, a name value pair. This may be a child of Geometry or of GeometryRow"""
 
     def __init__(
@@ -388,13 +388,13 @@ class GeometryCell(DocumentPart):
 
     @property
     @override
-    def _document(self) -> GuardedDocument:
-        return self.parent._document
+    def _shape(self) -> AttachedShape:
+        return self.parent._shape
 
     def create_cell_xml(self, name: str) -> Element:
         # also the first write of GeometryCell.__init__, so constructing a cell
-        # on a closed document refuses before it appends anything
-        self._require_open("GeometryCell.create_cell_xml()")
+        # on a detached shape refuses before it appends anything
+        self._require_attached("GeometryCell.create_cell_xml()")
         cell = make_cell_element(name)
         self.parent_xml.append(cell)
         if isinstance(self.parent, GeometryRow):
@@ -409,7 +409,7 @@ class GeometryCell(DocumentPart):
 
     @value.setter
     def value(self, value: float | str) -> None:
-        self._require_open(f"writing the value of geometry cell {self.name!r}")
+        self._require_attached(f"writing the value of geometry cell {self.name!r}")
         self.xml.attrib["V"] = xml_value(value)
 
     @property
@@ -418,7 +418,7 @@ class GeometryCell(DocumentPart):
 
     @formula.setter
     def formula(self, value: str) -> None:
-        self._require_open(f"writing the formula of geometry cell {self.name!r}")
+        self._require_attached(f"writing the formula of geometry cell {self.name!r}")
         self.xml.attrib["F"] = xml_value(value)
 
     @property
@@ -427,7 +427,7 @@ class GeometryCell(DocumentPart):
 
     @name.setter
     def name(self, value: str) -> None:
-        self._require_open("writing a geometry cell's name")
+        self._require_attached("writing a geometry cell's name")
         self.xml.attrib["N"] = xml_value(value)
 
     @property

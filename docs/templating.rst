@@ -17,9 +17,9 @@ Render ordinary expressions
        "owner": "Facilities",
    }
 
-   with VisioFile("template.vsdx") as vis:
-       vis.jinja_render_vsdx(context)
-       vis.save_vsdx("rendered.vsdx")
+   vis = VisioFile("template.vsdx")
+   vis.jinja_render_vsdx(context)
+   vis.save_vsdx("rendered.vsdx")
 
 A shape containing ``{{ project }}`` becomes ``Ward refurbishment`` in the
 saved document.

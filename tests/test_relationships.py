@@ -258,9 +258,9 @@ class TestRemovingAPageThroughTheHelpers:
                 rewritten.writestr(entry, data)
 
         out = str(tmp_path / "removed.vsdx")
-        with VisioFile(respelled) as document:
-            document.remove_page_by_index(0)
-            document.save_vsdx(out)
+        document = VisioFile(respelled)
+        document.remove_page_by_index(0)
+        document.save_vsdx(out)
 
         defects = validate_package(out)
         assert not defects, describe_defects(defects)

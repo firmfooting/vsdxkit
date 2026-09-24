@@ -65,42 +65,42 @@ def row_indexes(shape: Shape) -> list[str | None]:
 
 
 def test_rows_absent_from_the_instance_are_inherited_from_the_master():
-    with VisioFile(TEST9) as vis:
-        connector = vis.pages[0].shapes.by_text("Conn A")
+    vis = VisioFile(TEST9)
+    connector = vis.pages[0].shapes.by_text("Conn A")
 
-        rows = connector.geometry.rows
+    rows = connector.geometry.rows
 
-        # row 1 exists only in the master, row 2 only in the instance
-        assert sorted(rows) == ["1", "2"]
-        assert (rows["1"].row_type, rows["1"].x, rows["1"].y) == ("MoveTo", 0.0, 0.0)
-        assert (rows["2"].row_type, rows["2"].x, rows["2"].y) == ("LineTo", 3.543307044802283, 0.7874015655116189)
-        # every row belongs to this shape's Geometry; the inherited one is
-        # flagged, which is what the setters below act on
-        assert rows["1"].geometry is connector.geometry
-        assert rows["2"].geometry is connector.geometry
-        assert (rows["1"].inherited, rows["2"].inherited) == (True, False)
+    # row 1 exists only in the master, row 2 only in the instance
+    assert sorted(rows) == ["1", "2"]
+    assert (rows["1"].row_type, rows["1"].x, rows["1"].y) == ("MoveTo", 0.0, 0.0)
+    assert (rows["2"].row_type, rows["2"].x, rows["2"].y) == ("LineTo", 3.543307044802283, 0.7874015655116189)
+    # every row belongs to this shape's Geometry; the inherited one is
+    # flagged, which is what the setters below act on
+    assert rows["1"].geometry is connector.geometry
+    assert rows["2"].geometry is connector.geometry
+    assert (rows["1"].inherited, rows["2"].inherited) == (True, False)
 
 
 def test_an_overridden_row_keeps_the_master_cells_it_does_not_replace():
     """Merging happens cell by cell, so an X-only override inherits the master Y."""
-    with VisioFile(TEST9) as vis:
-        connector = vis.pages[0].shapes.by_text("Conn A")
-        instance_row = row_element(connector, "2")
-        instance_row.remove(instance_row.find(f'{namespace}Cell[@N="Y"]'))
+    vis = VisioFile(TEST9)
+    connector = vis.pages[0].shapes.by_text("Conn A")
+    instance_row = row_element(connector, "2")
+    instance_row.remove(instance_row.find(f'{namespace}Cell[@N="Y"]'))
 
-        row = reparse(connector).geometry.rows["2"]
+    row = reparse(connector).geometry.rows["2"]
 
-        assert row.x == 3.543307044802283  # from the instance
-        assert row.y == -1.181102362204724  # inherited from the master
+    assert row.x == 3.543307044802283  # from the instance
+    assert row.y == -1.181102362204724  # inherited from the master
 
 
 def test_a_row_deleted_by_the_instance_is_dropped_from_the_merge():
-    with VisioFile(TEST9) as vis:
-        connector = vis.pages[0].shapes.by_text("Conn A")
+    vis = VisioFile(TEST9)
+    connector = vis.pages[0].shapes.by_text("Conn A")
 
-        # the master defines row 3; the instance carries `<Row IX="3" Del="1"/>`
-        assert row_element(connector, "3").attrib["Del"] == "1"
-        assert "3" not in connector.geometry.rows
+    # the master defines row 3; the instance carries `<Row IX="3" Del="1"/>`
+    assert row_element(connector, "3").attrib["Del"] == "1"
+    assert "3" not in connector.geometry.rows
 
 
 def test_the_merge_leaves_the_master_geometry_alone(monkeypatch):
@@ -112,20 +112,20 @@ def test_the_merge_leaves_the_master_geometry_alone(monkeypatch):
     mutated object was thrown away. Memoise the master, as #261 needs to, and
     one shape's merge would reach every other, so this test pins it.
     """
-    with VisioFile(TEST9) as vis:
-        connector = vis.pages[0].shapes.by_text("Conn A")
-        master = connector.master_shape
-        # every instance resolves to this one master object, as memoising the
-        # resolution makes it; the master itself has none, or it would be its
-        # own master and its geometry would never finish building
-        monkeypatch.setattr(Shape, "master_shape", property(lambda self: None if self is master else master))
+    vis = VisioFile(TEST9)
+    connector = vis.pages[0].shapes.by_text("Conn A")
+    master = connector.master_shape
+    # every instance resolves to this one master object, as memoising the
+    # resolution makes it; the master itself has none, or it would be its
+    # own master and its geometry would never finish building
+    monkeypatch.setattr(Shape, "master_shape", property(lambda self: None if self is master else master))
 
-        instance_geometry = reparse(connector).geometry
+    instance_geometry = reparse(connector).geometry
 
-        assert sorted(instance_geometry.rows) == ["1", "2"]
-        assert sorted(master.geometry.rows) == ["1", "2", "3"]
-        assert [cell.name for cell in master.geometry.cells] == ["NoFill", "NoLine", "NoShow", "NoSnap", "NoQuickDrag"]
-        assert master.geometry.rows["2"].x == 0.0  # not the instance's 3.543307044802283
+    assert sorted(instance_geometry.rows) == ["1", "2"]
+    assert sorted(master.geometry.rows) == ["1", "2", "3"]
+    assert [cell.name for cell in master.geometry.cells] == ["NoFill", "NoLine", "NoShow", "NoSnap", "NoQuickDrag"]
+    assert master.geometry.rows["2"].x == 0.0  # not the instance's 3.543307044802283
 
 
 def test_section_cells_are_inherited_and_instance_cells_appended():
@@ -135,52 +135,52 @@ def test_section_cells_are_inherited_and_instance_cells_appended():
     it, and both stay readable. Callers reading `cells` by name have to take
     the last match.
     """
-    with VisioFile(TEST9) as vis:
-        connector = vis.pages[0].shapes.by_text("Conn A")
-        assert [cell.name for cell in connector.geometry.cells] == [
-            "NoFill",
-            "NoLine",
-            "NoShow",
-            "NoSnap",
-            "NoQuickDrag",
-        ]
-        assert connector.geometry.cells[0].value == "1"  # the master's NoFill
+    vis = VisioFile(TEST9)
+    connector = vis.pages[0].shapes.by_text("Conn A")
+    assert [cell.name for cell in connector.geometry.cells] == [
+        "NoFill",
+        "NoLine",
+        "NoShow",
+        "NoSnap",
+        "NoQuickDrag",
+    ]
+    assert connector.geometry.cells[0].value == "1"  # the master's NoFill
 
-        geometry_xml(connector).insert(0, ET.fromstring(f'<Cell xmlns="{namespace[1:-1]}" N="NoFill" V="0"/>'))
-        cells = reparse(connector).geometry.cells
+    geometry_xml(connector).insert(0, ET.fromstring(f'<Cell xmlns="{namespace[1:-1]}" N="NoFill" V="0"/>'))
+    cells = reparse(connector).geometry.cells
 
-        assert [cell.name for cell in cells] == ["NoFill", "NoLine", "NoShow", "NoSnap", "NoQuickDrag", "NoFill"]
-        assert [cell.value for cell in cells if cell.name == "NoFill"] == ["1", "0"]
+    assert [cell.name for cell in cells] == ["NoFill", "NoLine", "NoShow", "NoSnap", "NoQuickDrag", "NoFill"]
+    assert [cell.value for cell in cells if cell.name == "NoFill"] == ["1", "0"]
 
 
 def test_a_row_without_an_index_is_dropped():
     """Rows are keyed by IX, so one without an IX cannot be addressed."""
-    with VisioFile(TEST9) as vis:
-        line = vis.pages[0].shapes.by_text("Line A")
-        geometry_xml(line).append(ET.fromstring(f'<Row xmlns="{namespace[1:-1]}" T="LineTo"><Cell N="X" V="1"/></Row>'))
+    vis = VisioFile(TEST9)
+    line = vis.pages[0].shapes.by_text("Line A")
+    geometry_xml(line).append(ET.fromstring(f'<Row xmlns="{namespace[1:-1]}" T="LineTo"><Cell N="X" V="1"/></Row>'))
 
-        assert sorted(reparse(line).geometry.rows) == ["1", "2"]
+    assert sorted(reparse(line).geometry.rows) == ["1", "2"]
 
 
 def test_a_shape_without_a_master_starts_from_its_own_rows_alone():
-    with VisioFile(TEST9) as vis:
-        line = vis.pages[0].shapes.by_text("Line A")
+    vis = VisioFile(TEST9)
+    line = vis.pages[0].shapes.by_text("Line A")
 
-        assert line.master_shape is None
-        assert [(row.row_type, row.index) for row in line.geometry.rows.values()] == [("MoveTo", "1"), ("LineTo", "2")]
-        assert [cell.name for cell in line.geometry.cells] == ["NoFill", "NoLine", "NoShow", "NoSnap", "NoQuickDrag"]
+    assert line.master_shape is None
+    assert [(row.row_type, row.index) for row in line.geometry.rows.values()] == [("MoveTo", "1"), ("LineTo", "2")]
+    assert [cell.name for cell in line.geometry.cells] == ["NoFill", "NoLine", "NoShow", "NoSnap", "NoQuickDrag"]
 
 
 # --- start_pos --------------------------------------------------------------
 
 
 def test_start_pos_of_a_moveto_shape_is_in_shape_local_coordinates():
-    with VisioFile(PALETTE) as vis:
-        process = vis.pages[0].shapes.by_text("PALETTE_PROCESS")
+    vis = VisioFile(PALETTE)
+    process = vis.pages[0].shapes.by_text("PALETTE_PROCESS")
 
-        # the MoveTo row's own X/Y, not the shape's position on the page
-        assert process.geometry.start_pos() == (0.0, 0.0)
-        assert (process.x, process.y) == (2.0, 8.5)
+    # the MoveTo row's own X/Y, not the shape's position on the page
+    assert process.geometry.start_pos() == (0.0, 0.0)
+    assert (process.x, process.y) == (2.0, 8.5)
 
 
 @pytest.mark.parametrize(
@@ -202,72 +202,72 @@ def test_start_pos_of_a_relmoveto_shape_is_the_shape_pin(path, text):
     the nested case below sits inside one. Callers have to check the row
     type before they can use the result.
     """
-    with VisioFile(path) as vis:
-        shape = vis.pages[0].shapes.by_text(text)
+    vis = VisioFile(path)
+    shape = vis.pages[0].shapes.by_text(text)
 
-        assert shape.geometry.rows["1"].row_type == "RelMoveTo"
-        assert shape.geometry.start_pos() == (shape.x, shape.y)
+    assert shape.geometry.rows["1"].row_type == "RelMoveTo"
+    assert shape.geometry.start_pos() == (shape.x, shape.y)
 
 
 def test_start_pos_of_a_grouped_shape_is_relative_to_its_group():
     """A grouped shape's pin is measured inside its group, so the answer is
     comparable only between shapes with the same parent."""
-    with VisioFile(NESTED) as vis:
-        shape = vis.pages[0].shapes.by_text("Shape 1.1.1")
+    vis = VisioFile(NESTED)
+    shape = vis.pages[0].shapes.by_text("Shape 1.1.1")
 
-        assert shape.parent.shape_type == "Group"
-        assert shape.parent.parent.shape_type == "Group"
-        # the outermost group sits at x 2.36 on the page; this answer does not
-        assert shape.geometry.start_pos() == (0.6692913306848756, 0.7086614089604568)
+    assert shape.parent.shape_type == "Group"
+    assert shape.parent.parent.shape_type == "Group"
+    # the outermost group sits at x 2.36 on the page; this answer does not
+    assert shape.geometry.start_pos() == (0.6692913306848756, 0.7086614089604568)
 
 
 def test_start_pos_is_none_without_a_move_row():
-    with VisioFile(TEST9) as vis:
-        line = vis.pages[0].shapes.by_text("Line A")
-        section = geometry_xml(line)
-        section.remove(section.find(f'{namespace}Row[@T="MoveTo"]'))
+    vis = VisioFile(TEST9)
+    line = vis.pages[0].shapes.by_text("Line A")
+    section = geometry_xml(line)
+    section.remove(section.find(f'{namespace}Row[@T="MoveTo"]'))
 
-        assert reparse(line).geometry.start_pos() is None
+    assert reparse(line).geometry.start_pos() is None
 
 
 # --- move -------------------------------------------------------------------
 
 
 def test_move_shifts_absolute_rows():
-    with VisioFile(TEST9) as vis:
-        line = vis.pages[0].shapes.by_text("Line A")
+    vis = VisioFile(TEST9)
+    line = vis.pages[0].shapes.by_text("Line A")
 
-        line.geometry.move(1.0, 2.0)
+    line.geometry.move(1.0, 2.0)
 
-        assert [(row.row_type, row.x, row.y) for row in line.geometry.rows.values()] == [
-            ("MoveTo", 1.0, 2.0),
-            ("LineTo", 4.629741869488193, 2.0),
-        ]
+    assert [(row.row_type, row.x, row.y) for row in line.geometry.rows.values()] == [
+        ("MoveTo", 1.0, 2.0),
+        ("LineTo", 4.629741869488193, 2.0),
+    ]
 
 
 def test_move_leaves_relative_rows_alone():
     """Relative rows are offsets from the previous point, so moving the shape
     must not touch them; `move()` skips every row type but MoveTo and LineTo."""
-    with VisioFile(TEST9) as vis:
-        rect = vis.pages[0].shapes.by_text("Rect A")
-        before = [(row.row_type, row.x, row.y) for row in rect.geometry.rows.values()]
+    vis = VisioFile(TEST9)
+    rect = vis.pages[0].shapes.by_text("Rect A")
+    before = [(row.row_type, row.x, row.y) for row in rect.geometry.rows.values()]
 
-        rect.geometry.move(1.0, 2.0)
+    rect.geometry.move(1.0, 2.0)
 
-        assert [(row.row_type, row.x, row.y) for row in rect.geometry.rows.values()] == before
+    assert [(row.row_type, row.x, row.y) for row in rect.geometry.rows.values()] == before
 
 
 def test_move_leaves_a_missing_coordinate_missing():
-    with VisioFile(TEST9) as vis:
-        line = vis.pages[0].shapes.by_text("Line A")
-        geometry_xml(line).append(ET.fromstring(f'<Row xmlns="{namespace[1:-1]}" T="MoveTo" IX="9"><Cell N="Y" V="1"/></Row>'))
-        geometry = reparse(line).geometry
+    vis = VisioFile(TEST9)
+    line = vis.pages[0].shapes.by_text("Line A")
+    geometry_xml(line).append(ET.fromstring(f'<Row xmlns="{namespace[1:-1]}" T="MoveTo" IX="9"><Cell N="Y" V="1"/></Row>'))
+    geometry = reparse(line).geometry
 
-        geometry.move(1.0, 2.0)
+    geometry.move(1.0, 2.0)
 
-        row = geometry.rows["9"]
-        assert (row.x, row.y) == (None, 3.0)
-        assert "X" not in row.cells
+    row = geometry.rows["9"]
+    assert (row.x, row.y) == (None, 3.0)
+    assert "X" not in row.cells
 
 
 def test_move_copies_an_inherited_row_onto_the_instance():
@@ -276,16 +276,16 @@ def test_move_copies_an_inherited_row_onto_the_instance():
     Row 1 is the master's. `Geometry.move()` reads the coordinates from there
     and writes the shifted pair to a row of the instance's own (#239).
     """
-    with VisioFile(TEST9) as vis:
-        connector = vis.pages[0].shapes.by_text("Conn A")
-        assert cell_values(row_element(connector.master_shape, "1")) == {"X": "0", "Y": "0"}
+    vis = VisioFile(TEST9)
+    connector = vis.pages[0].shapes.by_text("Conn A")
+    assert cell_values(row_element(connector.master_shape, "1")) == {"X": "0", "Y": "0"}
 
-        connector.move(1.0, 2.0)
+    connector.move(1.0, 2.0)
 
-        assert cell_values(row_element(connector.master_shape, "1")) == {"X": "0", "Y": "0"}
-        assert cell_values(row_element(connector, "1")) == {"X": "1.0", "Y": "2.0"}
-        assert row_indexes(connector) == ["1", "2", "3"]
-        assert (connector.geometry.rows["1"].x, connector.geometry.rows["1"].y) == (1.0, 2.0)
+    assert cell_values(row_element(connector.master_shape, "1")) == {"X": "0", "Y": "0"}
+    assert cell_values(row_element(connector, "1")) == {"X": "1.0", "Y": "2.0"}
+    assert row_indexes(connector) == ["1", "2", "3"]
+    assert (connector.geometry.rows["1"].x, connector.geometry.rows["1"].y) == (1.0, 2.0)
 
 
 def test_a_row_copied_down_by_move_lands_after_the_sections_cells():
@@ -294,15 +294,15 @@ def test_a_row_copied_down_by_move_lands_after_the_sections_cells():
     A Section is `Cell*, Trigger*, Row*`, so a row wedged among the cells is a
     file Visio offers to repair.
     """
-    with VisioFile(TEST9) as vis:
-        connector = vis.pages[0].shapes.by_text("Conn A")
-        geometry_xml(connector).insert(0, ET.fromstring(f'<Cell xmlns="{namespace[1:-1]}" N="NoShow" V="1"/>'))
-        connector = reparse(connector)
+    vis = VisioFile(TEST9)
+    connector = vis.pages[0].shapes.by_text("Conn A")
+    geometry_xml(connector).insert(0, ET.fromstring(f'<Cell xmlns="{namespace[1:-1]}" N="NoShow" V="1"/>'))
+    connector = reparse(connector)
 
-        connector.move(1.0, 2.0)
+    connector.move(1.0, 2.0)
 
-        assert [child.tag.rpartition("}")[2] for child in geometry_xml(connector)] == ["Cell", "Row", "Row", "Row"]
-        assert row_indexes(connector) == ["1", "2", "3"]
+    assert [child.tag.rpartition("}")[2] for child in geometry_xml(connector)] == ["Cell", "Row", "Row", "Row"]
+    assert row_indexes(connector) == ["1", "2", "3"]
 
 
 # --- set_move_to / set_line_to ----------------------------------------------
@@ -311,43 +311,43 @@ def test_a_row_copied_down_by_move_lands_after_the_sections_cells():
 def test_set_move_to_materialises_an_inherited_row_on_the_instance(vsdx_copy):
     """The copy survives a round trip through the saved package."""
     path = vsdx_copy("test9_rect_and_line.vsdx")
-    with VisioFile(path) as vis:
-        connector = vis.pages[0].shapes.by_text("Conn A")
+    vis = VisioFile(path)
+    connector = vis.pages[0].shapes.by_text("Conn A")
 
-        connector.geometry.set_move_to(1.25, 2.5)
+    connector.geometry.set_move_to(1.25, 2.5)
 
-        assert cell_values(row_element(connector, "1")) == {"X": "1.25", "Y": "2.5"}
-        assert cell_values(row_element(connector.master_shape, "1")) == {"X": "0", "Y": "0"}
-        vis.save_vsdx(path)
+    assert cell_values(row_element(connector, "1")) == {"X": "1.25", "Y": "2.5"}
+    assert cell_values(row_element(connector.master_shape, "1")) == {"X": "0", "Y": "0"}
+    vis.save_vsdx(path)
 
-    with VisioFile(path) as vis:
-        row = vis.pages[0].shapes.by_text("Conn A").geometry.rows["1"]
-        assert (row.row_type, row.x, row.y) == ("MoveTo", 1.25, 2.5)
+    vis = VisioFile(path)
+    row = vis.pages[0].shapes.by_text("Conn A").geometry.rows["1"]
+    assert (row.row_type, row.x, row.y) == ("MoveTo", 1.25, 2.5)
 
 
 def test_set_line_to_updates_an_instance_row_in_place():
-    with VisioFile(TEST9) as vis:
-        connector = vis.pages[0].shapes.by_text("Conn A")
+    vis = VisioFile(TEST9)
+    connector = vis.pages[0].shapes.by_text("Conn A")
 
-        connector.geometry.set_line_to(9.0, 8.0)
+    connector.geometry.set_line_to(9.0, 8.0)
 
-        assert cell_values(row_element(connector, "2")) == {"X": "9.0", "Y": "8.0"}
-        # no duplicate row was added alongside the one already there
-        assert row_indexes(connector) == ["2", "3"]
+    assert cell_values(row_element(connector, "2")) == {"X": "9.0", "Y": "8.0"}
+    # no duplicate row was added alongside the one already there
+    assert row_indexes(connector) == ["2", "3"]
 
 
 def test_set_line_to_materialises_an_inherited_row_on_the_instance():
     """A connector that has never been re-routed inherits its LineTo rows."""
-    with VisioFile(TEST9) as vis:
-        connector = vis.pages[0].shapes.by_text("Conn A")
-        geometry_xml(connector).remove(row_element(connector, "2"))
-        connector = reparse(connector)
-        assert connector.geometry.rows["2"].inherited
+    vis = VisioFile(TEST9)
+    connector = vis.pages[0].shapes.by_text("Conn A")
+    geometry_xml(connector).remove(row_element(connector, "2"))
+    connector = reparse(connector)
+    assert connector.geometry.rows["2"].inherited
 
-        connector.geometry.set_line_to(9.0, 8.0)
+    connector.geometry.set_line_to(9.0, 8.0)
 
-        assert cell_values(row_element(connector, "2")) == {"X": "9.0", "Y": "8.0"}
-        assert cell_values(row_element(connector.master_shape, "2")) == {"X": "0", "Y": "-1.181102362204724"}
+    assert cell_values(row_element(connector, "2")) == {"X": "9.0", "Y": "8.0"}
+    assert cell_values(row_element(connector.master_shape, "2")) == {"X": "0", "Y": "-1.181102362204724"}
 
 
 def test_set_move_to_leaves_a_formula_that_overrides_the_value_it_writes():
@@ -356,14 +356,14 @@ def test_set_move_to_leaves_a_formula_that_overrides_the_value_it_writes():
     `Line A`'s MoveTo X carries `F="Width*0"`. Visio recomputes V from F, so
     the coordinate written here is discarded when the file is opened.
     """
-    with VisioFile(TEST9) as vis:
-        line = vis.pages[0].shapes.by_text("Line A")
+    vis = VisioFile(TEST9)
+    line = vis.pages[0].shapes.by_text("Line A")
 
-        line.geometry.set_move_to(7.0, 8.0)
+    line.geometry.set_move_to(7.0, 8.0)
 
-        x_cell = line.geometry.rows["1"].cells["X"]
-        assert x_cell.value == "7.0"
-        assert x_cell.formula == "Width*0"
+    x_cell = line.geometry.rows["1"].cells["X"]
+    assert x_cell.value == "7.0"
+    assert x_cell.formula == "Width*0"
 
 
 def test_copying_an_inherited_row_down_drops_the_masters_formula():
@@ -373,61 +373,61 @@ def test_copying_an_inherited_row_down_drops_the_masters_formula():
     value, so a formula the master used to compute the coordinate is dropped
     instead of inherited.
     """
-    with VisioFile(TEST9) as vis:
-        connector = vis.pages[0].shapes.by_text("Conn A")
-        master_x = row_element(connector.master_shape, "1").find(f'{namespace}Cell[@N="X"]')
-        master_x.attrib["F"] = "Width*0"
-        connector = reparse(connector)
-        assert connector.geometry.rows["1"].cells["X"].formula == "Width*0"
+    vis = VisioFile(TEST9)
+    connector = vis.pages[0].shapes.by_text("Conn A")
+    master_x = row_element(connector.master_shape, "1").find(f'{namespace}Cell[@N="X"]')
+    master_x.attrib["F"] = "Width*0"
+    connector = reparse(connector)
+    assert connector.geometry.rows["1"].cells["X"].formula == "Width*0"
 
-        connector.geometry.set_move_to(1.25, 2.5)
+    connector.geometry.set_move_to(1.25, 2.5)
 
-        assert row_element(connector, "1").find(f'{namespace}Cell[@N="X"]').attrib == {"N": "X", "V": "1.25"}
-        assert connector.geometry.rows["1"].cells["X"].formula is None
+    assert row_element(connector, "1").find(f'{namespace}Cell[@N="X"]').attrib == {"N": "X", "V": "1.25"}
+    assert connector.geometry.rows["1"].cells["X"].formula is None
 
 
 @pytest.mark.parametrize("text", ["Rect A", "Line A"])
 def test_setters_are_a_noop_when_the_row_type_is_absent(text):
     """`Rect A` has no MoveTo or LineTo row; `Line A` has one of each."""
-    with VisioFile(TEST9) as vis:
-        shape = vis.pages[0].shapes.by_text(text)
-        geometry = shape.geometry
-        before = ET.tostring(geometry.xml)
+    vis = VisioFile(TEST9)
+    shape = vis.pages[0].shapes.by_text(text)
+    geometry = shape.geometry
+    before = ET.tostring(geometry.xml)
 
-        geometry.set_move_to(5.0, 5.0, move_to_index=1)
-        geometry.set_line_to(5.0, 5.0, line_to_index=1)
+    geometry.set_move_to(5.0, 5.0, move_to_index=1)
+    geometry.set_line_to(5.0, 5.0, line_to_index=1)
 
-        assert ET.tostring(geometry.xml) == before
+    assert ET.tostring(geometry.xml) == before
 
 
 def test_set_move_to_and_set_line_to_address_rows_by_position_not_index():
     """The index argument counts matching rows; it is not a row IX."""
-    with VisioFile(PALETTE) as vis:
-        process = vis.pages[0].shapes.by_text("PALETTE_PROCESS")
+    vis = VisioFile(PALETTE)
+    process = vis.pages[0].shapes.by_text("PALETTE_PROCESS")
 
-        process.geometry.set_line_to(4.0, 5.0, line_to_index=2)
+    process.geometry.set_line_to(4.0, 5.0, line_to_index=2)
 
-        # LineTo rows are IX 2, 3, 4 and 5; the third of them is IX 4
-        assert cell_values(row_element(process, "4")) == {"X": "4.0", "Y": "5.0"}
+    # LineTo rows are IX 2, 3, 4 and 5; the third of them is IX 4
+    assert cell_values(row_element(process, "4")) == {"X": "4.0", "Y": "5.0"}
 
 
 # --- GeometryRow ------------------------------------------------------------
 
 
 def test_creating_a_row_requires_a_type_and_an_index():
-    with VisioFile(TEST9) as vis:
-        geometry = vis.pages[0].shapes.by_text("Line A").geometry
+    vis = VisioFile(TEST9)
+    geometry = vis.pages[0].shapes.by_text("Line A").geometry
 
-        with pytest.raises(ValueError, match="without T and IX"):
-            GeometryRow(geometry=geometry, xml=None, master_geometry_row=None, T="", IX="1")
+    with pytest.raises(ValueError, match="without T and IX"):
+        GeometryRow(geometry=geometry, xml=None, master_geometry_row=None, T="", IX="1")
 
 
 def test_creating_a_row_rejects_an_index_already_in_the_section():
-    with VisioFile(TEST9) as vis:
-        geometry = vis.pages[0].shapes.by_text("Line A").geometry
+    vis = VisioFile(TEST9)
+    geometry = vis.pages[0].shapes.by_text("Line A").geometry
 
-        with pytest.raises(ValueError, match="IX=1 already exists"):
-            GeometryRow(geometry=geometry, xml=None, master_geometry_row=None, T="MoveTo", IX="1")
+    with pytest.raises(ValueError, match="IX=1 already exists"):
+        GeometryRow(geometry=geometry, xml=None, master_geometry_row=None, T="MoveTo", IX="1")
 
 
 def test_creating_a_row_with_no_index_yields_the_string_none():
@@ -435,13 +435,13 @@ def test_creating_a_row_with_no_index_yields_the_string_none():
 
     The row lands with `IX="None"`, which Visio will not accept.
     """
-    with VisioFile(TEST9) as vis:
-        geometry = vis.pages[0].shapes.by_text("Line A").geometry
+    vis = VisioFile(TEST9)
+    geometry = vis.pages[0].shapes.by_text("Line A").geometry
 
-        row = GeometryRow(geometry=geometry, xml=None, master_geometry_row=None, T="MoveTo", IX=None)
+    row = GeometryRow(geometry=geometry, xml=None, master_geometry_row=None, T="MoveTo", IX=None)
 
-        assert row.index == "None"
-        assert geometry.rows["None"] is row
+    assert row.index == "None"
+    assert geometry.rows["None"] is row
 
 
 def test_a_new_row_is_placed_after_the_sections_cells_and_in_index_order():
@@ -451,47 +451,47 @@ def test_a_new_row_is_placed_after_the_sections_cells_and_in_index_order():
     follow, and IX 10 sorts after IX 2 rather than as the text "10" would, so
     the path is still drawn in index order.
     """
-    with VisioFile(TEST9) as vis:
-        line = vis.pages[0].shapes.by_text("Line A")
+    vis = VisioFile(TEST9)
+    line = vis.pages[0].shapes.by_text("Line A")
 
-        GeometryRow(geometry=line.geometry, xml=None, master_geometry_row=None, T="LineTo", IX=10)
+    GeometryRow(geometry=line.geometry, xml=None, master_geometry_row=None, T="LineTo", IX=10)
 
-        assert row_indexes(line) == ["1", "2", "10"]
-        assert [child.tag.rpartition("}")[2] for child in geometry_xml(line)] == [
-            "Cell",
-            "Cell",
-            "Cell",
-            "Cell",
-            "Cell",
-            "Row",
-            "Row",
-            "Row",
-        ]
+    assert row_indexes(line) == ["1", "2", "10"]
+    assert [child.tag.rpartition("}")[2] for child in geometry_xml(line)] == [
+        "Cell",
+        "Cell",
+        "Cell",
+        "Cell",
+        "Cell",
+        "Row",
+        "Row",
+        "Row",
+    ]
 
 
 def test_a_row_index_that_is_not_a_number_sorts_last():
     """`IX="None"` is unorderable against real indexes, so it goes at the end."""
-    with VisioFile(TEST9) as vis:
-        line = vis.pages[0].shapes.by_text("Line A")
+    vis = VisioFile(TEST9)
+    line = vis.pages[0].shapes.by_text("Line A")
 
-        GeometryRow(geometry=line.geometry, xml=None, master_geometry_row=None, T="LineTo", IX=None)
-        GeometryRow(geometry=line.geometry, xml=None, master_geometry_row=None, T="LineTo", IX=3)
+    GeometryRow(geometry=line.geometry, xml=None, master_geometry_row=None, T="LineTo", IX=None)
+    GeometryRow(geometry=line.geometry, xml=None, master_geometry_row=None, T="LineTo", IX=3)
 
-        assert row_indexes(line) == ["1", "2", "3", "None"]
+    assert row_indexes(line) == ["1", "2", "3", "None"]
 
 
 def test_coordinate_setters_create_the_cells_they_need():
-    with VisioFile(TEST9) as vis:
-        line = vis.pages[0].shapes.by_text("Line A")
-        geometry_xml(line).append(ET.fromstring(f'<Row xmlns="{namespace[1:-1]}" T="MoveTo" IX="9"/>'))
-        row = reparse(line).geometry.rows["9"]
-        assert (row.x, row.y) == (None, None)
+    vis = VisioFile(TEST9)
+    line = vis.pages[0].shapes.by_text("Line A")
+    geometry_xml(line).append(ET.fromstring(f'<Row xmlns="{namespace[1:-1]}" T="MoveTo" IX="9"/>'))
+    row = reparse(line).geometry.rows["9"]
+    assert (row.x, row.y) == (None, None)
 
-        row.x = 3  # int
-        row.y = "4.5"  # string
+    row.x = 3  # int
+    row.y = "4.5"  # string
 
-        assert (row.x, row.y) == (3.0, 4.5)
-        assert cell_values(row.xml) == {"X": "3", "Y": "4.5"}
+    assert (row.x, row.y) == (3.0, 4.5)
+    assert cell_values(row.xml) == {"X": "3", "Y": "4.5"}
 
 
 def test_setting_a_coordinate_on_an_inherited_row_copies_it_onto_the_instance():
@@ -500,99 +500,99 @@ def test_setting_a_coordinate_on_an_inherited_row_copies_it_onto_the_instance():
     Only X is written, so the instance's row carries X alone and Y is still
     read from the master (#239).
     """
-    with VisioFile(TEST9) as vis:
-        connector = vis.pages[0].shapes.by_text("Conn A")
-        row = connector.geometry.rows["1"]
+    vis = VisioFile(TEST9)
+    connector = vis.pages[0].shapes.by_text("Conn A")
+    row = connector.geometry.rows["1"]
 
-        row.x = 42.0
+    row.x = 42.0
 
-        assert cell_values(row_element(connector.master_shape, "1")) == {"X": "0", "Y": "0"}
-        assert cell_values(row_element(connector, "1")) == {"X": "42.0"}
-        assert (row.x, row.y) == (42.0, 0.0)
-        assert row.inherited is False
+    assert cell_values(row_element(connector.master_shape, "1")) == {"X": "0", "Y": "0"}
+    assert cell_values(row_element(connector, "1")) == {"X": "42.0"}
+    assert (row.x, row.y) == (42.0, 0.0)
+    assert row.inherited is False
 
 
 def test_del_bool_can_be_set_and_cleared():
-    with VisioFile(TEST9) as vis:
-        row = vis.pages[0].shapes.by_text("Line A").geometry.rows["1"]
-        assert row.del_bool is None
+    vis = VisioFile(TEST9)
+    row = vis.pages[0].shapes.by_text("Line A").geometry.rows["1"]
+    assert row.del_bool is None
 
-        row.del_bool = True
-        assert row.del_bool == "1"
+    row.del_bool = True
+    assert row.del_bool == "1"
 
-        row.del_bool = 0
-        assert row.del_bool is None
+    row.del_bool = 0
+    assert row.del_bool is None
 
 
 def test_clearing_del_bool_that_is_not_set_raises():
     """Clearing an absent Del raises KeyError instead of doing nothing."""
-    with VisioFile(TEST9) as vis:
-        row = vis.pages[0].shapes.by_text("Line A").geometry.rows["1"]
+    vis = VisioFile(TEST9)
+    row = vis.pages[0].shapes.by_text("Line A").geometry.rows["1"]
 
-        with pytest.raises(KeyError):
-            row.del_bool = False
+    with pytest.raises(KeyError):
+        row.del_bool = False
 
 
 def test_changing_a_rows_index_does_not_rekey_the_geometry():
     """`Geometry.rows` is keyed at parse time, so renumbering desyncs it."""
-    with VisioFile(TEST9) as vis:
-        geometry = vis.pages[0].shapes.by_text("Line A").geometry
-        row = geometry.rows["1"]
+    vis = VisioFile(TEST9)
+    geometry = vis.pages[0].shapes.by_text("Line A").geometry
+    row = geometry.rows["1"]
 
-        row.row_type = "LineTo"
-        row.index = 7
+    row.row_type = "LineTo"
+    row.index = 7
 
-        assert (row.row_type, row.index) == ("LineTo", "7")
-        assert sorted(geometry.rows) == ["1", "2"]
-        assert geometry.rows["1"] is row
+    assert (row.row_type, row.index) == ("LineTo", "7")
+    assert sorted(geometry.rows) == ["1", "2"]
+    assert geometry.rows["1"] is row
 
 
 # --- GeometryCell -----------------------------------------------------------
 
 
 def test_a_new_cell_joins_its_section_and_the_cells_list():
-    with VisioFile(TEST9) as vis:
-        geometry = vis.pages[0].shapes.by_text("Line A").geometry
+    vis = VisioFile(TEST9)
+    geometry = vis.pages[0].shapes.by_text("Line A").geometry
 
-        cell = GeometryCell(parent=geometry, xml=None, name="NoLine", value=1)
+    cell = GeometryCell(parent=geometry, xml=None, name="NoLine", value=1)
 
-        assert geometry.cells[-1] is cell
-        assert (cell.name, cell.value) == ("NoLine", "1")
-        assert geometry.xml.findall(f'{namespace}Cell[@N="NoLine"]')[-1] is cell.xml
+    assert geometry.cells[-1] is cell
+    assert (cell.name, cell.value) == ("NoLine", "1")
+    assert geometry.xml.findall(f'{namespace}Cell[@N="NoLine"]')[-1] is cell.xml
 
 
 def test_a_new_cell_joins_its_row_under_its_name():
-    with VisioFile(TEST9) as vis:
-        row = vis.pages[0].shapes.by_text("Line A").geometry.rows["1"]
+    vis = VisioFile(TEST9)
+    row = vis.pages[0].shapes.by_text("Line A").geometry.rows["1"]
 
-        cell = GeometryCell(parent=row, xml=None, name="A", value="POLYLINE(0,0)")
+    cell = GeometryCell(parent=row, xml=None, name="A", value="POLYLINE(0,0)")
 
-        assert row.cells["A"] is cell
-        assert row.xml.find(f'{namespace}Cell[@N="A"]') is cell.xml
+    assert row.cells["A"] is cell
+    assert row.xml.find(f'{namespace}Cell[@N="A"]') is cell.xml
 
 
 def test_formula_and_func_read_the_same_attribute():
-    with VisioFile(PALETTE) as vis:
-        decision = vis.pages[0].shapes.by_text("PALETTE_DECISION")
-        cell = decision.geometry.rows["2"].cells["A"]
+    vis = VisioFile(PALETTE)
+    decision = vis.pages[0].shapes.by_text("PALETTE_DECISION")
+    cell = decision.geometry.rows["2"].cells["A"]
 
-        assert cell.formula == cell.func == "POLYLINE(0, 0, 1,0.5, 0.5,0, 0,0.5)"
+    assert cell.formula == cell.func == "POLYLINE(0, 0, 1,0.5, 0.5,0, 0,0.5)"
 
-        cell.formula = "POLYLINE(0,0)"
+    cell.formula = "POLYLINE(0,0)"
 
-        assert cell.func == "POLYLINE(0,0)"
-        assert cell.xml.attrib["F"] == "POLYLINE(0,0)"
+    assert cell.func == "POLYLINE(0,0)"
+    assert cell.xml.attrib["F"] == "POLYLINE(0,0)"
 
 
 def test_reprs_identify_the_element_they_describe():
     """These show up in logs and debugger output, so they carry the identifiers."""
-    with VisioFile(PALETTE) as vis:
-        decision = vis.pages[0].shapes.by_text("PALETTE_DECISION")
-        geometry = decision.geometry
+    vis = VisioFile(PALETTE)
+    decision = vis.pages[0].shapes.by_text("PALETTE_DECISION")
+    geometry = decision.geometry
 
-        assert repr(geometry.rows["2"].cells["A"]).startswith("A=POLYLINE(0, 0, 1,0.5, 0.5,0, 0,0.5) func=")
-        assert repr(geometry.rows["1"]).startswith("Row[1] del:None: RelMoveTo=")
-        assert "('PolylineTo', '2', 1.5, 2.0)" in repr(geometry)
+    assert repr(geometry.rows["2"].cells["A"]).startswith("A=POLYLINE(0, 0, 1,0.5, 0.5,0, 0,0.5) func=")
+    assert repr(geometry.rows["1"]).startswith("Row[1] del:None: RelMoveTo=")
+    assert "('PolylineTo', '2', 1.5, 2.0)" in repr(geometry)
 
 
 # --- when the Geometry is built ---------------------------------------------
@@ -614,15 +614,15 @@ def test_geometry_is_built_on_first_read_not_when_the_shape_is_built(monkeypatch
 
     monkeypatch.setattr(vsdxkit.shapes, "Geometry", CountedGeometry)
 
-    with VisioFile(TEST9) as vis:
-        shapes = vis.pages[0].all_shapes
+    vis = VisioFile(TEST9)
+    shapes = vis.pages[0].all_shapes
 
-        assert shapes and built == []
+    assert shapes and built == []
 
-        geometry = shapes[0].geometry
+    geometry = shapes[0].geometry
 
-        assert [shape for shape in built if shape is shapes[0]] == [shapes[0]]
-        assert shapes[0].geometry is geometry  # held, not rebuilt on each read
+    assert [shape for shape in built if shape is shapes[0]] == [shapes[0]]
+    assert shapes[0].geometry is geometry  # held, not rebuilt on each read
 
 
 def test_the_master_is_resolved_once_per_shape(monkeypatch):
@@ -636,15 +636,15 @@ def test_the_master_is_resolved_once_per_shape(monkeypatch):
 
     monkeypatch.setattr(Shape, "_resolve_master_shape", counting)
 
-    with VisioFile(TEST9) as vis:
-        connector = vis.pages[0].shapes.by_text("Conn A")
+    vis = VisioFile(TEST9)
+    connector = vis.pages[0].shapes.by_text("Conn A")
 
-        assert connector.geometry is not None
-        assert connector.master_shape is not None
-        assert connector.data_properties is not None
+    assert connector.geometry is not None
+    assert connector.master_shape is not None
+    assert connector.data_properties is not None
 
-        # by identity: the master resolves its own master (to None) in passing
-        assert sum(1 for shape in resolutions if shape is connector) == 1
+    # by identity: the master resolves its own master (to None) in passing
+    assert sum(1 for shape in resolutions if shape is connector) == 1
 
 
 def test_the_section_is_located_when_the_shape_is_built():
@@ -654,36 +654,36 @@ def test_the_section_is_located_when_the_shape_is_built():
     section's rows at once; the Geometry keeps the section it located until
     the shape is read again.
     """
-    with VisioFile(TEST9) as vis:
-        line = vis.pages[0].shapes.by_text("Line A")
-        line.xml.remove(geometry_xml(line))
+    vis = VisioFile(TEST9)
+    line = vis.pages[0].shapes.by_text("Line A")
+    line.xml.remove(geometry_xml(line))
 
-        assert "Geometry/LineTo/X" not in line.cells
-        assert line.geometry is not None  # located before the removal
-        assert reparse(line).geometry is None
+    assert "Geometry/LineTo/X" not in line.cells
+    assert line.geometry is not None  # located before the removal
+    assert reparse(line).geometry is None
 
 
 def test_repointing_a_shape_at_a_master_drops_the_memo():
     """`master_page_ID` is writable, and `Connect.create` repoints it."""
-    with VisioFile(os.path.join(FIXTURES, "test4_connectors.vsdx")) as vis:
-        shapes = vis.pages[0].all_shapes
-        mastered = next(s for s in shapes if s.master_page_ID)
-        masterless = next(s for s in shapes if not s.master_page_ID)
-        assert masterless.master_shape is None  # resolved, and would be memoised as None
+    vis = VisioFile(os.path.join(FIXTURES, "test4_connectors.vsdx"))
+    shapes = vis.pages[0].all_shapes
+    mastered = next(s for s in shapes if s.master_page_ID)
+    masterless = next(s for s in shapes if not s.master_page_ID)
+    assert masterless.master_shape is None  # resolved, and would be memoised as None
 
-        masterless.master_page_ID = mastered.master_page_ID
+    masterless.master_page_ID = mastered.master_page_ID
 
-        assert masterless.master_shape is not None
+    assert masterless.master_shape is not None
 
 
 def test_a_cell_added_to_the_master_is_picked_up_by_a_shape_holding_it():
     """The memo is keyed on the master element's children, not taken on trust."""
-    with VisioFile(os.path.join(FIXTURES, "test5_master.vsdx")) as vis:
-        page = vis.pages[0]
-        shape = next(s for s in page.all_shapes if s.master_page_ID)
-        master_page = shape.master_page
-        assert shape.cell_value("LockDelete") is None
+    vis = VisioFile(os.path.join(FIXTURES, "test5_master.vsdx"))
+    page = vis.pages[0]
+    shape = next(s for s in page.all_shapes if s.master_page_ID)
+    master_page = shape.master_page
+    assert shape.cell_value("LockDelete") is None
 
-        master_page.child_shapes[0].set_cell_value("LockDelete", 1)
+    master_page.child_shapes[0].set_cell_value("LockDelete", 1)
 
-        assert shape.cell_value("LockDelete") == "1"
+    assert shape.cell_value("LockDelete") == "1"

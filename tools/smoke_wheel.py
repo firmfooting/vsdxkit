@@ -93,27 +93,27 @@ def main() -> int:
             handle.write(payload)
 
         try:
-            with VisioFile(document) as vis:
-                page = vis.pages[0]
-                shape = vis.create_shape(page, "PALETTE_DECISION", 4.0, 6.0, w=1.5, h=1.0, text="smoke")
-                if shape is None:
-                    fail("create_shape returned None")
-                else:
-                    ok("create_shape from installed palette")
-                other = vis.create_shape(page, "PALETTE_PROCESS", 8.0, 6.0, w=1.5, h=1.0, text="smoke-to")
-                connector = page.connect_shapes(shape, other)
-                if connector is None:
-                    fail("create_connect returned None")
-                else:
-                    ok("create_connect between created shapes")
-                vis.save_vsdx(document)
+            vis = VisioFile(document)
+            page = vis.pages[0]
+            shape = vis.create_shape(page, "PALETTE_DECISION", 4.0, 6.0, w=1.5, h=1.0, text="smoke")
+            if shape is None:
+                fail("create_shape returned None")
+            else:
+                ok("create_shape from installed palette")
+            other = vis.create_shape(page, "PALETTE_PROCESS", 8.0, 6.0, w=1.5, h=1.0, text="smoke-to")
+            connector = page.connect_shapes(shape, other)
+            if connector is None:
+                fail("create_connect returned None")
+            else:
+                ok("create_connect between created shapes")
+            vis.save_vsdx(document)
 
-            with VisioFile(document) as reloaded:
-                found = reloaded.pages[0].shapes.by_text("smoke")
-                if found is None:
-                    fail("saved document lost the created shape")
-                else:
-                    ok("save and reopen preserve created shapes")
+            reloaded = VisioFile(document)
+            found = reloaded.pages[0].shapes.by_text("smoke")
+            if found is None:
+                fail("saved document lost the created shape")
+            else:
+                ok("save and reopen preserve created shapes")
         except Exception as error:  # smoke harness reports every failure mode
             fail(f"creation API exercise failed: {error}")
             return 1

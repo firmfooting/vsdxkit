@@ -24,18 +24,16 @@ import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING
 
 if sys.version_info >= (3, 12):
-    from typing import override
+    pass
 else:
-    from typing_extensions import override
+    pass
 
 import vsdxkit
-from vsdxkit.document_part import DocumentPart
 from vsdxkit.errors import InvalidOperationError, MissingPartError
 from vsdxkit.shapes import Shape, is_connector
 
 if TYPE_CHECKING:
     from vsdxkit.pages import Page
-    from vsdxkit.vsdxfile import VisioFile
 
 # observed lane pitch in the Visio 16 CFF capture (inches)
 LANE_PITCH_INCHES = 1.18110236220472
@@ -71,7 +69,7 @@ def set_user_row_value(shape: Shape, name: str, value: str) -> bool:
     return False
 
 
-class Container(DocumentPart):
+class Container:
     """Read/write view over a CFF (swimlane) diagram structure.
 
     Membership is geometric: :meth:`lane_of` maps a shape to the lane whose
@@ -81,11 +79,6 @@ class Container(DocumentPart):
 
     def __init__(self, page: Page):
         self.page = page
-
-    @property
-    @override
-    def _document(self) -> VisioFile:
-        return self.page.vis
 
     # ---- discovery -------------------------------------------------------
 
@@ -168,10 +161,6 @@ class Container(DocumentPart):
 
         :return: the new lane Shape
         """
-        # the Page.* wrappers are guarded; a Container reached through
-        # Page.get_container() was not, and took its refusal from
-        # renumber_shape_ids, which the caller never called (issue #329)
-        self._require_open("Container.add_swimlane()")
         lanes = self.lanes
         if not lanes:
             raise InvalidOperationError("page has no Swimlane lanes; not a CFF diagram")
@@ -224,7 +213,6 @@ class Container(DocumentPart):
         :raises InvalidOperationError: if ``lane`` has no heading sub-shape, or no writable
             ``visHeadingText`` row.
         """
-        self._require_open("Container.set_lane_label()")
         self._write_lane_label(lane, label, subject=f"shape {lane.ID}")
 
     def _write_lane_label(self, lane: Shape, label: str, *, subject: str) -> None:
@@ -274,7 +262,6 @@ class Container(DocumentPart):
         lane's centre, keeping its PinX. Mirrors Visio's own behaviour when a
         shape is dragged into a lane; membership stays geometric.
         """
-        self._require_open("Container.add_shape_to_lane()")
         if self.lane_of(shape) is lane:
             return
         shape.get_or_create_cell("PinY", v=str(lane.y or 0.0))

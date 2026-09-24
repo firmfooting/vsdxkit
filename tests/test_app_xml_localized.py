@@ -63,9 +63,9 @@ def test_adding_a_page_counts_it_in_the_section_that_is_already_there(german, tm
     nothing else: `_set_app_xml_value` then creates the pair it could not find.
     """
     out = str(tmp_path / "out.vsdx")
-    with VisioFile(german) as vis:
-        vis.add_page("NewPage")
-        vis.save_vsdx(out)
+    vis = VisioFile(german)
+    vis.add_page("NewPage")
+    vis.save_vsdx(out)
     headings, titles = _app_xml(out)
     assert headings == ["Seiten", "4", "Master", "3"]
     assert titles[:4] == ["Page-1", "Page-2", "Page-3", "NewPage"]
@@ -73,9 +73,9 @@ def test_adding_a_page_counts_it_in_the_section_that_is_already_there(german, tm
 
 def test_removing_a_page_counts_it_in_the_section_that_is_already_there(german, tmp_path):
     out = str(tmp_path / "out.vsdx")
-    with VisioFile(german) as vis:
-        vis.remove_page_by_index(1)
-        vis.save_vsdx(out)
+    vis = VisioFile(german)
+    vis.remove_page_by_index(1)
+    vis.save_vsdx(out)
     headings, titles = _app_xml(out)
     assert headings == ["Seiten", "2", "Master", "3"]
     assert titles == ["Page-1", "Page-3", "Dynamic connector", "Switch", "Router"]
@@ -83,9 +83,9 @@ def test_removing_a_page_counts_it_in_the_section_that_is_already_there(german, 
 
 def test_renaming_a_page_renames_its_title(german, tmp_path):
     out = str(tmp_path / "out.vsdx")
-    with VisioFile(german) as vis:
-        vis.pages[1].name = "Umbenannt"
-        vis.save_vsdx(out)
+    vis = VisioFile(german)
+    vis.pages[1].name = "Umbenannt"
+    vis.save_vsdx(out)
     headings, titles = _app_xml(out)
     assert headings == ["Seiten", "3", "Master", "3"]
     assert titles[:3] == ["Page-1", "Umbenannt", "Page-3"]
@@ -146,9 +146,9 @@ def test_a_missing_section_is_created_rather_than_taking_one_that_is_named(maste
     _without_the_pages_section(os.path.join(basedir, "test4_connectors.vsdx"), stripped, masters_label)
 
     out = str(tmp_path / "out.vsdx")
-    with VisioFile(stripped) as vis:
-        vis.add_page("NewPage")
-        vis.save_vsdx(out)
+    vis = VisioFile(stripped)
+    vis.add_page("NewPage")
+    vis.save_vsdx(out)
     headings, titles = _app_xml(out)
     assert headings == [masters_label, "3", "Pages", "1"]
     assert titles == ["Dynamic connector", "Switch", "Router", "NewPage"]
@@ -169,9 +169,9 @@ def test_renaming_the_only_page_of_a_localised_document_still_renames_its_title(
     localised = str(tmp_path / "german_house.vsdx")
     _localise(os.path.join(basedir, "test3_house.vsdx"), localised, {"Pages": "Seiten", "Masters": "Master"})
     out = str(tmp_path / "out.vsdx")
-    with VisioFile(localised) as vis:
-        vis.pages[0].name = "Umbenannt"
-        vis.save_vsdx(out)
+    vis = VisioFile(localised)
+    vis.pages[0].name = "Umbenannt"
+    vis.save_vsdx(out)
     headings, titles = _app_xml(out)
     assert headings == ["Seiten", "1", "Master", "1"]
     assert titles == ["Umbenannt", "House"]
@@ -221,9 +221,9 @@ def test_a_master_sharing_the_only_page_s_name_does_not_make_the_masters_the_pag
             archive.writestr(name, members[name])
 
     out = str(tmp_path / "out.vsdx")
-    with VisioFile(colliding) as vis:
-        vis.add_page("NewPage")
-        vis.save_vsdx(out)
+    vis = VisioFile(colliding)
+    vis.add_page("NewPage")
+    vis.save_vsdx(out)
     headings_out, titles_out = _app_xml(out)
     master_count = int(headings_out[headings_out.index("Master") + 1])
     assert master_count == 1, f"the new page was counted among the masters: {headings_out}"
@@ -246,9 +246,9 @@ def test_removing_the_only_page_of_a_localised_document_uncounts_its_title(tmp_p
     localised = str(tmp_path / "german_house.vsdx")
     _localise(os.path.join(basedir, "test3_house.vsdx"), localised, {"Pages": "Seiten", "Masters": "Master"})
     out = str(tmp_path / "out.vsdx")
-    with VisioFile(localised) as vis:
-        vis.remove_page_by_index(0)
-        vis.save_vsdx(out)
+    vis = VisioFile(localised)
+    vis.remove_page_by_index(0)
+    vis.save_vsdx(out)
     headings, titles = _app_xml(out)
     assert headings == ["Seiten", "0", "Master", "1"]
     assert titles == ["House"]
@@ -297,10 +297,10 @@ def test_a_master_added_ahead_of_the_pages_is_counted_among_the_masters(tmp_path
     reordered = str(tmp_path / "masters_first.vsdx")
     _masters_listed_first(os.path.join(basedir, "test3_house.vsdx"), reordered)
     out = str(tmp_path / "out.vsdx")
-    with VisioFile(reordered) as vis:
-        page = vis.pages[0]
-        page.connect_shapes(page.shapes.require_id("1"), page.shapes.require_id("5"))
-        vis.save_vsdx(out)
+    vis = VisioFile(reordered)
+    page = vis.pages[0]
+    page.connect_shapes(page.shapes.require_id("1"), page.shapes.require_id("5"))
+    vis.save_vsdx(out)
     headings, titles = _app_xml(out)
     assert headings == ["Master", "2", "Seiten", "1"]
     assert titles == ["House", "Dynamic connector", "Page-1"]

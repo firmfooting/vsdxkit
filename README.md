@@ -57,27 +57,27 @@ or later.
 
 ## Open, edit and save
 
-Use the context manager to close the package cleanly. Saving is explicit.
+Opening reads the whole package into memory and holds no file, so there is nothing to close. Saving is explicit.
 
 ```python
 from vsdxkit.vsdxfile import VisioFile
 
-with VisioFile("diagram.vsdx") as vis:
-    page = vis.pages[0]
-    shape = page.shapes.by_text("Shape to remove")
+vis = VisioFile("diagram.vsdx")
+page = vis.pages[0]
+shape = page.shapes.by_text("Shape to remove")
 
-    if shape is not None:
-        shape.text = "Renamed shape"
+if shape is not None:
+    shape.text = "Renamed shape"
 
-    vis.save_vsdx("edited.vsdx")
+vis.save_vsdx("edited.vsdx")
 ```
 
 Call `save_vsdx()` without a filename to replace the source file in place:
 
 ```python
-with VisioFile("diagram.vsdx") as vis:
-    vis.pages[0].name = "Current state"
-    vis.save_vsdx()
+vis = VisioFile("diagram.vsdx")
+vis.pages[0].name = "Current state"
+vis.save_vsdx()
 ```
 
 A save writes every part you did not change exactly as it arrived. A part you did change is written as equivalent XML, but not in Visio's own spelling: the XML declaration, attribute quotes, empty-element form and namespace declarations can differ, and a CRLF inside text becomes LF. Visio and LibreOffice open both.
@@ -89,22 +89,22 @@ Shape coordinates are in Visio page units, normally inches. `x` and `y` identify
 ```python
 from vsdxkit.vsdxfile import VisioFile
 
-with VisioFile("diagram.vsdx") as vis:
-    page = vis.pages[0]
+vis = VisioFile("diagram.vsdx")
+page = vis.pages[0]
 
-    start = vis.create_shape(
-        page, "PALETTE_START_END", 2.0, 6.0, text="Start"
-    )
-    work = vis.create_shape(
-        page, "PALETTE_PROCESS", 6.0, 6.0, text="Do the thing"
-    )
-    decision = vis.create_shape(
-        page, "PALETTE_DECISION", 10.0, 6.0, text="OK?"
-    )
+start = vis.create_shape(
+    page, "PALETTE_START_END", 2.0, 6.0, text="Start"
+)
+work = vis.create_shape(
+    page, "PALETTE_PROCESS", 6.0, 6.0, text="Do the thing"
+)
+decision = vis.create_shape(
+    page, "PALETTE_DECISION", 10.0, 6.0, text="OK?"
+)
 
-    page.connect_shapes(start, work)
-    page.connect_shapes(work, decision, route="rightangle")
-    vis.save_vsdx("flow.vsdx")
+page.connect_shapes(start, work)
+page.connect_shapes(work, decision, route="rightangle")
+vis.save_vsdx("flow.vsdx")
 ```
 
 Bundled palette names are:
@@ -131,17 +131,17 @@ Connector `route` combines glue and routing behaviour:
 Pass only the end that should move. A `None` endpoint keeps the current shape.
 
 ```python
-with VisioFile("flow.vsdx") as vis:
-    page = vis.pages[0]
-    store = vis.create_shape(
-        page, "PALETTE_DATABASE", 10.0, 2.0, text="Store"
-    )
+vis = VisioFile("flow.vsdx")
+page = vis.pages[0]
+store = vis.create_shape(
+    page, "PALETTE_DATABASE", 10.0, 2.0, text="Store"
+)
 
-    # a connector is the shape a Connect record points from
-    connector = page.shapes.require_id(page.connects[0].from_id)
-    page.reanchor_connector(connector, to_shape=store)
+# a connector is the shape a Connect record points from
+connector = page.shapes.require_id(page.connects[0].from_id)
+page.reanchor_connector(connector, to_shape=store)
 
-    vis.save_vsdx("reanchored.vsdx")
+vis.save_vsdx("reanchored.vsdx")
 ```
 
 Deleting a shape through `page.delete_shape(shape)` also removes incident connectors and their `Connect` records.
@@ -151,21 +151,21 @@ Deleting a shape through `page.delete_shape(shape)` also removes incident connec
 Swimlane operations require an existing Visio cross-functional flowchart (CFF) page. `add_swimlane()` clones the current top lane and updates the CFF container geometry.
 
 ```python
-with VisioFile("cross-functional-flow.vsdx") as vis:
-    page = vis.pages[0]
-    container = page.get_container()
+vis = VisioFile("cross-functional-flow.vsdx")
+page = vis.pages[0]
+container = page.get_container()
 
-    if container is None:
-        raise ValueError("The page is not a Visio CFF diagram")
+if container is None:
+    raise ValueError("The page is not a Visio CFF diagram")
 
-    review_lane = page.add_swimlane("Review")
-    check = vis.create_shape(
-        page, "PALETTE_PROCESS", 6.0, 2.0, text="Check"
-    )
-    page.add_shape_to_lane(check, review_lane)
+review_lane = page.add_swimlane("Review")
+check = vis.create_shape(
+    page, "PALETTE_PROCESS", 6.0, 2.0, text="Check"
+)
+page.add_shape_to_lane(check, review_lane)
 
-    assert container.lane_of(check) is not None
-    vis.save_vsdx("with-review-lane.vsdx")
+assert container.lane_of(check) is not None
+vis.save_vsdx("with-review-lane.vsdx")
 ```
 
 Visio CFF membership is geometric. Shapes are associated with the lane whose vertical band contains their centre; there is no separate membership field to write.
@@ -175,11 +175,11 @@ Visio CFF membership is geometric. Shapes are associated with the lane whose ver
 Jinja expressions can be stored in shape text and rendered into a new file:
 
 ```python
-with VisioFile("template.vsdx") as vis:
-    vis.jinja_render_vsdx(
-        context={"project": "Ward refurbishment", "owner": "Facilities"}
-    )
-    vis.save_vsdx("rendered.vsdx")
+vis = VisioFile("template.vsdx")
+vis.jinja_render_vsdx(
+    context={"project": "Ward refurbishment", "owner": "Facilities"}
+)
+vis.save_vsdx("rendered.vsdx")
 ```
 
 The package also supports its existing group-shape loop and `showif` conventions. See `docs/templating.rst` and the `tests/test_jinja*.py` cases for the exact template structure.

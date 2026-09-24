@@ -54,10 +54,10 @@ def readme_workspace(tmp_path, basedir):
     # instead would fail on a variable the README never mentions, which says
     # nothing about whether the example works.
     template = str(tmp_path / "template.vsdx")
-    with VisioFile(template) as document:
-        shape = document.pages[0].child_shapes[0]
-        shape.text = "{{ project }} for {{ owner }}"
-        document.save_vsdx(template)
+    document = VisioFile(template)
+    shape = document.pages[0].child_shapes[0]
+    shape.text = "{{ project }} for {{ owner }}"
+    document.save_vsdx(template)
     return tmp_path
 
 
@@ -115,13 +115,13 @@ def test_every_readme_example_does_what_it_says(readme_workspace, monkeypatch):
 
 def _texts(path) -> set[str]:
     """Every shape's text, exactly, so a longer string does not match a shorter."""
-    with VisioFile(str(path)) as document:
-        return {shape.text.strip() for page in document.pages for shape in page.all_shapes}
+    document = VisioFile(str(path))
+    return {shape.text.strip() for page in document.pages for shape in page.all_shapes}
 
 
 def _page_names(path) -> list[str]:
-    with VisioFile(str(path)) as document:
-        return [page.name for page in document.pages]
+    document = VisioFile(str(path))
+    return [page.name for page in document.pages]
 
 
 def _connector_count(path) -> int:
@@ -131,18 +131,18 @@ def _connector_count(path) -> int:
     reports two for one connector and invites an off-by-one in the test rather
     than in the code.
     """
-    with VisioFile(str(path)) as document:
-        page = document.pages[0]
-        return len({record.from_id for record in page.connects})
+    document = VisioFile(str(path))
+    page = document.pages[0]
+    return len({record.from_id for record in page.connects})
 
 
 def _is_glued_to(path, text: str) -> bool:
-    with VisioFile(str(path)) as document:
-        page = document.pages[0]
-        target = next((s for s in page.shapes if text in s.text), None)
-        if target is None:
-            return False
-        return any(record.to_id == str(target.ID) for record in page.connects)
+    document = VisioFile(str(path))
+    page = document.pages[0]
+    target = next((s for s in page.shapes if text in s.text), None)
+    if target is None:
+        return False
+    return any(record.to_id == str(target.ID) for record in page.connects)
 
 
 def _readme() -> str:

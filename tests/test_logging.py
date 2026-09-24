@@ -53,8 +53,8 @@ def _is_eagerly_formatted(message: ast.expr | None) -> bool:
 def test_no_output_on_default_configuration(vsdx_copy, capsys):
     """Default config: NullHandler only; nothing reaches stdout/stderr."""
     path = vsdx_copy(BASE)
-    with VisioFile(path) as vis:
-        vis.pages[0].delete_shape(vis.pages[0].all_shapes[0])
+    vis = VisioFile(path)
+    vis.pages[0].delete_shape(vis.pages[0].all_shapes[0])
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == ""
@@ -63,8 +63,8 @@ def test_no_output_on_default_configuration(vsdx_copy, capsys):
 def test_debug_true_bridges_to_logging(vsdx_copy, capsys):
     """debug=True reproduces the old print behaviour via a logging handler."""
     path = vsdx_copy(BASE)
-    with VisioFile(path, debug=True) as vis:
-        vis.pages[0]  # touch enough to trigger debug paths
+    vis = VisioFile(path, debug=True)
+    vis.pages[0]  # touch enough to trigger debug paths
     # handler writes to stderr; capsys captures it even though it is
     # bypassing print (StreamHandler holds the stream by default capture)
     err = capsys.readouterr().err
@@ -80,8 +80,8 @@ def test_host_application_can_capture_module_logs(vsdx_copy):
     root.setLevel(logging.DEBUG)
     try:
         path = vsdx_copy(BASE)
-        with VisioFile(path) as vis:
-            vis.remove_page_by_index(0)
+        vis = VisioFile(path)
+        vis.remove_page_by_index(0)
         assert "_remove_page_from_app_xml()" in stream.getvalue()
         assert "VisioFile(filename=" in stream.getvalue()
     finally:
