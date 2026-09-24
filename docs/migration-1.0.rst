@@ -1,8 +1,65 @@
 Migrating to 1.0
 ================
 
-1.0 removes the names and behaviour listed here. Each entry gives the 0.x call
-and what replaces it. The guide grows with each 1.0 change until the release.
+1.0 removes the names and behaviour listed here, counted from 0.8.0, the last
+0.x release. Each entry gives the 0.x call and what replaces it.
+``tools/check_migration_guide.py`` holds the guide to 0.8.0's whole public
+surface: a name 1.0 no longer has must be named here.
+
+The import package is ``vsdxkit``
+---------------------------------
+
+0.8.0 installed as ``vsdxkit`` but imported as ``vsdx``, the name another
+distribution on PyPI also uses. Whichever of the two was installed last
+owned ``import vsdx``. The package now imports as ``vsdxkit``, and there is
+no ``vsdx`` alias, because an alias would bring the collision back.
+
+``import vsdx``, ``from vsdx.pages import Page``
+   ``import vsdxkit``, ``from vsdxkit.pages import Page``.
+
+The package root re-exports nothing. Import each name from the module that
+defines it:
+
+``from vsdx import Page, PagePosition``
+   ``from vsdxkit.pages import Page, PagePosition``
+
+``from vsdx import Shape, Cell, DataProperty``
+   ``from vsdxkit.shapes import Shape, Cell, DataProperty``
+
+``from vsdx import Geometry, GeometryRow, GeometryCell``
+   ``from vsdxkit.geometry import Geometry, GeometryRow, GeometryCell``
+
+``from vsdx import PackageLimits``
+   ``from vsdxkit.package import PackageLimits``
+
+``from vsdx import PackageLimitError``
+   ``from vsdxkit.errors import PackageLimitError``, with every other error
+   the library raises.
+
+``from vsdx import calc_value``
+   ``from vsdxkit.formulae import calc_value``
+
+``from vsdx import get_logger``
+   ``from vsdxkit.logging_support import get_logger``
+
+``from vsdx import attach_debug_stream_handler``
+   Gone. Configure logging for the ``vsdxkit`` logger instead, as shown under
+   ``VisioFile(path, debug=True)`` below.
+
+``from vsdx import VisioFile``
+   ``from vsdxkit.document import Document``, below.
+
+``from vsdx import VisioFileNotOpen``
+   Gone, with the close state, below.
+
+``from vsdx import Media``
+   Gone. A page creates its shapes from a ``ShapeKind``, below.
+
+``from vsdx import Connect``
+   Gone. A 1-D shape is a ``Connector``, below.
+
+``from vsdx import Container``
+   ``from vsdxkit.swimlanes import SwimlaneDiagram``, below.
 
 ``Document`` replaces ``VisioFile``
 -----------------------------------
@@ -77,6 +134,127 @@ as you hold it.
    that has been deleted from its page still raises
    :class:`vsdxkit.errors.InvalidOperationError`.
 
+Errors are one hierarchy
+------------------------
+
+Every error the library raises itself derives from
+:class:`vsdxkit.errors.VsdxError`, and every class is defined in
+``vsdxkit.errors``. A class that replaced a ``ValueError`` is still a
+``ValueError``, so ``except ValueError:`` keeps working.
+
+``except zipfile.BadZipFile:``, ``except RuntimeError:``, ``except KeyError:`` around an open
+   ``except MalformedPackageError:``. Opening a package that is not a zip,
+   is truncated, encrypted, compressed with an unsupported method, or whose
+   parts name an undecodable encoding or lack a required attribute raises
+   :class:`vsdxkit.errors.MalformedPackageError`. The original exception is
+   its ``__cause__``. An ``OSError`` with an ``errno``, and ``MemoryError``,
+   still propagate unchanged.
+
+``except ET.ParseError:``
+   Still works. A part that is not well-formed XML raises
+   :class:`vsdxkit.errors.PartParseError`, which is an ``ET.ParseError``
+   carrying ``position`` and ``code``.
+
+``vsdx.vsdxfile.PackageLimitError``
+   ``vsdxkit.errors.PackageLimitError``, a
+   :class:`vsdxkit.errors.PackageError` and an ``OSError``.
+
+A save writes only what changed
+-------------------------------
+
+A save writes each part the document did not change byte for byte as it
+arrived. 0.x re-serialised every XML part it had parsed, so tooling that
+relied on the library normalising every part's declaration, prefixes or
+quoting now sees the producer's own spelling on the parts left alone.
+
+``vis.pages_xml = None``, and the same for ``app_xml``, ``document_xml``, ``masters_xml`` and the other document parts
+   Refused with ``ValueError``. Removing the part would leave relationships
+   and content-type overrides naming it. ``page.rels_xml = None`` still
+   removes a page's relationships part.
+
+Parts are named by part name
+----------------------------
+
+A document holds its package in memory, part by part, under each part's
+OPC name, and the file-system view of 0.x is gone.
+
+``page.filename``, ``page.rels_xml_filename``
+   Now the part names, such as ``/visio/pages/page1.xml``, not paths on
+   disk. ``Document.insert_shape``'s ``page_path`` takes the same part name.
+
+``VisioFile.zip_file_contents``, ``VisioFile.directory``
+   Gone. Work through the object model; to read a part's raw bytes, open
+   the saved file with :mod:`zipfile`.
+
+``vsdx.xmlio.file_to_xml``, ``xml_to_file``, ``require_xml_tree``, ``require_root``
+   Gone with the file-system view. ``vsdxkit.xmlio.parse_part(bytes)`` and
+   ``serialise_part(tree)`` read and write a part.
+
+``vsdx.shapes.to_float``
+   ``vsdxkit.xmlio.to_float``.
+
+``vsdx.vsdxfile.DRAWING_CONTENT_TYPE``, ``MACRO_ENABLED_CONTENT_TYPE``
+   ``vsdxkit.document.DRAWING_CONTENT_TYPE`` and
+   ``vsdxkit.document.MACRO_ENABLED_CONTENT_TYPE``.
+
+``vsdx.vsdxfile.PackageLimits``
+   ``vsdxkit.package.PackageLimits``.
+
+``vsdx.document_part.DocumentPart``
+   Gone. The document parts are properties of ``Document``, such as
+   ``document.pages_xml``.
+
+``vsdx.masters.MastersImportMixin``, ``VisioFile.load_master_pages()``
+   Gone as a base class. The document's masters are
+   ``document.master_pages`` and ``document.master_index``, which are now
+   read-only.
+
+Pages and shapes are collections
+--------------------------------
+
+``vis.pages``
+   A read-only :class:`vsdxkit.pages.PageCollection`, not a ``list``. It
+   supports ``len``, iteration and indexing, ``by_name`` and
+   ``require_name``. Change pages with ``pages.create``, ``pages.copy`` and
+   ``pages.delete``.
+
+``page.shapes``
+   The recursive :class:`vsdxkit.shapes.ShapeCollection` of every shape on
+   the page, connectors included. It used to be a list holding the page's
+   ``<Shapes>`` element as a shape. ``page.children`` holds the top-level
+   shapes, and ``shape.children`` and ``shape.descendants`` a shape's own.
+
+``shape.parent`` of a top-level shape
+   Its :class:`vsdxkit.pages.Page`. It used to be the wrapper of the page's
+   ``<Shapes>`` element.
+
+``shape.append_shape(other)``
+   Takes a group only. ``document.copy_shape(element, page)`` places a
+   shape at a page's top level.
+
+A lookup by ID on a page where two shapes share the ID
+   Raises :class:`vsdxkit.errors.PackageError`, because the page is not
+   valid. It used to take the first match.
+
+A shape is its element
+----------------------
+
+``shape_a == shape_b``, ``hash(shape)``
+   Two shapes are equal when they wrap the same XML element, whatever their
+   class, and a shape keeps its place in a set or dict through a rename, a
+   renumber or a save. The hash used to be the ID, page name and file name.
+   Shapes from two documents are never equal, even two opens of one file.
+
+Reading or writing a deleted shape
+   Raises :class:`vsdxkit.errors.InvalidOperationError`, as does a shape on
+   a deleted page. ``shape.is_attached`` says whether a shape is still in
+   its document. ``ID``, ``xml``, ``repr`` and ``hash`` keep working.
+
+``shape.cells``
+   A read-only property that returns a new ``dict`` on each read, from the
+   XML. Assigning into the dict changes nothing; set a cell with
+   ``shape.set_cell_value`` or ``shape.set_cell_formula``.
+
 A page creates its own shapes
 -----------------------------
 
@@ -95,6 +273,15 @@ Palette-name strings are gone.
 A copy of an existing shape
    ``page.create_shape(shape, x=x, y=y)`` places a copy of ``shape``, with its
    text, on ``page``. ``shape`` must belong to the same document.
+
+``vsdx.media.Media``, ``Media().rectangle``, ``circle``, ``straight_connector`` and the other donor shapes
+   Gone. The bundled shapes are loaded once per process and only copies
+   leave the library: ``page.create_shape(ShapeKind.RECTANGLE, ...)`` and
+   ``ShapeKind.CIRCLE`` for the shapes, ``page.connect`` for the connectors.
+
+``shape.copy()`` with no page
+   The copy's parent is the page it lands on, not the group the source is
+   in.
 
 ``ConnectorOptions(routing=None)``
    ``ConnectorOptions(routing=Routing.DEFAULT)``, which is also the default:
@@ -121,7 +308,12 @@ are gone; glue and routing are :class:`vsdxkit.glue.Glue` and
 ``page.reanchor_connector(connector, from_shape=a, to_shape=b, route=...)``
    ``connector.retarget(source=a, target=b, options=ConnectorOptions(...))``.
    An end not named stays where it is, so ``None`` is never needed. Without
-   ``options`` the glue and routing are kept, as before.
+   ``options`` the connector keeps its glue, its routing and each end's
+   connection point; 0.x reset them to dynamic glue. A kept point the new
+   shape does not have raises :class:`vsdxkit.errors.InvalidOperationError`
+   instead of falling back to dynamic glue. A connector with a floating end
+   can now be retargeted. An endpoint on another page, and the connector
+   itself as an endpoint, are refused before anything is written.
 
 ``page.get_connectors_between(shape_a_id=..., shape_b_id=...)``
    ``set(a.connectors) & set(b.connectors)``. The text form matched a
@@ -173,6 +365,10 @@ which is gone along with its module. Membership is still geometric.
 
 ``vsdxkit.containers.get_user_row``, ``set_user_row_value``
    Gone. Label a lane with ``diagram.set_lane_label(lane, label)``.
+
+``vsdx.containers.LANE_PITCH_INCHES``, ``ROW_HEADING_TEXT``, ``ROW_SWIMLANE_GUID``
+   ``vsdxkit.swimlanes.LANE_PITCH_INCHES``, ``ROW_HEADING_TEXT`` and
+   ``ROW_SWIMLANE_GUID``.
 
 A shape on the edge two lanes share is now in the upper lane only. It used to
 count as a member of both.
