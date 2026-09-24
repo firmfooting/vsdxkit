@@ -19,7 +19,7 @@ import deprecation
 
 import vsdxkit
 from vsdxkit import namespace, relationships, retired_finders
-from vsdxkit.connectors import Connect
+from vsdxkit.connectors import Connect, _float_ends
 from vsdxkit.containers import Container
 from vsdxkit.errors import InvalidOperationError, MissingPartError, NotFoundError, PackageError
 from vsdxkit.glue import ConnectorOptions
@@ -56,8 +56,10 @@ def _place_one_d(shape: Shape, x: float, y: float, length: float | None) -> None
     """Centre a 1-D shape on `x`, `y` by moving its ends, keeping its direction and, without `length`, its length.
 
     Its pin, width and angle are formulas of its ends, so Visio would put back
-    any of them written directly.
+    any of them written directly. Its ends are left floating first: a copy of
+    a glued connector would otherwise be pulled back to the original's shapes.
     """
+    _float_ends(shape)
     begin_x, begin_y, end_x, end_y = shape.begin_x, shape.begin_y, shape.end_x, shape.end_y
     if begin_x is None or begin_y is None or end_x is None or end_y is None:
         raise InvalidOperationError(f"1-D shape ID {shape.ID} has no begin and end points to place it by")

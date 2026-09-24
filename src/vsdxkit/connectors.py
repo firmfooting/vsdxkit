@@ -349,3 +349,13 @@ class Connect:
 
     def __repr__(self):
         return f"Connect: from={self.from_id} to={self.to_id} connector_id={self.connector_shape_id} shape_id={self.shape_id}"
+
+
+def _float_ends(connector: Shape) -> None:
+    """Leave both of a 1-D shape's ends unglued: the cells a floating end has, and no records.
+
+    A copy of a glued connector keeps glue formulas naming the shapes the
+    original is glued to, but none of its records, and Visio would pull it
+    back to them.
+    """
+    Connect._write(connector, None, None, ())

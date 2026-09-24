@@ -92,6 +92,24 @@ def test_a_one_d_prototype_keeps_its_direction(vsdx_copy):
     assert _endpoints(slanted) == pytest.approx((1.0, 1.0, 4.0, 5.0))
 
 
+def test_a_glued_connector_prototype_is_copied_with_both_ends_floating(vsdx_copy):
+    """Fails if the copy keeps glue formulas naming the prototype's shapes, which Visio would pull it back to."""
+    page = Document.open(vsdx_copy("test4_connectors.vsdx")).pages[0]
+    glued = page.shapes.require_id("6")  # glued from shape 1 to shape 2
+    records = sorted((c.from_id, c.from_rel, c.to_id) for c in page.connects)
+    formulas = {name: glued.cells[name].formula for name in ("BeginX", "EndX", "BegTrigger", "EndTrigger")}
+
+    copy = page.create_shape(glued, x=10.0, y=1.0, width=2.0)
+
+    assert all(copy.cells[name].formula is None for name in ("BeginX", "BeginY", "EndX", "EndY"))
+    assert "BegTrigger" not in copy.cells and "EndTrigger" not in copy.cells
+    assert (copy.begin_x + copy.end_x) / 2 == pytest.approx(10.0)
+    assert (copy.begin_y + copy.end_y) / 2 == pytest.approx(1.0)
+    assert copy.ID not in {c.from_id for c in page.connects}
+    assert sorted((c.from_id, c.from_rel, c.to_id) for c in page.connects) == records
+    assert {name: glued.cells[name].formula for name in formulas} == formulas
+
+
 def test_a_prototype_is_copied_with_its_text(vsdx_copy):
     page = Document.open(vsdx_copy(BASE)).pages[0]
     prototype = page.shapes.require_text("Shape A")
