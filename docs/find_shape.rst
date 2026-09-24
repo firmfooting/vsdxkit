@@ -7,7 +7,8 @@ shape may contain nested shapes of its own.
 Select a page
 -------------
 
-Pages can be selected by zero-based index or case-sensitive name.
+``vis.pages`` is a :class:`vsdxkit.pages.PageCollection`: a sequence of the
+document's pages in order, with lookup by name.
 
 .. code-block:: python
 
@@ -15,11 +16,27 @@ Pages can be selected by zero-based index or case-sensitive name.
 
    with VisioFile("diagram.vsdx") as vis:
        first_page = vis.pages[0]
-       named_page = vis.get_page_by_name("Current state")
+       current = vis.pages.require_name("Current state")
+       draft = vis.pages.by_name("Draft")  # None if there is no such page
 
-       print(first_page.name)
-       if named_page is not None:
-           print(named_page.name)
+       for page in vis.pages:
+           print(page.name)
+
+Page names are unique in a document, so two pages with one name raise
+:class:`vsdxkit.errors.PackageError`.
+
+Add, copy and delete pages
+--------------------------
+
+.. code-block:: python
+
+   review = vis.pages.create("Review")              # at the end
+   cover = vis.pages.create("Cover", index=0)        # at the front
+   again = vis.pages.copy(review, name="Review 2")   # straight after review
+   vis.pages.delete(cover)
+
+``index`` is the position the new page will take, from 0 to ``len(vis.pages)``.
+A page can be copied only within its own document.
 
 Find shapes in a scope
 ----------------------

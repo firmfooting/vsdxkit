@@ -8,16 +8,19 @@ VisioFile
 ---------
 
 .. autoclass:: vsdxkit.vsdxfile.VisioFile
-   :members: add_page, add_page_at, copy_page, create_shape, get_page_by_name, jinja_render_vsdx, remove_page_by_index, remove_page_by_name, save_vsdx
+   :members: add_page, add_page_at, copy_page, create_shape, get_page_by_name, jinja_render_vsdx, pages, remove_page_by_index, remove_page_by_name, save_vsdx
    :undoc-members:
    :special-members: __init__, __enter__, __exit__
 
-Page and PagePosition
----------------------
+Page, PageCollection and PagePosition
+-------------------------------------
 
 .. autoclass:: vsdxkit.pages.Page
    :members: all_shapes, child_shapes, children, connect_shapes, connects, delete_shape, find_shape_by_id, find_shape_by_text, find_shapes_by_text, get_connectors_between, get_container, shapes, add_swimlane, add_shape_to_lane, reanchor_connector
    :undoc-members:
+
+.. autoclass:: vsdxkit.pages.PageCollection
+   :members: by_name, require_name, create, copy, delete
 
 .. autoclass:: vsdxkit.pages.PagePosition
    :members:

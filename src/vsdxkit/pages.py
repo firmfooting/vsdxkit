@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Mapping
+import sys
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from enum import IntEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol, overload
 
 if TYPE_CHECKING:
     from vsdxkit.vsdxfile import VisioFile
 import xml.etree.ElementTree as ET
+
+if sys.version_info >= (3, 12):
+    from typing import override
+else:
+    from typing_extensions import override
 
 import deprecation
 
@@ -15,7 +21,7 @@ import vsdxkit
 from vsdxkit import namespace, relationships
 from vsdxkit.connectors import Connect
 from vsdxkit.containers import Container
-from vsdxkit.errors import InvalidOperationError, MissingPartError, NotFoundError
+from vsdxkit.errors import InvalidOperationError, MissingPartError, NotFoundError, PackageError
 from vsdxkit.package import XmlPart
 from vsdxkit.partnames import relationship_target, relationships_part_name
 from vsdxkit.shape_tree import iter_descendants
@@ -686,3 +692,102 @@ class Page:
         """
         root = self.xml.getroot()
         return {shape_id for element in iter_descendants(root) if (shape_id := element.attrib.get("ID"))}
+
+
+class PageLifecycle(Protocol):
+    """What a :class:`PageCollection` needs from the document that owns its pages."""
+
+    def add_page_at(self, index: int, name: str | None = None) -> Page: ...
+
+    def copy_page(self, page: Page, *, index: int | PagePosition = ..., name: str | None = None) -> Page: ...
+
+    def remove_page_by_index(self, index: int) -> None: ...
+
+
+class PageCollection(Sequence[Page]):
+    """A document's pages, in order, and the one place pages are created, copied and deleted.
+
+    A sequence: ``len``, iteration, indexing (negative indexes too), ``in``
+    and ``index`` behave as they do on a tuple. It is live: a page added or
+    removed through any route is seen by a collection taken before.
+    """
+
+    def __init__(self, pages: list[Page], lifecycle: PageLifecycle) -> None:
+        self._pages = pages
+        self._lifecycle = lifecycle
+
+    def __repr__(self) -> str:
+        return f"<PageCollection {[page.name for page in self._pages]!r}>"
+
+    def __len__(self) -> int:
+        return len(self._pages)
+
+    @override
+    def __iter__(self) -> Iterator[Page]:
+        return iter(list(self._pages))
+
+    @overload
+    def __getitem__(self, index: int) -> Page: ...
+
+    @overload
+    def __getitem__(self, index: slice) -> tuple[Page, ...]: ...
+
+    def __getitem__(self, index: int | slice) -> Page | tuple[Page, ...]:
+        if isinstance(index, slice):
+            return tuple(self._pages[index])
+        return self._pages[index]
+
+    def by_name(self, name: str) -> Page | None:
+        """The page called `name`, or None.
+
+        Visio keeps page names unique in a document, so two pages of one name
+        are a :class:`PackageError` rather than a choice between them.
+        """
+        matches = [page for page in self._pages if page.name == name]
+        if len(matches) > 1:
+            raise PackageError(f"the document has {len(matches)} pages called {name!r}; page names are unique in a document")
+        return matches[0] if matches else None
+
+    def require_name(self, name: str) -> Page:
+        """The page called `name`."""
+        page = self.by_name(name)
+        if page is None:
+            raise NotFoundError(f"the document has no page called {name!r}")
+        return page
+
+    def create(self, name: str | None = None, index: int | None = None) -> Page:
+        """Add an empty page, at the end or at `index`, and return it.
+
+        `index` is where the page will sit, from 0 to ``len(pages)``. A name
+        the document already uses gets a numeric suffix, and one is made up
+        when `name` is None.
+        """
+        position = PagePosition.LAST if index is None else self._insertion_index(index)
+        return self._lifecycle.add_page_at(position, name)
+
+    def copy(self, page: Page, name: str | None = None, index: int | None = None) -> Page:
+        """Copy one of this document's pages, and return the copy.
+
+        The copy goes straight after `page`, or at `index`, from 0 to
+        ``len(pages)``. A page of another document is refused: copying pages
+        across documents is not supported.
+        """
+        if page not in self:
+            raise InvalidOperationError(
+                f"page {page.name!r} belongs to another document; pages can be copied only within their own document"
+            )
+        position = PagePosition.AFTER if index is None else self._insertion_index(index)
+        return self._lifecycle.copy_page(page, index=position, name=name)
+
+    def delete(self, page: Page) -> None:
+        """Remove `page` from the document, with its part, its relationships and its title."""
+        if page not in self:
+            raise InvalidOperationError(f"page {page.name!r} is not one of this document's pages")
+        self._lifecycle.remove_page_by_index(self.index(page))
+
+    def _insertion_index(self, index: int) -> int:
+        # negative indexes are refused rather than read from the end: the
+        # document's own page positions use -1 to -3 for LAST, AFTER and BEFORE
+        if not 0 <= index <= len(self._pages):
+            raise InvalidOperationError(f"page index {index} is outside 0..{len(self._pages)}")
+        return index
