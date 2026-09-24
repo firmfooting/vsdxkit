@@ -1,13 +1,13 @@
 """One implementation of "substitute into shape text", reachable two ways.
 
-`VisioFile.apply_text_context` and `Page.apply_text_context` are both public and
+`Document.apply_text_context` and `Page.apply_text_context` are both public and
 both claim to do this. They used to disagree.
 """
 
 import xml.etree.ElementTree as ET
 
 from vsdxkit import namespace
-from vsdxkit.vsdxfile import VisioFile
+from vsdxkit.document import Document
 
 NS = namespace[1:-1]
 
@@ -35,7 +35,7 @@ class TestTheStaticEntryPoint:
             '<Shape ID="1"><Text>outer {{who}}</Text><Shapes><Shape ID="2"><Text>inner {{who}}</Text></Shape></Shapes></Shape>'
         )
 
-        VisioFile.apply_text_context(root, {"who": "Ada"})
+        Document.apply_text_context(root, {"who": "Ada"})
 
         assert _texts(root) == ["outer Ada", "inner Ada"]
 
@@ -43,7 +43,7 @@ class TestTheStaticEntryPoint:
         """Visio writes `<Text/>`; four such elements ship in this repo's fixtures."""
         root = _shapes('<Shape ID="1"><Text /></Shape>')
 
-        VisioFile.apply_text_context(root, {"who": "Ada"})
+        Document.apply_text_context(root, {"who": "Ada"})
 
         assert _texts(root) == [""]
 
@@ -55,7 +55,7 @@ class TestTheStaticEntryPoint:
         """
         root = _shapes('<Shape ID="1"><Text>{{who}}<cp IX="0"/></Text></Shape>')
 
-        VisioFile.apply_text_context(root, {"who": "Ada"})
+        Document.apply_text_context(root, {"who": "Ada"})
 
         text = next(iter(root.iter(f"{namespace}Text")))
         assert [child.tag for child in text] == [f"{namespace}cp"]
@@ -70,7 +70,7 @@ class TestTheStaticEntryPoint:
         """
         root = _shapes('<Shapes><Text>container {{who}}</Text><Shape ID="2"><Text>{{who}}</Text></Shape></Shapes>')
 
-        VisioFile.apply_text_context(root, {"who": "Ada"})
+        Document.apply_text_context(root, {"who": "Ada"})
 
         assert _texts(root) == ["container {{who}}", "Ada"]
 
@@ -84,7 +84,7 @@ class TestTheStaticEntryPoint:
         root = _shapes('<Shape ID="1"><Text>a<cp IX="0"/>b</Text></Shape>')
         before = _xml(root)
 
-        VisioFile.apply_text_context(root, {"nothing": "here"})
+        Document.apply_text_context(root, {"nothing": "here"})
 
         assert _xml(root) == before
 
@@ -98,7 +98,7 @@ class TestTheStaticEntryPoint:
         root = _shapes('<Shape ID="1" Master="4" />')
         before = _xml(root)
 
-        VisioFile.apply_text_context(root, {"who": "Ada"})
+        Document.apply_text_context(root, {"who": "Ada"})
 
         assert _xml(root) == before
 
@@ -109,8 +109,8 @@ def test_the_second_implementation_is_gone():
     `set_shape_text` raised `IndexError` on an empty `<Text/>` and silently
     dropped the text on a shape with no `<Text>` at all.
     """
-    assert not hasattr(VisioFile, "get_shape_text")
-    assert not hasattr(VisioFile, "set_shape_text")
+    assert not hasattr(Document, "get_shape_text")
+    assert not hasattr(Document, "set_shape_text")
 
 
 def _seed_some(path: str) -> int:
@@ -121,14 +121,14 @@ def _seed_some(path: str) -> int:
     local text and dissolve the one case where the two routes differ - leaving
     a parity assertion that cannot fail.
     """
-    document = VisioFile(path)
+    document = Document.open(path)
     seeded = 0
     for shape in document.pages[0].all_shapes:
         if shape.xml.find(f"{namespace}Text") is None:
             continue
         shape.text = f"shape {shape.ID} {{{{tok}}}}"
         seeded += 1
-    document.save_vsdx(path)
+    document.save(path)
     return seeded
 
 
@@ -141,16 +141,16 @@ def test_the_two_entry_points_agree_on_shapes_that_hold_their_own_text(vsdx_copy
     seeded = _seed_some(through_page)
     assert seeded > 1, "the fixture has to have shapes with text for this to compare anything"
 
-    document = VisioFile(through_page)
+    document = Document.open(through_page)
     page = document.pages[0]
     page.apply_text_context({"tok": "SUBSTITUTED"})
     by_page = sorted(shape.text for shape in page.all_shapes)
 
     through_static = vsdx_copy("test2.vsdx")
     _seed_some(through_static)
-    document = VisioFile(through_static)
+    document = Document.open(through_static)
     page = document.pages[0]
-    VisioFile.apply_text_context(page.xml.getroot(), {"tok": "SUBSTITUTED"})
+    Document.apply_text_context(page.xml.getroot(), {"tok": "SUBSTITUTED"})
     by_static = sorted(shape.text for shape in page.all_shapes)
 
     assert all("{{tok}}" not in text for text in by_page), "a placeholder was left behind"

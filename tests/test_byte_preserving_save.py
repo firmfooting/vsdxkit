@@ -13,7 +13,7 @@ from datetime import datetime
 
 import pytest
 
-from vsdxkit.vsdxfile import VisioFile
+from vsdxkit.document import Document
 from vsdxkit.xmlio import parse_part, serialise_part
 
 BASEDIR = os.path.dirname(os.path.realpath(__file__))
@@ -29,22 +29,22 @@ def _members(path) -> list[tuple[str, bytes]]:
 def test_open_and_save_is_byte_identical(fixture, vsdx_copy, tmp_path):
     source = vsdx_copy(fixture)
     target = tmp_path / f"out{os.path.splitext(fixture)[1]}"
-    vis = VisioFile(source)
+    vis = Document.open(source)
     for page in vis.pages:  # read every shape, promoting nothing new but walking the trees
         _ = [shape.text for shape in page.all_shapes]
-    vis.save_vsdx(str(target))
+    vis.save(str(target))
     assert _members(target) == _members(source)
 
 
 def test_one_edit_changes_one_member(vsdx_copy, tmp_path):
     source = vsdx_copy("test8_simple_connector.vsdx")
     target = tmp_path / "out.vsdx"
-    vis = VisioFile(source)
+    vis = Document.open(source)
     shape = vis.pages[0].shapes.by_text("Shape A")
     assert shape is not None
     shape.text = "Renamed A"
     page_member = vis.pages[0].filename[1:]
-    vis.save_vsdx(str(target))
+    vis.save(str(target))
     before, after = dict(_members(source)), dict(_members(target))
     assert list(after) == list(before)
     assert [name for name in before if before[name] != after[name]] == [page_member]
@@ -54,37 +54,37 @@ def test_a_second_save_carries_a_second_edit(vsdx_copy, tmp_path):
     """Review Focus 3: comparing against the baseline must not use the change up."""
     source = vsdx_copy("test8_simple_connector.vsdx")
     first, second = tmp_path / "first.vsdx", tmp_path / "second.vsdx"
-    vis = VisioFile(source)
+    vis = Document.open(source)
     shape = vis.pages[0].shapes.by_text("Shape A")
     assert shape is not None
     shape.text = "Once"
-    vis.save_vsdx(str(first))
+    vis.save(str(first))
     shape.text = "Twice"
-    vis.save_vsdx(str(second))
-    vis = VisioFile(str(second))
+    vis.save(str(second))
+    vis = Document.open(str(second))
     assert vis.pages[0].shapes.by_text("Twice") is not None
 
 
 def test_save_as_then_save_writes_the_original(vsdx_copy, tmp_path):
-    """Review Focus 4, through VisioFile."""
+    """Review Focus 4, through Document."""
     source = vsdx_copy("test8_simple_connector.vsdx")
     elsewhere = tmp_path / "elsewhere.vsdx"
-    vis = VisioFile(source)
-    vis.save_vsdx(str(elsewhere))
+    vis = Document.open(source)
+    vis.save(str(elsewhere))
     shape = vis.pages[0].shapes.by_text("Shape A")
     assert shape is not None
     shape.text = "In place"
-    vis.save_vsdx()
-    vis = VisioFile(source)
+    vis.save()
+    vis = Document.open(source)
     assert vis.pages[0].shapes.by_text("In place") is not None
-    vis = VisioFile(str(elsewhere))
+    vis = Document.open(str(elsewhere))
     assert vis.pages[0].shapes.by_text("In place") is None
 
 
 def test_reassigning_filename_redirects_an_in_place_save(vsdx_copy, tmp_path):
     """Fails if an in-place save writes to the path the store was opened from when `vis.filename` has changed since.
 
-    Before the store, `save_vsdx()` with no argument wrote to `self.filename`,
+    Before the store, `save()` with no argument wrote to `self.filename`,
     so assigning it was how a caller pointed the next plain save somewhere
     else. The store remembers the absolute path it was opened from, which is
     what an unchanged `filename` means; a changed one is still the caller's
@@ -94,13 +94,13 @@ def test_reassigning_filename_redirects_an_in_place_save(vsdx_copy, tmp_path):
     with open(source, "rb") as handle:
         original = handle.read()
     other = str(tmp_path / "other.vsdx")
-    vis = VisioFile(source)
+    vis = Document.open(source)
     shape = vis.pages[0].shapes.by_text("Shape A")
     assert shape is not None
     shape.text = "Redirected"
     vis.filename = other
-    vis.save_vsdx()
-    vis = VisioFile(other)
+    vis.save()
+    vis = Document.open(other)
     assert vis.pages[0].shapes.by_text("Redirected") is not None
     with open(source, "rb") as handle:
         assert handle.read() == original
@@ -117,10 +117,10 @@ def test_a_canonically_equal_replacement_tree_saves_the_original_bytes(vsdx_copy
     """
     source = vsdx_copy("test1.vsdx")
     target = tmp_path / "out.vsdx"
-    vis = VisioFile(source)
+    vis = Document.open(source)
     page = vis.pages[0]
     page.xml = parse_part(serialise_part(page.xml))
-    vis.save_vsdx(str(target))
+    vis.save(str(target))
     assert _members(target) == _members(source)
 
 
@@ -134,9 +134,9 @@ def test_rendering_a_template_rewrites_only_the_pages_it_changes(vsdx_copy, tmp_
     """
     source = vsdx_copy("test1.vsdx")
     target = tmp_path / "out.vsdx"
-    vis = VisioFile(source)
-    vis.jinja_render_vsdx(context={})
-    vis.save_vsdx(str(target))
+    vis = Document.open(source)
+    vis.render(context={})
+    vis.save(str(target))
     pages = [name for name, _ in _members(source) if re.fullmatch(r"visio/pages/page\d+\.xml", name)]
     assert len(pages) == 3  # the fixture has changed if this does not hold
     before, after = dict(_members(source)), dict(_members(target))
@@ -147,16 +147,16 @@ def test_a_rendered_template_reaches_disk(vsdx_copy, tmp_path):
     """Jinja replaces each page's tree wholesale; nothing rewrites it at save any more."""
     source = vsdx_copy("test_jinja.vsdx")
     target = tmp_path / "rendered.vsdx"
-    vis = VisioFile(source)
-    vis.jinja_render_vsdx(context={"date": datetime(2026, 9, 23), "scenario": "VsdxkitRendered", "x": 2, "y": 2})
-    vis.save_vsdx(str(target))
+    vis = Document.open(source)
+    vis.render(context={"date": datetime(2026, 9, 23), "scenario": "VsdxkitRendered", "x": 2, "y": 2})
+    vis.save(str(target))
     with zipfile.ZipFile(target) as archive:
         pages = b"".join(archive.read(n) for n in archive.namelist() if n.startswith("visio/pages/page"))
     assert b"VsdxkitRendered" in pages
 
 
 def test_a_tree_held_across_a_save_stays_the_documents_tree(vsdx_copy, tmp_path):
-    """Fails if `save_vsdx` turns a part back into bytes, or swaps in a tree of its own.
+    """Fails if `save` turns a part back into bytes, or swaps in a tree of its own.
 
     The trees a document edits are the store's own, and a save only writes them
     out. A save that re-serialised a part through the zip view would leave the
@@ -165,17 +165,17 @@ def test_a_tree_held_across_a_save_stays_the_documents_tree(vsdx_copy, tmp_path)
     """
     source = vsdx_copy("test1.vsdx")
     first, second = tmp_path / "first.vsdx", tmp_path / "second.vsdx"
-    vis = VisioFile(source)
+    vis = Document.open(source)
     app, pages, page = vis.app_xml, vis.pages_xml, vis.pages[0].xml
     page_member = vis.pages[0].filename[1:]
-    vis.save_vsdx(str(first))
+    vis.save(str(first))
     assert vis.app_xml is app
     assert vis.pages_xml is pages
     assert vis.pages[0].xml is page
 
     shape = next(page.getroot().iter("{http://schemas.microsoft.com/office/visio/2012/main}Shape"))
     shape.set("NameU", "HeldAcrossSave")
-    vis.save_vsdx(str(second))
+    vis.save(str(second))
     with zipfile.ZipFile(first) as archive:
         assert b"HeldAcrossSave" not in archive.read(page_member)
     with zipfile.ZipFile(second) as archive:
@@ -190,12 +190,12 @@ def test_clearing_a_pages_rels_takes_its_part_out_of_the_package(vsdx_copy, tmp_
     """
     source = vsdx_copy("test3_house.vsdx")
     target = tmp_path / "out.vsdx"
-    vis = VisioFile(source)
+    vis = Document.open(source)
     page = vis.pages[0]
     assert page.rels_xml_filename is not None
     rels_member = page.rels_xml_filename[1:]
     page.rels_xml = None
-    vis.save_vsdx(str(target))
+    vis.save(str(target))
     with zipfile.ZipFile(source) as archive:
         assert rels_member in archive.namelist()
     with zipfile.ZipFile(target) as archive:
@@ -210,7 +210,7 @@ def test_setting_a_pages_xml_to_none_is_refused(vsdx_copy):
     part after this assignment, so removing it would leave the package
     promising a part it does not hold.
     """
-    vis = VisioFile(vsdx_copy("test3_house.vsdx"))
+    vis = Document.open(vsdx_copy("test3_house.vsdx"))
     page = vis.pages[0]
     part_name = page.filename
     with pytest.raises(ValueError, match=r"Page\.xml"):
@@ -227,7 +227,7 @@ def test_a_rels_tree_assigned_after_the_part_is_cleared_is_saved(vsdx_copy, tmp_
     would leave the page's master and image relationships out of the file.
     """
     target = str(tmp_path / "saved.vsdx")
-    vis = VisioFile(vsdx_copy("test4_connectors.vsdx"))
+    vis = Document.open(vsdx_copy("test4_connectors.vsdx"))
     page = next(p for p in vis.pages if p.rels_xml is not None)
     assert page.rels_xml is not None
     replacement = parse_part(serialise_part(page.rels_xml))
@@ -235,7 +235,7 @@ def test_a_rels_tree_assigned_after_the_part_is_cleared_is_saved(vsdx_copy, tmp_
     page.rels_xml = replacement
     assert page.rels_xml_filename is not None
     member = page.rels_xml_filename[1:]
-    vis.save_vsdx(target)
+    vis.save(target)
     with zipfile.ZipFile(target) as archive:
         assert member in archive.namelist()
 
@@ -264,7 +264,7 @@ def test_a_tree_assigned_after_the_pages_part_is_removed_is_saved(vsdx_copy, tmp
     crafted = str(tmp_path / "crafted.vsdx")
     _two_pages_on_one_part(vsdx_copy("test2.vsdx"), crafted)
     target = str(tmp_path / "saved.vsdx")
-    vis = VisioFile(crafted)
+    vis = Document.open(crafted)
     first, second = vis.pages[0], vis.pages[1]
     assert first.filename == second.filename, "the crafted package should give both pages one part"
     replacement = parse_part(serialise_part(second.xml))
@@ -274,6 +274,6 @@ def test_a_tree_assigned_after_the_pages_part_is_removed_is_saved(vsdx_copy, tmp
     vis.remove_page_by_index(0)
     assert vis._package.part(second.filename) is None
     second.xml = replacement
-    vis.save_vsdx(target)
-    saved = VisioFile(target)
+    vis.save(target)
+    saved = Document.open(target)
     assert saved.pages[0].xml.getroot().get("VsdxkitMarker") == "1"

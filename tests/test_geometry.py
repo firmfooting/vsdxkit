@@ -14,9 +14,9 @@ import pytest
 
 import vsdxkit.shapes
 from vsdxkit import namespace
+from vsdxkit.document import Document
 from vsdxkit.geometry import Geometry, GeometryCell, GeometryRow
 from vsdxkit.shapes import Shape
-from vsdxkit.vsdxfile import VisioFile
 
 # Named for what it holds, not `basedir`: conftest.py has a session fixture of
 # that name, and a module global shadows it for every test in the file.
@@ -65,7 +65,7 @@ def row_indexes(shape: Shape) -> list[str | None]:
 
 
 def test_rows_absent_from_the_instance_are_inherited_from_the_master():
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     connector = vis.pages[0].shapes.by_text("Conn A")
 
     rows = connector.geometry.rows
@@ -83,7 +83,7 @@ def test_rows_absent_from_the_instance_are_inherited_from_the_master():
 
 def test_an_overridden_row_keeps_the_master_cells_it_does_not_replace():
     """Merging happens cell by cell, so an X-only override inherits the master Y."""
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     connector = vis.pages[0].shapes.by_text("Conn A")
     instance_row = row_element(connector, "2")
     instance_row.remove(instance_row.find(f'{namespace}Cell[@N="Y"]'))
@@ -95,7 +95,7 @@ def test_an_overridden_row_keeps_the_master_cells_it_does_not_replace():
 
 
 def test_a_row_deleted_by_the_instance_is_dropped_from_the_merge():
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     connector = vis.pages[0].shapes.by_text("Conn A")
 
     # the master defines row 3; the instance carries `<Row IX="3" Del="1"/>`
@@ -112,7 +112,7 @@ def test_the_merge_leaves_the_master_geometry_alone(monkeypatch):
     mutated object was thrown away. Memoise the master, as #261 needs to, and
     one shape's merge would reach every other, so this test pins it.
     """
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     connector = vis.pages[0].shapes.by_text("Conn A")
     master = connector.master_shape
     # every instance resolves to this one master object, as memoising the
@@ -135,7 +135,7 @@ def test_section_cells_are_inherited_and_instance_cells_appended():
     it, and both stay readable. Callers reading `cells` by name have to take
     the last match.
     """
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     connector = vis.pages[0].shapes.by_text("Conn A")
     assert [cell.name for cell in connector.geometry.cells] == [
         "NoFill",
@@ -155,7 +155,7 @@ def test_section_cells_are_inherited_and_instance_cells_appended():
 
 def test_a_row_without_an_index_is_dropped():
     """Rows are keyed by IX, so one without an IX cannot be addressed."""
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     line = vis.pages[0].shapes.by_text("Line A")
     geometry_xml(line).append(ET.fromstring(f'<Row xmlns="{namespace[1:-1]}" T="LineTo"><Cell N="X" V="1"/></Row>'))
 
@@ -163,7 +163,7 @@ def test_a_row_without_an_index_is_dropped():
 
 
 def test_a_shape_without_a_master_starts_from_its_own_rows_alone():
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     line = vis.pages[0].shapes.by_text("Line A")
 
     assert line.master_shape is None
@@ -175,7 +175,7 @@ def test_a_shape_without_a_master_starts_from_its_own_rows_alone():
 
 
 def test_start_pos_of_a_moveto_shape_is_in_shape_local_coordinates():
-    vis = VisioFile(PALETTE)
+    vis = Document.open(PALETTE)
     process = vis.pages[0].shapes.by_text("PALETTE_PROCESS")
 
     # the MoveTo row's own X/Y, not the shape's position on the page
@@ -202,7 +202,7 @@ def test_start_pos_of_a_relmoveto_shape_is_the_shape_pin(path, text):
     the nested case below sits inside one. Callers have to check the row
     type before they can use the result.
     """
-    vis = VisioFile(path)
+    vis = Document.open(path)
     shape = vis.pages[0].shapes.by_text(text)
 
     assert shape.geometry.rows["1"].row_type == "RelMoveTo"
@@ -212,7 +212,7 @@ def test_start_pos_of_a_relmoveto_shape_is_the_shape_pin(path, text):
 def test_start_pos_of_a_grouped_shape_is_relative_to_its_group():
     """A grouped shape's pin is measured inside its group, so the answer is
     comparable only between shapes with the same parent."""
-    vis = VisioFile(NESTED)
+    vis = Document.open(NESTED)
     shape = vis.pages[0].shapes.by_text("Shape 1.1.1")
 
     assert shape.parent.shape_type == "Group"
@@ -222,7 +222,7 @@ def test_start_pos_of_a_grouped_shape_is_relative_to_its_group():
 
 
 def test_start_pos_is_none_without_a_move_row():
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     line = vis.pages[0].shapes.by_text("Line A")
     section = geometry_xml(line)
     section.remove(section.find(f'{namespace}Row[@T="MoveTo"]'))
@@ -234,7 +234,7 @@ def test_start_pos_is_none_without_a_move_row():
 
 
 def test_move_shifts_absolute_rows():
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     line = vis.pages[0].shapes.by_text("Line A")
 
     line.geometry.move(1.0, 2.0)
@@ -248,7 +248,7 @@ def test_move_shifts_absolute_rows():
 def test_move_leaves_relative_rows_alone():
     """Relative rows are offsets from the previous point, so moving the shape
     must not touch them; `move()` skips every row type but MoveTo and LineTo."""
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     rect = vis.pages[0].shapes.by_text("Rect A")
     before = [(row.row_type, row.x, row.y) for row in rect.geometry.rows.values()]
 
@@ -258,7 +258,7 @@ def test_move_leaves_relative_rows_alone():
 
 
 def test_move_leaves_a_missing_coordinate_missing():
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     line = vis.pages[0].shapes.by_text("Line A")
     geometry_xml(line).append(ET.fromstring(f'<Row xmlns="{namespace[1:-1]}" T="MoveTo" IX="9"><Cell N="Y" V="1"/></Row>'))
     geometry = reparse(line).geometry
@@ -276,7 +276,7 @@ def test_move_copies_an_inherited_row_onto_the_instance():
     Row 1 is the master's. `Geometry.move()` reads the coordinates from there
     and writes the shifted pair to a row of the instance's own (#239).
     """
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     connector = vis.pages[0].shapes.by_text("Conn A")
     assert cell_values(row_element(connector.master_shape, "1")) == {"X": "0", "Y": "0"}
 
@@ -294,7 +294,7 @@ def test_a_row_copied_down_by_move_lands_after_the_sections_cells():
     A Section is `Cell*, Trigger*, Row*`, so a row wedged among the cells is a
     file Visio offers to repair.
     """
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     connector = vis.pages[0].shapes.by_text("Conn A")
     geometry_xml(connector).insert(0, ET.fromstring(f'<Cell xmlns="{namespace[1:-1]}" N="NoShow" V="1"/>'))
     connector = reparse(connector)
@@ -311,22 +311,22 @@ def test_a_row_copied_down_by_move_lands_after_the_sections_cells():
 def test_set_move_to_materialises_an_inherited_row_on_the_instance(vsdx_copy):
     """The copy survives a round trip through the saved package."""
     path = vsdx_copy("test9_rect_and_line.vsdx")
-    vis = VisioFile(path)
+    vis = Document.open(path)
     connector = vis.pages[0].shapes.by_text("Conn A")
 
     connector.geometry.set_move_to(1.25, 2.5)
 
     assert cell_values(row_element(connector, "1")) == {"X": "1.25", "Y": "2.5"}
     assert cell_values(row_element(connector.master_shape, "1")) == {"X": "0", "Y": "0"}
-    vis.save_vsdx(path)
+    vis.save(path)
 
-    vis = VisioFile(path)
+    vis = Document.open(path)
     row = vis.pages[0].shapes.by_text("Conn A").geometry.rows["1"]
     assert (row.row_type, row.x, row.y) == ("MoveTo", 1.25, 2.5)
 
 
 def test_set_line_to_updates_an_instance_row_in_place():
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     connector = vis.pages[0].shapes.by_text("Conn A")
 
     connector.geometry.set_line_to(9.0, 8.0)
@@ -338,7 +338,7 @@ def test_set_line_to_updates_an_instance_row_in_place():
 
 def test_set_line_to_materialises_an_inherited_row_on_the_instance():
     """A connector that has never been re-routed inherits its LineTo rows."""
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     connector = vis.pages[0].shapes.by_text("Conn A")
     geometry_xml(connector).remove(row_element(connector, "2"))
     connector = reparse(connector)
@@ -356,7 +356,7 @@ def test_set_move_to_leaves_a_formula_that_overrides_the_value_it_writes():
     `Line A`'s MoveTo X carries `F="Width*0"`. Visio recomputes V from F, so
     the coordinate written here is discarded when the file is opened.
     """
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     line = vis.pages[0].shapes.by_text("Line A")
 
     line.geometry.set_move_to(7.0, 8.0)
@@ -373,7 +373,7 @@ def test_copying_an_inherited_row_down_drops_the_masters_formula():
     value, so a formula the master used to compute the coordinate is dropped
     instead of inherited.
     """
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     connector = vis.pages[0].shapes.by_text("Conn A")
     master_x = row_element(connector.master_shape, "1").find(f'{namespace}Cell[@N="X"]')
     master_x.attrib["F"] = "Width*0"
@@ -389,7 +389,7 @@ def test_copying_an_inherited_row_down_drops_the_masters_formula():
 @pytest.mark.parametrize("text", ["Rect A", "Line A"])
 def test_setters_are_a_noop_when_the_row_type_is_absent(text):
     """`Rect A` has no MoveTo or LineTo row; `Line A` has one of each."""
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     shape = vis.pages[0].shapes.by_text(text)
     geometry = shape.geometry
     before = ET.tostring(geometry.xml)
@@ -402,7 +402,7 @@ def test_setters_are_a_noop_when_the_row_type_is_absent(text):
 
 def test_set_move_to_and_set_line_to_address_rows_by_position_not_index():
     """The index argument counts matching rows; it is not a row IX."""
-    vis = VisioFile(PALETTE)
+    vis = Document.open(PALETTE)
     process = vis.pages[0].shapes.by_text("PALETTE_PROCESS")
 
     process.geometry.set_line_to(4.0, 5.0, line_to_index=2)
@@ -415,7 +415,7 @@ def test_set_move_to_and_set_line_to_address_rows_by_position_not_index():
 
 
 def test_creating_a_row_requires_a_type_and_an_index():
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     geometry = vis.pages[0].shapes.by_text("Line A").geometry
 
     with pytest.raises(ValueError, match="without T and IX"):
@@ -423,7 +423,7 @@ def test_creating_a_row_requires_a_type_and_an_index():
 
 
 def test_creating_a_row_rejects_an_index_already_in_the_section():
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     geometry = vis.pages[0].shapes.by_text("Line A").geometry
 
     with pytest.raises(ValueError, match="IX=1 already exists"):
@@ -435,7 +435,7 @@ def test_creating_a_row_with_no_index_yields_the_string_none():
 
     The row lands with `IX="None"`, which Visio will not accept.
     """
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     geometry = vis.pages[0].shapes.by_text("Line A").geometry
 
     row = GeometryRow(geometry=geometry, xml=None, master_geometry_row=None, T="MoveTo", IX=None)
@@ -451,7 +451,7 @@ def test_a_new_row_is_placed_after_the_sections_cells_and_in_index_order():
     follow, and IX 10 sorts after IX 2 rather than as the text "10" would, so
     the path is still drawn in index order.
     """
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     line = vis.pages[0].shapes.by_text("Line A")
 
     GeometryRow(geometry=line.geometry, xml=None, master_geometry_row=None, T="LineTo", IX=10)
@@ -471,7 +471,7 @@ def test_a_new_row_is_placed_after_the_sections_cells_and_in_index_order():
 
 def test_a_row_index_that_is_not_a_number_sorts_last():
     """`IX="None"` is unorderable against real indexes, so it goes at the end."""
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     line = vis.pages[0].shapes.by_text("Line A")
 
     GeometryRow(geometry=line.geometry, xml=None, master_geometry_row=None, T="LineTo", IX=None)
@@ -481,7 +481,7 @@ def test_a_row_index_that_is_not_a_number_sorts_last():
 
 
 def test_coordinate_setters_create_the_cells_they_need():
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     line = vis.pages[0].shapes.by_text("Line A")
     geometry_xml(line).append(ET.fromstring(f'<Row xmlns="{namespace[1:-1]}" T="MoveTo" IX="9"/>'))
     row = reparse(line).geometry.rows["9"]
@@ -500,7 +500,7 @@ def test_setting_a_coordinate_on_an_inherited_row_copies_it_onto_the_instance():
     Only X is written, so the instance's row carries X alone and Y is still
     read from the master (#239).
     """
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     connector = vis.pages[0].shapes.by_text("Conn A")
     row = connector.geometry.rows["1"]
 
@@ -513,7 +513,7 @@ def test_setting_a_coordinate_on_an_inherited_row_copies_it_onto_the_instance():
 
 
 def test_del_bool_can_be_set_and_cleared():
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     row = vis.pages[0].shapes.by_text("Line A").geometry.rows["1"]
     assert row.del_bool is None
 
@@ -526,7 +526,7 @@ def test_del_bool_can_be_set_and_cleared():
 
 def test_clearing_del_bool_that_is_not_set_raises():
     """Clearing an absent Del raises KeyError instead of doing nothing."""
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     row = vis.pages[0].shapes.by_text("Line A").geometry.rows["1"]
 
     with pytest.raises(KeyError):
@@ -535,7 +535,7 @@ def test_clearing_del_bool_that_is_not_set_raises():
 
 def test_changing_a_rows_index_does_not_rekey_the_geometry():
     """`Geometry.rows` is keyed at parse time, so renumbering desyncs it."""
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     geometry = vis.pages[0].shapes.by_text("Line A").geometry
     row = geometry.rows["1"]
 
@@ -551,7 +551,7 @@ def test_changing_a_rows_index_does_not_rekey_the_geometry():
 
 
 def test_a_new_cell_joins_its_section_and_the_cells_list():
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     geometry = vis.pages[0].shapes.by_text("Line A").geometry
 
     cell = GeometryCell(parent=geometry, xml=None, name="NoLine", value=1)
@@ -562,7 +562,7 @@ def test_a_new_cell_joins_its_section_and_the_cells_list():
 
 
 def test_a_new_cell_joins_its_row_under_its_name():
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     row = vis.pages[0].shapes.by_text("Line A").geometry.rows["1"]
 
     cell = GeometryCell(parent=row, xml=None, name="A", value="POLYLINE(0,0)")
@@ -572,7 +572,7 @@ def test_a_new_cell_joins_its_row_under_its_name():
 
 
 def test_formula_and_func_read_the_same_attribute():
-    vis = VisioFile(PALETTE)
+    vis = Document.open(PALETTE)
     decision = vis.pages[0].shapes.by_text("PALETTE_DECISION")
     cell = decision.geometry.rows["2"].cells["A"]
 
@@ -586,7 +586,7 @@ def test_formula_and_func_read_the_same_attribute():
 
 def test_reprs_identify_the_element_they_describe():
     """These show up in logs and debugger output, so they carry the identifiers."""
-    vis = VisioFile(PALETTE)
+    vis = Document.open(PALETTE)
     decision = vis.pages[0].shapes.by_text("PALETTE_DECISION")
     geometry = decision.geometry
 
@@ -614,7 +614,7 @@ def test_geometry_is_built_on_first_read_not_when_the_shape_is_built(monkeypatch
 
     monkeypatch.setattr(vsdxkit.shapes, "Geometry", CountedGeometry)
 
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     shapes = vis.pages[0].all_shapes
 
     assert shapes and built == []
@@ -636,7 +636,7 @@ def test_the_master_is_resolved_once_per_shape(monkeypatch):
 
     monkeypatch.setattr(Shape, "_resolve_master_shape", counting)
 
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     connector = vis.pages[0].shapes.by_text("Conn A")
 
     assert connector.geometry is not None
@@ -654,7 +654,7 @@ def test_the_section_is_located_when_the_shape_is_built():
     section's rows at once; the Geometry keeps the section it located until
     the shape is read again.
     """
-    vis = VisioFile(TEST9)
+    vis = Document.open(TEST9)
     line = vis.pages[0].shapes.by_text("Line A")
     line.xml.remove(geometry_xml(line))
 
@@ -665,7 +665,7 @@ def test_the_section_is_located_when_the_shape_is_built():
 
 def test_repointing_a_shape_at_a_master_drops_the_memo():
     """`master_page_ID` is writable, and `Connect.create` repoints it."""
-    vis = VisioFile(os.path.join(FIXTURES, "test4_connectors.vsdx"))
+    vis = Document.open(os.path.join(FIXTURES, "test4_connectors.vsdx"))
     shapes = vis.pages[0].all_shapes
     mastered = next(s for s in shapes if s.master_page_ID)
     masterless = next(s for s in shapes if not s.master_page_ID)
@@ -678,7 +678,7 @@ def test_repointing_a_shape_at_a_master_drops_the_memo():
 
 def test_a_cell_added_to_the_master_is_picked_up_by_a_shape_holding_it():
     """The memo is keyed on the master element's children, not taken on trust."""
-    vis = VisioFile(os.path.join(FIXTURES, "test5_master.vsdx"))
+    vis = Document.open(os.path.join(FIXTURES, "test5_master.vsdx"))
     page = vis.pages[0]
     shape = next(s for s in page.all_shapes if s.master_page_ID)
     master_page = shape.master_page

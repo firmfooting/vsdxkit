@@ -10,16 +10,16 @@ Render ordinary expressions
 
 .. code-block:: python
 
-   from vsdxkit.vsdxfile import VisioFile
+   from vsdxkit.document import Document
 
    context = {
        "project": "Ward refurbishment",
        "owner": "Facilities",
    }
 
-   vis = VisioFile("template.vsdx")
-   vis.jinja_render_vsdx(context)
-   vis.save_vsdx("rendered.vsdx")
+   vis = Document.open("template.vsdx")
+   vis.render(context)
+   vis.save("rendered.vsdx")
 
 A shape containing ``{{ project }}`` becomes ``Ward refurbishment`` in the
 saved document.
@@ -65,4 +65,4 @@ interpreter does not, and raises ``jinja2.exceptions.SecurityError``.
 The sandbox is a bound on what a malicious document can do, not a licence to
 render anything. A template can still consume memory and time, and it sees
 whatever you put in the context — so do not pass secrets to
-``jinja_render_vsdx()`` alongside a document you do not trust.
+``render()`` alongside a document you do not trust.

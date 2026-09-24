@@ -4,12 +4,12 @@ import math
 
 import pytest
 
-from vsdxkit.vsdxfile import VisioFile
+from vsdxkit.document import Document
 
 
 @pytest.fixture
 def page(vsdx_copy):
-    visio = VisioFile(vsdx_copy("test1.vsdx"))
+    visio = Document.open(vsdx_copy("test1.vsdx"))
     yield visio.pages[0]
 
 

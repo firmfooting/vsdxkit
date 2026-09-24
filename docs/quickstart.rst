@@ -23,21 +23,21 @@ nothing:
 
 .. code-block:: python
 
-   from vsdxkit.vsdxfile import VisioFile
+   from vsdxkit.document import Document
 
 Python 3.10–3.14 is supported.
 
 Open a document
 ---------------
 
-Open a document with :class:`vsdxkit.vsdxfile.VisioFile`. Opening reads the
+Open a document with :class:`vsdxkit.document.Document`. Opening reads the
 whole package into memory and holds no file, so there is nothing to close.
 
 .. code-block:: python
 
-   from vsdxkit.vsdxfile import VisioFile
+   from vsdxkit.document import Document
 
-   vis = VisioFile("diagram.vsdx")
+   vis = Document.open("diagram.vsdx")
    page = vis.pages[0]
    print(page.name)
 
@@ -49,26 +49,26 @@ editing it.
 
 .. code-block:: python
 
-   vis = VisioFile("diagram.vsdx")
+   vis = Document.open("diagram.vsdx")
    page = vis.pages[0]
    shape = page.shapes.by_text("Draft")
 
    if shape is not None:
        shape.text = "Approved"
 
-   vis.save_vsdx("approved.vsdx")
+   vis.save("approved.vsdx")
 
 Save in place
 -------------
 
-Call :meth:`vsdxkit.vsdxfile.VisioFile.save_vsdx` without a filename to replace
+Call :meth:`vsdxkit.document.Document.save` without a filename to replace
 the source file. Nothing is saved until you call it.
 
 .. code-block:: python
 
-   vis = VisioFile("diagram.vsdx")
+   vis = Document.open("diagram.vsdx")
    vis.pages[0].name = "Current state"
-   vis.save_vsdx()
+   vis.save()
 
 Development install
 -------------------

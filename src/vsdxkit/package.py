@@ -63,7 +63,7 @@ class PackageLimits:
     archive is rejected well before it can exhaust process memory. Even at the
     caps the loader materialises at most ``max_total_uncompressed`` bytes
     (256 MiB by default); callers loading larger trusted documents should raise
-    the caps explicitly via ``VisioFile(filename, limits=PackageLimits(...))``
+    the caps explicitly via ``Document.open(filename, limits=PackageLimits(...))``
     or a JSON file passed as ``limits_path`` with the same keys.
     """
 

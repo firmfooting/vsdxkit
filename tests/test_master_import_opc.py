@@ -8,7 +8,7 @@ master's name in ``app.xml``. Each comes from a different line, and dropping
 any one of them yields a package Visio repairs or rejects while the in-memory
 object model still looks right.
 
-So these assertions read the saved archive rather than the ``VisioFile``.
+So these assertions read the saved archive rather than the ``Document``.
 ``test3_house.vsdx`` is the fixture because it ships exactly one master, so
 the connector master is imported alongside one the document already has.
 """
@@ -24,7 +24,7 @@ from dataclasses import dataclass
 import pytest
 
 from vsdxkit.connectors import Connect
-from vsdxkit.vsdxfile import VisioFile
+from vsdxkit.document import Document
 
 RELS_NS = "{http://schemas.openxmlformats.org/package/2006/relationships}"
 R_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
@@ -139,7 +139,7 @@ def imported_master(vsdx_copy, tmp_path) -> ImportedMaster:
     """
     source = vsdx_copy("test3_house.vsdx")
     document = os.path.join(str(tmp_path), "imported_master.vsdx")
-    vis = VisioFile(source)
+    vis = Document.open(source)
     page = vis.pages[0]
     connector = Connect.create(
         page=page,
@@ -147,7 +147,7 @@ def imported_master(vsdx_copy, tmp_path) -> ImportedMaster:
         to_shape=page.shapes.by_text("Shape to remove"),
     )
     master_id = connector.xml.attrib["Master"]
-    vis.save_vsdx(document)
+    vis.save(document)
     return ImportedMaster(document=document, master_id=master_id, master_name="Dynamic connector")
 
 
@@ -248,7 +248,7 @@ def test_every_master_name_is_listed_in_titles_of_parts(imported_master: Importe
 
 def test_imported_master_survives_a_reopen(imported_master: ImportedMaster):
     """Reopening must find the imported master where the saved graph says it is."""
-    vis = VisioFile(imported_master.document)
+    vis = Document.open(imported_master.document)
     master_page = vis.get_master_page_by_id(imported_master.master_id)
     assert master_page is not None, f"master {imported_master.master_id} did not survive the round trip"
     assert master_page.name == imported_master.master_name
@@ -290,17 +290,17 @@ def test_import_survives_masters_declared_with_no_masters_parts(vsdx_copy):
                     )
                 zout.writestr(info, data)
 
-        vis = VisioFile(crafted_path)
+        vis = Document.open(crafted_path)
         page = vis.pages[0]
         shapes = page.child_shapes
         connector = Connect.create(page=page, from_shape=shapes[0], to_shape=shapes[1])
         master_id = connector.xml.attrib["Master"]
         document = os.path.join(os.path.dirname(crafted_path), "reopened.vsdx")
-        vis.save_vsdx(document)
+        vis.save(document)
 
         # the reopen itself is the assertion the fixture's own KeyError made:
         # a dangling relationship id there raises before this line returns
-        reopened = VisioFile(document)
+        reopened = Document.open(document)
         masters_root = reopened.masters_xml
         assert masters_root is not None
         master = next(m for m in masters_root if m.attrib.get("ID") == master_id)
@@ -327,8 +327,8 @@ def test_a_source_master_that_cannot_be_read_fails_before_the_target_changes(vsd
     until the file is opened; the import has to stop, and stop before it has
     changed the target package.
     """
-    source = VisioFile(vsdx_copy("test4_connectors.vsdx"))
-    target = VisioFile(vsdx_copy("test1.vsdx"))
+    source = Document.open(vsdx_copy("test4_connectors.vsdx"))
+    target = Document.open(vsdx_copy("test1.vsdx"))
     shape = next(shape for shape in source.pages[0].all_shapes if shape.xml.attrib.get("Master"))
     before = target._package.names()
     monkeypatch.setattr(source._package, "read_bytes", lambda name: None)

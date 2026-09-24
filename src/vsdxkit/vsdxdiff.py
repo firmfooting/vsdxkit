@@ -12,9 +12,9 @@ logger = get_logger(__name__)
 class VisioFileDiff:
     """Compares two vsdx files
 
-    :param filepath_a: file path of the first :class:`VisioFile` was created from
+    :param filepath_a: file path of the first :class:`Document` was created from
     :type filepath_a: str
-    :param filepath_b: file path of the second :class:`VisioFile` was created from
+    :param filepath_b: file path of the second :class:`Document` was created from
     :type filepath_b: str
     """
 

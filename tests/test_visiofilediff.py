@@ -4,8 +4,8 @@ import pprint
 import pytest
 
 from vsdxkit.connectors import Connect
+from vsdxkit.document import Document
 from vsdxkit.vsdxdiff import VisioFileDiff
-from vsdxkit.vsdxfile import VisioFile
 
 
 @pytest.mark.parametrize(("filename_a", "filename_b"), [("test1.vsdx", "test2.vsdx"), ("test1.vsdx", "test4_connectors.vsdx")])
@@ -34,8 +34,8 @@ def test_create_visiodiff(filename_a: str, filename_b: str, basedir):
 def test_visiodiff_before_after(filename_a: str, filename_b: str, vsdx_copy, tmp_path):
     filepath_a = vsdx_copy(filename_a)
     filepath_b = os.path.join(str(tmp_path), filename_b)
-    vis = VisioFile(filepath_a)
-    vis.save_vsdx(filepath_b)
+    vis = Document.open(filepath_a)
+    vis.save(filepath_b)
 
     file_diff = VisioFileDiff(filepath_a, filepath_b)
 
@@ -49,12 +49,12 @@ def test_visiodiff_detects_added_connector(vsdx_copy, tmp_path):
     """Adding a connector between two shapes must show up in the diff."""
     filepath_a = vsdx_copy("test1.vsdx")
     filepath_b = os.path.join(str(tmp_path), "with_connector.vsdx")
-    vis = VisioFile(filepath_a)
+    vis = Document.open(filepath_a)
     page = vis.pages[0]
     shapes = page.all_shapes
     assert len(shapes) >= 2
     Connect.create(page=page, from_shape=shapes[0], to_shape=shapes[1])
-    vis.save_vsdx(filepath_b)
+    vis.save(filepath_b)
 
     file_diff = VisioFileDiff(filepath_a, filepath_b)
     # connector creation legitimately imports media masters and the page rels

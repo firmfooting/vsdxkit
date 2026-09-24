@@ -1,7 +1,7 @@
 """vsdxkit - create, edit and analyse Microsoft Visio .vsdx files.
 
 Import each name from the module that defines it, for example
-``from vsdxkit.vsdxfile import VisioFile``. This module holds only the XML
+``from vsdxkit.document import Document``. This module holds only the XML
 namespace constants the other modules share, and the version.
 """
 

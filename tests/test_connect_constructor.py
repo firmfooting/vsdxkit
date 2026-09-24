@@ -6,7 +6,7 @@ import xml.etree.ElementTree as ET
 import pytest
 
 from vsdxkit.connectors import Connect
-from vsdxkit.vsdxfile import VisioFile
+from vsdxkit.document import Document
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 namespace = "{http://schemas.microsoft.com/office/visio/2012/main}"
@@ -15,7 +15,7 @@ namespace = "{http://schemas.microsoft.com/office/visio/2012/main}"
 @pytest.fixture
 def page_with_connector(vsdx_copy):
     path = vsdx_copy("test8_simple_connector.vsdx")
-    visio = VisioFile(path)
+    visio = Document.open(path)
     yield visio.pages[0]
 
 

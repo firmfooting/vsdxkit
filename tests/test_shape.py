@@ -6,8 +6,8 @@ import xml.etree.ElementTree as ET
 import pytest
 
 from vsdxkit import namespace
+from vsdxkit.document import Document
 from vsdxkit.shapes import DataProperty, Shape
-from vsdxkit.vsdxfile import VisioFile
 
 
 def _first_shape_containing(shapes, text: str):
@@ -27,7 +27,7 @@ def _first_shape_containing(shapes, text: str):
 )
 def test_get_shape_text(filename: str, shape_id: str, expected_text: str, basedir):
     # Check that a specific shape on a page has expected text value
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.get_page(0)  # type: Page
     shape = page.shapes.require_id(shape_id)
     # check that shape has expected text
@@ -45,7 +45,7 @@ def test_get_shape_text(filename: str, shape_id: str, expected_text: str, basedi
 )
 def test_set_shape_text(filename: str, shape_id: str, expected_text: str, basedir):
     # Check that a specific shape on a page has expected text value after it is updated
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.get_page(0)  # type: Page
     shape = page.shapes.require_id(shape_id)
     # check that shape has expected text
@@ -63,7 +63,7 @@ def test_set_shape_text(filename: str, shape_id: str, expected_text: str, basedi
 )
 def test_get_shape_attr_value(filename: str, attr: str, attr_value: str, expected_id: str, basedir):
     # Check that a specific shape on a page has expected text value
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.get_page(0)  # type: Page
     shape = next((s for s in page.shapes if str(s.xml.attrib.get(attr)) == attr_value), None)
     # check that shape has expected text
@@ -81,7 +81,7 @@ def test_get_shape_attr_value(filename: str, attr: str, attr_value: str, expecte
 )
 def test_get_shape_child_shapes(filename: str, shape_id: str, child_count: int, basedir):
     # Check that page has expected number of top level shapes
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.get_page(0)  # type: Page
     shape = page.shapes.require_id(shape_id)
 
@@ -100,7 +100,7 @@ def test_get_shape_child_shapes(filename: str, shape_id: str, child_count: int, 
 )
 def test_get_shape_all_shapes(filename: str, shape_id: str, all_count: int, basedir):
     # Check that page has expected number of top level shapes
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.get_page(0)  # type: Page
 
     shape_group = page.shapes.require_id(shape_id)
@@ -119,7 +119,7 @@ def test_get_shape_all_shapes(filename: str, shape_id: str, all_count: int, base
 )
 def test_shape_locations(filename: str, expected_locations: str, basedir):
     print("=== list_shape_locations ===")
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.get_page(0)  # type: Page
     shapes = page.child_shapes
     locations = ""
@@ -140,7 +140,7 @@ def test_shape_locations(filename: str, expected_locations: str, basedir):
 )
 def test_shape_center(filename: str, shape_id: str, expected_center: str, basedir):
 
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.get_page(0)  # type: Page
     shape = page.shapes.require_id(shape_id)
 
@@ -150,14 +150,14 @@ def test_shape_center(filename: str, shape_id: str, expected_center: str, basedi
 @pytest.mark.parametrize("filename", ["test2.vsdx", "test3_house.vsdx"])
 def test_remove_shape(filename: str, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_shape_removed.vsdx")
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     # get shape to remove
     shape = vis.pages[0].shapes.by_text("Shape to remove")  # type: Shape
     assert shape  # check shape found
     shape.remove()
-    vis.save_vsdx(out_file)
+    vis.save(out_file)
 
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     # get shape that should have been removed
     shape = vis.pages[0].shapes.by_text("Shape to remove")  # type: Shape
     assert shape is None  # check shape not found
@@ -166,7 +166,7 @@ def test_remove_shape(filename: str, tmp_path, basedir):
 @pytest.mark.parametrize(("filename", "shape_names", "shape_locations"), [("test1.vsdx", {"Shape to remove"}, {(1.0, 1.0)})])
 def test_set_shape_location(filename: str, shape_names: set, shape_locations: set, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_set_shape_location.vsdx")
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     # move shapes in list
     for shape_name, x_y in zip(shape_names, shape_locations, strict=True):
         shape = vis.pages[0].shapes.by_text(shape_name)  # type: Shape
@@ -176,10 +176,10 @@ def test_set_shape_location(filename: str, shape_names: set, shape_locations: se
         print(f"Moving shape '{shape_name}' from {shape.x}, {shape.y} to {x_y}")
         shape.x = x_y[0]
         shape.y = x_y[1]
-    vis.save_vsdx(out_file)
+    vis.save(out_file)
 
     # re-open saved file and check it is changed as expected
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     # get each shape that should have been moved
     for shape_name, x_y in zip(shape_names, shape_locations, strict=True):
         shape = vis.pages[0].shapes.by_text(shape_name)  # type: Shape
@@ -200,7 +200,7 @@ def test_move_shape(filename: str, page_index: int, shape_names: set, shape_x_y_
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_move_shape.vsdx")
     expected_shape_locations = {}
 
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     # move shapes in list
     for shape_name, x_y in zip(shape_names, shape_x_y_deltas, strict=True):
         shape = vis.pages[page_index].shapes.by_text(shape_name)  # type: Shape
@@ -210,11 +210,11 @@ def test_move_shape(filename: str, page_index: int, shape_names: set, shape_x_y_
         expected_shape_locations[shape_name] = (shape.x + x_y[0], shape.y + x_y[1])
         shape.move(x_y[0], x_y[1])
 
-    vis.save_vsdx(out_file)
+    vis.save(out_file)
     print(f"expected_shape_locations={expected_shape_locations}")
 
     # re-open saved file and check it is changed as expected
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     # get each shape that should have been moved
     for shape_name in shape_names:
         shape = vis.pages[page_index].shapes.by_text(shape_name)  # type: Shape
@@ -227,7 +227,7 @@ def test_move_shape(filename: str, page_index: int, shape_names: set, shape_x_y_
 def test_shape_copy(filename: str, shape_name: str, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_shape_copy.vsdx")
 
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[0]  # type: Page
     # find and copy shape by name
     shape = page.shapes.by_text(shape_name)  # type: Shape
@@ -246,10 +246,10 @@ def test_shape_copy(filename: str, shape_name: str, tmp_path, basedir):
     new_shape.text = updated_text  # update text of new shape
     assert page.shapes.by_text(updated_text)
     new_shape_id = new_shape.ID
-    vis.save_vsdx(out_file)
+    vis.save(out_file)
 
     # re-open saved file and check it is changed as expected
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     page = vis.pages[0]
     shape = page.shapes.require_id(new_shape_id)
     assert shape
@@ -261,7 +261,7 @@ def test_shape_copy(filename: str, shape_name: str, tmp_path, basedir):
 def test_shape_copy_other_page(filename: str, shape_name: str, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_shape_copy_other_page.vsdx")
 
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[0]  # type: Page
     page2 = vis.pages[1]  # type: Page
     page3 = vis.pages[2]  # type: Page
@@ -281,10 +281,10 @@ def test_shape_copy_other_page(filename: str, shape_name: str, tmp_path, basedir
     print(f"created new shape {type(new_shape)} {new_shape} {new_shape.ID}")
     page3_new_shape_id = new_shape.ID
 
-    vis.save_vsdx(out_file)
+    vis.save(out_file)
 
     # re-open saved file and check it is changed as expected
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     page2 = vis.pages[1]
     shape = page2.shapes.require_id(page2_new_shape_id)
     assert shape
@@ -303,7 +303,7 @@ def test_shape_copy_other_page(filename: str, shape_name: str, tmp_path, basedir
 )
 def test_get_shape_data_properties_type_is_dict_of_data_property(filename: str, page_index: int, shape_name: str, basedir):
     """check that Shape.data_properties is a dict of ShapeProperty"""
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     shape = vis.pages[page_index].shapes.by_text(shape_name)  # type: Shape
 
     props = shape.data_properties
@@ -332,7 +332,7 @@ def test_get_shape_data_properties_type_is_dict_of_data_property(filename: str, 
     ],
 )
 def test_get_shape_data_properties(filename: str, page_index: int, shape_name: str, property_dict: dict, basedir):
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     shape = vis.pages[page_index].shapes.by_text(shape_name)  # type: Shape
 
     props = shape.data_properties
@@ -362,7 +362,7 @@ def test_get_shape_data_properties(filename: str, page_index: int, shape_name: s
 def test_set_shape_data_properties(filename: str, page_index: int, shape_name: str, property_dict: dict, tmp_path, basedir):
     """Check that we can set a prop value, and this change persists through save and load"""
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_set_shape_data_properties.vsdx")
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     shape = vis.pages[page_index].shapes.by_text(shape_name)
 
     props = shape.data_properties
@@ -382,10 +382,10 @@ def test_set_shape_data_properties(filename: str, page_index: int, shape_name: s
         print(f"checking prop after set: lbl:'{prop.label}' name:'{prop.name}': val:'{prop.value}'")
         assert prop.value == property_dict.get(property_label)
 
-    vis.save_vsdx(out_file)
+    vis.save(out_file)
 
     # re-open saved file and check it is changed as expected
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     shape = vis.pages[page_index].shapes.by_text(shape_name)  # type: Shape
     # check each key/value is not already set to required value
     for property_label in property_dict:
@@ -406,7 +406,7 @@ def test_find_sub_shape_by_data_property_label(
     filename: str, page_index: int, container_shape_name: str, expected_shape_name: list, property_label: str, basedir
 ):
     """Test that we can find a shape and it's text inside a container shape based on the sub shapes labels"""
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     container_shape = vis.pages[page_index].shapes.by_text(container_shape_name)
 
     shape = container_shape.descendants.by_property(property_label)
@@ -426,7 +426,7 @@ def test_find_shape_by_data_property_label(
     filename: str, page_index: int, property_label: str, expected_shape_text: str, basedir
 ):
     """Test that we can find a shape and it's text inside a page based on the shapes labels"""
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     shape = vis.pages[page_index].shapes.by_property(property_label)
 
     # test that a shape is returned
@@ -450,7 +450,7 @@ def test_find_shape_by_data_property_label(
     ],
 )
 def test_find_connected_shapes(filename: str, shape_id: str, expected_shape_ids: list, basedir):
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[0]  # type: Page
     actual_connect_shape_ids = list()
     shape = page.shapes.require_id(shape_id)
@@ -478,7 +478,7 @@ def test_find_connected_shape_relationships(
     expected_to_rels: list,
     basedir,
 ):
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[0]  # type: Page
 
     shape = page.shapes.require_id(shape_id)
@@ -552,25 +552,25 @@ def test_find_connected_shape_relationships(
     ],
 )
 def test_get_shape_geometry(filename: str, page_index: str, shape_text: str, expected_coords: list, basedir):
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[page_index]
     shape = page.shapes.by_text(shape_text)
 
     coords = [(r.row_type, [(c.name, c.value, c.func) for c in r.cells.values()]) for r in shape.geometry.rows.values()]
     print(f"coords={coords}")
-    print(VisioFile.pretty_print_element(shape.xml))
+    print(Document.pretty_print_element(shape.xml))
     if shape.master_shape:
-        print(VisioFile.pretty_print_element(shape.master_shape.xml))
+        print(Document.pretty_print_element(shape.master_shape.xml))
     assert coords == expected_coords
 
 
 @pytest.mark.parametrize("filename_2", ["test1.vsdx", "test2.vsdx"])
 def test_shapes_of_two_documents_are_never_equal(filename_2, basedir):
     """Fails if a shape equals one in another document: two opens of one file are two documents (#101)."""
-    vis = VisioFile(os.path.join(basedir, "test1.vsdx"))
+    vis = Document.open(os.path.join(basedir, "test1.vsdx"))
     shape_1 = vis.pages[0].shapes.by_text("Shape Text")
 
-    vis = VisioFile(os.path.join(basedir, filename_2))
+    vis = Document.open(os.path.join(basedir, filename_2))
     shape_2 = vis.pages[0].shapes.by_text("Shape Text")
 
     assert shape_1 != shape_2
@@ -585,7 +585,7 @@ def test_shapes_of_two_documents_are_never_equal(filename_2, basedir):
     ],
 )
 def test_shape_bounds(filename, page_index, shape_text, expected_bounds, basedir):
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[page_index]
     shape = _first_shape_containing(page.shapes, shape_text)
     print([f"{n:.2f}" for n in shape.bounds])
@@ -620,7 +620,7 @@ def test_all_shape_bounds(filename, page_index, basedir):
     other. An assertion those fail is one that fails a correct library, which is
     how it ends up deleted.
     """
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[page_index]
     shapes = page.all_shapes
     assert shapes, "a bounds test needs shapes to bound"
@@ -650,7 +650,7 @@ def test_all_shape_bounds(filename, page_index, basedir):
     ],
 )
 def test_shape_relative_bounds(filename, page_index, shape_text, expected_bounds, basedir):
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[page_index]
     shape = _first_shape_containing(page.shapes, shape_text)
     print([f"{n:.2f}" for n in shape.relative_bounds])
@@ -667,15 +667,15 @@ def test_shape_relative_bounds(filename, page_index, shape_text, expected_bounds
 def test_shape_end_arrow(filename, page_index, shape_text, arrow, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_shape_end_arrow_{arrow}.vsdx")
 
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[page_index]
     shape = _first_shape_containing(page.shapes, shape_text)
     shape.end_arrow = arrow
     expected_arrow = "13" if arrow else "0"
     assert shape.end_arrow == expected_arrow
-    vis.save_vsdx(out_file)
+    vis.save(out_file)
 
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     page = vis.pages[page_index]
     shape = _first_shape_containing(page.shapes, shape_text)
     assert shape.end_arrow == expected_arrow
@@ -692,7 +692,7 @@ def test_shape_end_arrow(filename, page_index, shape_text, arrow, tmp_path, base
     ],
 )
 def test_shape_universal_name(filename, page_index, shape_text, expected_universal_name, basedir):
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[page_index]
     shape = _first_shape_containing(page.shapes, shape_text)
     assert shape.universal_name == expected_universal_name
@@ -708,7 +708,7 @@ def test_shape_universal_name(filename, page_index, shape_text, expected_univers
     ],
 )  # expected master shape name
 def test_get_shape_master_page(filename: str, expected_master_shape_name: str, basedir):
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     child_shape = vis.get_page(0).child_shapes[0]
     assert child_shape.master_page.name == expected_master_shape_name
 
@@ -723,7 +723,7 @@ def test_get_shape_master_page(filename: str, expected_master_shape_name: str, b
     ],
 )
 def test_get_shape_angle(filename: str, shape_id: str, expected_angle: float, basedir):
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[0]
     # check angle is close enough to expected
     assert abs(page.shapes.require_id(shape_id).angle - expected_angle) < 0.01
@@ -755,7 +755,7 @@ def test_get_shape_line_color(
     filename: str, page_index: int, shape_text: str, color_param: str, expected_colour: str, basedir
 ):
     """Test that we can get a shapes line, text, or fill color"""
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     shape = vis.pages[page_index].shapes.by_text(shape_text)
     assert _colour_of(shape, color_param) == expected_colour
 
@@ -776,12 +776,12 @@ def test_set_shape_line_color(
 ):
     """Test that we can set a shapes line, text, or fill color"""
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_{page_index}_set_shape_{color_param}_color.vsdx")
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     shape = vis.pages[page_index].shapes.by_text(shape_text)
     setattr(shape, _COLOUR_ATTRIBUTES[color_param], expected_colour)
-    vis.save_vsdx(out_file)
+    vis.save(out_file)
 
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     shape = vis.pages[page_index].shapes.by_text(shape_text)
     assert _colour_of(shape, color_param) == expected_colour
 
@@ -802,7 +802,7 @@ def test_append_shape_puts_the_shape_inside_the_group(vsdx_copy, tmp_path):
     filename = vsdx_copy("test2.vsdx")
     out_file = os.path.join(str(tmp_path), "test2_append_shape.vsdx")
 
-    vis = VisioFile(filename)
+    vis = Document.open(filename)
     page = vis.pages[0]
     group = page.shapes.require_id("9")
     assert group.shape_type == "Group"
@@ -819,9 +819,9 @@ def test_append_shape_puts_the_shape_inside_the_group(vsdx_copy, tmp_path):
     assert new_id not in ids_before
     assert new_id in [s.ID for s in group.child_shapes]
     assert new_id in [s.ID for s in page.all_shapes]
-    vis.save_vsdx(out_file)
+    vis.save(out_file)
 
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     page = vis.pages[0]
     group = page.shapes.require_id("9")
     assert new_id in [s.ID for s in group.child_shapes]
@@ -834,7 +834,7 @@ def test_append_shape_creates_a_shapes_container_for_an_empty_group(vsdx_copy):
     """A group that has been emptied has no <Shapes> tag; appending must make one."""
     filename = vsdx_copy("test2.vsdx")
 
-    vis = VisioFile(filename)
+    vis = Document.open(filename)
     page = vis.pages[0]
     group = page.shapes.require_id("9")
     group.xml.remove(group.xml.find(f"{namespace}Shapes"))
@@ -853,7 +853,7 @@ def test_append_shape_rejects_a_shape_that_cannot_hold_sub_shapes(vsdx_copy):
     """Only a group holds sub-shapes; anything else produces XML Visio repairs."""
     filename = vsdx_copy("test2.vsdx")
 
-    vis = VisioFile(filename)
+    vis = Document.open(filename)
     page = vis.pages[0]
     plain = page.shapes.require_id("6")
     assert plain.shape_type != "Group"
@@ -872,7 +872,7 @@ def test_append_shape_moves_a_shape_that_is_already_on_the_page(vsdx_copy):
     error message recommended -- raised. Detaching first is also what prevents
     the element gaining a second parent.
     """
-    vis = VisioFile(vsdx_copy("test2.vsdx"))
+    vis = Document.open(vsdx_copy("test2.vsdx"))
     page = vis.pages[0]
     group = page.shapes.require_id("9")
     existing = page.shapes.require_id("6")
@@ -887,7 +887,7 @@ def test_append_shape_moves_a_shape_that_is_already_on_the_page(vsdx_copy):
 
 def test_appending_a_copy_places_it_in_the_group(vsdx_copy):
     """The documented copy-and-append path works end to end."""
-    vis = VisioFile(vsdx_copy("test2.vsdx"))
+    vis = Document.open(vsdx_copy("test2.vsdx"))
     page = vis.pages[0]
     group = page.shapes.require_id("9")
     before = {s.ID for s in page.all_shapes}
@@ -901,7 +901,7 @@ def test_appending_a_copy_places_it_in_the_group(vsdx_copy):
 
 def test_moving_a_shape_into_a_group_keeps_its_id(vsdx_copy):
     """A move is the same shape, so Connect records naming it stay valid."""
-    vis = VisioFile(vsdx_copy("test2.vsdx"))
+    vis = Document.open(vsdx_copy("test2.vsdx"))
     page = vis.pages[0]
     group = page.shapes.require_id("9")
     existing = page.shapes.require_id("6")
@@ -915,7 +915,7 @@ def test_append_shape_rejects_a_shape_built_against_another_page(vsdx_copy):
     """IDs are page-scoped, so a shape may only be appended on its own page."""
     filename = vsdx_copy("test2.vsdx")
 
-    vis = VisioFile(filename)
+    vis = Document.open(filename)
     page, other_page = vis.pages[0], vis.pages[1]
     group = page.shapes.require_id("9")
 
@@ -931,7 +931,7 @@ def test_a_group_member_copied_onto_its_own_page_names_its_master(vsdx_copy):
     until the page was walked again, and was saved with a MasterShape pointing
     into nothing.
     """
-    vis = VisioFile(vsdx_copy("test5_master.vsdx"))
+    vis = Document.open(vsdx_copy("test5_master.vsdx"))
     page = vis.pages[0]
     member = page.shapes.require_id("2")
     assert member.xml.attrib.get("Master") is None

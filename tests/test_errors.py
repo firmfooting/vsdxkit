@@ -16,10 +16,11 @@ import zipfile
 import pytest
 
 import vsdxkit
+import vsdxkit.document
 import vsdxkit.errors
 import vsdxkit.package
-import vsdxkit.vsdxfile
 import vsdxkit.xmlio
+from vsdxkit.document import Document
 from vsdxkit.errors import (
     InvalidOperationError,
     MalformedPackageError,
@@ -31,7 +32,6 @@ from vsdxkit.errors import (
     VsdxError,
 )
 from vsdxkit.package import PackageLimits
-from vsdxkit.vsdxfile import VisioFile
 
 BASEDIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -223,7 +223,7 @@ def test_a_document_with_no_pages_part_raises_missing_part_error(vsdx_copy):
     is refused, because it would leave the relationship and content-type
     override that name the part behind.
     """
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
     vis._package.remove("/visio/pages/pages.xml")
     with pytest.raises(MissingPartError, match=r"pages\.xml"):
@@ -241,8 +241,8 @@ def test_a_required_part_the_store_lacks_is_a_missing_part():
 
 def test_a_source_master_listed_but_unreadable_is_a_missing_part(vsdx_copy, monkeypatch):
     """Fails if master import reports a listed-but-unreadable donor part with a plain ValueError."""
-    source = VisioFile(vsdx_copy("test4_connectors.vsdx"))
-    target = VisioFile(vsdx_copy("test1.vsdx"))
+    source = Document.open(vsdx_copy("test4_connectors.vsdx"))
+    target = Document.open(vsdx_copy("test1.vsdx"))
     shape = next(shape for shape in source.pages[0].all_shapes if shape.xml.attrib.get("Master"))
     monkeypatch.setattr(source._package, "read_bytes", lambda name: None)
     with pytest.raises(MissingPartError, match="could not be read"):
@@ -269,19 +269,19 @@ def test_promoting_a_part_that_is_not_xml_raises_malformed_package_error(tmp_pat
 def test_opening_a_package_whose_xml_is_broken_raises_malformed_package_error(broken_document_package):
     """The public open path parses through `parse_part`, which must translate too.
 
-    `PackageStore._promoted` is the one way into the parser now: `VisioFile`
+    `PackageStore._promoted` is the one way into the parser now: `Document`
     opens a document through the store's promotion, which is `parse_part`,
     where a malformed part used to surface as a raw `ET.ParseError` and miss
     the hierarchy entirely (#365 review).
     """
     with pytest.raises(MalformedPackageError, match="not well-formed XML"):
-        VisioFile(broken_document_package)
+        Document.open(broken_document_package)
 
 
 def test_the_parse_error_is_kept_as_the_cause(broken_document_package):
     """Chained, not swallowed: `ET.ParseError.position` is how a caller finds the byte."""
     with pytest.raises(MalformedPackageError) as caught:
-        VisioFile(broken_document_package)
+        Document.open(broken_document_package)
     assert isinstance(caught.value.__cause__, ET.ParseError)
 
 
@@ -312,12 +312,12 @@ def test_a_required_attribute_missing_on_open_raises_malformed_package_error(vsd
             rewritten.writestr(entry, data)
 
     with pytest.raises(MalformedPackageError, match=expected):
-        VisioFile(destination)
+        Document.open(destination)
 
 
 @pytest.mark.allow_invalid_package
 def test_a_page_part_the_relationships_name_and_the_package_lacks_raises_missing_part_error(vsdx_copy, tmp_path):
-    """Fails if `VisioFile._require_part_xml` reports a required part that is not there as a plain `ValueError`.
+    """Fails if `Document._require_part_xml` reports a required part that is not there as a plain `ValueError`.
 
     #365 made `require_xml` raise `MissingPartError`, and the open path read
     every required part through it. #371 moved the open path onto the store,
@@ -333,7 +333,7 @@ def test_a_page_part_the_relationships_name_and_the_package_lacks_raises_missing
                 rewritten.writestr(entry, original.read(entry.filename))
 
     with pytest.raises(MissingPartError, match=r"page part"):
-        VisioFile(destination)
+        Document.open(destination)
 
 
 @pytest.mark.allow_invalid_package
@@ -351,7 +351,7 @@ def test_a_master_relationship_without_an_id_raises_malformed_package_error(vsdx
             rewritten.writestr(entry, data)
 
     with pytest.raises(MalformedPackageError, match="Id"):
-        VisioFile(destination)
+        Document.open(destination)
 
 
 @pytest.mark.allow_invalid_package
@@ -390,7 +390,7 @@ def test_a_relationship_target_that_is_not_a_part_name_raises_malformed_package_
     )
 
     with pytest.raises(MalformedPackageError, match="not a part name") as caught:
-        VisioFile(destination)
+        Document.open(destination)
     assert isinstance(caught.value, ValueError)
     assert isinstance(caught.value.__cause__, ValueError)
 
@@ -412,7 +412,7 @@ def test_a_file_that_is_not_a_readable_archive_raises_malformed_package_error(vs
     destination.write_bytes(payload)
 
     with pytest.raises(MalformedPackageError, match="not a readable package"):
-        VisioFile(str(destination))
+        Document.open(str(destination))
 
 
 def test_a_malformed_page_dimension_raises_malformed_package_error(vsdx_copy):
@@ -422,7 +422,7 @@ def test_a_malformed_page_dimension_raises_malformed_package_error(vsdx_copy):
     `MalformedPackageError`; `Page.width` and `Page.height` read the same kind
     of cell and raised a plain `ValueError` (#365 review).
     """
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
     page._pagesheet_cell("PageWidth").attrib["V"] = "not-a-number"
     with pytest.raises(MalformedPackageError, match="PageWidth"):
@@ -432,7 +432,7 @@ def test_a_malformed_page_dimension_raises_malformed_package_error(vsdx_copy):
 @pytest.mark.parametrize("coordinate", ["X", "Y"])
 def test_a_malformed_geometry_coordinate_raises_malformed_package_error(vsdx_copy, coordinate):
     """Geometry rows read the same ShapeSheet cells, and read them with a bare `float()`."""
-    vis = VisioFile(vsdx_copy("test9_rect_and_line.vsdx"))
+    vis = Document.open(vsdx_copy("test9_rect_and_line.vsdx"))
     row = next(
         row
         for shape in vis.pages[0].all_shapes
@@ -447,7 +447,7 @@ def test_a_malformed_geometry_coordinate_raises_malformed_package_error(vsdx_cop
 
 def test_a_connect_record_missing_its_sheet_attributes_raises_malformed_package_error(vsdx_copy):
     """Reading `page.connects` builds these from package XML, so it is content, not an argument."""
-    vis = VisioFile(vsdx_copy("test4_connectors.vsdx"))
+    vis = Document.open(vsdx_copy("test4_connectors.vsdx"))
     page = vis.pages[0]
     connect = page.connects[0]
     del connect.xml.attrib["FromSheet"]
@@ -476,7 +476,7 @@ def test_an_encrypted_member_raises_malformed_package_error(vsdx_copy, tmp_path)
     destination.write_bytes(bytes(raw))
 
     with pytest.raises(MalformedPackageError, match="cannot be read"):
-        VisioFile(str(destination))
+        Document.open(str(destination))
 
 
 @pytest.mark.allow_invalid_package
@@ -499,7 +499,7 @@ def test_a_member_needing_an_unsupported_zip_version_raises_malformed_package_er
     destination.write_bytes(bytes(raw))
 
     with pytest.raises(MalformedPackageError, match="not a readable package") as caught:
-        VisioFile(str(destination))
+        Document.open(str(destination))
     assert isinstance(caught.value.__cause__, NotImplementedError)
 
 
@@ -526,7 +526,7 @@ def test_a_member_whose_header_lies_before_the_archive_raises_malformed_package_
     destination.write_bytes(bytes(raw))
 
     with pytest.raises(MalformedPackageError, match="before the start of the archive"):
-        VisioFile(str(destination))
+        Document.open(str(destination))
 
 
 @pytest.mark.allow_invalid_package
@@ -546,7 +546,7 @@ def test_a_corrupt_compressed_stream_raises_malformed_package_error(vsdx_copy, t
     destination.write_bytes(bytes(raw))
 
     with pytest.raises(MalformedPackageError, match="cannot be read"):
-        VisioFile(str(destination))
+        Document.open(str(destination))
 
 
 @pytest.mark.allow_invalid_package
@@ -570,7 +570,7 @@ def test_a_corrupt_bzip2_member_raises_malformed_package_error(vsdx_copy, tmp_pa
     destination.write_bytes(bytes(raw))
 
     with pytest.raises(MalformedPackageError, match="cannot be read"):
-        VisioFile(str(destination))
+        Document.open(str(destination))
 
 
 @pytest.mark.allow_invalid_package
@@ -599,7 +599,7 @@ def test_a_corrupt_lzma_member_raises_malformed_package_error(vsdx_copy, tmp_pat
     destination.write_bytes(bytes(raw))
 
     with pytest.raises(MalformedPackageError, match="cannot be read"):
-        VisioFile(str(destination))
+        Document.open(str(destination))
 
 
 @pytest.mark.allow_invalid_package
@@ -625,7 +625,7 @@ def test_a_member_name_that_is_not_utf_8_raises_malformed_package_error(vsdx_cop
     destination.write_bytes(bytes(raw))
 
     with pytest.raises(MalformedPackageError, match="not a readable package"):
-        VisioFile(str(destination))
+        Document.open(str(destination))
 
 
 @pytest.mark.allow_invalid_package
@@ -662,7 +662,7 @@ def test_a_part_declaring_an_unknown_encoding_raises_malformed_package_error(bad
     both load paths go through (#365 review).
     """
     with pytest.raises(MalformedPackageError, match="encoding"):
-        VisioFile(bad_encoding_package)
+        Document.open(bad_encoding_package)
 
 
 def test_a_part_in_a_multibyte_encoding_the_parser_refuses_is_malformed():
@@ -677,7 +677,7 @@ def test_a_part_in_a_multibyte_encoding_the_parser_refuses_is_malformed():
 def test_opening_a_package_with_a_refused_multibyte_page_encoding_raises_malformed_package_error(multibyte_page_package):
     """The public open path must translate this ValueError too, not just the direct `parse_part` call above."""
     with pytest.raises(MalformedPackageError, match="encoding"):
-        VisioFile(multibyte_page_package)
+        Document.open(multibyte_page_package)
 
 
 def test_memory_exhausted_while_reading_a_member_is_not_blamed_on_the_package(monkeypatch, tmp_path):
@@ -698,7 +698,7 @@ def test_malformed_shapesheet_number_raises_malformed_package_error(vsdx_copy):
     The value comes from the document, not from the caller, so a cell that does
     not hold the number it has to is a malformed package.
     """
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     shape = vis.pages[0].all_shapes[0]
     shape.set_cell_value("PinX", "not-a-number")
     with pytest.raises(MalformedPackageError, match="malformed numeric ShapeSheet value"):
@@ -711,12 +711,12 @@ def test_malformed_shapesheet_number_raises_malformed_package_error(vsdx_copy):
 
 
 def test_unknown_palette_name_raises_not_found_error(vsdx_copy):
-    """Fails if `VisioFile.create_shape` reports an unknown palette name with anything but `NotFoundError`.
+    """Fails if `Document.create_shape` reports an unknown palette name with anything but `NotFoundError`.
 
     The name is a lookup in the palette, and a lookup that finds nothing is
     what `NotFoundError` is for. It is still a `ValueError`, as it was.
     """
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     with pytest.raises(NotFoundError, match=r"has no shape named 'PALETTE_NOT_A_SHAPE'"):
         vis.create_shape(vis.pages[0], "PALETTE_NOT_A_SHAPE", 1.0, 1.0)
 
@@ -727,8 +727,8 @@ def test_deleting_a_shape_that_is_not_on_the_page_raises_not_found_error(vsdx_co
     The shape is looked up on this page and is not found there, which is a
     missing thing rather than a refused operation.
     """
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
-    other = VisioFile(vsdx_copy("test2.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
+    other = Document.open(vsdx_copy("test2.vsdx"))
     stranger = other.pages[0].all_shapes[0]
     with pytest.raises(NotFoundError, match="is not on page"):
         vis.pages[0].delete_shape(stranger)
@@ -741,9 +741,9 @@ def test_deleting_a_shape_that_is_not_on_the_page_raises_not_found_error(vsdx_co
 
 def test_saving_a_drawing_under_a_vsdm_name_raises_invalid_operation(vsdx_copy, tmp_path):
     """#90 needs exactly this type for a package kind / suffix mismatch."""
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     with pytest.raises(InvalidOperationError, match="macro-enabled"):
-        vis.save_vsdx(str(tmp_path / "out.vsdm"))
+        vis.save(str(tmp_path / "out.vsdm"))
 
 
 def test_gluing_to_a_connection_point_a_shape_does_not_have_raises_invalid_operation(vsdx_copy):
@@ -752,7 +752,7 @@ def test_gluing_to_a_connection_point_a_shape_does_not_have_raises_invalid_opera
     Whether the index is usable depends on how many connection points that
     shape has, so the refusal is about the document's state, not the index.
     """
-    vis = VisioFile(vsdx_copy("test4_connectors.vsdx"))
+    vis = Document.open(vsdx_copy("test4_connectors.vsdx"))
     page = vis.pages[0]
     a, b = page.child_shapes[0], page.child_shapes[1]
     with pytest.raises(InvalidOperationError, match="connection point"):
@@ -769,7 +769,7 @@ def test_connecting_a_shape_with_no_pin_coordinates_raises_invalid_operation(vsd
     position a few lines further on already reported the same None that way.
     It stays a `ValueError`, so code catching the old type still catches it.
     """
-    vis = VisioFile(vsdx_copy("test8_simple_connector.vsdx"))
+    vis = Document.open(vsdx_copy("test8_simple_connector.vsdx"))
     page = vis.pages[0]
     source = page.shapes.by_text("Shape A")
     target = page.shapes.by_text("Shape B")
@@ -789,7 +789,7 @@ def test_a_page_with_no_container_raises_invalid_operation(vsdx_copy):
     A swimlane needs a container to go into. The call is valid on a page that
     has one, so this page's state is what refuses it.
     """
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     with pytest.raises(InvalidOperationError, match="no CFF Container"):
         vis.pages[0].add_swimlane("Lane")
 
@@ -800,7 +800,7 @@ def test_appending_a_shape_to_a_non_group_raises_invalid_operation(vsdx_copy):
     Only a group can hold shapes, and whether the host is one is the document's
     state rather than something wrong with the shape passed in.
     """
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
     host, guest = page.child_shapes[0], page.child_shapes[1]
     with pytest.raises(InvalidOperationError, match="cannot contain shapes"):
@@ -813,7 +813,7 @@ def test_a_duplicate_geometry_row_index_raises_invalid_operation(vsdx_copy):
     The same index is fine in a section that does not use it yet, so the
     refusal comes from what the section already holds.
     """
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     shape = vis.pages[0].all_shapes[0]
     geometry = shape.geometry
     assert geometry is not None
@@ -823,28 +823,28 @@ def test_a_duplicate_geometry_row_index_raises_invalid_operation(vsdx_copy):
 
 
 def test_saving_an_empty_package_raises_invalid_operation(vsdx_copy, tmp_path):
-    """Fails if `VisioFile.save_vsdx` refuses a package with no parts with anything but `InvalidOperationError`.
+    """Fails if `Document.save` refuses a package with no parts with anything but `InvalidOperationError`.
 
     Nothing is wrong with the destination path. The document has been emptied,
     and that state is why there is nothing to save.
     """
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     for name in vis._package.names():
         vis._package.remove(name)
     with pytest.raises(InvalidOperationError, match="empty package"):
-        vis.save_vsdx(str(tmp_path / "out.vsdx"))
+        vis.save(str(tmp_path / "out.vsdx"))
 
 
 def test_refusing_none_for_a_document_part_is_an_invalid_operation(vsdx_copy):
-    """Fails if VisioFile's document-part setters refuse None with a plain ValueError."""
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    """Fails if Document's document-part setters refuse None with a plain ValueError."""
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     with pytest.raises(InvalidOperationError):
         vis.app_xml = None
 
 
 def test_refusing_none_for_a_page_part_is_an_invalid_operation(vsdx_copy):
     """Fails if Page.xml refuses None with a plain ValueError."""
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     with pytest.raises(InvalidOperationError):
         vis.pages[0].xml = None
 

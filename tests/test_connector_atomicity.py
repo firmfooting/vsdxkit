@@ -11,7 +11,7 @@ import os
 import pytest
 
 from vsdxkit.connectors import Connect
-from vsdxkit.vsdxfile import VisioFile
+from vsdxkit.document import Document
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
@@ -32,7 +32,7 @@ def _snapshot(page):
 @pytest.fixture
 def atomicity_page(vsdx_copy):
     path = vsdx_copy("test8_simple_connector.vsdx")
-    vis = VisioFile(path)
+    vis = Document.open(path)
     yield vis.pages[0]
 
 
@@ -58,7 +58,7 @@ def test_create_rejects_negative_connection_point_without_mutating_package(atomi
 def test_retarget_rejects_invalid_connection_point_without_mutating_package(vsdx_copy):
     """A rejected retarget must keep the connector's original records intact."""
     path = vsdx_copy("test4_connectors.vsdx")
-    vis = VisioFile(path)
+    vis = Document.open(path)
     page = vis.pages[0]
     connectors = [s for s in page.all_shapes if "BeginX" in s.cells]
     assert connectors, "fixture must contain a connector"
@@ -80,7 +80,7 @@ def test_retarget_rejects_invalid_connection_point_without_mutating_package(vsdx
 def test_create_with_valid_point_glue_still_works(vsdx_copy):
     """The atomicity guard must not break the valid path (fixture with real connection points)."""
     path = vsdx_copy("fixtures/com_reference/s05_swimlanes_cfflow.vsdx")
-    vis = VisioFile(path)
+    vis = Document.open(path)
     page = vis.pages[0]
     a = page.shapes.by_id("90")
     b = page.shapes.by_id("97")

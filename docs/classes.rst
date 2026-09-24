@@ -2,15 +2,14 @@ API reference
 =============
 
 Each class is imported from the module named in its heading, for example
-``from vsdxkit.vsdxfile import VisioFile``. The package root re-exports nothing.
+``from vsdxkit.document import Document``. The package root re-exports nothing.
 
-VisioFile
----------
+Document
+--------
 
-.. autoclass:: vsdxkit.vsdxfile.VisioFile
-   :members: add_page, add_page_at, copy_page, create_shape, get_page_by_name, jinja_render_vsdx, pages, remove_page_by_index, remove_page_by_name, save_vsdx
+.. autoclass:: vsdxkit.document.Document
+   :members: open, pages, save, render, add_page, add_page_at, copy_page, create_shape, get_page_by_name, remove_page_by_index, remove_page_by_name
    :undoc-members:
-   :special-members: __init__, __enter__, __exit__
 
 Page, PageCollection and PagePosition
 -------------------------------------

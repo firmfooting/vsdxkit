@@ -4,7 +4,7 @@ import os
 import xml.etree.ElementTree as ET
 import zipfile
 
-from vsdxkit.vsdxfile import VisioFile
+from vsdxkit.document import Document
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 RELS_NS = "{http://schemas.openxmlformats.org/package/2006/relationships}"
@@ -33,16 +33,16 @@ def _content_type_part_names(path: str) -> set[str]:
 
 def _save_copy(tmp_path, name: str = "doc.vsdx") -> str:
     document = str(tmp_path / name)
-    vis = VisioFile(os.path.join(FIXTURES, "test1.vsdx"))
-    vis.save_vsdx(document)
+    vis = Document.open(os.path.join(FIXTURES, "test1.vsdx"))
+    vis.save(document)
     return document
 
 
 def test_remove_page_clears_relationship_and_content_type(tmp_path):
     document = _save_copy(tmp_path)
-    vis = VisioFile(document)
+    vis = Document.open(document)
     vis.remove_page_by_index(1)  # middle page
-    vis.save_vsdx(document)
+    vis.save(document)
 
     names, rel_pairs, _ = _zip_graph(document)
     assert "visio/pages/page2.xml" not in names, "removed page part still present"
@@ -57,10 +57,10 @@ def test_remove_page_clears_relationship_and_content_type(tmp_path):
 
 def test_remove_then_add_allocates_unused_part_and_resolves_graph(tmp_path):
     document = _save_copy(tmp_path)
-    vis = VisioFile(document)
+    vis = Document.open(document)
     vis.remove_page_by_index(1)
     new_page = vis.add_page("replacement")
-    vis.save_vsdx(document)
+    vis.save(document)
 
     names, rel_pairs, rel_ids_in_pages = _zip_graph(document)
     for rel_id in rel_ids_in_pages:
@@ -75,7 +75,7 @@ def test_remove_then_add_allocates_unused_part_and_resolves_graph(tmp_path):
 
 def test_new_page_part_name_is_an_unused_value(tmp_path):
     document = _save_copy(tmp_path)
-    vis = VisioFile(document)
+    vis = Document.open(document)
     vis.remove_page_by_index(1)  # frees page2.xml
     new_page = vis.add_page("replacement")
     # page count went 3 -> 2; page-count derivation would say page3.xml (taken);
@@ -85,11 +85,11 @@ def test_new_page_part_name_is_an_unused_value(tmp_path):
 
 def test_removed_page_reopening_round_trip(tmp_path):
     document = _save_copy(tmp_path)
-    vis = VisioFile(document)
+    vis = Document.open(document)
     vis.remove_page_by_index(1)
     vis.add_page("replacement")
-    vis.save_vsdx(document)
-    vis = VisioFile(document)
+    vis.save(document)
+    vis = Document.open(document)
     assert [p.name for p in vis.pages] == ["Page-1", "Page-3", "replacement"]
     assert all(page.filename for page in vis.pages)
     assert all(page.rel_id for page in vis.pages)

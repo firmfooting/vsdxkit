@@ -12,7 +12,7 @@ import os
 import xml.etree.ElementTree as ET
 
 from vsdxkit import namespace
-from vsdxkit.vsdxfile import VisioFile
+from vsdxkit.document import Document
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
@@ -28,7 +28,7 @@ POINT_GLUE_FIXTURE = os.path.join(FIXTURES, "fixtures", "com_reference", "s05_sw
 
 def test_update_ids_remaps_shape_glue_trigger_formulas(vsdx_copy):
     """`_XFTRIGGER(SheetN!EventXFMod)` carries no dot and is not at the start."""
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
     start = vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="A")
     end = vis.create_shape(page, "PALETTE_PROCESS", 6.0, 2.0, text="B")
@@ -43,7 +43,7 @@ def test_update_ids_remaps_shape_glue_trigger_formulas(vsdx_copy):
 
 def test_update_ids_remaps_point_glue_formulas():
     """A point-glue formula carries two references to the same shape."""
-    vis = VisioFile(POINT_GLUE_FIXTURE)
+    vis = Document.open(POINT_GLUE_FIXTURE)
     page = vis.pages[0]
     start = page.shapes.require_id("90")
     end = page.shapes.require_id("97")
@@ -59,7 +59,7 @@ def test_update_ids_remaps_point_glue_formulas():
 
 def test_update_ids_leaves_references_outside_the_copy_untouched(vsdx_copy):
     """A reference to a shape that is not being copied must not be rewritten."""
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
     start = vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="A")
     end = vis.create_shape(page, "PALETTE_PROCESS", 6.0, 2.0, text="B")
@@ -77,7 +77,7 @@ def test_update_ids_matches_whole_ids_only(vsdx_copy):
     shapes = ET.fromstring(
         f'<Shapes xmlns="{namespace[1:-1]}"><Shape ID="12"><Cell N="Width" F="Sheet.1!Width+Sheet.12!Width"/></Shape></Shapes>'
     )
-    vis = VisioFile(os.path.join(FIXTURES, "test1.vsdx"))
+    vis = Document.open(os.path.join(FIXTURES, "test1.vsdx"))
     vis.update_ids(shapes, {"12": 700})
     cell = shapes.find(f"{namespace}Shape/{namespace}Cell")
     # the reference form is preserved; only the id changes
@@ -98,7 +98,7 @@ def test_update_ids_leaves_a_reference_to_another_pages_sheet_alone():
         f'<Shape ID="9"><Cell N="Width" F="Pages[Page-2]!Sheet.1!Width+Sheet.1!Height"/></Shape>'
         f"</Shapes>"
     )
-    vis = VisioFile(os.path.join(FIXTURES, "test1.vsdx"))
+    vis = Document.open(os.path.join(FIXTURES, "test1.vsdx"))
     vis.update_ids(shapes, {"1": 700})
     cell = shapes.find(f"{namespace}Shape/{namespace}Cell")
     assert cell.attrib["F"] == "Pages[Page-2]!Sheet.1!Width+Sheet.700!Height"
@@ -112,7 +112,7 @@ def test_update_ids_remaps_the_copied_shapes_own_cells(vsdx_copy):
         f'<Shapes><Shape ID="2"><Cell N="Height" F="Sheet.1!Height"/></Shape></Shapes>'
         f"</Shape></Shapes>"
     )
-    vis = VisioFile(os.path.join(FIXTURES, "test1.vsdx"))
+    vis = Document.open(os.path.join(FIXTURES, "test1.vsdx"))
     vis.update_ids(shapes, {"1": 800, "2": 801})
     group = shapes.find(f"{namespace}Shape")
     assert group.find(f'{namespace}Cell[@N="Width"]').attrib["F"] == "Sheet.801!Width"
@@ -122,7 +122,7 @@ def test_update_ids_remaps_the_copied_shapes_own_cells(vsdx_copy):
 
 def test_copying_a_group_remaps_its_children_references(vsdx_copy):
     """End to end: the master group in test5 references its own shape ID."""
-    vis = VisioFile(vsdx_copy("test5_master.vsdx"))
+    vis = Document.open(vsdx_copy("test5_master.vsdx"))
     page = vis.pages[0]
     group = page.child_shapes[0]
     referenced = {cell.attrib["F"] for shape in group.xml.iter(f"{namespace}Cell") for cell in [shape] if "F" in shape.attrib}
@@ -143,7 +143,7 @@ def test_copy_page_keeps_connector_glue(vsdx_copy):
     there is nothing for the remapper to do here; this guards that the two
     mechanisms do not start fighting each other.
     """
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
     start = vis.create_shape(page, "PALETTE_PROCESS", 2.0, 2.0, text="A")
     end = vis.create_shape(page, "PALETTE_PROCESS", 6.0, 2.0, text="B")

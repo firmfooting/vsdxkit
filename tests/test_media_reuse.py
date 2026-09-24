@@ -17,8 +17,8 @@ import pytest
 
 from vsdxkit import media
 from vsdxkit.connectors import Connect
+from vsdxkit.document import Document
 from vsdxkit.package import PackageStore
-from vsdxkit.vsdxfile import VisioFile
 
 BASE = "test8_simple_connector.vsdx"
 
@@ -51,13 +51,13 @@ def test_each_donor_is_opened_once_across_documents(vsdx_copy, monkeypatch, fres
     opens = count_package_opens(monkeypatch)
     path = vsdx_copy(BASE)
 
-    vis = VisioFile(path)
+    vis = Document.open(path)
     page = vis.pages[0]
     shapes = [vis.create_shape(page, "PALETTE_PROCESS", 1.0 + i * 0.01, 1.0, text=f"S{i}") for i in range(50)]
     for i in range(50):
         assert page.connect_shapes(shapes[i], shapes[(i + 1) % 50]) is not None
-    vis.save_vsdx(path)
-    second = VisioFile(vsdx_copy("test1.vsdx"))
+    vis.save(path)
+    second = Document.open(vsdx_copy("test1.vsdx"))
     a = second.create_shape(second.pages[0], "PALETTE_DECISION", 1.0, 1.0, text="A")
     b = second.create_shape(second.pages[0], "PALETTE_DATABASE", 2.0, 1.0, text="B")
     second.pages[0].connect_shapes(a, b)
@@ -69,7 +69,7 @@ def test_each_donor_is_opened_once_across_documents(vsdx_copy, monkeypatch, fres
     # copy out of it: the saved package still reopens with every shape intact
     monkeypatch.undo()
     assert zipfile.ZipFile(path).testzip() is None
-    reopened = VisioFile(path)
+    reopened = Document.open(path)
     for i in range(50):
         assert reopened.pages[0].shapes.by_text(f"S{i}") is not None
 
@@ -90,7 +90,7 @@ def _donor_xml() -> dict[str, bytes]:
 def test_creation_leaves_the_donors_as_they_were(vsdx_copy, fresh_donors):
     """Fails if copying a shape or connector out of a donor writes anything back into it."""
     before = _donor_xml()
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
     a = vis.create_shape(page, "PALETTE_PROCESS", 1.0, 1.0, text="A")
     b = vis.create_shape(page, "PALETTE_START_END", 3.0, 1.0)
@@ -104,7 +104,7 @@ def test_provisioning_masters_reads_only_the_donors_master_parts(vsdx_copy, monk
     Reading a part the donor has parsed serialises it, and the donor has parsed
     every page it holds -- all of it wasted on a copy that wants none of them.
     """
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
     donor = media._donor(media.MEDIA)
     read: list[str] = []
@@ -124,7 +124,7 @@ def test_provisioning_masters_reads_only_the_donors_master_parts(vsdx_copy, monk
 
 def test_provisioning_masters_copies_the_donors_master_parts_byte_for_byte(vsdx_copy):
     """Fails if a document with no masters gets anything but the donor's `/visio/masters/` parts, unchanged."""
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     assert not [n for n in vis._package.names() if n.startswith("/visio/masters/")]
     page = vis.pages[0]
     donor = media._donor(media.MEDIA)
@@ -150,7 +150,7 @@ def test_provisioning_masters_leaves_a_sibling_of_the_masters_folder_behind(vsdx
     store directly, past the donor's closed guard, on a donor this test alone
     loads.
     """
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
     media._donor(media.MEDIA)._package.write_bytes("/visio/masters-old/x.xml", b"<x/>")
     shapes = page.child_shapes

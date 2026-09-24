@@ -9,9 +9,9 @@ import zipfile
 import pytest
 from helpers.broken_package import append_member, understated
 
+from vsdxkit.document import Document
 from vsdxkit.errors import MalformedPackageError, PackageLimitError
 from vsdxkit.package import PackageLimits, _read_bounded, read_archive_members
-from vsdxkit.vsdxfile import VisioFile
 
 # Every test here builds a package designed to be wrong - padding members to
 # trip a count cap, names that escape the archive, payloads that expand out of
@@ -43,7 +43,7 @@ def _write_limits(tmp_path, limits: dict) -> str:
 
 def test_default_limits_accept_real_documents(tmp_path):
     path = _copy("test1.vsdx", tmp_path)
-    visio = VisioFile(path)
+    visio = Document.open(path)
     assert len(visio.pages) > 0
 
 
@@ -51,7 +51,7 @@ def test_default_compression_ratio_guard_rejects_highly_compressible_payload(tmp
     path = _copy("test1.vsdx", tmp_path)
     append_member(path, "visio/pages/pad.bin", b"\0" * 500_000)
     with pytest.raises(PackageLimitError) as excinfo:
-        VisioFile(path)
+        Document.open(path)
     assert excinfo.value.reason == "compression_ratio"
 
 
@@ -60,7 +60,7 @@ def test_per_member_size_limit(tmp_path):
     append_member(path, "visio/pages/pad.bin", os.urandom(20_000))  # incompressible
     limits_path = _write_limits(tmp_path, {"max_member_size": 10_000})
     with pytest.raises(PackageLimitError) as excinfo:
-        VisioFile(path, limits_path=limits_path)
+        Document.open(path, limits_path=limits_path)
     assert excinfo.value.reason == "member_size"
 
 
@@ -69,7 +69,7 @@ def test_total_uncompressed_size_limit(tmp_path):
     append_member(path, "visio/pages/pad.bin", os.urandom(20_000))  # incompressible
     limits_path = _write_limits(tmp_path, {"max_total_uncompressed": 60_000})
     with pytest.raises(PackageLimitError) as excinfo:
-        VisioFile(path, limits_path=limits_path)
+        Document.open(path, limits_path=limits_path)
     assert excinfo.value.reason == "total_size"
 
 
@@ -79,7 +79,7 @@ def test_member_count_limit(tmp_path):
         append_member(path, f"visio/pages/pad{index}.bin", b"pad")
     limits_path = _write_limits(tmp_path, {"max_members": 20})
     with pytest.raises(PackageLimitError) as excinfo:
-        VisioFile(path, limits_path=limits_path)
+        Document.open(path, limits_path=limits_path)
     assert excinfo.value.reason == "member_count"
 
 
@@ -88,7 +88,7 @@ def test_per_member_limit_is_enforced_before_total(tmp_path):
     append_member(path, "visio/pages/pad.bin", os.urandom(20_000))  # incompressible
     limits_path = _write_limits(tmp_path, {"max_member_size": 10_000, "max_total_uncompressed": 15_000})
     with pytest.raises(PackageLimitError) as excinfo:
-        VisioFile(path, limits_path=limits_path)
+        Document.open(path, limits_path=limits_path)
     assert excinfo.value.reason == "member_size"
 
 
@@ -98,7 +98,7 @@ def test_duplicate_member_name_rejected(tmp_path):
         warnings.simplefilter("ignore", UserWarning)
         append_member(path, "visio/document.xml", b"<xml/>")
     with pytest.raises(PackageLimitError) as excinfo:
-        VisioFile(path)
+        Document.open(path)
     assert excinfo.value.reason == "duplicate_member"
 
 
@@ -107,7 +107,7 @@ def test_suspicious_member_name_rejected(tmp_path, name):
     path = _copy("test1.vsdx", tmp_path)
     append_member(path, name, b"evil")
     with pytest.raises(PackageLimitError) as excinfo:
-        VisioFile(path)
+        Document.open(path)
     assert excinfo.value.reason == "member_name"
 
 
@@ -118,7 +118,7 @@ def test_explicit_limits_relax_caps_for_trusted_documents(tmp_path):
         tmp_path,
         {"max_member_size": 1_048_576, "max_total_uncompressed": 4_194_304, "max_ratio": 1_000},
     )
-    visio = VisioFile(path, limits_path=limits_path)
+    visio = Document.open(path, limits_path=limits_path)
     assert len(visio.pages) > 0
 
 
@@ -140,7 +140,7 @@ def test_non_finite_json_limits_are_a_package_limit_error(tmp_path):
     with open(limits_path, "w", encoding="utf-8") as handle:
         handle.write('{"max_members": NaN}')
     with pytest.raises(PackageLimitError) as excinfo:
-        VisioFile(path, limits_path=limits_path)
+        Document.open(path, limits_path=limits_path)
     assert excinfo.value.reason == "limits_file"
 
 
@@ -151,7 +151,7 @@ def test_directory_entries_count_toward_member_limit(tmp_path):
             archive.writestr(f"d{index}/", b"")
     limits_path = _write_limits(tmp_path, {"max_members": 20})
     with pytest.raises(PackageLimitError) as excinfo:
-        VisioFile(path, limits_path=limits_path)
+        Document.open(path, limits_path=limits_path)
     assert excinfo.value.reason == "member_count"
 
 
@@ -159,7 +159,7 @@ def test_missing_limits_file_is_a_package_limit_error(tmp_path):
     path = _copy("test1.vsdx", tmp_path)
     limits_path = os.path.join(str(tmp_path), "nonexistent.json")
     with pytest.raises(PackageLimitError) as excinfo:
-        VisioFile(path, limits_path=limits_path)
+        Document.open(path, limits_path=limits_path)
     assert excinfo.value.reason == "limits_file"
 
 
@@ -169,7 +169,7 @@ def test_unparsable_limits_file_is_a_package_limit_error(tmp_path):
     with open(limits_path, "w", encoding="utf-8") as handle:
         handle.write("{not json")
     with pytest.raises(PackageLimitError) as excinfo:
-        VisioFile(path, limits_path=limits_path)
+        Document.open(path, limits_path=limits_path)
     assert excinfo.value.reason == "limits_file"
 
 
@@ -177,7 +177,7 @@ def test_unknown_limits_keys_are_rejected(tmp_path):
     path = _copy("test1.vsdx", tmp_path)
     limits_path = _write_limits(tmp_path, {"max_membres": 10})
     with pytest.raises(PackageLimitError) as excinfo:
-        VisioFile(path, limits_path=limits_path)
+        Document.open(path, limits_path=limits_path)
     assert excinfo.value.reason == "limits_file"
 
 
@@ -198,7 +198,7 @@ def test_error_message_names_the_limit_and_values(tmp_path):
     append_member(path, "visio/pages/pad.bin", os.urandom(20_000))  # incompressible
     limits_path = _write_limits(tmp_path, {"max_total_uncompressed": 60_000})
     with pytest.raises(PackageLimitError) as excinfo:
-        VisioFile(path, limits_path=limits_path)
+        Document.open(path, limits_path=limits_path)
     assert "60000" in str(excinfo.value)
 
 

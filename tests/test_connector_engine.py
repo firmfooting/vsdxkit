@@ -8,7 +8,7 @@ import zipfile
 
 import pytest
 
-from vsdxkit.vsdxfile import VisioFile
+from vsdxkit.document import Document
 
 
 def _any_shape_containing(shapes, text: str):
@@ -24,7 +24,7 @@ def get_copy(basedir: str, filename: str, target_dir: str) -> str:
 
 
 def test_connect_shapes_dynamic_glue_formulas(basedir):
-    vis = VisioFile(os.path.join(basedir, "test8_simple_connector.vsdx"))
+    vis = Document.open(os.path.join(basedir, "test8_simple_connector.vsdx"))
     page = vis.pages[0]
     a = page.shapes.by_text("Shape A")
     b = page.shapes.by_text("Shape B")
@@ -49,7 +49,7 @@ def test_connect_shapes_dynamic_glue_formulas(basedir):
 
 
 def test_connect_shapes_glue_records(basedir):
-    vis = VisioFile(os.path.join(basedir, "test8_simple_connector.vsdx"))
+    vis = Document.open(os.path.join(basedir, "test8_simple_connector.vsdx"))
     page = vis.pages[0]
     a = page.shapes.by_text("Shape A")
     b = page.shapes.by_text("Shape B")
@@ -65,7 +65,7 @@ def test_connect_shapes_glue_records(basedir):
 
 
 def test_connect_shapes_route_variants(basedir):
-    vis = VisioFile(os.path.join(basedir, "test8_simple_connector.vsdx"))
+    vis = Document.open(os.path.join(basedir, "test8_simple_connector.vsdx"))
     page = vis.pages[0]
     a = page.shapes.by_text("Shape A")
     b = page.shapes.by_text("Shape B")
@@ -81,7 +81,7 @@ def test_connect_shapes_route_variants(basedir):
 
 
 def test_connect_point_glue_requires_connection_points(basedir):
-    vis = VisioFile(os.path.join(basedir, "test8_simple_connector.vsdx"))
+    vis = Document.open(os.path.join(basedir, "test8_simple_connector.vsdx"))
     page = vis.pages[0]
     a = page.shapes.by_text("Shape A")
     b = page.shapes.by_text("Shape B")
@@ -91,7 +91,7 @@ def test_connect_point_glue_requires_connection_points(basedir):
 
 def test_connect_shapes_combines_point_glue_and_curved_routing(basedir):
     fixture = os.path.join(basedir, "fixtures", "com_reference", "s05_swimlanes_cfflow.vsdx")
-    vis = VisioFile(fixture)
+    vis = Document.open(fixture)
     page = vis.pages[0]
     source = page.shapes.by_id("90")
     target = page.shapes.by_id("97")
@@ -111,7 +111,7 @@ def test_connect_shapes_combines_point_glue_and_curved_routing(basedir):
 
 
 def test_invalid_route_fails_before_mutating_page(basedir):
-    vis = VisioFile(os.path.join(basedir, "test8_simple_connector.vsdx"))
+    vis = Document.open(os.path.join(basedir, "test8_simple_connector.vsdx"))
     page = vis.pages[0]
     source = page.shapes.by_text("Shape A")
     target = page.shapes.by_text("Shape B")
@@ -129,16 +129,16 @@ def test_invalid_route_fails_before_mutating_page(basedir):
 def test_connector_round_trip_and_zip_validity(basedir):
     with tempfile.TemporaryDirectory() as tmp:
         src = get_copy(basedir, "test8_simple_connector.vsdx", tmp)
-        vis = VisioFile(src)
+        vis = Document.open(src)
         page = vis.pages[0]
         a = page.shapes.by_text("Shape A")
         b = page.shapes.by_text("Shape B")
         connector = page.connect_shapes(a, b, route="curved")
         conn_id = connector.ID
-        vis.save_vsdx(src)
+        vis.save(src)
         with zipfile.ZipFile(src) as z:
             assert z.testzip() is None
-        vis2 = VisioFile(src)
+        vis2 = Document.open(src)
         page = vis2.pages[0]
         reopened = page.shapes.by_id(str(conn_id))
         assert reopened is not None
@@ -150,17 +150,17 @@ def test_connector_round_trip_and_zip_validity(basedir):
 def test_delete_shape_cascades_connectors(basedir):
     with tempfile.TemporaryDirectory() as tmp:
         src = get_copy(basedir, "test4_connectors.vsdx", tmp)
-        vis = VisioFile(src)
+        vis = Document.open(src)
         page = vis.pages[0]
         before_connects = len(list(page.connects))
         assert before_connects > 0
         doomed = page.shapes.by_id("2")
         assert doomed is not None
         page.delete_shape(doomed)
-        vis.save_vsdx(src)
+        vis.save(src)
         with zipfile.ZipFile(src) as z:
             assert z.testzip() is None
-        vis2 = VisioFile(src)
+        vis2 = Document.open(src)
         page = vis2.pages[0]
         # shape 2 and both connectors attached to it (6 and 7) are gone
         assert page.shapes.by_id("2") is None
@@ -176,7 +176,7 @@ def test_delete_shape_cascades_connectors(basedir):
 def test_master_import_on_own_masters_document(tmp_path, basedir):
     """Connector creation on a doc with own masters imports the master."""
     src = get_copy(basedir, "test3_house.vsdx", str(tmp_path))
-    vis = VisioFile(src)
+    vis = Document.open(src)
     page = vis.pages[0]
     a = page.shapes.by_property("Network Name", "House01")
     b = page.shapes.by_property("Network Name", "Box01")
@@ -185,7 +185,7 @@ def test_master_import_on_own_masters_document(tmp_path, basedir):
     assert connector is not None
     # the connector now references a master that exists in THIS document
     assert vis.get_master_page_by_id(connector.master_page_ID) is not None
-    vis.save_vsdx(src)
+    vis.save(src)
     with zipfile.ZipFile(src) as z:
         assert z.testzip() is None
         rels = z.read("visio/_rels/document.xml.rels").decode()
@@ -193,7 +193,7 @@ def test_master_import_on_own_masters_document(tmp_path, basedir):
         assert rels.count("relationships/masters") == 1
         master_parts = [n for n in z.namelist() if n.startswith("visio/masters/master")]
         assert len(master_parts) >= 2  # original + imported
-    vis2 = VisioFile(src)
+    vis2 = Document.open(src)
     page = vis2.pages[0]
     assert _any_shape_containing(page.shapes, "") is not None  # reopen is valid
     connectors = [s for s in page.all_shapes if "BeginX" in s.cells]
@@ -203,7 +203,7 @@ def test_master_import_on_own_masters_document(tmp_path, basedir):
 def test_master_import_is_idempotent(tmp_path, basedir):
     """Three connectors on an own-masters doc import the connector master once."""
     src = get_copy(basedir, "test3_house.vsdx", str(tmp_path))
-    vis = VisioFile(src)
+    vis = Document.open(src)
     page = vis.pages[0]
     a = page.shapes.by_property("Network Name", "House01")
     b = page.shapes.by_property("Network Name", "Box01")
@@ -214,7 +214,7 @@ def test_master_import_is_idempotent(tmp_path, basedir):
     master_ids = {connector.master_page_ID for connector in connectors}
     assert None not in master_ids, "connector was created without a master reference"
     assert len(master_ids) == 1
-    vis.save_vsdx(src)
+    vis.save(src)
     with zipfile.ZipFile(src) as z:
         rels = z.read("visio/_rels/document.xml.rels").decode()
         assert rels.count("relationships/masters") == 1
@@ -269,7 +269,7 @@ def _by_role(formula: str, roles: dict[str, str]) -> str:
 )
 def test_each_route_writes_what_visio_writes(route, scenario, style):
     (expected,) = [cells for cells in _manifest_connectors(scenario) if cells["ShapeRouteStyle"] == style]
-    vis = VisioFile(S05)
+    vis = Document.open(S05)
     page = vis.pages[0]
     source, target = page.shapes.by_id("90"), page.shapes.by_id("97")
     connector = page.connect_shapes(source, target, route=route)
@@ -282,7 +282,7 @@ def test_each_route_writes_what_visio_writes(route, scenario, style):
 
 def _s07_connector() -> tuple[dict[str, str], list[tuple[str, ...]]]:
     """The point-glued connector of s07 and its records, as Visio wrote them."""
-    vis = VisioFile(os.path.join(COM_REFERENCE, "s07_point_glue_masters.vsdx"))
+    vis = Document.open(os.path.join(COM_REFERENCE, "s07_point_glue_masters.vsdx"))
     page = vis.pages[0]
     (connector,) = [shape for shape in page.shapes if "BeginX" in shape.cells]
     names = ("BegTrigger", "EndTrigger", "BeginX", "BeginY", "EndX", "EndY")
@@ -295,7 +295,7 @@ def _s07_connector() -> tuple[dict[str, str], list[tuple[str, ...]]]:
 
 def test_point_glue_writes_what_visio_writes():
     expected_cells, expected_records = _s07_connector()
-    vis = VisioFile(S05)
+    vis = Document.open(S05)
     page = vis.pages[0]
     source, target = page.shapes.by_id("90"), page.shapes.by_id("97")
     connector = page.connect_shapes(source, target, route="point", from_cp=0, to_cp=1)
@@ -312,7 +312,7 @@ def test_point_glue_writes_what_visio_writes():
 
 def test_point_glue_names_only_the_shapes_it_glues():
     """The donor's `BegTrigger` named its own shape 1: point glue left it there, and wrote `BeginTrigger`."""
-    vis = VisioFile(S05)
+    vis = Document.open(S05)
     page = vis.pages[0]
     source, target = page.shapes.by_id("90"), page.shapes.by_id("97")
     connector = page.connect_shapes(source, target, route="point")
@@ -328,7 +328,7 @@ def test_point_glue_names_only_the_shapes_it_glues():
 
 def test_point_glue_reaches_the_points_a_shape_inherits():
     """Shape 53 is a flowchart Decision: its four connection points are its master's."""
-    vis = VisioFile(S05)
+    vis = Document.open(S05)
     page = vis.pages[0]
     source, decision = page.shapes.by_id("90"), page.shapes.by_id("53")
     connector = page.connect_shapes(source, decision, route="point", to_cp=3)

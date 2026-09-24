@@ -10,9 +10,9 @@ Find the container
 
 .. code-block:: python
 
-   from vsdxkit.vsdxfile import VisioFile
+   from vsdxkit.document import Document
 
-   vis = VisioFile("cross-functional-flow.vsdx")
+   vis = Document.open("cross-functional-flow.vsdx")
    page = vis.pages[0]
    container = page.get_container()
 
@@ -47,7 +47,7 @@ Add a shape to a lane
    page.add_shape_to_lane(check, review_lane)
 
    assert container.lane_of(check) is not None
-   vis.save_vsdx("with-review-lane.vsdx")
+   vis.save("with-review-lane.vsdx")
 
 Membership is geometric
 -----------------------

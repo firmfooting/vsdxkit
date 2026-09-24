@@ -16,8 +16,8 @@ import pytest
 
 from vsdxkit import namespace
 from vsdxkit.containers import ROW_HEADING_TEXT, get_user_row
+from vsdxkit.document import Document
 from vsdxkit.shapes import Shape
-from vsdxkit.vsdxfile import VisioFile
 
 CFF_FIXTURE = "fixtures/com_reference/s05_swimlanes_cfflow.vsdx"
 
@@ -44,7 +44,7 @@ def restore_value_cell(lane: Shape) -> None:
 
 
 def test_add_swimlane_leaves_the_page_untouched_when_the_label_cannot_be_written(vsdx_copy):
-    vis = VisioFile(vsdx_copy(CFF_FIXTURE))
+    vis = Document.open(vsdx_copy(CFF_FIXTURE))
     page = vis.pages[0]
     container = page.get_container()
     strip_value_cell(container.lanes[0])
@@ -58,7 +58,7 @@ def test_add_swimlane_leaves_the_page_untouched_when_the_label_cannot_be_written
 
 def test_add_swimlane_reports_the_lane_it_cloned_and_what_that_lane_lacks(vsdx_copy):
     """The message named the clone, and called a clone of a lane 'not a lane'."""
-    vis = VisioFile(vsdx_copy(CFF_FIXTURE))
+    vis = Document.open(vsdx_copy(CFF_FIXTURE))
     page = vis.pages[0]
     container = page.get_container()
     top_lane = container.lanes[0]
@@ -76,7 +76,7 @@ def test_add_swimlane_reports_the_lane_it_cloned_and_what_that_lane_lacks(vsdx_c
 def test_add_swimlane_leaves_the_page_untouched_when_the_lane_has_no_heading_shape(vsdx_copy):
     """The other way `_write_lane_label` refuses, and the one that used to put
     the label on the lane body and carry on."""
-    vis = VisioFile(vsdx_copy(CFF_FIXTURE))
+    vis = Document.open(vsdx_copy(CFF_FIXTURE))
     page = vis.pages[0]
     container = page.get_container()
     top_lane = container.lanes[0]
@@ -95,7 +95,7 @@ def test_add_swimlane_still_allocates_unique_ids_after_a_refused_call(vsdx_copy)
     Shape ids need not be contiguous, so the gap is harmless -- but a later
     lane must still not collide with one already on the page.
     """
-    vis = VisioFile(vsdx_copy(CFF_FIXTURE))
+    vis = Document.open(vsdx_copy(CFF_FIXTURE))
     page = vis.pages[0]
     container = page.get_container()
     strip_value_cell(container.lanes[0])
@@ -113,7 +113,7 @@ def test_a_non_string_label_is_refused_before_either_half_is_written(vsdx_copy):
     """`Shape.text` rejects a non-str only once it is writing, so the User row
     was left holding a value `ET.tostring` cannot serialise: the document could
     then not be saved at all."""
-    vis = VisioFile(vsdx_copy(CFF_FIXTURE))
+    vis = Document.open(vsdx_copy(CFF_FIXTURE))
     page = vis.pages[0]
     container = page.get_container()
     lane = container.lanes[0]
@@ -133,7 +133,7 @@ def test_set_lane_label_refuses_a_shape_that_was_never_a_lane(vsdx_copy):
     The existing #263 test strips the row from a real lane, which keeps its
     sub-shapes, so nothing covered a shape that is not a lane at all.
     """
-    vis = VisioFile(vsdx_copy(CFF_FIXTURE))
+    vis = Document.open(vsdx_copy(CFF_FIXTURE))
     page = vis.pages[0]
     container = page.get_container()
     decision = page.shapes.by_text("Decision")
@@ -147,7 +147,7 @@ def test_set_lane_label_refuses_a_shape_that_was_never_a_lane(vsdx_copy):
 
 
 def test_set_lane_label_refuses_a_lane_whose_heading_row_has_no_value_cell(vsdx_copy):
-    vis = VisioFile(vsdx_copy(CFF_FIXTURE))
+    vis = Document.open(vsdx_copy(CFF_FIXTURE))
     container = vis.pages[0].get_container()
     lane = container.lanes[0]
     strip_value_cell(lane)
@@ -161,7 +161,7 @@ def test_set_lane_label_refuses_a_lane_whose_heading_row_has_no_value_cell(vsdx_
 
 def test_set_lane_label_refuses_a_lane_with_no_heading_shape(vsdx_copy):
     """The label used to land on the lane body when there was no heading shape (#307)."""
-    vis = VisioFile(vsdx_copy(CFF_FIXTURE))
+    vis = Document.open(vsdx_copy(CFF_FIXTURE))
     container = vis.pages[0].get_container()
     lane = container.lanes[0]
     assert container.lane_heading(lane) is not None

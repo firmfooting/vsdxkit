@@ -1,15 +1,16 @@
-"""Pytest Tests for VisioFile class"""
+"""Pytest Tests for Document class"""
 
 import os
 import xml.etree.ElementTree as ET
 import zipfile
+from pathlib import Path
 from xml.etree.ElementTree import Element
 
 import pytest
 
 from vsdxkit import ext_prop_namespace, media, namespace, vt_namespace
+from vsdxkit.document import Document
 from vsdxkit.pages import PagePosition
-from vsdxkit.vsdxfile import VisioFile
 
 
 def _media_filename() -> str:
@@ -24,7 +25,7 @@ def test_apply_text_context_coerces_non_string_values():
         f'<PageContents xmlns="{namespace[1:-1]}"><Shapes><Shape ID="1"><Text>Year {{{{year}}}}</Text></Shape></Shapes></PageContents>'
     )
 
-    VisioFile.apply_text_context(root, {"year": 2020})
+    Document.apply_text_context(root, {"year": 2020})
 
     shape = root.find(f".//{namespace}Shape")
     assert shape is not None
@@ -38,7 +39,7 @@ def test_insert_shape_rejects_mismatched_page_path(vsdx_copy):
     shape = ET.fromstring(f'<Shape xmlns="{namespace[1:-1]}" ID="1" />')
     shapes = Element(f"{namespace}Shapes")
 
-    vis = VisioFile(filename)
+    vis = Document.open(filename)
     with pytest.raises(ValueError, match="does not match"):
         vis.insert_shape(shape, shapes, vis.pages[0], "not-the-page.xml")
 
@@ -50,7 +51,7 @@ def test_insert_shape_accepts_equivalent_mixed_separator_path(vsdx_copy):
     shape = ET.fromstring(f'<Shape xmlns="{namespace[1:-1]}" ID="1" />')
     shapes = Element(f"{namespace}Shapes")
 
-    vis = VisioFile(filename)
+    vis = Document.open(filename)
     page = vis.pages[0]
     page_path = page.filename.replace("/", "\\")
     result = vis.insert_shape(shape, shapes, page, page_path)
@@ -71,7 +72,7 @@ def test_insert_shape_allocates_an_id_the_page_is_not_using(vsdx_copy, tmp_path)
     out_file = os.path.join(str(tmp_path), "test1_insert_shape.vsdx")
     shape = ET.fromstring(f'<Shape xmlns="{namespace[1:-1]}" ID="1" Type="Shape" />')
 
-    vis = VisioFile(filename)
+    vis = Document.open(filename)
     page = vis.pages[0]
     shapes = page.xml.getroot().find(f"{namespace}Shapes")
     ids_before = [s.ID for s in page.all_shapes]
@@ -82,9 +83,9 @@ def test_insert_shape_allocates_an_id_the_page_is_not_using(vsdx_copy, tmp_path)
     assert new_id not in ids_before
     ids_after = [s.ID for s in page.all_shapes]
     assert sorted(ids_after) == sorted([*ids_before, new_id])
-    vis.save_vsdx(out_file)
+    vis.save(out_file)
 
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     page = vis.pages[0]
     ids = [s.ID for s in page.all_shapes]
     assert new_id in ids
@@ -96,7 +97,7 @@ def test_invalid_file_type():
     filename = __file__
     print(f"Opening invalid but existing {filename}")
     with pytest.raises(TypeError):
-        VisioFile(filename)
+        Document.open(filename)
         pass
 
 
@@ -113,7 +114,7 @@ def test_open_rel_path(filename: str, basedir, monkeypatch):
     # rather than computing a relative path that can cross drives on Windows
     monkeypatch.chdir(basedir)
     assert os.path.exists(filename), "bare filename did not resolve against the new working directory"
-    vis = VisioFile(filename)
+    vis = Document.open(filename)
     assert vis.pages
     assert all(page.name for page in vis.pages)
 
@@ -122,7 +123,7 @@ def test_open_abs_path():
     """A package outside the tests tree opens the same way by absolute path."""
     filename = os.path.abspath(_media_filename())
     assert os.path.exists(filename)
-    vis = VisioFile(filename)
+    vis = Document.open(filename)
     assert vis.pages
     assert all(page.name for page in vis.pages)
 
@@ -136,8 +137,8 @@ def test_open_abs_path_save_rel_path(tmp_path, monkeypatch):
     # the destination must stay relative, so run from tmp_path rather than naming it
     monkeypatch.chdir(tmp_path)
     output_file = "abs_to_rel_out.vsdx"
-    vis = VisioFile(filename)
-    vis.save_vsdx(output_file)
+    vis = Document.open(filename)
+    vis.save(output_file)
     assert (tmp_path / output_file).exists()
 
 
@@ -146,8 +147,8 @@ def test_open_abs_path_save_abs_path(tmp_path):
     filename = os.path.abspath(_media_filename())
 
     output_file = os.path.abspath(os.path.join(str(tmp_path), "abs_to_abs_out.vsdx"))
-    vis = VisioFile(filename)
-    vis.save_vsdx(output_file)
+    vis = Document.open(filename)
+    vis.save(output_file)
     assert os.path.exists(output_file)
 
 
@@ -156,7 +157,7 @@ def test_open_abs_path_save_abs_path(tmp_path):
 
 @pytest.mark.parametrize(("filename", "shape_elements"), [("test1.vsdx", 4), ("test2.vsdx", 14), ("test3_house.vsdx", 10)])
 def test_xml_findall_shapes(filename: str, shape_elements: int, basedir):
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.get_page(0)  # type: Page
     # find all Shape elements
     xml = page.xml.getroot()
@@ -168,7 +169,7 @@ def test_xml_findall_shapes(filename: str, shape_elements: int, basedir):
 
 @pytest.mark.parametrize(("filename", "group_shape_elements"), [("test1.vsdx", 0), ("test2.vsdx", 3), ("test3_house.vsdx", 2)])
 def test_xml_findall_group_shapes(filename: str, group_shape_elements: int, basedir):
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.get_page(0)  # type: Page
     # find all Shape elements where attribute Type='Group'
     xml = page.xml.getroot()
@@ -205,7 +206,7 @@ def _app_xml_page_names(vis) -> list[str]:
 )
 def test_app_xml_page_names(filename: str, basedir):
     # test that page names in app.xml matches page names loaded
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     assert _app_xml_page_count(vis) == len(vis.pages)
     assert _app_xml_page_names(vis) == [p.name for p in vis.pages]
 
@@ -219,13 +220,13 @@ def test_app_xml_page_names(filename: str, basedir):
 )
 def test_remove_page_by_index(filename: str, page_index: int, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_remove_page.vsdx")
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page_count = len(vis.pages)
     vis.remove_page_by_index(page_index)
-    vis.save_vsdx(out_file)
+    vis.save(out_file)
 
     # re-open file and confirm it has one less page
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     assert len(vis.pages) == page_count - 1
 
 
@@ -245,7 +246,7 @@ def test_remove_page_by_index(filename: str, page_index: int, tmp_path, basedir)
 def test_remove_page_by_page_index(filename: str, page_name: str, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_remove_page_by_page_index.vsdx")
     expected_page_names = []
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     print(f"Found {len(vis.pages)} pages, {sorted([p.name for p in vis.pages])}")
     for page in list(vis.pages):
         print(f"page.name='{page.name}' index:{page.index_num}")
@@ -255,11 +256,11 @@ def test_remove_page_by_page_index(filename: str, page_name: str, tmp_path, base
         else:
             expected_page_names.append(page.name)
 
-    vis.save_vsdx(out_file)
+    vis.save(out_file)
 
     print(f"expected names={expected_page_names}")
     # re-open file and confirm it contains all and only those not deleted
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     print(f"Found {len(vis.pages)} pages, {sorted([p.name for p in vis.pages])}")
     assert sorted(expected_page_names) == sorted([p.name for p in vis.pages])
 
@@ -280,18 +281,18 @@ def test_remove_page_by_page_index(filename: str, page_name: str, tmp_path, base
 def test_remove_page_by_name(filename: str, page_name: str, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_remove_page_by_name.vsdx")
     expected_page_names = []
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     print(f"Found {len(vis.pages)} pages, {sorted([p.name for p in vis.pages])}")
     for page in list(vis.pages):
         print(f"page.name='{page.name}' index:{page.index_num}")
         if page_name != page.name:
             expected_page_names.append(page.name)
     vis.remove_page_by_name(page_name)
-    vis.save_vsdx(out_file)
+    vis.save(out_file)
 
     print(f"expected names={expected_page_names}")
     # re-open file and confirm it contains all and only those not deleted
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     print(f"Found {len(vis.pages)} pages, {sorted([p.name for p in vis.pages])}")
     assert sorted(expected_page_names) == sorted([p.name for p in vis.pages])
 
@@ -306,7 +307,7 @@ def test_remove_page_by_name(filename: str, page_name: str, tmp_path, basedir):
 )
 def test_app_xml_page_names_after_remove_page(filename: str, remove_index: int, basedir):
     # test that page names in app.xml matches page names loaded
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     vis.remove_page_by_index(remove_index)
 
     assert _app_xml_page_count(vis) == len(vis.pages)
@@ -316,7 +317,7 @@ def test_app_xml_page_names_after_remove_page(filename: str, remove_index: int, 
 @pytest.mark.parametrize(("filename"), [("test1.vsdx")])
 def test_add_page(filename: str, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_add_page.vsdx")
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     number_pages = len(vis.pages)
 
     new_page = vis.add_page()
@@ -324,9 +325,9 @@ def test_add_page(filename: str, tmp_path, basedir):
     assert len(vis.pages) == number_pages + 1
 
     new_page_name = new_page.name
-    vis.save_vsdx(out_file)
+    vis.save(out_file)
 
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     page = vis.get_page_by_name(new_page_name)
     assert page
 
@@ -340,7 +341,7 @@ def test_add_page(filename: str, tmp_path, basedir):
 )
 def test_add_page_name(filename: str, page_name: str, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_add_page_name_{page_name}.vsdx")
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     number_pages = len(vis.pages)
 
     new_page = vis.add_page(page_name)
@@ -348,9 +349,9 @@ def test_add_page_name(filename: str, page_name: str, tmp_path, basedir):
     assert len(vis.pages) == number_pages + 1
 
     new_page_name = new_page.name
-    vis.save_vsdx(out_file)
+    vis.save(out_file)
 
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     page = vis.get_page_by_name(new_page_name)
     assert page
 
@@ -365,7 +366,7 @@ def test_add_page_name(filename: str, page_name: str, tmp_path, basedir):
 )
 def test_add_page_at(filename: str, index: int, page_name: str, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_add_page_at_{page_name}.vsdx")
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     number_pages = len(vis.pages)
 
     new_page = vis.add_page_at(index, page_name)
@@ -373,9 +374,9 @@ def test_add_page_at(filename: str, index: int, page_name: str, tmp_path, basedi
     assert len(vis.pages) == number_pages + 1
 
     new_page_name = new_page.name
-    vis.save_vsdx(out_file)
+    vis.save(out_file)
 
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     page = vis.get_page_by_name(new_page_name)
     assert page
 
@@ -394,7 +395,7 @@ def test_add_page_at(filename: str, index: int, page_name: str, tmp_path, basedi
 )
 def test_app_xml_page_names_after_add_page(filename: str, new_page_name: str, location: int | None, basedir):
     # test that page names in app.xml matches page names loaded
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     if location is None:
         vis.add_page(new_page_name)
     else:
@@ -412,7 +413,7 @@ def test_copy_page_clones_relationship_part(vsdx_copy, tmp_path):
     filename = vsdx_copy("test4_connectors.vsdx")
     output = tmp_path / "copied-page.vsdx"
 
-    vis = VisioFile(filename)
+    vis = Document.open(filename)
     source = vis.pages[0]
     assert source.rels_xml is not None
     source_rels = ET.tostring(source.rels_xml.getroot())
@@ -424,7 +425,7 @@ def test_copy_page_clones_relationship_part(vsdx_copy, tmp_path):
     assert ET.tostring(copied.rels_xml.getroot()) == source_rels
     assert copied.rels_xml_filename is not None
     member = copied.rels_xml_filename[1:]
-    vis.save_vsdx(str(output))
+    vis.save(str(output))
 
     with zipfile.ZipFile(output) as archive:
         assert member in archive.namelist()
@@ -442,7 +443,7 @@ def test_copy_page_clones_relationship_part(vsdx_copy, tmp_path):
 )
 def test_copy_page(filename: str, index: int, page_name: str, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_copy_page_{page_name}.vsdx")
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     number_pages = len(vis.pages)
 
     page = vis.pages[0]  # type: Page
@@ -451,9 +452,9 @@ def test_copy_page(filename: str, index: int, page_name: str, tmp_path, basedir)
     assert len(vis.pages) == number_pages + 1
 
     new_page_name = new_page.name
-    vis.save_vsdx(out_file)
+    vis.save(out_file)
 
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     page = vis.get_page_by_name(new_page_name)
     assert page
 
@@ -471,14 +472,14 @@ def test_copy_page(filename: str, index: int, page_name: str, tmp_path, basedir)
 )
 def test_copy_page_naming(filename: str, page_index_to_copy: int, in_page_name: str, out_page_name: str, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_copy_page_naming.vsdx")
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[page_index_to_copy]  # type: Page
     new_page = vis.copy_page(page, name=in_page_name)
     print(f"in_page_name:{in_page_name} out_page_name:{out_page_name} actual:{new_page.name}")
     assert new_page.name == out_page_name  # check new page has expected name
-    vis.save_vsdx(out_file)
+    vis.save(out_file)
 
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     page = vis.get_page_by_name(out_page_name)
     assert page  # check that page name persists through file save and open
 
@@ -498,7 +499,7 @@ def test_copy_page_positions(
     filename: str, page_index_to_copy: int, page_position: PagePosition, out_page_index: int, tmp_path, basedir
 ):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_copy_page_position.vsdx")
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[page_index_to_copy]  # type: Page
     new_page = vis.copy_page(page, index=page_position)
     index = vis.pages.index(new_page)
@@ -506,9 +507,9 @@ def test_copy_page_positions(
         f"page_index_to_copy:{page_index_to_copy} page_position:{page_position} out_page_index:{out_page_index} actual:{index}"
     )
     assert index == out_page_index  # check new page has expected index
-    vis.save_vsdx(out_file)
+    vis.save(out_file)
 
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     page = vis.get_page_by_name(new_page.name)
     index = vis.pages.index(page)
     assert index == out_page_index  # check that page location persists through file save and open
@@ -521,7 +522,7 @@ def test_copy_page_positions(
 def test_vis_copy_shape(filename: str, shape_name: str, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_vis_copy_shape.vsdx")
 
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[0]  # type: Page
     # find and copy shape by name
     s = page.shapes.by_text(shape_name)  # type: Shape
@@ -539,10 +540,10 @@ def test_vis_copy_shape(filename: str, shape_name: str, tmp_path, basedir):
     assert int(new_shape.attrib.get("ID")) > max_id
 
     new_shape_id = new_shape.attrib["ID"]
-    vis.save_vsdx(out_file)
+    vis.save(out_file)
 
     # re-open saved file and check it is changed as expected
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     page = vis.pages[0]
     s = page.shapes.by_id(new_shape_id)
     assert s
@@ -552,7 +553,7 @@ def test_vis_copy_shape(filename: str, shape_name: str, tmp_path, basedir):
 def test_copy_shape_other_page(filename: str, shape_name: str, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_copy_shape_other_page.vsdx")
 
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[0]  # type: Page
     page2 = vis.pages[1]  # type: Page
     page3 = vis.pages[2]  # type: Page
@@ -573,10 +574,10 @@ def test_copy_shape_other_page(filename: str, shape_name: str, tmp_path, basedir
     print(f"created new shape {type(new_shape)} {new_shape} {new_shape.attrib['ID']}")
     page3_new_shape_id = new_shape.attrib["ID"]
 
-    vis.save_vsdx(out_file)
+    vis.save(out_file)
 
     # re-open saved file and check it is changed as expected
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     page2 = vis.pages[1]
     s = page2.shapes.by_id(page2_new_shape_id)
     assert s
@@ -589,7 +590,7 @@ def test_copy_shape_other_page(filename: str, shape_name: str, tmp_path, basedir
 
 def test_every_xml_part_of_an_opened_document_parses(basedir):
     """Fails if a part named `.xml` or `.rels` cannot be promoted to a tree."""
-    vis = VisioFile(os.path.join(basedir, "test1.vsdx"))
+    vis = Document.open(os.path.join(basedir, "test1.vsdx"))
     assert vis._package.names()
     for name in vis._package.names():
         if name.endswith((".xml", ".rels")):
@@ -598,7 +599,7 @@ def test_every_xml_part_of_an_opened_document_parses(basedir):
 
 def test_a_document_has_no_close_state(vsdx_copy):
     """Fails if the context manager or `close_vsdx` come back: a document holds no file, so there is nothing to close."""
-    vis = VisioFile(vsdx_copy("test1.vsdx"))
+    vis = Document.open(vsdx_copy("test1.vsdx"))
     assert not hasattr(vis, "__enter__")
     assert not hasattr(vis, "close_vsdx")
     assert not hasattr(vis, "file_open")
@@ -612,3 +613,41 @@ def test_visiofilenotopen_is_gone():
     import vsdxkit.errors
 
     assert not hasattr(vsdxkit.errors, "VisioFileNotOpen")
+
+
+def test_open_takes_a_path(vsdx_copy):
+    vis = Document.open(Path(vsdx_copy("test1.vsdx")))
+    assert vis.pages[0].name
+
+
+def test_save_returns_the_absolute_path_it_wrote(vsdx_copy, tmp_path, monkeypatch):
+    source = vsdx_copy("test1.vsdx")
+    vis = Document.open(source)
+    monkeypatch.chdir(tmp_path)
+
+    written = vis.save("copy.vsdx")
+    in_place = vis.save()
+
+    assert written == tmp_path / "copy.vsdx"
+    assert written.is_absolute() and zipfile.is_zipfile(written)
+    assert in_place == Path(source).resolve()
+
+
+def test_save_appends_the_package_kind_to_a_bare_name(vsdx_copy, tmp_path):
+    vis = Document.open(vsdx_copy("test1.vsdx"))
+    assert vis.save(tmp_path / "bare").name == "bare.vsdx"
+
+
+def test_the_0x_names_are_gone(vsdx_copy):
+    """Fails if a 0.x name comes back beside its 1.0 replacement (#108)."""
+    import importlib.util
+
+    import vsdxkit.document
+
+    assert importlib.util.find_spec("vsdxkit.vsdxfile") is None
+    assert not hasattr(vsdxkit.document, "VisioFile")
+    vis = Document.open(vsdx_copy("test1.vsdx"))
+    for name in ("save_vsdx", "jinja_render_vsdx", "open_vsdx_file", "debug", "limits"):
+        assert not hasattr(vis, name), name
+    with pytest.raises(TypeError):
+        Document.open(vsdx_copy("test1.vsdx"), debug=True)  # type: ignore[call-arg]

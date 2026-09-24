@@ -7,7 +7,7 @@ from enum import IntEnum
 from typing import TYPE_CHECKING, Protocol, overload
 
 if TYPE_CHECKING:
-    from vsdxkit.vsdxfile import VisioFile
+    from vsdxkit.document import Document
 import xml.etree.ElementTree as ET
 
 if sys.version_info >= (3, 12):
@@ -70,7 +70,7 @@ def _page_dimension(cell: ET.Element, name: str) -> float:
     return 0.0 if value is None else value
 
 
-def _pages_root(vis: VisioFile) -> ET.Element:
+def _pages_root(vis: Document) -> ET.Element:
     """The required root element of the document's pages.xml part."""
     pages_xml = vis.pages_xml
     if pages_xml is None:
@@ -81,8 +81,8 @@ def _pages_root(vis: VisioFile) -> ET.Element:
 class Page:
     """Represents a page or a master page in a vsdx file
 
-    :param vis: the VisioFile object the page belongs to
-    :type vis: :class:`VisioFile`
+    :param vis: the Document object the page belongs to
+    :type vis: :class:`Document`
     :param name: the name of the page
     :type name: str
     :param connects: a list of Connect objects in the page
@@ -92,7 +92,7 @@ class Page:
 
     xml: PartTree
 
-    def __init__(self, xml: PartTree, filename: str, page_name: str, page_id: str, rel_id: str, vis: VisioFile):
+    def __init__(self, xml: PartTree, filename: str, page_name: str, page_id: str, rel_id: str, vis: Document):
         self._xml = xml
         self.filename = filename
         self._name = page_name
@@ -103,7 +103,7 @@ class Page:
         self.rels_xml_filename: str | None = None
         self._rels_xml: PartTree | None = None
         self.vis = vis
-        self._max_id = 0  # ID high-water mark, maintained by VisioFile's ID allocator
+        self._max_id = 0  # ID high-water mark, maintained by Document's ID allocator
         # todo: add page id - from pages_xml - PageSheet[ID]
 
     def __repr__(self):
@@ -145,10 +145,10 @@ class Page:
         self.vis._rename_page_in_app_xml(previous, value)
 
     def _index(self) -> int:
-        """Zero-based index of this page in its VisioFile (required)."""
+        """Zero-based index of this page in its Document (required)."""
         index = self.index_num
         if index is None:
-            raise InvalidOperationError("page is not attached to a VisioFile")
+            raise InvalidOperationError("page is not attached to a Document")
         return index
 
     def _page_xml(self) -> ET.Element:
@@ -250,7 +250,7 @@ class Page:
         """Whether an assignment to `xml` may write this page's part.
 
         A caller may keep holding a `Page` after it has been removed from the
-        document (`VisioFile.remove_page_by_index`); a later assignment to its
+        document (`Document.remove_page_by_index`); a later assignment to its
         `xml` must not resurrect the part it was removed from. Nor may it
         write over the part of the page added after it: removal frees the part
         name, and the next page takes it. So this asks whether the part at the
@@ -320,7 +320,7 @@ class Page:
 
     @property
     def child_shapes(self) -> list[Shape]:
-        """Return list of Shape objects at top level of VisioFile.Page
+        """Return list of Shape objects at top level of Document.Page
 
         :returns: list of `Shape` objects
         :rtype: List[Shape]
@@ -331,7 +331,7 @@ class Page:
     def _set_max_ids(self) -> None:
         """Raise this page's ID high-water mark to cover every shape now on it.
 
-        Private plumbing for ``VisioFile.increment_shape_ids()``, which calls it
+        Private plumbing for ``Document.increment_shape_ids()``, which calls it
         at the start of each allocation run. It was public, and every caller
         that inserted a shape was expected to remember to call it first; the
         ones that forgot handed out IDs the page was already using. Monotonic
@@ -349,7 +349,7 @@ class Page:
 
     @property
     def index_num(self) -> int | None:
-        # return zero-based index of this page in parent VisioFile.pages list
+        # return zero-based index of this page in parent Document.pages list
         return self.vis.pages.index(self) if self in self.vis.pages else None
 
     def add_connect(self, connect: Connect) -> None:
@@ -676,12 +676,12 @@ class Page:
         """Point the records at the new ids of shapes this page has renumbered.
 
         Shape ids live in two places: the ``Sheet.N!`` references inside cell
-        formulas, which ``VisioFile.update_ids`` rewrites, and the ``FromSheet``
+        formulas, which ``Document.update_ids`` rewrites, and the ``FromSheet``
         and ``ToSheet`` attributes here. Records left behind when a shape is
         renumbered name an id that is no longer on the page, and Visio rebinds
         glue like that silently.
 
-        Private plumbing for ``VisioFile.renumber_shape_ids()``, which runs this
+        Private plumbing for ``Document.renumber_shape_ids()``, which runs this
         and the formula sweep over the same page with the same map, and decides
         what belongs in that map: only the ids renumbering vacated. An id still
         in use, or one that was never on this page, names a record that means

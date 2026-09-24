@@ -3,8 +3,8 @@ from datetime import datetime
 
 import pytest
 
+from vsdxkit.document import Document
 from vsdxkit.shapes import Shape
-from vsdxkit.vsdxfile import VisioFile
 
 
 def _first_shape_containing(shapes, text: str):
@@ -23,7 +23,7 @@ def _first_shape_containing(shapes, text: str):
 def test_basic_jinja(filename: str, context: dict, tmp_path, basedir):
 
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_basic_jinja.vsdx")
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[0]
 
     # each key string in context dict will be replaced with value, record against shape Ids for validation
@@ -31,11 +31,11 @@ def test_basic_jinja(filename: str, context: dict, tmp_path, basedir):
     for k, v in context.items():
         shape_id = _first_shape_containing(page.shapes, k).ID
         shape_id_values[shape_id] = v
-    vis.jinja_render_vsdx(context=context)
-    vis.save_vsdx(out_file)
+    vis.render(context=context)
+    vis.save(out_file)
 
     # open file and validate each shape id has expected text
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     page = vis.pages[0]
     for shape_id, text in shape_id_values.items():
         if type(text) is str:
@@ -54,12 +54,12 @@ def test_basic_jinja(filename: str, context: dict, tmp_path, basedir):
 def test_jinja_if(filename: str, context: dict, shape_count: int, tmp_path, basedir):
 
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_jinja_if_{context['scenario']}.vsdx")
-    vis = VisioFile(os.path.join(basedir, filename))
-    vis.jinja_render_vsdx(context=context)
-    vis.save_vsdx(out_file)
+    vis = Document.open(os.path.join(basedir, filename))
+    vis.render(context=context)
+    vis.save(out_file)
 
     # open file and validate each shape id has expected text
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     page = vis.pages[1]  # second page has the shapes with if statements
     count = len(page.child_shapes)
     print(f"expected {shape_count} and found {count}")
@@ -76,12 +76,12 @@ def test_jinja_if(filename: str, context: dict, shape_count: int, tmp_path, base
 )
 def test_jinja_calc(filename: str, context: dict, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_jinja_calc.vsdx")
-    vis = VisioFile(os.path.join(basedir, filename))
-    vis.jinja_render_vsdx(context=context)
-    vis.save_vsdx(out_file)
+    vis = Document.open(os.path.join(basedir, filename))
+    vis.render(context=context)
+    vis.save(out_file)
 
     # open file and validate each shape id has expected text
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     page = vis.pages[0]
     # check a shape exists with product of x and y values
     x_y = str(context["x"] * context["y"])
@@ -98,7 +98,7 @@ def test_jinja_calc(filename: str, context: dict, tmp_path, basedir):
 )
 def test_basic_jinja_loop(filename: str, context: dict, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_{context['scenario']}_test_basic_jinja_loop.vsdx")
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[0]
 
     # each key string in context dict will be replaced with value, record against shape Ids for validation
@@ -106,11 +106,11 @@ def test_basic_jinja_loop(filename: str, context: dict, tmp_path, basedir):
     for k, v in context.items():
         shape_id = _first_shape_containing(page.shapes, k).ID
         shape_id_values[shape_id] = v
-    vis.jinja_render_vsdx(context=context)
-    vis.save_vsdx(out_file)
+    vis.render(context=context)
+    vis.save(out_file)
 
     # open file and validate each shape id has expected text, and that a shape exists with each loop value
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     page = vis.pages[0]
     for shape_id, text in shape_id_values.items():
         if type(text) is str:
@@ -131,13 +131,13 @@ def test_basic_jinja_loop(filename: str, context: dict, tmp_path, basedir):
 )
 def test_jinja_inner_loop(filename: str, context: dict, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_jinja_inner_loop.vsdx")
-    vis = VisioFile(os.path.join(basedir, filename))
-    vis.jinja_render_vsdx(context=context)
-    vis.save_vsdx(out_file)
+    vis = Document.open(os.path.join(basedir, filename))
+    vis.render(context=context)
+    vis.save(out_file)
 
     # open file and validate each shape id has expected text, and that a shape exists with each loop value
     test_list = context["test_list"]
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     page = vis.pages[0]
     for o in test_list:
         for p in o:
@@ -155,11 +155,11 @@ def test_jinja_inner_loop(filename: str, context: dict, tmp_path, basedir):
 )
 def test_jinja_loop_showif(filename: str, out_name: str, context: dict, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}{out_name}.vsdx")
-    vis = VisioFile(os.path.join(basedir, filename))
-    vis.jinja_render_vsdx(context=context)
-    vis.save_vsdx(out_file)
+    vis = Document.open(os.path.join(basedir, filename))
+    vis.render(context=context)
+    vis.save(out_file)
 
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     page = vis.pages[0]
     for o in context["test_list"]:
         s = _first_shape_containing(page.shapes, f"In this instance, o={o}")
@@ -182,17 +182,17 @@ def test_jinja_loop_showif(filename: str, out_name: str, context: dict, tmp_path
 )
 def test_jinja_self_refs(filename: str, context: dict, shape_id, expected_x, expected_text, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_jinja_self_refs.vsdx")
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[0]  # type: Page
     # there should be one shape on page 0
     shape = page.shapes.require_id(shape_id)  # type: Shape
     print(f"DEBUG: ID={shape.ID} shape.text={shape.text}")
     print(f"DEBUG: ID={shape.ID} shape.x={shape.x}")
-    vis.jinja_render_vsdx(context=context)
-    vis.save_vsdx(out_file)
+    vis.render(context=context)
+    vis.save(out_file)
 
     # open file and check shape has moved
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     page = vis.pages[0]
     shape = page.shapes.require_id(shape_id)  # type: Shape
     print(f"DEBUG: ID={shape.ID} shape.text='{shape.text}' expected='{expected_text}'")
@@ -211,18 +211,18 @@ def test_jinja_self_refs(filename: str, context: dict, shape_id, expected_x, exp
 )
 def test_jinja_self_ref_calculations(filename: str, context: dict, shape_id, expected_y, expected_text, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_jinja_self_ref_calcs.vsdx")
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[0]  # type: Page
     # there should be one shape on page 0
     shape = page.shapes.by_id(shape_id)  # type: Shape
     if shape:
         print(f"DEBUG: ID={shape.ID} shape.text={shape.text}")
         print(f"DEBUG: ID={shape.ID} shape.y={shape.y}")
-    vis.jinja_render_vsdx(context=context)
-    vis.save_vsdx(out_file)
+    vis.render(context=context)
+    vis.save(out_file)
 
     # open file and check shape has moved
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     page = vis.pages[0]
     shape = page.shapes.require_id(shape_id)  # type: Shape
     print(f"DEBUG: ID={shape.ID} shape.text='{shape.text}' expected='{expected_text}'")
@@ -245,15 +245,15 @@ def test_jinja_self_ref_calculations(filename: str, context: dict, shape_id, exp
 )
 def test_jinja_page_showif(filename: str, context: dict, expected_page_count, expected_page_names, tmp_path, basedir):
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_show_{context['show']}.vsdx")
-    vis = VisioFile(os.path.join(basedir, filename))
+    vis = Document.open(os.path.join(basedir, filename))
     print(f"len(vis.pages)={len(vis.pages)} context={context}")
     print("BEFORE", [(p.index_num, p.name) for p in vis.pages])
-    vis.jinja_render_vsdx(context=context)
+    vis.render(context=context)
     print("AFTER", [(p.index_num, p.name) for p in vis.pages])
-    vis.save_vsdx(out_file)
+    vis.save(out_file)
 
     # open file and check shape has moved
-    vis = VisioFile(out_file)
+    vis = Document.open(out_file)
     page_names = []
     for p in vis.pages:  # type: Page
         print(f"page:{p.name}")
@@ -276,10 +276,10 @@ def test_jinja_page_showif(filename: str, context: dict, expected_page_count, ex
 
 def _render_one_self_statement(path: str, shape_id: str, statement: str, context: dict) -> Shape:
     """Put `statement` on a real shape, run the self-ref pass, return the shape."""
-    vis = VisioFile(path)
+    vis = Document.open(path)
     shape = vis.pages[0].shapes.require_id(shape_id)
     shape.text = statement
-    VisioFile.jinja_set_selfs(shape, context)
+    Document.jinja_set_selfs(shape, context)
     return shape
 
 
@@ -290,7 +290,7 @@ def test_a_self_reference_to_a_multi_character_attribute_reads_the_whole_name(ba
     returns strings rather than the tuples the old annotation claimed.
     """
     path = os.path.join(basedir, "test_jinja_self_refs.vsdx")
-    vis = VisioFile(path)
+    vis = Document.open(path)
     expected = vis.pages[0].shapes.require_id("4").width
     shape = _render_one_self_statement(path, "4", "{% set self.y=self.width %}", {})
     assert shape.y == expected
@@ -304,7 +304,7 @@ def test_every_self_reference_in_one_expression_is_resolved(basedir):
     resolves `self` to its own `TemplateReference`.
     """
     path = os.path.join(basedir, "test_jinja_self_refs.vsdx")
-    vis = VisioFile(path)
+    vis = Document.open(path)
     start = vis.pages[0].shapes.require_id("4")
     expected = start.x + start.y
     shape = _render_one_self_statement(path, "4", "{% set self.x=self.x+self.y %}", {})
@@ -362,7 +362,7 @@ def test_one_reference_is_not_substituted_into_a_longer_one():
     `str.replace` calls instead of a single pass.
     """
     shape = _SelfRefShape("{% set self.x=self.ab+self.abc %}", ab=1.0, abc=20.0, x=0.0)
-    VisioFile.jinja_set_selfs(shape, {})
+    Document.jinja_set_selfs(shape, {})
     assert shape.x == pytest.approx(21.0)
 
 
@@ -375,6 +375,6 @@ def test_spaces_around_the_equals_sign_do_not_drop_the_statement():
     a template that silently did nothing.
     """
     shape = _SelfRefShape("keep me {% set self.x  =  2.0 %}", x=0.0)
-    VisioFile.jinja_set_selfs(shape, {})
+    Document.jinja_set_selfs(shape, {})
     assert shape.x == pytest.approx(2.0)
     assert shape.text == "keep me "
