@@ -465,6 +465,11 @@ Reading or writing a deleted shape
    :class:`vsdxkit.shapes.DataProperty`:
    ``shape.data_properties["Status"].value = "Done"``.
 
+``shape.page = page``, ``shape.parent = group``, ``page.vis = document``
+   Read-only. The XML does not follow a repointed reference, so assigning
+   one only ever made the wrapper lie. Move a shape into a group with
+   ``group.append_shape(shape)``.
+
 A page creates its own shapes
 -----------------------------
 

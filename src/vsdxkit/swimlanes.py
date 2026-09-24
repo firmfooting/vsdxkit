@@ -155,7 +155,7 @@ class SwimlaneDiagram:
 
     def __init__(self, container: Shape) -> None:
         """Bind to one CFF container shape; the diagram is on the container's page."""
-        self._page = container.page
+        self._page = container._page
         self._container = container
 
     def __repr__(self) -> str:

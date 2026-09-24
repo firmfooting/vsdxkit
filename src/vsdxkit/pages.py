@@ -79,13 +79,13 @@ def _left_behind(source: Shape, destination: Page) -> Callable[[str], bool]:
     Sheet.9 is not its group. On another page every id is another shape's.
     A reference to a shape still beside the copy is left alone.
     """
-    if source.page is not destination:
+    if source._page is not destination:
         return lambda _: True
     groups = set()
-    parent = source.parent
+    parent = source._parent
     while isinstance(parent, Shape):
         groups.add(parent.ID)
-        parent = parent.parent
+        parent = parent._parent
     return groups.__contains__
 
 
@@ -174,12 +174,17 @@ class Page:
         self.master_base_id: str | None = None
         self.rels_xml_filename: str | None = None
         self._rels_xml: PartTree | None = None
-        self.vis = vis
+        self._document = vis
         self._max_id = 0  # ID high-water mark, maintained by Document's ID allocator
         # todo: add page id - from pages_xml - PageSheet[ID]
 
     def __repr__(self):
         return f"<Page name={self.name} file={self.filename} >"
+
+    @property
+    def vis(self) -> Document:
+        """The document this page belongs to."""
+        return self._document
 
     def _connects(self) -> list[_Connect]:
         """Every ``<Connect>`` record on the page, in document order."""
@@ -202,7 +207,7 @@ class Page:
         page.attrib["NameU"] = value
         self._name = value
         # app.xml lists the page names too, and would keep the old one
-        self.vis._rename_page_in_app_xml(previous, value)
+        self._document._rename_page_in_app_xml(previous, value)
 
     def _index(self) -> int:
         """Zero-based index of this page in its Document (required)."""
@@ -216,7 +221,7 @@ class Page:
         # by position among the Page children, not with a Page[n] path: a
         # positional predicate builds a map of the whole tree on every call
         index = self._index()
-        pages = _pages_root(self.vis).findall(f"{namespace}Page")
+        pages = _pages_root(self._document).findall(f"{namespace}Page")
         return require_element(pages[index] if index < len(pages) else None, f"Page[{index + 1}]")
 
     @property
@@ -230,18 +235,18 @@ class Page:
     @property
     def is_master_page(self) -> bool:
         """Return True if this page has a master unique id and there is a match in masters xml"""
-        if self.vis.masters_xml is not None and self.master_unique_id:
+        if self._document.masters_xml is not None and self.master_unique_id:
             master_match = f'{namespace}Master[@UniqueID="{self.master_unique_id}"]'
-            master_element = self.vis.masters_xml.find(master_match)
+            master_element = self._document.masters_xml.find(master_match)
             return master_element is not None
         return False
 
     @property
     def _pagesheet_xml(self) -> ET.Element:
         # get PageSheet element from pages_xml based on page_id
-        ps = _pages_root(self.vis).find(f'{namespace}Page[@ID="{self.page_id}"]/{namespace}PageSheet')
+        ps = _pages_root(self._document).find(f'{namespace}Page[@ID="{self.page_id}"]/{namespace}PageSheet')
         if not isinstance(ps, ET.Element):
-            masters_xml = self.vis.masters_xml
+            masters_xml = self._document.masters_xml
             if masters_xml is not None:
                 ps = masters_xml.find(f'{namespace}Master[@ID="{self.page_id}"]/{namespace}PageSheet')
         return require_element(ps, f"PageSheet for page_id={self.page_id}")
@@ -281,11 +286,11 @@ class Page:
         attached = self._attached()
         self._xml = value
         if attached:
-            self.vis._set_part_xml(self.filename, value)
+            self._document._set_part_xml(self.filename, value)
 
     def _holds(self, filename: str, tree: PartTree | None) -> bool:
         """Whether the package's part at `filename` is `tree` itself."""
-        held = self.vis._package.part(filename)
+        held = self._document._package.part(filename)
         return isinstance(held, XmlPart) and held.tree is tree
 
     def _attached(self) -> bool:
@@ -306,7 +311,7 @@ class Page:
         """
         if self._holds(self.filename, self._xml):
             return True
-        return self.vis._package.part(self.filename) is None and any(page is self for page in self.vis.pages)
+        return self._document._package.part(self.filename) is None and any(page is self for page in self._document.pages)
 
     def _rels_attached(self) -> bool:
         """Whether an assignment to `rels_xml` may write this page's relationship part.
@@ -319,7 +324,7 @@ class Page:
         """
         if self.rels_xml_filename is None or not self._attached():
             return False
-        held = self.vis._package.part(self.rels_xml_filename)
+        held = self._document._package.part(self.rels_xml_filename)
         if held is None:
             return True
         return isinstance(held, XmlPart) and held.tree is self._rels_xml
@@ -336,7 +341,7 @@ class Page:
         self._rels_xml = value
         if attached:
             assert self.rels_xml_filename is not None  # _rels_attached() says so
-            self.vis._set_part_xml(self.rels_xml_filename, value)
+            self._document._set_part_xml(self.rels_xml_filename, value)
 
     @property
     def shapes(self) -> ShapeCollection:
@@ -383,7 +388,7 @@ class Page:
     @property
     def index_num(self) -> int | None:
         # return zero-based index of this page in parent Document.pages list
-        return self.vis.pages.index(self) if self in self.vis.pages else None
+        return self._document.pages.index(self) if self in self._document.pages else None
 
     def _add_connect(self, element: ET.Element) -> None:
         connects = self.xml.find(f".//{namespace}Connects")
@@ -478,7 +483,7 @@ class Page:
         """
         options = ConnectorOptions(glue=glue, routing=routing, from_point=from_point, to_point=to_point)
         begin, end = _plan_connector(self, source, target, options)
-        connector = self.vis._copy_connector(self)
+        connector = self._document._copy_connector(self)
         _glue_connector(connector, begin, end, options)
         return connector
 
@@ -535,10 +540,10 @@ class Page:
         if not self._attached():
             raise InvalidOperationError(f"page {self.name!r} is no longer in its document, so nothing can be created on it")
         if isinstance(kind_or_prototype, ShapeKind):
-            source = self.vis._kind_source(kind_or_prototype)
+            source = self._document._kind_source(kind_or_prototype)
         elif isinstance(kind_or_prototype, Shape):
             kind_or_prototype._require_attached("Page.create_shape()")
-            if kind_or_prototype.page.vis is not self.vis:
+            if kind_or_prototype._page._document is not self._document:
                 raise InvalidOperationError(
                     f"shape ID {kind_or_prototype.ID} belongs to another document; "
                     "a prototype must come from the document it is copied into"

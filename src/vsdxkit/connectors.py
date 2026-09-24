@@ -176,7 +176,7 @@ def _retarget_connector(
     """Glue one or both ends of `connector` to other shapes; see :meth:`vsdxkit.shapes.Connector.retarget`."""
     if source is None and target is None:
         raise InvalidOperationError("retargeting a connector needs at least one endpoint")
-    page = connector.page
+    page = connector._page
     _check_endpoint(page, connector, None)
     for shape in (source, target):
         if shape is not None:
@@ -196,7 +196,7 @@ def _retarget_connector(
 
 def _glued_ends(connector: Shape) -> tuple[_End, _End]:
     """Each end as the connector's records have it glued; `None` for an end no record names a shape on the page for."""
-    page = connector.page
+    page = connector._page
     ends: dict[str, tuple[Shape, int | None]] = {}
     for connect in page._connects():
         if connect.from_id != connector.ID or connect.from_rel not in ("BeginX", "EndX"):
@@ -224,7 +224,7 @@ def _write(connector: Shape, begin: _End, end: _End, routing: tuple[CellWrite, .
     begin_glue, end_glue = _end_glue(begin), _end_glue(end)
     for change in (*glue_cells(begin_glue, end_glue), *routing):
         _change_cell(connector, change)
-    page = connector.page
+    page = connector._page
     page._remove_connect_records({connector_id})
     for record in connection_records(connector_id, begin_glue, end_glue):
         page._add_connect(record_element(record))
@@ -261,4 +261,4 @@ def _float_ends(connector: Shape) -> None:
     for change in glue_cells(None, None):
         if change.name not in _CONNECTOR_KIND_CELLS:
             _change_cell(connector, change)
-    connector.page._remove_connect_records({_id(connector)})
+    connector._page._remove_connect_records({_id(connector)})
