@@ -353,7 +353,9 @@ page's finder and ``shape.descendants`` for a shape's.
    * - ``page.find_shapes_by_regex(regex)``, ``shape.find_shapes_by_regex(regex)``
      - ``[s for s in scope if re.search(regex, s.text)]``, after ``import re``
    * - ``page.find_shape_by_attr(attr, value)``, ``shape.find_shape_by_attr(attr, value)``
-     - ``next((s for s in scope if s.xml.get(attr) == value), None)``
+     - ``next((s for s in scope if str(s.xml.get(attr)) == value), None)``.
+       The ``str`` keeps 0.x's match of ``"None"`` against a shape without the
+       attribute; compare ``s.xml.get(attr) is None`` to find those directly.
    * - ``shape.find_shapes_by_master(page_id, shape_id)``
      - ``[s for s in scope if (s.master_page_ID, s.master_shape_ID) == (page_id, shape_id)]``
    * - ``page.find_shapes_with_same_master(shape)``
