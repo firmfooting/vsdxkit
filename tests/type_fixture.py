@@ -46,3 +46,19 @@ def relaxed_limits() -> PackageLimits:
 
 def save_copy(visio_file: VisioFile, destination: Path) -> None:
     visio_file.save_vsdx(str(destination))
+
+
+def start_shape(page: Page) -> Shape:
+    return page.shapes.require_text("Start")
+
+
+def open_items(page: Page) -> tuple[Shape, ...]:
+    return page.shapes.matching_property("Status", "Open")
+
+
+def group_members(shape: Shape) -> list[Shape]:
+    return [*shape.children, *shape.descendants]
+
+
+def maybe_shape(page: Page, shape_id: str) -> Shape | None:
+    return page.children.by_id(shape_id)

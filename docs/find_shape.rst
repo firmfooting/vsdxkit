@@ -21,64 +21,64 @@ Pages can be selected by zero-based index or case-sensitive name.
        if named_page is not None:
            print(named_page.name)
 
-Find one shape
---------------
-
-The ``find_shape_*`` methods return the first matching
-:class:`vsdxkit.shapes.Shape`, or ``None``.
-
-.. code-block:: python
-
-   with VisioFile("diagram.vsdx") as vis:
-       page = vis.pages[0]
-
-       by_id = page.find_shape_by_id("1")
-       by_text = page.find_shape_by_text("Assessment")
-       by_label = page.find_shape_by_property_label("Status")
-       by_data = page.find_shape_by_property_label_value("Status", "Open")
-
-Shape Data labels are the names shown in Visio's Shape Data window. They are
-not necessarily the internal row names stored in the file.
-
-Find several shapes
--------------------
-
-The plural methods return ``list[Shape]`` and return an empty list when there
-are no matches.
-
-.. code-block:: python
-
-   with VisioFile("diagram.vsdx") as vis:
-       page = vis.pages[0]
-
-       mentions_review = page.find_shapes_by_text("Review")
-       status_fields = page.find_shapes_by_property_label("Status")
-       open_items = page.find_shapes_by_property_label_value("Status", "Open")
-       numbered_steps = page.find_shapes_by_regex(r"Step \d+")
-
-Search within a grouped shape
------------------------------
-
-Page and Shape expose the same recursive finder pattern. Search a group when a
-match should be constrained to that subtree.
-
-.. code-block:: python
-
-   group = page.find_shape_by_text("Assessment group")
-   if group is not None:
-       task = group.find_shape_by_text("Review")
-
-Traverse the hierarchy
+Find shapes in a scope
 ----------------------
 
-``child_shapes`` contains only direct children. ``all_shapes`` recursively
-includes descendants.
+Every lookup goes through a :class:`vsdxkit.shapes.ShapeCollection`, which is a
+fixed scope of shapes:
+
+- ``page.children``: the page's top-level shapes;
+- ``page.shapes``: every shape on the page, at any depth, connectors included;
+- ``shape.children``: a group's direct members, empty for any other shape;
+- ``shape.descendants``: every shape inside a group, at any depth.
+
+Iterating a collection and looking up in it read the same shapes. A collection
+is live: it sees shapes added or removed after it was taken.
 
 .. code-block:: python
 
-   top_level = page.child_shapes
-   every_shape = page.all_shapes
+   with VisioFile("diagram.vsdx") as vis:
+       page = vis.pages[0]
 
-   if every_shape:
-       direct_children = every_shape[0].child_shapes
-       all_descendants = every_shape[0].all_shapes
+       start = page.shapes.require_text("Start")
+       maybe = page.shapes.by_id("12")
+       status = page.shapes.require_property("Status", "Open")
+
+       for shape in page.children:
+           print(shape.ID, shape.text)
+
+Each lookup says how many shapes it expects:
+
+- ``by_id``, ``by_text`` and ``by_property`` return the one match, or ``None``;
+- ``require_id``, ``require_text`` and ``require_property`` return the one
+  match, and raise :class:`vsdxkit.errors.NotFoundError` when there is none;
+- ``matching_text`` and ``matching_property`` return every match as a tuple.
+
+When several shapes match, the ``by_*`` and ``require_*`` forms raise
+:class:`vsdxkit.errors.InvalidOperationError` naming them instead of picking
+one. Shape IDs are unique on a page, so two shapes with one ID raise
+:class:`vsdxkit.errors.PackageError`.
+
+Text is matched exactly: ``require_text("Start")`` finds the shape that reads
+"Start", not one that mentions it. For a looser search, filter the collection:
+
+.. code-block:: python
+
+   mentions_review = [shape for shape in page.shapes if "Review" in shape.text]
+
+A property is matched by its Shape Data label, the name shown in Visio's Shape
+Data window, including properties the shape inherits from its master. A value,
+where one is given, is compared as text.
+
+Earlier finders
+---------------
+
+The ``find_shape_*`` and ``find_shapes_*`` methods, ``child_shapes`` and
+``all_shapes`` still work and will be removed before 1.0. They differ from the
+collections in two ways: text is matched as a substring, and a lookup of one
+shape returns the first match without saying that there were several.
+
+.. code-block:: python
+
+   by_text = page.find_shape_by_text("Assessment")
+   numbered_steps = page.find_shapes_by_regex(r"Step \d+")
