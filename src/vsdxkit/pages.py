@@ -52,6 +52,25 @@ def _dimension_value(value: float | str | None) -> str:
     return xml_value(number)
 
 
+def _place_one_d(shape: Shape, x: float, y: float, length: float | None) -> None:
+    """Centre a 1-D shape on `x`, `y` by moving its ends, keeping its direction and, without `length`, its length.
+
+    Its pin, width and angle are formulas of its ends, so Visio would put back
+    any of them written directly.
+    """
+    begin_x, begin_y, end_x, end_y = shape.begin_x, shape.begin_y, shape.end_x, shape.end_y
+    if begin_x is None or begin_y is None or end_x is None or end_y is None:
+        raise InvalidOperationError(f"1-D shape ID {shape.ID} has no begin and end points to place it by")
+    dx, dy = end_x - begin_x, end_y - begin_y
+    if length is not None:
+        current = math.hypot(dx, dy)
+        # a zero-length line has no direction, so it is laid along the x axis
+        dx, dy = (length * dx / current, length * dy / current) if current else (length, 0.0)
+    shape.begin_x, shape.begin_y = x - dx / 2, y - dy / 2
+    shape.end_x, shape.end_y = x + dx / 2, y + dy / 2
+    shape._refresh_formula_values()
+
+
 class PagePosition(IntEnum):
     FIRST = 0
     LAST = -1
@@ -596,6 +615,9 @@ class Page:
         with a custom master is made. Either way the new shape is a copy made
         by :meth:`Shape.copy`, the one way a shape is created.
 
+        A 1-D shape, such as :attr:`ShapeKind.LINE`, is placed by its ends: it
+        keeps its direction, and ``width`` is its length.
+
         :param width, height: the new size; the kind's or prototype's when omitted
         :param text: the label. A kind starts blank; a prototype keeps its text when omitted.
         :raises TypeError: if ``kind_or_prototype`` is neither a kind nor a shape
@@ -620,11 +642,14 @@ class Page:
         else:
             kinds = ", ".join(f"ShapeKind.{kind.name}" for kind in ShapeKind)
             raise TypeError(f"create_shape takes a Shape or one of {kinds}, not {kind_or_prototype!r}")
-        # built-in shapes are drawn around their centre: position via PinX/PinY
-        shape.get_or_create_cell("PinX", v=str(x))
-        shape.get_or_create_cell("PinY", v=str(y))
-        if width is not None:
-            shape.width = width
+        if is_connector(shape):
+            _place_one_d(shape, x, y, width)
+        else:
+            # a 2-D shape is drawn around its pin
+            shape.get_or_create_cell("PinX", v=str(x))
+            shape.get_or_create_cell("PinY", v=str(y))
+            if width is not None:
+                shape.width = width
         if height is not None:
             shape.height = height
         if label is not None:
