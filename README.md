@@ -133,21 +133,18 @@ Deleting a shape through `page.delete_shape(shape)` also removes incident connec
 
 ## Work with swimlanes
 
-Swimlane operations require an existing Visio cross-functional flowchart (CFF) page. `add_swimlane()` clones the current top lane and updates the CFF container geometry.
+Swimlane operations need a page that already holds a Visio cross-functional flowchart (CFF). `page.swimlanes` is that diagram, or `None` on a page without one; `page.require_swimlanes()` raises `NotFoundError` instead. `add_lane()` copies the top lane above it and grows the CFF container to match.
 
 ```python
 vis = Document.open("cross-functional-flow.vsdx")
 page = vis.pages[0]
-container = page.get_container()
+diagram = page.require_swimlanes()
 
-if container is None:
-    raise ValueError("The page is not a Visio CFF diagram")
-
-review_lane = page.add_swimlane("Review")
+review_lane = diagram.add_lane("Review")
 check = page.create_shape(ShapeKind.PROCESS, x=6.0, y=2.0, text="Check")
-page.add_shape_to_lane(check, review_lane)
+diagram.move_to_lane(check, review_lane)
 
-assert container.lane_of(check) is not None
+assert diagram.lane_for(check) == review_lane
 vis.save("with-review-lane.vsdx")
 ```
 

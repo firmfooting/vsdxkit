@@ -1,6 +1,6 @@
 """A swimlane that cannot be labelled is never put on the page.
 
-`Container.add_swimlane` pre-checked whether the top lane had a
+`add_swimlane` (now `SwimlaneDiagram.add_lane`) pre-checked whether the top lane had a
 `visHeadingText` row. What raises is `set_user_row_value`, which also returns
 False when the row exists but carries no `<Cell N="Value">`. That case walked
 past the pre-check into the state the check existed to prevent: the clone
@@ -15,9 +15,9 @@ import xml.etree.ElementTree as ET
 import pytest
 
 from vsdxkit import namespace
-from vsdxkit.containers import ROW_HEADING_TEXT, get_user_row
 from vsdxkit.document import Document
 from vsdxkit.shapes import Shape
+from vsdxkit.swimlanes import ROW_HEADING_TEXT, _heading, _user_row
 
 CFF_FIXTURE = "fixtures/com_reference/s05_swimlanes_cfflow.vsdx"
 
@@ -25,10 +25,10 @@ CFF_FIXTURE = "fixtures/com_reference/s05_swimlanes_cfflow.vsdx"
 def strip_value_cell(lane: Shape) -> None:
     """Leave the lane's heading row in place but take away the cell it writes.
 
-    `get_user_row` finds the row; `set_user_row_value` finds nothing to write.
+    `_user_row` finds the row; `set_user_row_value` finds nothing to write.
     That gap is #330.
     """
-    row = get_user_row(lane, ROW_HEADING_TEXT)
+    row = _user_row(lane, ROW_HEADING_TEXT)
     assert row is not None
     value_cells = [cell for cell in row.findall(f"{namespace}Cell") if cell.attrib.get("N") == "Value"]
     assert value_cells, "fixture lane has no Value cell to remove"
@@ -38,34 +38,34 @@ def strip_value_cell(lane: Shape) -> None:
 
 def restore_value_cell(lane: Shape) -> None:
     """Put back what `strip_value_cell` took away."""
-    row = get_user_row(lane, ROW_HEADING_TEXT)
+    row = _user_row(lane, ROW_HEADING_TEXT)
     assert row is not None
     row.append(ET.fromstring(f'<Cell xmlns="{namespace[1:-1]}" N="Value" V="restored"/>'))
 
 
-def test_add_swimlane_leaves_the_page_untouched_when_the_label_cannot_be_written(vsdx_copy):
+def test_add_lane_leaves_the_page_untouched_when_the_label_cannot_be_written(vsdx_copy):
     vis = Document.open(vsdx_copy(CFF_FIXTURE))
     page = vis.pages[0]
-    container = page.get_container()
+    container = page.require_swimlanes()
     strip_value_cell(container.lanes[0])
     before = ET.tostring(page.xml.getroot())
 
     with pytest.raises(ValueError):
-        page.add_swimlane("Test lane")
+        page.require_swimlanes().add_lane("Test lane")
 
     assert ET.tostring(page.xml.getroot()) == before
 
 
-def test_add_swimlane_reports_the_lane_it_cloned_and_what_that_lane_lacks(vsdx_copy):
+def test_add_lane_reports_the_lane_it_cloned_and_what_that_lane_lacks(vsdx_copy):
     """The message named the clone, and called a clone of a lane 'not a lane'."""
     vis = Document.open(vsdx_copy(CFF_FIXTURE))
     page = vis.pages[0]
-    container = page.get_container()
+    container = page.require_swimlanes()
     top_lane = container.lanes[0]
     strip_value_cell(top_lane)
 
     with pytest.raises(ValueError) as excinfo:
-        page.add_swimlane("Test lane")
+        page.require_swimlanes().add_lane("Test lane")
 
     message = str(excinfo.value)
     assert f"shape {top_lane.ID} " in message
@@ -73,23 +73,23 @@ def test_add_swimlane_reports_the_lane_it_cloned_and_what_that_lane_lacks(vsdx_c
     assert "is not a swimlane lane" not in message
 
 
-def test_add_swimlane_leaves_the_page_untouched_when_the_lane_has_no_heading_shape(vsdx_copy):
+def test_add_lane_leaves_the_page_untouched_when_the_lane_has_no_heading_shape(vsdx_copy):
     """The other way `_write_lane_label` refuses, and the one that used to put
     the label on the lane body and carry on."""
     vis = Document.open(vsdx_copy(CFF_FIXTURE))
     page = vis.pages[0]
-    container = page.get_container()
+    container = page.require_swimlanes()
     top_lane = container.lanes[0]
     top_lane.xml.remove(top_lane.xml.find(f"{namespace}Shapes"))
     before = ET.tostring(page.xml.getroot())
 
     with pytest.raises(ValueError):
-        page.add_swimlane("Test lane")
+        page.require_swimlanes().add_lane("Test lane")
 
     assert ET.tostring(page.xml.getroot()) == before
 
 
-def test_add_swimlane_still_allocates_unique_ids_after_a_refused_call(vsdx_copy):
+def test_add_lane_still_allocates_unique_ids_after_a_refused_call(vsdx_copy):
     """A refused call leaves the page's id mark raised, which is all it leaves.
 
     Shape ids need not be contiguous, so the gap is harmless -- but a later
@@ -97,14 +97,14 @@ def test_add_swimlane_still_allocates_unique_ids_after_a_refused_call(vsdx_copy)
     """
     vis = Document.open(vsdx_copy(CFF_FIXTURE))
     page = vis.pages[0]
-    container = page.get_container()
+    container = page.require_swimlanes()
     strip_value_cell(container.lanes[0])
 
     with pytest.raises(ValueError):
-        page.add_swimlane("Refused")
+        page.require_swimlanes().add_lane("Refused")
 
     restore_value_cell(container.lanes[0])
-    page.add_swimlane("Accepted")
+    page.require_swimlanes().add_lane("Accepted")
     ids = [shape.ID for shape in page.all_shapes]
     assert len(ids) == len(set(ids))
 
@@ -115,14 +115,14 @@ def test_a_non_string_label_is_refused_before_either_half_is_written(vsdx_copy):
     then not be saved at all."""
     vis = Document.open(vsdx_copy(CFF_FIXTURE))
     page = vis.pages[0]
-    container = page.get_container()
+    container = page.require_swimlanes()
     lane = container.lanes[0]
     before = ET.tostring(page.xml.getroot())
 
     with pytest.raises(TypeError):
         container.set_lane_label(lane, 5)  # type: ignore[arg-type]
     with pytest.raises(TypeError):
-        page.add_swimlane(5)  # type: ignore[arg-type]
+        page.require_swimlanes().add_lane(5)  # type: ignore[arg-type]
 
     assert ET.tostring(page.xml.getroot()) == before
 
@@ -135,7 +135,7 @@ def test_set_lane_label_refuses_a_shape_that_was_never_a_lane(vsdx_copy):
     """
     vis = Document.open(vsdx_copy(CFF_FIXTURE))
     page = vis.pages[0]
-    container = page.get_container()
+    container = page.require_swimlanes()
     decision = page.shapes.by_text("Decision")
     assert decision is not None
     before = ET.tostring(decision.xml)
@@ -148,7 +148,7 @@ def test_set_lane_label_refuses_a_shape_that_was_never_a_lane(vsdx_copy):
 
 def test_set_lane_label_refuses_a_lane_whose_heading_row_has_no_value_cell(vsdx_copy):
     vis = Document.open(vsdx_copy(CFF_FIXTURE))
-    container = vis.pages[0].get_container()
+    container = vis.pages[0].require_swimlanes()
     lane = container.lanes[0]
     strip_value_cell(lane)
     before = ET.tostring(lane.xml)
@@ -162,9 +162,9 @@ def test_set_lane_label_refuses_a_lane_whose_heading_row_has_no_value_cell(vsdx_
 def test_set_lane_label_refuses_a_lane_with_no_heading_shape(vsdx_copy):
     """The label used to land on the lane body when there was no heading shape (#307)."""
     vis = Document.open(vsdx_copy(CFF_FIXTURE))
-    container = vis.pages[0].get_container()
+    container = vis.pages[0].require_swimlanes()
     lane = container.lanes[0]
-    assert container.lane_heading(lane) is not None
+    assert _heading(lane) is not None
     # a lane with no sub-shapes at all, so nothing can carry the heading
     lane.xml.remove(lane.xml.find(f"{namespace}Shapes"))
     before = ET.tostring(lane.xml)

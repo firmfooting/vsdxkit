@@ -4,7 +4,7 @@
 that already existed. Most shapes have no such cell -- fifteen of the seventeen
 on page 1 of the three fixtures below -- so the assignment was a silent no-op,
 while `line_color` and `fill_color`, which go through `set_cell_value`, created
-the cell they needed. `Container.set_lane_label` had the same shape from the other
+the cell they needed. `set_lane_label` had the same shape from the other
 side: it dropped the `False` that `set_user_row_value` returns for a lane with
 no `visHeadingText` row (issue #263).
 """
@@ -15,8 +15,8 @@ import xml.etree.ElementTree as ET
 import pytest
 
 from vsdxkit import namespace
-from vsdxkit.containers import ROW_HEADING_TEXT, get_user_row
 from vsdxkit.document import Document
+from vsdxkit.swimlanes import ROW_HEADING_TEXT, _heading, _user_row
 
 CFF_FIXTURE = "fixtures/com_reference/s05_swimlanes_cfflow.vsdx"
 
@@ -162,7 +162,7 @@ def test_text_color_follows_a_run_that_names_a_row_out_of_range(basedir):
 def test_a_created_section_goes_where_visio_puts_one(vsdx_copy):
     """A group holds its children in `Shapes`, and no section follows that."""
     vis = Document.open(vsdx_copy(CFF_FIXTURE))
-    lane = vis.pages[0].get_container().lanes[0]
+    lane = vis.pages[0].require_swimlanes().lanes[0]
     assert lane.xml.find(f"{namespace}Shapes") is not None, "fixture lane is no longer a group"
     assert lane.xml.find(f'{namespace}Section[@N="Geometry"]') is None
 
@@ -185,43 +185,44 @@ def test_a_rejected_colour_leaves_the_shape_untouched(basedir):
     assert ET.tostring(shape.xml) == before
 
 
-def test_add_swimlane_with_a_label_adds_no_lane_it_cannot_label(vsdx_copy):
+def test_add_lane_with_a_label_adds_no_lane_it_cannot_label(vsdx_copy):
     """A lane whose heading row is missing adds no lane at all (#263, #330)."""
     vis = Document.open(vsdx_copy(CFF_FIXTURE))
     page = vis.pages[0]
-    container = page.get_container()
+    container = page.require_swimlanes()
     lane = container.lanes[0]
-    lane.xml.find(f'{namespace}Section[@N="User"]').remove(get_user_row(lane, ROW_HEADING_TEXT))
+    lane.xml.find(f'{namespace}Section[@N="User"]').remove(_user_row(lane, ROW_HEADING_TEXT))
     before = [existing.ID for existing in container.lanes]
-    list_height = container.swimlane_list.height
+    swimlane_list = next(shape for shape in page.children if shape.shape_name == "Swimlane List")
+    list_height = swimlane_list.height
 
     with pytest.raises(ValueError, match=ROW_HEADING_TEXT):
-        page.add_swimlane("Test lane")
+        page.require_swimlanes().add_lane("Test lane")
 
     assert [existing.ID for existing in container.lanes] == before
-    assert container.swimlane_list.height == list_height
+    assert swimlane_list.height == list_height
 
 
 def test_set_lane_label_refuses_a_shape_that_is_not_a_lane(vsdx_copy):
     """A lane with no `visHeadingText` row cannot be labelled, and must say so."""
     vis = Document.open(vsdx_copy(CFF_FIXTURE))
     page = vis.pages[0]
-    lane = page.get_container().lanes[0]
-    row = get_user_row(lane, ROW_HEADING_TEXT)
+    lane = page.require_swimlanes().lanes[0]
+    row = _user_row(lane, ROW_HEADING_TEXT)
     lane.xml.find(f'{namespace}Section[@N="User"]').remove(row)
 
     with pytest.raises(ValueError, match=ROW_HEADING_TEXT):
-        page.get_container().set_lane_label(lane, "Renamed")
+        page.require_swimlanes().set_lane_label(lane, "Renamed")
 
 
 def test_set_lane_label_still_labels_a_real_lane(vsdx_copy):
     vis = Document.open(vsdx_copy(CFF_FIXTURE))
     page = vis.pages[0]
-    container = page.get_container()
+    container = page.require_swimlanes()
     lane = container.lanes[0]
 
     container.set_lane_label(lane, "Renamed")
 
-    row = get_user_row(lane, ROW_HEADING_TEXT)
+    row = _user_row(lane, ROW_HEADING_TEXT)
     assert [cell.attrib.get("V") for cell in row if cell.attrib.get("N") == "Value"] == ["Renamed"]
-    assert container.lane_heading(lane).text == "Renamed"
+    assert _heading(lane).text == "Renamed"

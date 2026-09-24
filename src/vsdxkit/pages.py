@@ -21,7 +21,6 @@ import deprecation
 import vsdxkit
 from vsdxkit import namespace, r_namespace, relationships, retired_finders
 from vsdxkit.connectors import Connect, _create_connector, _float_ends
-from vsdxkit.containers import Container
 from vsdxkit.errors import InvalidOperationError, MissingPartError, NotFoundError, PackageError
 from vsdxkit.glue import ConnectorOptions, Glue, Routing
 from vsdxkit.package import XmlPart
@@ -29,6 +28,7 @@ from vsdxkit.partnames import relationship_target, relationships_part_name, targ
 from vsdxkit.shape_kind import ShapeKind
 from vsdxkit.shape_tree import iter_descendants
 from vsdxkit.shapes import Connector, Shape, ShapeCollection, _wrap_children, _wrap_descendants, is_connector, parent_of
+from vsdxkit.swimlanes import SwimlaneDiagram, _diagram_on
 from vsdxkit.xmlio import PartTree, require_element, to_float, xml_value
 
 # the two places a Connect record names a shape: the connector it leads from,
@@ -613,26 +613,24 @@ class Page:
         """Every connector on the page, at any depth, glued at both ends, one or neither."""
         return tuple(shape for shape in self.shapes if isinstance(shape, Connector))
 
-    def get_container(self) -> Container | None:
-        """Return the page's CFF Container (swimlane diagram root), or None."""
-        return Container.find(self)
+    @property
+    def swimlanes(self) -> SwimlaneDiagram | None:
+        """The cross-functional flowchart on this page, or None for a page without one.
 
-    def add_swimlane(self, label: str | None = None) -> Shape:
-        """Add a swimlane to this page's CFF Container by cloning its top lane.
-
-        :returns: the new lane Shape
+        :raises InvalidOperationError: the page has more than one CFF container
         """
-        container = self.get_container()
-        if container is None:
-            raise InvalidOperationError("page has no CFF Container")
-        return container.add_swimlane(label)
+        return _diagram_on(self)
 
-    def add_shape_to_lane(self, shape: Shape, lane: Shape) -> None:
-        """Move a shape so its centre lies within a CFF swimlane's geometric band."""
-        container = self.get_container()
-        if container is None:
-            raise InvalidOperationError("page has no CFF Container")
-        container.add_shape_to_lane(shape, lane)
+    def require_swimlanes(self) -> SwimlaneDiagram:
+        """The cross-functional flowchart on this page.
+
+        :raises NotFoundError: the page has no CFF container
+        :raises InvalidOperationError: the page has more than one
+        """
+        diagram = _diagram_on(self)
+        if diagram is None:
+            raise NotFoundError(f"page {self.name!r} has no CFF container, so no swimlane diagram")
+        return diagram
 
     def create_shape(
         self,

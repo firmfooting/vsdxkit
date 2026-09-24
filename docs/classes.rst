@@ -15,7 +15,7 @@ Page, PageCollection and PagePosition
 -------------------------------------
 
 .. autoclass:: vsdxkit.pages.Page
-   :members: all_shapes, child_shapes, children, connect, connectors, connects, create_shape, delete_shape, get_container, shapes, add_swimlane, add_shape_to_lane
+   :members: all_shapes, child_shapes, children, connect, connectors, connects, create_shape, delete_shape, shapes, swimlanes, require_swimlanes
    :undoc-members:
 
 .. autoclass:: vsdxkit.pages.PageCollection
@@ -54,8 +54,8 @@ Shape, Connector, ShapeCollection, Cell and DataProperty
    :members:
    :undoc-members:
 
-Connect and Container
----------------------
+Connect and SwimlaneDiagram
+---------------------------
 
 .. autoclass:: vsdxkit.connectors.Connect
    :members: connector_shape, connector_shape_id, shape, shape_id
@@ -90,9 +90,8 @@ fields identify the source and target cells, such as ``BeginX``, ``EndX``,
 .. py:attribute:: vsdxkit.connectors.Connect.to_rel
    :type: str | None
 
-.. autoclass:: vsdxkit.containers.Container
-   :members: add_shape_to_lane, add_swimlane, container_shape, find, lane_band, lane_heading, lane_of, lanes, members, set_lane_label, swimlane_list
-   :undoc-members:
+.. autoclass:: vsdxkit.swimlanes.SwimlaneDiagram
+   :members: container, lanes, shapes_in, lane_for, add_lane, set_lane_label, move_to_lane
 
 Package limits
 --------------

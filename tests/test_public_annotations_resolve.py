@@ -25,9 +25,6 @@ UNRESOLVED = {
     "vsdxkit.connectors.Connect.__init__",
     "vsdxkit.connectors.Connect.connector_shape",
     "vsdxkit.connectors.Connect.shape",
-    # Phase 5: `Container` becomes `SwimlaneDiagram`, reached as `page.swimlanes`.
-    "vsdxkit.containers.Container.__init__",
-    "vsdxkit.containers.Container.find",
     # Phase 3: a page holds a document token rather than its `Document`.
     "vsdxkit.pages.Page.__init__",
     # Phase 2 moves master lookup to `MasterCatalog`; Phase 3 replaces the

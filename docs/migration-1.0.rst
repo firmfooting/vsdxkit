@@ -135,3 +135,44 @@ are gone; glue and routing are :class:`vsdxkit.glue.Glue` and
 
 ``ConnectorOptions.from_route(route)``
    Gone with the route strings.
+
+A swimlane diagram replaces the container
+-----------------------------------------
+
+:class:`vsdxkit.swimlanes.SwimlaneDiagram` replaces ``vsdxkit.containers.Container``,
+which is gone along with its module. Membership is still geometric.
+
+``page.get_container()``
+   ``page.swimlanes``, which is ``None`` on a page with no CFF container, or
+   ``page.require_swimlanes()``, which raises
+   :class:`vsdxkit.errors.NotFoundError`. A page with two CFF containers now
+   raises :class:`vsdxkit.errors.InvalidOperationError` from both.
+
+``page.add_swimlane(label)``, ``container.add_swimlane(label)``
+   ``diagram.add_lane(label)``.
+
+``page.add_shape_to_lane(shape, lane)``, ``container.add_shape_to_lane(shape, lane)``
+   ``diagram.move_to_lane(shape, lane)``. A shape already in the lane is left
+   where it is.
+
+``container.lane_of(shape)``
+   ``diagram.lane_for(shape)``. It raises
+   :class:`vsdxkit.errors.InvalidOperationError` where lanes overlap.
+
+``container.members(lane)``
+   ``diagram.shapes_in(lane)``, a tuple.
+
+``container.lanes``
+   ``diagram.lanes``, a tuple.
+
+``container.container_shape``
+   ``diagram.container``.
+
+``container.lane_band(lane)``, ``container.swimlane_list``, ``container.lane_heading(lane)``, ``Container.find(page)``
+   Gone. A lane's band is its ``y`` plus or minus half its ``height``.
+
+``vsdxkit.containers.get_user_row``, ``set_user_row_value``
+   Gone. Label a lane with ``diagram.set_lane_label(lane, label)``.
+
+A shape on the edge two lanes share is now in the upper lane only. It used to
+count as a member of both.
