@@ -585,7 +585,11 @@ delete. The graph is read through connectors and shapes instead.
 
 ``shape.connects``
    ``shape.connectors`` for the connectors glued to ``shape``, and
-   ``shape.connected_shapes`` for what is at their other ends.
+   ``shape.connected_shapes`` for what is at their other ends. On a
+   connector, ``shape.connects`` returned the connector's own records; use
+   ``connector.source`` and ``connector.target`` there, because
+   ``connector.connectors`` lists the connectors glued to the connector,
+   which is normally none.
 
 ``Connect.connector_shape``, ``Connect.connector_shape_id``, ``Connect.from_id``
    The connector itself, and its ``ID``.
@@ -597,10 +601,16 @@ delete. The graph is read through connectors and shapes instead.
    Which end is glued, and to what, are the connector's ``BeginX`` and
    ``EndX`` cell formulas: a formula that refers to a shape glues that end.
 
-``Connect.page``, ``Connect.xml``
-   ``connector.page`` and ``connector.xml``. The ``<Connect>`` elements are
-   under ``page.xml``'s ``Connects`` element, for code that needs the raw
-   records.
+``Connect.page``
+   ``connector.page``.
+
+``Connect.xml``
+   The ``<Connect>`` element itself, with ``FromSheet``, ``ToSheet``,
+   ``FromPart`` and ``ToPart``, is a child of the ``Connects`` element in
+   ``page.xml``, for code that needs the raw record:
+   ``[c for c in page.xml.getroot().iter(f"{ns}Connect") if c.get("FromSheet") == connector.ID]``,
+   where ``ns`` is ``"{http://schemas.microsoft.com/office/visio/2012/main}"``.
+   ``connector.xml`` is the connector's ``<Shape>`` element, not a record.
 
 ``page.add_connect(connect)``, ``page.remove_connect_records(ids)``
    ``page.connect(a, b)`` writes a connector with its records,
