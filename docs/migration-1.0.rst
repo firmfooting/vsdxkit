@@ -208,9 +208,18 @@ OPC name, and the file-system view of 0.x is gone.
    Gone. Work through the object model; to read a part's raw bytes, open
    the saved file with :mod:`zipfile`.
 
-``vsdx.xmlio.file_to_xml``, ``xmlio.xml_to_file``, ``xmlio.require_xml_tree``, ``xmlio.require_root``
+``vsdx.xmlio.file_to_xml``, ``xmlio.xml_to_file``
    Gone with the file-system view. ``vsdxkit.xmlio.parse_part(bytes)`` and
-   ``serialise_part(tree)`` read and write a part.
+   ``serialise_part(tree)`` parse and serialise a part's bytes.
+
+``xmlio.require_xml_tree``, ``xmlio.require_root``
+   Gone. They read a named part from the zip, refused one that was absent
+   with the description given, and ``require_root`` returned the root. The
+   parts are already parsed: take the tree from the object model, such as
+   ``document.pages_xml`` or ``page.xml``, and compose the two checks 1.0
+   keeps. ``vsdxkit.xmlio.require_tree(tree, description)`` refuses ``None``
+   with :class:`vsdxkit.errors.MissingPartError`, and
+   ``require_element(tree.getroot(), description)`` gives the root.
 
 ``vsdx.shapes.to_float``
    ``vsdxkit.xmlio.to_float``.
@@ -404,10 +413,12 @@ are gone; glue and routing are :class:`vsdxkit.glue.Glue` and
    ``set(a.connectors) & set(b.connectors)``.
 
 ``page.get_connectors_between(shape_a_text=..., shape_b_text=...)``
-   The text form took the first shape whose text contained each string. A
-   comprehension keeps that:
-   ``a = next(s for s in page.shapes if shape_a_text in s.text)``, and the
-   same for ``b``, then ``set(a.connectors) & set(b.connectors)``.
+   The text form took the first shape whose text contained each string, and
+   raised ``ValueError`` when there was none. A comprehension keeps both:
+   ``a = next((s for s in page.shapes if shape_a_text in s.text), None)``,
+   the same for ``b``, ``raise ValueError(...)`` if either is ``None``, then
+   ``set(a.connectors) & set(b.connectors)``. Without the default, ``next``
+   raises ``StopIteration`` instead.
    ``page.shapes.require_text`` and ``matching_text`` compare the whole text
    instead.
 
@@ -486,11 +497,15 @@ which is gone along with its module. Membership is still geometric.
       )
       row = next(rows, None)
       value = None if row is None else row.find(f"{namespace}Cell[@N='Value']")
-      if value is not None:
+      updated = value is not None
+      if updated:
           value.set("V", new_value)
 
    The row name is compared in Python rather than written into the path, so
-   a name holding a quote, such as ``Owner's``, still matches.
+   a name holding a quote, such as ``Owner's``, still matches. ``updated``
+   is what ``set_user_row_value`` returned: whether a ``Value`` cell was
+   written. Compare with ``None`` rather than testing ``value`` itself,
+   because an element with no children is false.
 
    As in 0.x, a row that is absent is not created.
 

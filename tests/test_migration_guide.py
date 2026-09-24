@@ -124,6 +124,22 @@ def test_the_root_version_is_in_the_snapshot(monkeypatch):
     assert check.unexplained(["vsdx.__version__"], [], check.vsdxkit_modules()) == []
 
 
+def test_a_nested_code_block_ends_where_its_indentation_does():
+    """Fails if the prose after a code block inside a definition item counts as code, as after the User-row example."""
+    text = (
+        "``old_call()``\n"
+        "   Gone. Do this:\n\n"
+        "   .. code-block:: python\n\n"
+        "      vis.gone_call()\n\n"
+        "   Then vis.gone_prose happens.\n"
+    )
+
+    literals = check.guide_literals(text)
+
+    assert "      vis.gone_call()" in literals
+    assert not any("gone_prose" in literal for literal in literals)
+
+
 def test_code_blocks_count_as_literals():
     text = "Title\n\n.. code-block:: python\n\n   vis.gone_call()\n\nProse gone_prose.\n"
 

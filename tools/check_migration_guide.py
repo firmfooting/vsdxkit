@@ -54,13 +54,16 @@ _ROOT_IMPORT = re.compile(r"from vsdx import ([\w, ]+)")
 def guide_literals(text: str) -> list[str]:
     """The inline literals of the guide, and the lines of its code blocks."""
     literals = _INLINE_LITERAL.findall(text)
-    in_block = False
+    # the indentation of the open code-block directive; its content is indented
+    # deeper, so the first non-blank line that is not ends the block
+    directive_indent: int | None = None
     for line in text.splitlines():
+        indent = len(line) - len(line.lstrip())
         if line.strip().startswith(".. code-block::"):
-            in_block = True
-        elif in_block and line and not line[0].isspace():
-            in_block = False
-        elif in_block:
+            directive_indent = indent
+        elif directive_indent is not None and line.strip() and indent <= directive_indent:
+            directive_indent = None
+        elif directive_indent is not None:
             literals.append(line)
     return literals
 
