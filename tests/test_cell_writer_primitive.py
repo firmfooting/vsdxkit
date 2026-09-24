@@ -20,7 +20,7 @@ FIXTURES = os.path.dirname(os.path.realpath(__file__))
 @pytest.fixture
 def shape(vsdx_copy):
     vis = Document.open(vsdx_copy("test1.vsdx"))
-    yield vis.pages[0].child_shapes[0]
+    yield next(iter(vis.pages[0].children))
 
 
 def test_a_created_formula_cell_is_in_the_visio_namespace(shape):
@@ -50,11 +50,11 @@ def test_setting_a_formula_then_a_value_updates_one_cell(shape):
 def test_a_created_cell_survives_save_and_reload(vsdx_copy, tmp_path):
     out = os.path.join(str(tmp_path), "out.vsdx")
     vis = Document.open(vsdx_copy("test1.vsdx"))
-    vis.pages[0].child_shapes[0].set_cell_formula("Persisted", "Height*3")
+    next(iter(vis.pages[0].children)).set_cell_formula("Persisted", "Height*3")
     vis.save(out)
 
     vis = Document.open(out)
-    cell = vis.pages[0].child_shapes[0].cells.get("Persisted")
+    cell = next(iter(vis.pages[0].children)).cells.get("Persisted")
     assert cell is not None
     assert cell.formula == "Height*3"
 
@@ -72,12 +72,12 @@ def test_a_cell_value_needing_escaping_round_trips(vsdx_copy, tmp_path, label, v
     """
     out = os.path.join(str(tmp_path), "out.vsdx")
     vis = Document.open(vsdx_copy("test1.vsdx"))
-    shape = vis.pages[0].child_shapes[0]
+    shape = next(iter(vis.pages[0].children))
     shape.get_or_create_cell(f"Escaped{label}", v=value)
     vis.save(out)
 
     vis = Document.open(out)
-    assert vis.pages[0].child_shapes[0].cells[f"Escaped{label}"].value == value
+    assert next(iter(vis.pages[0].children)).cells[f"Escaped{label}"].value == value
 
 
 @pytest.mark.parametrize("value", [5, 2.5, True])
@@ -90,8 +90,8 @@ def test_a_non_string_cell_value_is_coerced_before_it_reaches_the_tree(vsdx_copy
     """
     out = os.path.join(str(tmp_path), "out.vsdx")
     vis = Document.open(vsdx_copy("test1.vsdx"))
-    vis.pages[0].child_shapes[0].get_or_create_cell("Coerced", v=value)
+    next(iter(vis.pages[0].children)).get_or_create_cell("Coerced", v=value)
     vis.save(out)
 
     vis = Document.open(out)
-    assert vis.pages[0].child_shapes[0].cells["Coerced"].value == str(value)
+    assert next(iter(vis.pages[0].children)).cells["Coerced"].value == str(value)

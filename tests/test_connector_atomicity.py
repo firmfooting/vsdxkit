@@ -18,7 +18,7 @@ FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
 def _snapshot(page):
     """Observable package state: shapes, cells, records, masters, page rels."""
-    shapes = sorted((s.ID, s.text, tuple(sorted(s.cells))) for s in page.all_shapes)
+    shapes = sorted((s.ID, s.text, tuple(sorted(s.cells))) for s in page.shapes)
     records = sorted((c.from_id, c.to_id, c.from_rel, c.to_rel) for c in page.connects)
     document = page.vis
     names = document._package.names()
@@ -37,7 +37,7 @@ def atomicity_page(vsdx_copy):
 
 
 def test_create_rejects_invalid_connection_point_without_mutating_package(atomicity_page):
-    shapes = atomicity_page.all_shapes
+    shapes = list(atomicity_page.shapes)
     a, b = shapes[0], shapes[1]
     before = _snapshot(atomicity_page)
     with pytest.raises(ValueError, match="connection point"):
@@ -47,7 +47,7 @@ def test_create_rejects_invalid_connection_point_without_mutating_package(atomic
 
 def test_create_rejects_negative_connection_point_without_mutating_package(atomicity_page):
     """Zero-based indices: negatives are invalid even before the upper bound."""
-    shapes = atomicity_page.all_shapes
+    shapes = list(atomicity_page.shapes)
     a, b = shapes[0], shapes[1]
     before = _snapshot(atomicity_page)
     with pytest.raises(ValueError, match="connection point"):
@@ -60,10 +60,10 @@ def test_retarget_rejects_invalid_connection_point_without_mutating_package(vsdx
     path = vsdx_copy("test4_connectors.vsdx")
     vis = Document.open(path)
     page = vis.pages[0]
-    connectors = [s for s in page.all_shapes if "BeginX" in s.cells]
+    connectors = [s for s in page.shapes if "BeginX" in s.cells]
     assert connectors, "fixture must contain a connector"
     connector = connectors[0]
-    other = next(s for s in page.all_shapes if "BeginX" not in s.cells)
+    other = next(s for s in page.shapes if "BeginX" not in s.cells)
     records_before = sorted((c.from_id, c.to_id, c.from_rel, c.to_rel) for c in page.connects)
     with pytest.raises(ValueError, match="connection point"):
         connector.retarget(target=other, options=ConnectorOptions(glue=Glue.POINT, to_point=999))

@@ -245,7 +245,7 @@ def test_a_source_master_listed_but_unreadable_is_a_missing_part(vsdx_copy, monk
     """Fails if master import reports a listed-but-unreadable donor part with a plain ValueError."""
     source = Document.open(vsdx_copy("test4_connectors.vsdx"))
     target = Document.open(vsdx_copy("test1.vsdx"))
-    shape = next(shape for shape in source.pages[0].all_shapes if shape.xml.attrib.get("Master"))
+    shape = next(shape for shape in source.pages[0].shapes if shape.xml.attrib.get("Master"))
     monkeypatch.setattr(source._package, "read_bytes", lambda name: None)
     with pytest.raises(MissingPartError, match="could not be read"):
         shape.copy(target.pages[0])
@@ -437,7 +437,7 @@ def test_a_malformed_geometry_coordinate_raises_malformed_package_error(vsdx_cop
     vis = Document.open(vsdx_copy("test9_rect_and_line.vsdx"))
     row = next(
         row
-        for shape in vis.pages[0].all_shapes
+        for shape in vis.pages[0].shapes
         if shape.geometry is not None
         for row in shape.geometry.rows.values()
         if coordinate in row.cells
@@ -701,7 +701,7 @@ def test_malformed_shapesheet_number_raises_malformed_package_error(vsdx_copy):
     not hold the number it has to is a malformed package.
     """
     vis = Document.open(vsdx_copy("test1.vsdx"))
-    shape = vis.pages[0].all_shapes[0]
+    shape = next(iter(vis.pages[0].shapes))
     shape.set_cell_value("PinX", "not-a-number")
     with pytest.raises(MalformedPackageError, match="malformed numeric ShapeSheet value"):
         _ = shape.x
@@ -730,7 +730,7 @@ def test_deleting_a_shape_that_is_not_on_the_page_raises_not_found_error(vsdx_co
     """
     vis = Document.open(vsdx_copy("test1.vsdx"))
     other = Document.open(vsdx_copy("test2.vsdx"))
-    stranger = other.pages[0].all_shapes[0]
+    stranger = next(iter(other.pages[0].shapes))
     with pytest.raises(NotFoundError, match="is not on page"):
         vis.pages[0].delete_shape(stranger)
 
@@ -755,7 +755,7 @@ def test_gluing_to_a_connection_point_a_shape_does_not_have_raises_invalid_opera
     """
     vis = Document.open(vsdx_copy("test4_connectors.vsdx"))
     page = vis.pages[0]
-    a, b = page.child_shapes[0], page.child_shapes[1]
+    a, b = next(iter(page.children)), list(page.children)[1]
     with pytest.raises(InvalidOperationError, match="connection point"):
         page.connect(a, b, glue=Glue.POINT, from_point=99)
 
@@ -804,7 +804,7 @@ def test_appending_a_shape_to_a_non_group_raises_invalid_operation(vsdx_copy):
     """
     vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
-    host, guest = page.child_shapes[0], page.child_shapes[1]
+    host, guest = next(iter(page.children)), list(page.children)[1]
     with pytest.raises(InvalidOperationError, match="cannot contain shapes"):
         host.append_shape(guest)
 
@@ -816,7 +816,7 @@ def test_a_duplicate_geometry_row_index_raises_invalid_operation(vsdx_copy):
     refusal comes from what the section already holds.
     """
     vis = Document.open(vsdx_copy("test1.vsdx"))
-    shape = vis.pages[0].all_shapes[0]
+    shape = next(iter(vis.pages[0].shapes))
     geometry = shape.geometry
     assert geometry is not None
     existing = geometry.rows[sorted(geometry.rows)[0]]

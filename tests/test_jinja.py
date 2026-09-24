@@ -61,7 +61,7 @@ def test_jinja_if(filename: str, context: dict, shape_count: int, tmp_path, base
     # open file and validate each shape id has expected text
     vis = Document.open(out_file)
     page = vis.pages[1]  # second page has the shapes with if statements
-    count = len(page.child_shapes)
+    count = len(page.children)
     print(f"expected {shape_count} and found {count}")
     assert count == shape_count
 

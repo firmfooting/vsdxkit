@@ -16,10 +16,8 @@ if sys.version_info >= (3, 12):
 else:
     from typing_extensions import override
 
-import deprecation
 
-import vsdxkit
-from vsdxkit import namespace, r_namespace, relationships, retired_finders
+from vsdxkit import namespace, r_namespace, relationships
 from vsdxkit.connectors import Connect, _create_connector, _float_ends
 from vsdxkit.errors import InvalidOperationError, MissingPartError, NotFoundError, PackageError
 from vsdxkit.glue import ConnectorOptions, Glue, Routing
@@ -189,18 +187,6 @@ class Page:
     def connects(self) -> list[Connect]:
         return self.get_connects()
 
-    @deprecation.deprecated(
-        deprecated_in="v0.5.0",
-        removed_in="1.0.0",
-        current_version=vsdxkit.__version__,
-        details="Use Page.name property instead",
-    )
-    def set_name(self, value: str) -> None:
-        # the `name` setter edits the store's own pages.xml tree, Name and NameU
-        # both; this used to go on to overwrite that tree with a fresh parse
-        # carrying only Name, which left NameU with the old name
-        self.name = value
-
     @property
     def name(self) -> str:
         if self._name:
@@ -242,24 +228,6 @@ class Page:
     @background.setter
     def background(self, value: bool) -> None:
         self._page_xml().attrib["Background"] = "1" if value else "0"
-
-    def _get_page_name(self) -> str:
-        return self.name
-
-    def _set_page_name(self, value: str) -> None:
-        self.name = value
-
-    # built explicitly: the deprecation wrapper returns a plain function, so it
-    # cannot be composed with @property/@x.setter (type checkers lose the setter)
-    page_name = property(
-        deprecation.deprecated(
-            deprecated_in="v0.5.0", removed_in="1.0.0", current_version=vsdxkit.__version__, details="Use Page.name instead"
-        )(_get_page_name),
-        deprecation.deprecated(
-            deprecated_in="v0.5.0", removed_in="1.0.0", current_version=vsdxkit.__version__, details="Use Page.name instead"
-        )(_set_page_name),
-        doc="Deprecated alias for :attr:`Page.name`.",
-    )
 
     @property
     def is_master_page(self) -> bool:
@@ -375,34 +343,25 @@ class Page:
     @property
     def shapes(self) -> ShapeCollection:
         """Every shape on the page, at any depth, connectors included: depth first, parents first."""
-        return ShapeCollection(lambda: self.all_shapes, self._scope)
+        return ShapeCollection(self._descendants, self._scope)
 
     @property
     def children(self) -> ShapeCollection:
         """The page's top-level shapes."""
-        return ShapeCollection(lambda: self.child_shapes, self._scope)
+        return ShapeCollection(self._children, self._scope)
+
+    def _children(self) -> list[Shape]:
+        """What :attr:`children` holds, as a list, for the library's own walks."""
+        root = self.xml.getroot()
+        return [] if root is None else _wrap_children(root, self, self)
+
+    def _descendants(self) -> list[Shape]:
+        """What :attr:`shapes` holds, as a list, for the library's own walks."""
+        root = self.xml.getroot()
+        return [] if root is None else _wrap_descendants(root, self, self)
 
     def _scope(self) -> str:
         return f"page {self.name!r}"
-
-    @deprecation.deprecated(
-        deprecated_in="0.5.0",
-        removed_in="1.0.0",
-        current_version=vsdxkit.__version__,
-        details="Use Page.child_shapes property to access top level shapes of a Page",
-    )
-    def sub_shapes(self) -> list[Shape]:
-        return self.child_shapes
-
-    @property
-    def child_shapes(self) -> list[Shape]:
-        """Return list of Shape objects at top level of Document.Page
-
-        :returns: list of `Shape` objects
-        :rtype: List[Shape]
-        """
-        root = self.xml.getroot()
-        return [] if root is None else _wrap_children(root, self, self)
 
     def _set_max_ids(self) -> None:
         """Raise this page's ID high-water mark to cover every shape now on it.
@@ -497,93 +456,12 @@ class Page:
         return connects
 
     def apply_text_context(self, context: dict[str, object]) -> None:
-        for shape in self.child_shapes:
+        for shape in self._children():
             shape.apply_text_filter(context)
 
     def find_replace(self, old: str, new: str) -> None:
-        for shape in self.child_shapes:
+        for shape in self._children():
             shape.find_replace(old, new)
-
-    @property
-    def all_shapes(self) -> list[Shape]:
-        """Every shape on the page, at any depth, depth first and parents first."""
-        root = self.xml.getroot()
-        return [] if root is None else _wrap_descendants(root, self, self)
-
-    def find_shape_by_id(self, shape_id: str) -> Shape | None:
-        """The first shape on the page with this ID, or None. Deprecated: use ``page.shapes.by_id(shape_id)``."""
-        retired_finders.warn("Page.find_shape_by_id", "page.shapes.by_id(shape_id)")
-        return retired_finders.first_by_id(self.shapes, shape_id)
-
-    def find_shapes_by_id(self, shape_id: str) -> list[Shape]:
-        """Every shape on the page with this ID. Deprecated: IDs are unique on a page, so use ``page.shapes.by_id(shape_id)``."""
-        retired_finders.warn("Page.find_shapes_by_id", "page.shapes.by_id(shape_id)")
-        return retired_finders.all_by_id(self.shapes, shape_id)
-
-    def find_shape_by_attr(self, attr: str, attr_value: str) -> Shape | None:
-        """The first shape on the page whose XML attribute `attr` is `attr_value`, or None. Deprecated."""
-        retired_finders.warn("Page.find_shape_by_attr", "a comprehension over page.shapes")
-        return retired_finders.first_by_attr(self.shapes, attr, attr_value)
-
-    def find_shape_by_text(self, text: str) -> Shape | None:
-        """The first shape on the page whose text contains `text`, or None.
-
-        Deprecated: ``page.shapes.by_text(text)`` matches the whole text and refuses
-        more than one match; for a substring, filter ``page.shapes`` directly.
-        """
-        retired_finders.warn("Page.find_shape_by_text", "page.shapes.by_text(text), which matches the whole text")
-        return retired_finders.first_by_text(self.shapes, text)
-
-    def find_shapes_by_text(self, text: str) -> list[Shape]:
-        """Every shape on the page whose text contains `text`.
-
-        Deprecated: ``page.shapes.matching_text(text)`` matches the whole text; for a
-        substring, filter ``page.shapes`` directly.
-        """
-        retired_finders.warn("Page.find_shapes_by_text", "page.shapes.matching_text(text), which matches the whole text")
-        return retired_finders.all_by_text(self.shapes, text)
-
-    def find_shapes_by_regex(self, regex: str) -> list[Shape]:
-        """Every shape on the page whose text `regex` matches. Deprecated: filter ``page.shapes`` directly."""
-        retired_finders.warn("Page.find_shapes_by_regex", "a comprehension over page.shapes")
-        return retired_finders.all_by_regex(self.shapes, regex)
-
-    def find_shape_by_property_label(self, property_label: str) -> Shape | None:
-        """The first shape on the page with this Shape Data label, or None. Deprecated: use ``page.shapes.by_property(label)``."""
-        retired_finders.warn("Page.find_shape_by_property_label", "page.shapes.by_property(label)")
-        return retired_finders.first_by_property(self.shapes, property_label)
-
-    def find_shapes_by_property_label(self, property_label: str, shapes: list[Shape] | None = None) -> list[Shape]:
-        """Every shape on the page with this Shape Data label. Deprecated: use ``page.shapes.matching_property(label)``.
-
-        `shapes` was never read, and still is not.
-        """
-        retired_finders.warn("Page.find_shapes_by_property_label", "page.shapes.matching_property(label)")
-        return retired_finders.all_by_property(self.shapes, property_label)
-
-    def find_shape_by_property_label_value(self, property_label: str, property_value: str) -> Shape | None:
-        """The first shape on the page whose property `property_label` is `property_value`, or None.
-
-        Deprecated: use ``page.shapes.by_property(label, value)``.
-        """
-        retired_finders.warn("Page.find_shape_by_property_label_value", "page.shapes.by_property(label, value)")
-        return retired_finders.first_by_property(self.shapes, property_label, property_value)
-
-    def find_shapes_by_property_label_value(
-        self, property_label: str, property_value: str, shapes: list[Shape] | None = None
-    ) -> list[Shape]:
-        """Every shape on the page whose property `property_label` is `property_value`.
-
-        Deprecated: use ``page.shapes.matching_property(label, value)``. `shapes` was
-        never read, and still is not.
-        """
-        retired_finders.warn("Page.find_shapes_by_property_label_value", "page.shapes.matching_property(label, value)")
-        return retired_finders.all_by_property(self.shapes, property_label, property_value)
-
-    def find_shapes_with_same_master(self, shape: Shape) -> list[Shape]:
-        """Every shape on the page instancing `shape`'s master shape. Deprecated: filter ``page.shapes`` directly."""
-        retired_finders.warn("Page.find_shapes_with_same_master", "a comprehension over page.shapes")
-        return retired_finders.all_by_master(self.shapes, shape.master_page_ID, shape.master_shape_ID)
 
     def connect(
         self,
@@ -730,7 +608,7 @@ class Page:
         # both answers in one pass.
         on_this_page: list[Shape] = []
         id_is_taken_by_another_shape = False
-        for candidate in self.all_shapes:
+        for candidate in self._descendants():
             if candidate.xml is shape.xml:
                 on_this_page.append(candidate)
             elif str(candidate.ID) == shape_id:
@@ -747,7 +625,7 @@ class Page:
             raise NotFoundError(f"shape ID {shape.ID} is not on page {self.name!r}{collision}")
         # every id that is about to disappear: the shape and, for a group,
         # everything it contains
-        self._delete(on_this_page, {shape_id} | {str(s.ID) for s in shape.all_shapes})
+        self._delete(on_this_page, {shape_id} | {str(s.ID) for s in shape._descendants()})
 
     def _delete(self, shapes: Iterable[Shape], gone_ids: set[str]) -> None:
         """The one deletion: `shapes`, the connectors glued to any of `gone_ids`, and every record naming them.
@@ -761,7 +639,7 @@ class Page:
         # of the shapes going, on a begin/end relationship
         connector_ids = {c.from_id for c in self.connects if c.to_id in gone_ids and c.from_rel in ("BeginX", "EndX")}
         doomed = set(shapes)
-        for s in self.all_shapes:
+        for s in self._descendants():
             # the master too: a connector may inherit BeginX from it, and one
             # missed here survives as a detached line whose glue record has just
             # been removed

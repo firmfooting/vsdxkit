@@ -15,6 +15,7 @@ from vsdxkit.errors import InvalidOperationError, NotFoundError, PackageError
 from vsdxkit.shapes import ShapeCollection
 
 BASEDIR = os.path.dirname(os.path.realpath(__file__))
+NS = "{http://schemas.microsoft.com/office/visio/2012/main}"
 
 
 def _ids(shapes) -> list[str]:
@@ -27,17 +28,29 @@ def _fixtures() -> list[str]:
     )
 
 
+def _xml_children(element) -> list[str]:
+    """The IDs of the shapes in `element`'s own ``<Shapes>``, read straight from the XML."""
+    container = element.find(f"{NS}Shapes")
+    return [] if container is None else [child.attrib.get("ID") for child in container.findall(f"{NS}Shape")]
+
+
+def _xml_descendants(element) -> list[str]:
+    """The IDs of every shape below `element`, depth first and parents first, read straight from the XML."""
+    return [shape.attrib.get("ID") for shape in element.iter(f"{NS}Shape") if shape is not element]
+
+
 @pytest.mark.parametrize("fixture", _fixtures())
-def test_every_scope_holds_what_its_walk_holds(fixture):
-    """Fails if a collection's members disagree with the traversal it is scoped to, on any fixture page."""
+def test_every_scope_holds_what_its_xml_holds(fixture):
+    """Fails if a collection's members or their order disagree with its scope in the XML, on any fixture page."""
     vis = Document.open(os.path.join(BASEDIR, fixture))
     for page in vis.pages:
-        assert _ids(page.children) == _ids(page.child_shapes)
-        assert _ids(page.shapes) == _ids(page.all_shapes)
-        assert len(page.shapes) == len(page.all_shapes)
-        for shape in page.all_shapes:
-            assert _ids(shape.children) == _ids(shape.child_shapes)
-            assert _ids(shape.descendants) == _ids(shape.all_shapes)
+        root = page.xml.getroot()
+        assert _ids(page.children) == _xml_children(root)
+        assert _ids(page.shapes) == _xml_descendants(root)
+        assert len(page.shapes) == len(_xml_descendants(root))
+        for shape in page.shapes:
+            assert _ids(shape.children) == _xml_children(shape.xml)
+            assert _ids(shape.descendants) == _xml_descendants(shape.xml)
 
 
 def test_every_scope_is_a_shape_collection(basedir):

@@ -75,19 +75,19 @@ def test_insert_shape_allocates_an_id_the_page_is_not_using(vsdx_copy, tmp_path)
     vis = Document.open(filename)
     page = vis.pages[0]
     shapes = page.xml.getroot().find(f"{namespace}Shapes")
-    ids_before = [s.ID for s in page.all_shapes]
+    ids_before = [s.ID for s in page.shapes]
 
     vis.insert_shape(shape, shapes, page, page.filename)
 
     new_id = shape.attrib["ID"]
     assert new_id not in ids_before
-    ids_after = [s.ID for s in page.all_shapes]
+    ids_after = [s.ID for s in page.shapes]
     assert sorted(ids_after) == sorted([*ids_before, new_id])
     vis.save(out_file)
 
     vis = Document.open(out_file)
     page = vis.pages[0]
-    ids = [s.ID for s in page.all_shapes]
+    ids = [s.ID for s in page.shapes]
     assert new_id in ids
     assert len(ids) == len(set(ids))
 
@@ -528,7 +528,7 @@ def test_vis_copy_shape(filename: str, shape_name: str, tmp_path, basedir):
     s = page.shapes.by_text(shape_name)  # type: Shape
     assert s  # check shape found
     print(f"Found shape id:{s.ID}")
-    max_id = max(int(existing.ID) for existing in page.all_shapes)
+    max_id = max(int(existing.ID) for existing in page.shapes)
 
     # note = this does add the shape, but prefer Shape.copy() as per next test which wraps this and returns Shape
     new_shape = vis.copy_shape(shape=s.xml, page=page)

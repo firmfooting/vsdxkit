@@ -28,7 +28,7 @@ def _grow(page: Page, target: int) -> None:
     shapes = page.xml.getroot().find(f"{namespace}Shapes")
     originals = list(shapes)
     next_id = 10_000
-    while len(page.all_shapes) < target:
+    while len(page.shapes) < target:
         for original in originals:
             clone = copy.deepcopy(original)
             for element in clone.iter(f"{namespace}Shape"):
@@ -39,23 +39,23 @@ def _grow(page: Page, target: int) -> None:
 
 def _workloads(page: Page) -> dict[str, Callable[[], object]]:
     def walk() -> object:
-        return [shape.ID for shape in page.all_shapes]
+        return [shape.ID for shape in page.shapes]
 
     def geometry() -> object:
-        return [(s.x, s.y, s.width, s.height, s.text) for s in page.all_shapes]
+        return [(s.x, s.y, s.width, s.height, s.text) for s in page.shapes]
 
     def reread() -> object:
-        shapes = page.all_shapes
+        shapes = list(page.shapes)
         return [(s.x, s.y, s.width, s.height) for _ in range(10) for s in shapes]
 
     def cells() -> object:
-        return [len(s.cells) for s in page.all_shapes]
+        return [len(s.cells) for s in page.shapes]
 
     def properties() -> object:
-        return [len(s.data_properties) for s in page.all_shapes]
+        return [len(s.data_properties) for s in page.shapes]
 
     def reproperties() -> object:
-        shapes = page.all_shapes
+        shapes = list(page.shapes)
         return [len(s.data_properties) for _ in range(10) for s in shapes]
 
     def background() -> object:
@@ -82,7 +82,7 @@ def _best(work: Callable[[], object]) -> float:
 
 
 def _report(label: str, page: Page) -> None:
-    print(f"{label}: {len(page.all_shapes)} shapes")
+    print(f"{label}: {len(page.shapes)} shapes")
     for name, work in _workloads(page).items():
         print(f"  {name:<18} {_best(work) * 1000:9.2f} ms")
 

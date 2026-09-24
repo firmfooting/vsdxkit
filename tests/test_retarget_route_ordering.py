@@ -22,10 +22,10 @@ def test_a_refused_retarget_keeps_connect_records(vsdx_copy, tmp_path):
     output = os.path.join(str(tmp_path), "after-rejected-retarget.vsdx")
     vis = Document.open(path)
     page = vis.pages[0]
-    connectors = [s for s in page.all_shapes if "BeginX" in s.cells]
+    connectors = [s for s in page.shapes if "BeginX" in s.cells]
     assert connectors
     connector = connectors[0]
-    other = next(s for s in page.all_shapes if "BeginX" not in s.cells)
+    other = next(s for s in page.shapes if "BeginX" not in s.cells)
     records_before = sorted((c.from_id, c.to_id, c.from_rel) for c in page.connects)
     with pytest.raises(InvalidOperationError, match="connection point"):
         connector.retarget(target=other, options=ConnectorOptions(glue=Glue.POINT, to_point=99))

@@ -50,7 +50,7 @@ def test_visiodiff_detects_added_connector(vsdx_copy, tmp_path):
     filepath_b = os.path.join(str(tmp_path), "with_connector.vsdx")
     vis = Document.open(filepath_a)
     page = vis.pages[0]
-    shapes = page.all_shapes
+    shapes = list(page.shapes)
     assert len(shapes) >= 2
     page.connect(shapes[0], shapes[1])
     vis.save(filepath_b)

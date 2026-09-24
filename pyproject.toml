@@ -12,7 +12,6 @@ authors = [{ name = "Firm Footing" }]
 requires-python = ">=3.10"
 dependencies = [
     "Jinja2>=3.1.6",
-    "deprecation>=2.1.0",
     "typing-extensions>=4.4.0; python_version < '3.12'",
 ]
 dynamic = ["version"]

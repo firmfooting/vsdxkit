@@ -84,7 +84,7 @@ def test_copy_places_the_copy_after_its_page_unless_told_otherwise(vsdx_copy, tm
     after = vis.pages.copy(original, name="Copy after")
     at_end = vis.pages.copy(original, name="Copy at end", index=len(vis.pages))
     assert _names(vis) == ["Page-1", "Copy after", "Page-2", "Page-3", "Copy at end"]
-    assert len(after.child_shapes) == len(original.child_shapes) == len(at_end.child_shapes)
+    assert len(after.children) == len(original.children) == len(at_end.children)
     vis.save(saved)
 
 

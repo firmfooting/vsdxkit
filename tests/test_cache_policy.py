@@ -73,12 +73,12 @@ def test_a_master_added_after_a_shape_missed_it_is_resolved(vsdx_copy):
     target_path = vsdx_copy("test1.vsdx")
     source = Document.open(source_path)
     rehearsal = Document.open(target_path)
-    instance = next(shape for shape in source.pages[0].all_shapes if shape.xml.attrib.get("Master"))
+    instance = next(shape for shape in source.pages[0].shapes if shape.xml.attrib.get("Master"))
     imported_id = instance.copy(rehearsal.pages[0]).master_page_ID
 
     source = Document.open(source_path)
     target = Document.open(target_path)
-    instance = next(shape for shape in source.pages[0].all_shapes if shape.xml.attrib.get("Master"))
+    instance = next(shape for shape in source.pages[0].shapes if shape.xml.attrib.get("Master"))
     waiting = target.pages[0].shapes.require_id("1")
     waiting.master_page_ID = imported_id
     assert waiting.master_shape is None

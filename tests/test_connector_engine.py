@@ -118,13 +118,13 @@ def test_a_routing_string_fails_before_mutating_page(basedir):
     source = page.shapes.by_text("Shape A")
     target = page.shapes.by_text("Shape B")
     assert source is not None and target is not None
-    before_shapes = len(page.all_shapes)
+    before_shapes = len(page.shapes)
     before_connects = len(page.connects)
 
     with pytest.raises(TypeError, match="routing must be one of"):
         page.connect(source, target, routing="curved")  # type: ignore[arg-type]
 
-    assert len(page.all_shapes) == before_shapes
+    assert len(page.shapes) == before_shapes
     assert len(page.connects) == before_connects
 
 
@@ -166,7 +166,7 @@ def test_delete_shape_cascades_connectors(basedir):
         page = vis2.pages[0]
         # shape 2 and both connectors attached to it (6 and 7) are gone
         assert page.shapes.by_id("2") is None
-        remaining_ids = {str(s.ID) for s in page.all_shapes}
+        remaining_ids = {str(s.ID) for s in page.shapes}
         assert "6" not in remaining_ids
         assert "7" not in remaining_ids
         # no Connect records may reference removed shapes
@@ -198,7 +198,7 @@ def test_master_import_on_own_masters_document(tmp_path, basedir):
     vis2 = Document.open(src)
     page = vis2.pages[0]
     assert _any_shape_containing(page.shapes, "") is not None  # reopen is valid
-    connectors = [s for s in page.all_shapes if "BeginX" in s.cells]
+    connectors = [s for s in page.shapes if "BeginX" in s.cells]
     assert len(connectors) == 1
 
 

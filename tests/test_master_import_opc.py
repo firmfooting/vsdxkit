@@ -287,7 +287,7 @@ def test_import_survives_masters_declared_with_no_masters_parts(vsdx_copy):
 
         vis = Document.open(crafted_path)
         page = vis.pages[0]
-        shapes = page.child_shapes
+        shapes = list(page.children)
         connector = page.connect(shapes[0], shapes[1])
         master_id = connector.xml.attrib["Master"]
         document = os.path.join(os.path.dirname(crafted_path), "reopened.vsdx")
@@ -324,7 +324,7 @@ def test_a_source_master_that_cannot_be_read_fails_before_the_target_changes(vsd
     """
     source = Document.open(vsdx_copy("test4_connectors.vsdx"))
     target = Document.open(vsdx_copy("test1.vsdx"))
-    shape = next(shape for shape in source.pages[0].all_shapes if shape.xml.attrib.get("Master"))
+    shape = next(shape for shape in source.pages[0].shapes if shape.xml.attrib.get("Master"))
     before = target._package.names()
     monkeypatch.setattr(source._package, "read_bytes", lambda name: None)
     with pytest.raises(ValueError, match="could not be read"):

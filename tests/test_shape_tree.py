@@ -151,7 +151,7 @@ def test_connector_classification_agrees_with_visio(scenario):
     """Fails if any shape Visio reported as 1-D (or not) is classified the other way."""
     path = os.path.join(BASEDIR, "fixtures", "com_reference", scenario["file"])
     vis = Document.open(path)
-    shapes = {shape.ID: shape for page in vis.pages for shape in page.all_shapes}
+    shapes = {shape.ID: shape for page in vis.pages for shape in page.shapes}
     for expected in scenario["shapes"]:
         shape = shapes[str(expected["id"])]
         master = shape.master_shape

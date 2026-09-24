@@ -6,7 +6,6 @@ import os
 import posixpath
 import re
 import sys
-import warnings
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import NamedTuple
@@ -1052,20 +1051,6 @@ class Document(JinjaTemplatingMixin):
         )
 
         return new_page
-
-    def get_sub_shapes(self, shape: Element, nth: int = 1) -> Element | None:
-        """The `nth` ``<Shapes>`` element directly inside `shape`, or None. Deprecated; nothing here uses it."""
-        warnings.warn(
-            "Document.get_sub_shapes() is deprecated and will be removed in 1.0.0. "
-            "Use Shape.children for the shapes inside a group.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        for e in shape:
-            if "Shapes" in e.tag:
-                nth -= 1
-                if not nth:
-                    return e
 
     @staticmethod
     def get_shape_location(shape: Element) -> tuple[float, float]:

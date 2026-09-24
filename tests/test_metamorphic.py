@@ -114,13 +114,13 @@ def _shape_ids(source: str) -> dict[int, list[int]]:
 
     Read through the library rather than from an observation because the two
     disagree by design: an observation drops shapes marked `Del="1"`, which the
-    page still holds and `Page.all_shapes` still returns. Deleting by position
+    page still holds and `Page.shapes` still returns. Deleting by position
     off the shorter list would delete a different shape than the one the
     expectation was built for, so the position and the id have to come from the
     same list.
     """
     vis = Document.open(source)
-    return {index: [int(shape.ID) for shape in page.all_shapes] for index, page in enumerate(vis.pages)}
+    return {index: [int(shape.ID) for shape in page.shapes] for index, page in enumerate(vis.pages)}
 
 
 def _page_part_names(source: str) -> dict[int, str]:
@@ -308,7 +308,7 @@ def _copy_first_shape(page_index: int) -> Callable[[Document], None]:
     """Copy the first top-level shape of a page - the edit that draws on its id allocator."""
 
     def edit(vis: Document) -> None:
-        vis.pages[page_index].child_shapes[0].copy()
+        next(iter(vis.pages[page_index].children)).copy()
 
     return edit
 
@@ -414,7 +414,7 @@ def test_copying_a_shape_and_deleting_the_copy_restores_the_package(package_path
 
     def copy_then_delete(vis: Document) -> None:
         page = vis.pages[0]
-        copy = page.child_shapes[0].copy()
+        copy = next(iter(page.children)).copy()
         assert int(copy.ID) not in pages[0], "the copy reused an id the page was already using"
         page.delete_shape(copy)
 
@@ -449,13 +449,13 @@ def test_deleting_a_copy_made_before_the_last_save_restores_the_package(package_
 
     def copy_a_shape(vis: Document) -> None:
         nonlocal copied_id
-        copied_id = int(vis.pages[0].child_shapes[0].copy().ID)
+        copied_id = int(next(iter(vis.pages[0].children)).copy().ID)
 
     with_copy = _saved(source, _output(tmp_path, package_path, "with-copy"), copy_a_shape)
 
     def delete_the_copy(vis: Document) -> None:
         page = vis.pages[0]
-        reopened = [shape for shape in page.all_shapes if int(shape.ID) == copied_id]
+        reopened = [shape for shape in page.shapes if int(shape.ID) == copied_id]
         assert reopened, f"the copy with id {copied_id} is not on page 1 after the save"
         page.delete_shape(reopened[0])
 
@@ -472,7 +472,7 @@ def test_deleting_a_copy_made_before_the_last_save_restores_the_package(package_
     )
 
     vis = Document.open(restored)
-    next_id = int(vis.pages[0].child_shapes[0].copy().ID)
+    next_id = int(next(iter(vis.pages[0].children)).copy().ID)
     assert next_id == copied_id, (
         f"the next copy on page 1 of {package_path} got id {next_id}, not the {copied_id} the deleted "
         "copy had: the id mark rebuilt from the file is not where it was"
@@ -592,7 +592,7 @@ def test_deleting_a_shape_removes_exactly_it(package_path, vsdx_copy, tmp_path):
 
             def delete(vis: Document, page_index=page_index, position=position, shape_id=shape_id) -> None:
                 page = vis.pages[page_index]
-                target = page.all_shapes[position]
+                target = list(page.shapes)[position]
                 # the position and the id were read off the same list in an
                 # earlier session; if they have come apart, this deletes a shape
                 # the expectation below was not built for

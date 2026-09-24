@@ -31,7 +31,7 @@ def test_open_and_save_is_byte_identical(fixture, vsdx_copy, tmp_path):
     target = tmp_path / f"out{os.path.splitext(fixture)[1]}"
     vis = Document.open(source)
     for page in vis.pages:  # read every shape, promoting nothing new but walking the trees
-        _ = [shape.text for shape in page.all_shapes]
+        _ = [shape.text for shape in page.shapes]
     vis.save(str(target))
     assert _members(target) == _members(source)
 

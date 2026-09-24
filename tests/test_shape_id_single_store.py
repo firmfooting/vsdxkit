@@ -92,8 +92,8 @@ def test_deleting_a_renumbered_shape_takes_its_connectors_with_it(vsdx_copy, tmp
 def test_the_master_a_shape_names_is_read_from_its_element(vsdx_copy):
     """`Master` and `MasterShape` were cached alongside `ID`, and now read the same way."""
     vis = Document.open(vsdx_copy("test5_master.vsdx"))
-    shape = next(s for s in vis.pages[0].all_shapes if s.master_page_ID)
-    master_shape = next(s for s in vis.pages[0].all_shapes if s.master_shape_ID)
+    shape = next(s for s in vis.pages[0].shapes if s.master_page_ID)
+    master_shape = next(s for s in vis.pages[0].shapes if s.master_shape_ID)
 
     shape.xml.attrib["Master"] = "999"
     master_shape.xml.attrib["MasterShape"] = "998"
@@ -110,7 +110,7 @@ def test_repointing_a_shape_at_a_master_writes_the_element(vsdx_copy):
     master back rather than None.
     """
     vis = Document.open(vsdx_copy("test5_master.vsdx"))
-    shape = next(s for s in vis.pages[0].child_shapes if "Master" in s.xml.attrib)
+    shape = next(s for s in vis.pages[0].children if "Master" in s.xml.attrib)
 
     shape.master_page_ID = "3"
     assert shape.xml.attrib["Master"] == "3"
@@ -125,12 +125,12 @@ def test_a_sub_shape_inherits_the_master_of_whichever_group_holds_it(vsdx_copy):
 
     `append_shape` re-parents the object as well as the element. Resolved once
     at construction, the held shape kept reporting the master it had before the
-    move while `page.all_shapes` reported the new one.
+    move while `page.shapes` reported the new one.
     """
     vis = Document.open(vsdx_copy("test3_house.vsdx"))
     page = vis.pages[0]
-    group = next(s for s in page.all_shapes if s.shape_type == "Group" and "Master" in s.xml.attrib)
-    loose = next(s for s in page.child_shapes if s is not group and "Master" not in s.xml.attrib)
+    group = next(s for s in page.shapes if s.shape_type == "Group" and "Master" in s.xml.attrib)
+    loose = next(s for s in page.children if s is not group and "Master" not in s.xml.attrib)
 
     group.append_shape(loose)
 
@@ -141,7 +141,7 @@ def test_a_sub_shape_inherits_the_master_of_whichever_group_holds_it(vsdx_copy):
 def test_a_shape_cannot_be_appended_into_itself(vsdx_copy):
     """Otherwise the element becomes its own descendant and every walk recurses."""
     vis = Document.open(vsdx_copy("test3_house.vsdx"))
-    group = next(s for s in vis.pages[0].all_shapes if s.shape_type == "Group")
+    group = next(s for s in vis.pages[0].shapes if s.shape_type == "Group")
 
     with pytest.raises(ValueError, match="cannot be placed inside"):
         group.append_shape(group)

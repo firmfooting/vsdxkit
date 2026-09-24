@@ -615,7 +615,7 @@ def test_geometry_is_built_on_first_read_not_when_the_shape_is_built(monkeypatch
     monkeypatch.setattr(vsdxkit.shapes, "Geometry", CountedGeometry)
 
     vis = Document.open(TEST9)
-    shapes = vis.pages[0].all_shapes
+    shapes = list(vis.pages[0].shapes)
 
     assert shapes and built == []
 
@@ -666,7 +666,7 @@ def test_the_section_is_located_when_the_shape_is_built():
 def test_repointing_a_shape_at_a_master_drops_the_memo():
     """`master_page_ID` is writable, and `Connect.create` repoints it."""
     vis = Document.open(os.path.join(FIXTURES, "test4_connectors.vsdx"))
-    shapes = vis.pages[0].all_shapes
+    shapes = list(vis.pages[0].shapes)
     mastered = next(s for s in shapes if s.master_page_ID)
     masterless = next(s for s in shapes if not s.master_page_ID)
     assert masterless.master_shape is None  # resolved, and would be memoised as None
@@ -680,10 +680,10 @@ def test_a_cell_added_to_the_master_is_picked_up_by_a_shape_holding_it():
     """The memo is keyed on the master element's children, not taken on trust."""
     vis = Document.open(os.path.join(FIXTURES, "test5_master.vsdx"))
     page = vis.pages[0]
-    shape = next(s for s in page.all_shapes if s.master_page_ID)
+    shape = next(s for s in page.shapes if s.master_page_ID)
     master_page = shape.master_page
     assert shape.cell_value("LockDelete") is None
 
-    master_page.child_shapes[0].set_cell_value("LockDelete", 1)
+    next(iter(master_page.children)).set_cell_value("LockDelete", 1)
 
     assert shape.cell_value("LockDelete") == "1"

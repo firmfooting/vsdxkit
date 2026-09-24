@@ -54,7 +54,7 @@ def test_no_output_on_default_configuration(vsdx_copy, capsys):
     """Default config: NullHandler only; nothing reaches stdout/stderr."""
     path = vsdx_copy(BASE)
     vis = Document.open(path)
-    vis.pages[0].delete_shape(vis.pages[0].all_shapes[0])
+    vis.pages[0].delete_shape(next(iter(vis.pages[0].shapes)))
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == ""

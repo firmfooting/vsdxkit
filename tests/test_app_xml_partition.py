@@ -220,7 +220,7 @@ def test_the_imported_master_is_named_and_counted_in_the_masters_section(vsdx_co
 def test_a_document_with_no_masters_heading_gains_one_with_its_first_master(vsdx_copy, tmp_path):
     vis = Document.open(vsdx_copy("test8_simple_connector.vsdx"))
     page = vis.pages[0]
-    page.connect(page.child_shapes[0], page.child_shapes[1])
+    page.connect(next(iter(page.children)), list(page.children)[1])
     saved = _saved(vis, tmp_path, "simple-connected.vsdx")
 
     sections = _sections(_app_xml(saved))
@@ -238,7 +238,7 @@ def test_a_master_is_listed_even_when_a_page_is_called_the_same_thing(vsdx_copy,
     vis = Document.open(vsdx_copy("test8_simple_connector.vsdx"))
     page = vis.pages[0]
     page.name = "Dynamic connector"
-    page.connect(page.child_shapes[0], page.child_shapes[1])
+    page.connect(next(iter(page.children)), list(page.children)[1])
     saved = _saved(vis, tmp_path, "namesake-page.vsdx")
 
     sections = _sections(_app_xml(saved))

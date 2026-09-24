@@ -59,7 +59,7 @@ def test_master_inheritance(filename: str, basedir):
     assert shape_a.height == 0.75
 
     # test inheritance for subshapes
-    sub_shape_a = shape_a.child_shapes[0]
+    sub_shape_a = next(iter(shape_a.children))
     assert sub_shape_a.cell_value("LineWeight") == "0.01875"
 
 
@@ -70,7 +70,7 @@ def test_set_master_child_property(filename: str, tmp_path, basedir):
     vis = Document.open(os.path.join(basedir, filename))
     page = vis.get_page(0)
     # find shape with master and set a child property
-    sub_shape_b = page.shapes.by_text("Shape B").child_shapes[0]
+    sub_shape_b = next(iter(page.shapes.require_text("Shape B").children))
 
     sub_shape_b.line_weight = 0.5
 
@@ -79,7 +79,7 @@ def test_set_master_child_property(filename: str, tmp_path, basedir):
     vis = Document.open(out_file)
     page = vis.get_page(0)
 
-    sub_shape_b = page.shapes.by_text("Shape B").child_shapes[0]
+    sub_shape_b = next(iter(page.shapes.require_text("Shape B").children))
     assert sub_shape_b.master_shape  # shape has a master
     assert sub_shape_b.line_weight == 0.5  # child shape has value set
 
@@ -91,7 +91,7 @@ def test_master_property_change_is_inherited(filename: str, weight, tmp_path, ba
     vis = Document.open(os.path.join(basedir, filename))
     page = vis.get_page(0)
 
-    sub_shape_a = page.shapes.by_text("Shape A").child_shapes[0]
+    sub_shape_a = next(iter(page.shapes.require_text("Shape A").children))
     master = sub_shape_a.master_shape
     master.line_weight = weight
 
@@ -100,8 +100,8 @@ def test_master_property_change_is_inherited(filename: str, weight, tmp_path, ba
     vis = Document.open(out_file)
     page = vis.get_page(0)
 
-    sub_shape_a = page.shapes.by_text("Shape A").child_shapes[0]
-    sub_shape_b = page.shapes.by_text("Shape B").child_shapes[0]
+    sub_shape_a = next(iter(page.shapes.require_text("Shape A").children))
+    sub_shape_b = next(iter(page.shapes.require_text("Shape B").children))
 
     # check that both sub_shape values have changed based on master
     assert sub_shape_a.line_weight == weight
@@ -116,7 +116,7 @@ def test_child_property_change_is_not_inherited(filename: str, weight, tmp_path,
     page = vis.get_page(0)
 
     shape_a = page.shapes.by_text("Shape A")
-    sub_shape_a = shape_a.child_shapes[0]
+    sub_shape_a = next(iter(shape_a.children))
     master = sub_shape_a.master_shape
     original_master_weight = master.line_weight
     # increment child property to ensure child and master are not the same
@@ -128,7 +128,7 @@ def test_child_property_change_is_not_inherited(filename: str, weight, tmp_path,
     vis = Document.open(out_file)
     page = vis.get_page(0)
 
-    sub_shape_a = page.shapes.by_text("Shape A").child_shapes[0]
+    sub_shape_a = next(iter(page.shapes.require_text("Shape A").children))
     master = sub_shape_a.master_shape
 
     # check that child shape has changed to expected value
@@ -280,7 +280,7 @@ def test_master_inheritance_master_shape_set_text(
 def test_get_text_from_master_shape(filename: str, shape_id: str, expected_text: str, basedir):
     vis = Document.open(os.path.join(basedir, filename))
     # print out ID and text for all shapes in first page
-    for s in vis.pages[0].all_shapes:
+    for s in vis.pages[0].shapes:
         print(f"ID={s.ID} text='{s.text}'")
 
     child_shape = vis.pages[0].shapes.require_id(shape_id)
