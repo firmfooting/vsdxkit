@@ -501,6 +501,16 @@ def _wrap_descendants(element: Element, parent: Page | Shape, page: Page) -> lis
     return shapes
 
 
+def _as_shape(end: object) -> Shape:
+    """An end the connector engine found, which is always one of this module's shapes.
+
+    The engine looks ends up in ``page.shapes``, so the narrowing never fails.
+    """
+    if not isinstance(end, Shape):
+        raise TypeError(f"expected a vsdxkit Shape, got {type(end).__name__}")
+    return end
+
+
 class Shape:
     """Represents a single shape, or a group shape containing other shapes"""
 
@@ -1740,14 +1750,14 @@ class Connector(Shape):
         """The shape the connector's begin end is glued to, or None when that end is floating."""
         self._require_attached("Connector.source")
         begin, _ = _glued_ends(self)
-        return None if begin is None else begin[0]
+        return None if begin is None else _as_shape(begin[0])
 
     @property
     def target(self) -> Shape | None:
         """The shape the connector's end is glued to, or None when that end is floating."""
         self._require_attached("Connector.target")
         _, end = _glued_ends(self)
-        return None if end is None else end[0]
+        return None if end is None else _as_shape(end[0])
 
     def retarget(
         self,

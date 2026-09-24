@@ -20,14 +20,29 @@ Model (verified against the capture):
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
-from typing import TYPE_CHECKING
+from typing import Protocol
 
 from vsdxkit import namespace
 from vsdxkit.errors import InvalidOperationError
-from vsdxkit.shapes import Shape, is_connector
+from vsdxkit.shapes import Shape, ShapeCollection, is_connector
 
-if TYPE_CHECKING:
-    from vsdxkit.pages import Page
+
+class _DiagramPage(Protocol):
+    """What a swimlane diagram needs from its page.
+
+    The page sits above this module, so the diagram names only what it reads:
+    the top-level shapes it finds the container and lanes among, the name its
+    messages give, and whether the page is still in its document.
+    """
+
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def children(self) -> ShapeCollection: ...
+
+    def _attached(self) -> bool: ...
+
 
 # observed lane pitch in the Visio 16 CFF capture (inches)
 LANE_PITCH_INCHES = 1.18110236220472
@@ -131,7 +146,7 @@ def _heading(lane: Shape) -> Shape | None:
     return None
 
 
-def _diagram_on(page: Page) -> SwimlaneDiagram | None:
+def _diagram_on(page: _DiagramPage) -> SwimlaneDiagram | None:
     """The page's swimlane diagram, None where it has no CFF container.
 
     :raises InvalidOperationError: the page has more than one
