@@ -58,7 +58,7 @@ def _is_one_d(xml: Element, parent: Page | Shape, page: Page) -> bool:
         master_id = parent.master_page_ID
     if master_id is None:
         return False
-    return page._document._master_is_one_d(master_id, xml.attrib.get("MasterShape"))
+    return page._master_is_one_d(master_id, xml.attrib.get("MasterShape"))
 
 
 def _shape_ids(master: Page) -> frozenset[str]:
@@ -764,9 +764,9 @@ class Shape:
             master_ids.insert(0, inherited)
         # resolved, and imported from another document, before the copy: the
         # source still holds the masters its shapes name (#331)
-        masters = dst_page._document._masters_for(master_ids, self._page._document)
-        new_shape_xml = self._page._document.copy_shape(self.xml, dst_page)
-        cross_document = dst_page._document is not self._page._document
+        masters = dst_page._masters_for(master_ids, self._page)
+        new_shape_xml = dst_page._copy_shape_xml(self.xml)
+        cross_document = not dst_page._same_document(self._page)
         # within one document a dangling master is kept, as it is on any other
         # copy; only another document's copy drops it, below
         if inherited and (inherited in masters or not cross_document):
@@ -838,12 +838,12 @@ class Shape:
         """
         master = self._master_shape
         children = None if master is None else tuple(master.xml)
-        return (self.master_page_ID, self.master_shape_ID, self._page._document._master_revision(), children)
+        return (self.master_page_ID, self.master_shape_ID, self._page._master_revision(), children)
 
     def _resolve_master_shape(self) -> Shape | None:
         if self.master_page_ID is None:
             return None  # no master set for this Shape
-        master_page = self._page._document.get_master_page_by_id(self.master_page_ID)
+        master_page = self._page._master_by_id(self.master_page_ID)
         if not master_page:
             return None  # None if no master page set for this Shape
         master_shape = master_page._children()[0]  # there's always a single master shape in a master page
@@ -862,7 +862,7 @@ class Shape:
         """
         if self.master_page_ID is None:
             return None
-        return self._page._document.get_master_page_by_id(self.master_page_ID)
+        return self._page._master_by_id(self.master_page_ID)
 
     @property
     def data_properties(self) -> dict[str, DataProperty]:
@@ -1647,7 +1647,7 @@ class Shape:
         if current_parent is None:
             # New to the page, so it needs ids; a move keeps the ones it has,
             # or every Connect record naming the shape would be left dangling.
-            self._page._document.renumber_shape_ids(append_shape.xml, self._page)
+            self._page._renumber_shape_ids(append_shape.xml)
         else:
             current_parent.remove(append_shape.xml)
         # last, because it creates the <Shapes> element an empty group lacks:

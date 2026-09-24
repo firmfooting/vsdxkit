@@ -417,6 +417,32 @@ class Page:
             target=relationship_target(self.filename, master_part_name),
         )
 
+    # A shape asks its page, and the page asks its document: a shape never
+    # reaches through the page to the document (#114).
+
+    def _master_by_id(self, master_id: str) -> Page | None:
+        return self._document.get_master_page_by_id(master_id)
+
+    def _master_is_one_d(self, master_id: str, master_shape_id: str | None) -> bool:
+        return self._document._master_is_one_d(master_id, master_shape_id)
+
+    def _master_revision(self) -> int:
+        return self._document._master_revision()
+
+    def _masters_for(self, master_ids: list[str], source: Page) -> dict[str, Page]:
+        """This document's master for each of `master_ids`, as `source`'s document numbers them."""
+        return self._document._masters_for(master_ids, source._document)
+
+    def _copy_shape_xml(self, element: ET.Element) -> ET.Element:
+        """A copy of `element` at this page's top level, with IDs unused on this page."""
+        return self._document.copy_shape(element, self)
+
+    def _renumber_shape_ids(self, element: ET.Element, id_map: dict[str, int] | None = None) -> dict[str, int]:
+        return self._document.renumber_shape_ids(element, self, id_map)
+
+    def _same_document(self, other: Page) -> bool:
+        return other._document is self._document
+
     def _rels_root(self) -> ET.Element:
         """This page's `<Relationships>` element, creating the part on demand; assigning it writes it into the package."""
         rels_xml: PartTree | None = self.rels_xml
