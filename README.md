@@ -7,19 +7,19 @@
 
 Create, edit and analyse Microsoft Visio `.vsdx` files with Python. Visio is not required at runtime.
 
-> **0.x API notice.** The 0.x line carries the inherited API and is changing under it: 0.8 alone made seven breaking changes, each listed in the [changelog](CHANGELOG.md). 1.0 renames `VisioFile` to `Document` and `Container` to `SwimlaneDiagram`, splits `Connect` into an internal `ConnectionRecord` and a public `Connector`, and drops the context manager: opening closes the archive before it returns, and `save()` is the only write. The [1.0 design](https://github.com/firmfooting/vsdxkit/blob/main/.hermes/plans/2026-09-12_simplification-usability-refactor.md) lists every change. Pin `vsdxkit<1` to stay on the 0.x names.
+> **The 1.0 API.** This README describes the 1.0 API, which `main` carries. Code written for 0.x will not run unchanged: [Migrating to 1.0](docs/migration-1.0.rst) gives the replacement for every 0.x name 1.0 removes. Pin `vsdxkit<1` to stay on the 0.x names.
 
 The distribution and the import package are both named **`vsdxkit`**. Import each name from the module that defines it, for example `from vsdxkit.document import Document`; the package root re-exports nothing.
 
-vsdxkit adds shape creation, Visio-faithful connectors, connector re-anchoring, cross-functional flowchart swimlanes, stricter package handling, current Python tooling and typed public APIs. It began as a fork of [`dave-howard/vsdx`](https://github.com/dave-howard/vsdx) and is now developed as its own project; see [Provenance and licence](#provenance-and-licence).
+vsdxkit adds shape creation, Visio-faithful connectors, connector retargeting, cross-functional flowchart swimlanes, stricter package handling, current Python tooling and typed public APIs. It began as a fork of [`dave-howard/vsdx`](https://github.com/dave-howard/vsdx) and is now developed as its own project; see [Provenance and licence](#provenance-and-licence).
 
 ## What it does
 
 - Opens, queries and edits existing `.vsdx` files without Microsoft Visio.
-- Finds shapes by ID, text, regular expression or Shape Data.
+- Finds shapes by ID, text or Shape Data, on a page or inside a group.
 - Creates common flowchart shapes, or copies a shape already on the page.
 - Creates dynamic or connection-point glue with straight, right-angle or curved routing.
-- Re-anchors either end of an existing connector.
+- Retargets either end of an existing connector.
 - Reads and extends Visio cross-functional flowchart swimlanes.
 - Copies shapes and pages while rewriting package-local IDs and importing masters.
 - Renders data into Visio templates with Jinja.
@@ -82,6 +82,24 @@ vis.save()
 
 A save writes every part you did not change exactly as it arrived. A part you did change is written as equivalent XML, but not in Visio's own spelling: the XML declaration, attribute quotes, empty-element form and namespace declarations can differ, and a CRLF inside text becomes LF. Visio and LibreOffice open both.
 
+## Find shapes
+
+`page.shapes` is every shape on the page, inside groups too; `page.children` is only the page's top-level shapes, and a group's `children` and `descendants` are its own. Each is a collection: iterate it, or look shapes up in it. A lookup says how many shapes it expects: `require_*` wants exactly one and raises `NotFoundError` for none, `by_*` wants at most one and returns `None` for none, and `matching_*` returns every match. Two matches where one was wanted raise `InvalidOperationError` instead of picking one.
+
+```python
+vis = Document.open("diagram.vsdx")
+page = vis.pages[0]
+
+shape = page.shapes.require_text("Shape to remove")
+missing = page.shapes.by_id("9999")
+networked = page.shapes.matching_property("Network Name")
+wide = [s for s in page.shapes if (s.width or 0) > 2]
+
+assert missing is None and networked
+```
+
+Any other test is a comprehension over a collection.
+
 ## Create shapes and connectors
 
 Shape coordinates are in Visio page units, normally inches. `x` and `y` identify the shape centre.
@@ -114,7 +132,7 @@ vis.save("flow.vsdx")
 
 `page.connectors` lists every connector on the page, and `shape.connectors` and `shape.connected_shapes` the ones glued to a shape and the shapes at their other ends.
 
-## Re-anchor a connector
+## Retarget a connector
 
 Name only the end that should move; the other stays where it is. The connector keeps its glue and routing unless you pass `options`.
 
@@ -126,10 +144,10 @@ store = page.create_shape(ShapeKind.DATABASE, x=10.0, y=2.0, text="Store")
 connector = page.connectors[0]
 connector.retarget(target=store)
 
-vis.save("reanchored.vsdx")
+vis.save("retargeted.vsdx")
 ```
 
-`shape.delete()` also removes the connectors glued to the shape and their `Connect` records.
+`shape.delete()` also removes the connectors glued to the shape, and a group's members with it.
 
 ## Work with swimlanes
 

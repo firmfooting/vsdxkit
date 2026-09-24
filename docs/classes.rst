@@ -15,7 +15,7 @@ Page and PageCollection
 -----------------------
 
 .. autoclass:: vsdxkit.pages.Page
-   :members: children, connect, connectors, create_shape, shapes, swimlanes, require_swimlanes
+   :members: name, width, height, background, children, shapes, connect, connectors, create_shape, find_replace, swimlanes, require_swimlanes
    :undoc-members:
 
 .. autoclass:: vsdxkit.pages.PageCollection
@@ -32,11 +32,12 @@ Shape, Connector, ShapeCollection, Cell and DataProperty
 --------------------------------------------------------
 
 .. autoclass:: vsdxkit.shapes.Shape
-   :members: ID, bounds, cell_value, cells, center_x_y, children, connected_shapes, connectors, copy, data_properties, delete, descendants, fill_color, is_attached, find_replace, geometry, get_or_create_cell, height, line_color, line_weight, master_page_ID, master_shape_ID, move, shape_name, shape_type, tag, text, text_color, width, x, y
+   :members: ID, angle, begin_x, begin_y, bounds, cell_formula, cell_value, cells, center_x_y, children, connected_shapes, connectors, copy, data_properties, delete, descendants, end_x, end_y, fill_color, find_replace, geometry, get_or_create_cell, height, is_attached, line_color, line_weight, master_page_ID, master_shape, master_shape_ID, move, set_cell_formula, set_cell_value, shape_name, shape_type, tag, text, text_color, universal_name, width, x, y
    :undoc-members:
 
 .. autoclass:: vsdxkit.shapes.Connector
    :members: source, target, retarget
+   :show-inheritance:
 
 .. autoclass:: vsdxkit.shapes.ShapeCollection
    :members:
@@ -54,7 +55,8 @@ Glue, routing and SwimlaneDiagram
 ---------------------------------
 
 .. autoclass:: vsdxkit.glue.ConnectorOptions
-   :members: end_point
+   :members: glue, routing, from_point, to_point, end_point
+   :undoc-members:
 
 .. autoclass:: vsdxkit.glue.Glue
    :members:

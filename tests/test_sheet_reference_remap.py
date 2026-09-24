@@ -143,7 +143,7 @@ def test_copying_a_group_remaps_its_children_references(vsdx_copy):
 def test_copy_page_keeps_connector_glue(vsdx_copy):
     """Shape ids are page-scoped, so a page copy keeps them and stays glued.
 
-    `copy_page` clones the page part verbatim rather than reallocating ids, so
+    `pages.copy` clones the page part verbatim rather than reallocating ids, so
     there is nothing for the remapper to do here; this guards that the two
     mechanisms do not start fighting each other.
     """

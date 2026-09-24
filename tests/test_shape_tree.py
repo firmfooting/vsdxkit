@@ -72,7 +72,7 @@ def test_a_shapes_element_s_children_are_the_shapes_it_holds():
 
 
 def test_descendants_are_in_document_order_parents_first():
-    """Fails if the order of `all_shapes` changes: templating and finders rely on it."""
+    """Fails if the order of `page.shapes` changes: templating and the lookups rely on it."""
     page = _page(_shape("1", _shape("2", _shape("3")), _shape("4")), _shape("5"))
     assert _ids(iter_descendants(page)) == ["1", "2", "3", "4", "5"]
 

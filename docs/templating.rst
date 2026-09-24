@@ -35,8 +35,8 @@ Jinja expressions:
   item and closed with an injected ``endfor``;
 * a group shape or page containing ``{% showif expression %}`` is included only
   when the expression is true. A shape left out is deleted as
-  :meth:`vsdxkit.shapes.Shape.delete` deletes one: the connectors glued to
-  it and the ``Connect`` records naming it go too.
+  :meth:`vsdxkit.shapes.Shape.delete` deletes one, so the connectors glued
+  to it go too.
 
 Nested loops and ``showif`` combinations are supported. Treat the tests as the
 executable reference for the exact shape arrangement:

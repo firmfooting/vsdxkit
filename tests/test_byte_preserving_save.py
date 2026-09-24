@@ -255,7 +255,7 @@ def test_a_tree_assigned_after_the_pages_part_is_removed_is_saved(vsdx_copy, tmp
     """Fails if `Page.xml` keeps out when the page's part is gone rather than someone else's.
 
     Nothing at open stops two pages' relationships targeting one part, and
-    then the two pages share it. Removing one (`remove_page_by_index`) takes
+    then the two pages share it. Removing one (`pages.delete`) takes
     the part out from under the other, which stays in the document with
     pages.xml and its own relationship still naming the part. A tree the
     caller assigns to it afterwards must bring the part back, or the saved

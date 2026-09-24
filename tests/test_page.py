@@ -446,7 +446,7 @@ def test_add_connect_between_shapes(filename: str, page_index: int, shape_a_text
     vis = Document.open(out_file)
     page = vis.pages[page_index]
     connector_ids = [c.from_id for c in page_records(page)]
-    # new shape is referenced as connector_shape for new connector relationship
+    # the new connector is the shape the new records lead from
     assert new_connector_id in connector_ids
     # new shape exists in page
     c = page.shapes.require_id(new_connector_id)
@@ -532,7 +532,7 @@ def test_add_connect_between_shapes_by_property(
     vis = Document.open(out_file)
     page = vis.pages[page_index]
     connector_ids = [c.from_id for c in page_records(page)]
-    # new shape is referenced as connector_shape for new connector relationship
+    # the new connector is the shape the new records lead from
     assert new_connector_id in connector_ids
     # new shape exists in page
     c = page.shapes.require_id(new_connector_id)
@@ -701,7 +701,7 @@ def test_copy_and_move_line(filename: str, shape_text: str, start: tuple, finish
 def test_page_all_shapes(filename, page_index, expected_ids, basedir):
     vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[page_index]
-    # all_shapes() gets all shapes on a page, recursively
+    # page.shapes holds every shape on the page, recursively
     shape_ids = [s.ID for s in page.shapes]
     print(shape_ids)
     assert shape_ids == expected_ids

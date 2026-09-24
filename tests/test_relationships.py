@@ -215,7 +215,7 @@ class TestContentTypeOverrides:
         assert self._parts(types) == ["/visio/pages/page2.xml"]
 
     def test_an_override_is_removed_whatever_case_it_is_spelled_in(self):
-        """The half of the case rule that `remove_page_by_index` depends on."""
+        """The half of the case rule that `pages.delete` depends on."""
         types = self._types('<Override PartName="/visio/Pages/Page1.xml" ContentType="application/vnd.ms-visio.page+xml"/>')
 
         assert remove_override(types, "/visio/pages/page1.xml") is True
@@ -239,7 +239,7 @@ class TestContentTypeOverrides:
 
 
 class TestRemovingAPageThroughTheHelpers:
-    """`remove_page_by_index` is the call site issue #92 names for `remove`."""
+    """`pages.delete` is the call site issue #92 names for `remove`."""
 
     def test_it_removes_an_override_spelled_in_another_case(self, tmp_path, basedir):
         """OPC part names compare without regard to case; an exact match misses.

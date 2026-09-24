@@ -799,7 +799,7 @@ def test_append_shape_puts_the_shape_inside_the_group(vsdx_copy, tmp_path):
     """A group holds its children in a <Shapes> container, not in the group element.
 
     Appending to the group element itself makes the new shape a sibling of that
-    container, which the schema does not allow and which child_shapes and
+    container, which the schema does not allow and which children and
     page.shapes cannot see.
     """
     filename = vsdx_copy("test2.vsdx")

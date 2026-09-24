@@ -37,7 +37,7 @@ FILES_THE_EXAMPLES_NAME = {
 _PYTHON_BLOCK = re.compile(r"^```python\n(.*?)^```", re.MULTILINE | re.DOTALL)
 
 # Pinned exactly; see test_the_readme_has_the_examples_this_file_checks.
-EXAMPLES_IN_THE_README = 6
+EXAMPLES_IN_THE_README = 7
 
 
 def python_blocks(markdown: str) -> list[str]:
@@ -86,7 +86,7 @@ def test_every_readme_example_does_what_it_says(readme_workspace, monkeypatch):
 
     Each assertion below is aimed at the sentence the README puts next to the
     example, and at the thing that would still be true if the call were deleted.
-    Checking that a shape named "Store" exists in the re-anchored file, for
+    Checking that a shape named "Store" exists in the retargeted file, for
     instance, proves nothing: the example creates it two lines earlier. What has
     to be checked is that a connector now ends on it.
     """
@@ -103,8 +103,8 @@ def test_every_readme_example_does_what_it_says(readme_workspace, monkeypatch):
     assert _connector_count(readme_workspace / "flow.vsdx") == 2, (
         "the section is called 'Create shapes and connectors' and draws two of them"
     )
-    assert _is_glued_to(readme_workspace / "reanchored.vsdx", "Store"), (
-        "the re-anchor example promises a connector moved onto the new shape"
+    assert _is_glued_to(readme_workspace / "retargeted.vsdx", "Store"), (
+        "the retarget example promises a connector moved onto the new shape"
     )
     assert "Review" in _texts(readme_workspace / "with-review-lane.vsdx"), (
         "the swimlane example promises a lane with that heading"

@@ -134,7 +134,7 @@ def imported_master(vsdx_copy, tmp_path) -> ImportedMaster:
 
     Creating a connector copies the bundled connector shape into this
     document, which imports its master through ``MasterCatalog``. The
-    documented public entry point, ``Page.connect_shapes()``, delegates here.
+    documented public entry point, ``Page.connect()``, delegates here.
     """
     source = vsdx_copy("test3_house.vsdx")
     document = os.path.join(str(tmp_path), "imported_master.vsdx")
