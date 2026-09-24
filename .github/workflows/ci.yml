@@ -165,6 +165,8 @@ jobs:
         run: uv run --no-sync python tools/check_action_pins.py
       - name: Public type-completeness gate
         run: uv run --no-sync python tools/check_public_annotations.py
+      - name: Migration guide names every removed 0.8.0 name
+        run: uv run --no-sync python tools/check_migration_guide.py
       - name: Mypy consumer fixture
         run: uv run --no-sync mypy --disallow-untyped-calls --follow-imports=silent --ignore-missing-imports tests/type_fixture.py
       - name: Sphinx documentation
