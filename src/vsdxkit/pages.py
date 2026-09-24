@@ -18,13 +18,13 @@ else:
 import deprecation
 
 import vsdxkit
-from vsdxkit import namespace, relationships, retired_finders
+from vsdxkit import namespace, r_namespace, relationships, retired_finders
 from vsdxkit.connectors import Connect, _float_ends
 from vsdxkit.containers import Container
 from vsdxkit.errors import InvalidOperationError, MissingPartError, NotFoundError, PackageError
 from vsdxkit.glue import ConnectorOptions
 from vsdxkit.package import XmlPart
-from vsdxkit.partnames import relationship_target, relationships_part_name
+from vsdxkit.partnames import relationship_target, relationships_part_name, target_part_name
 from vsdxkit.shape_kind import ShapeKind
 from vsdxkit.shape_tree import iter_descendants
 from vsdxkit.shapes import Shape, ShapeCollection, _wrap_children, _wrap_descendants, is_connector, parent_of
@@ -33,6 +33,12 @@ from vsdxkit.xmlio import PartTree, require_element, to_float, xml_value
 # the two places a Connect record names a shape: the connector it leads from,
 # and the shape that connector is glued to
 _CONNECT_SHEET_ATTRIBUTES = ("FromSheet", "ToSheet")
+
+# how a shape names one of its page's relationships: an image's ForeignData Rel
+_RELATIONSHIP_ID = f"{r_namespace}id"
+
+# the cells that size and place a 2-D shape, which a group member ties to its group
+_TRANSFORM_CELLS = ("Width", "Height", "LocPinX", "LocPinY", "Angle", "FlipX", "FlipY")
 
 
 def _dimension_value(value: float | str | None) -> str:
@@ -61,6 +67,18 @@ def _drop_formula(shape: Shape, name: str) -> None:
     cell = shape._cell(name)
     if cell is not None:
         cell.xml.attrib.pop("F", None)
+
+
+def _detach_from_group(shape: Shape) -> None:
+    """Keep the size and place a copied group member had, without the formulas that took them from its group.
+
+    A member's Width can be ``Sheet.9!Width*1``; on the page the copy lands
+    on, Sheet.9 is another shape or none.
+    """
+    for name in _TRANSFORM_CELLS:
+        cell = shape._cell(name)
+        if cell is not None and cell.formula is not None and "!" in cell.formula:
+            _drop_formula(shape, name)
 
 
 def _place_one_d(shape: Shape, x: float, y: float, length: float | None) -> None:
@@ -406,6 +424,14 @@ class Page:
         different id space, and an id free there says nothing here (#357). The
         rels part is created on demand; assigning it writes it into the package.
         """
+        relationships.append_if_absent(
+            self._rels_root(),
+            rel_type="http://schemas.microsoft.com/visio/2010/relationships/master",
+            target=relationship_target(self.filename, master_part_name),
+        )
+
+    def _rels_root(self) -> ET.Element:
+        """This page's `<Relationships>` element, creating the part on demand; assigning it writes it into the package."""
         rels_xml: PartTree | None = self.rels_xml
         if rels_xml is None:
             self.rels_xml_filename = relationships_part_name(self.filename)
@@ -413,11 +439,32 @@ class Page:
                 ET.fromstring('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
             )
             self.rels_xml = rels_xml
-        relationships.append_if_absent(
-            require_element(rels_xml.getroot(), f"{self.rels_xml_filename} root"),
-            rel_type="http://schemas.microsoft.com/visio/2010/relationships/master",
-            target=relationship_target(self.filename, master_part_name),
-        )
+        return require_element(rels_xml.getroot(), f"{self.rels_xml_filename} root")
+
+    def _carry_relationships(self, copied: ET.Element, source: Page) -> None:
+        """Relate this page to what each ``r:id`` in `copied` names on `source`, and point the copy at it.
+
+        An image or embedded object reaches its part through its page's
+        relationships, by an id that means nothing on another page. Within one
+        document the part is shared, so the copy needs only a relationship of
+        its own to the same part.
+        """
+        source_rels = source.rels_xml
+        if source_rels is None:
+            return
+        by_id = {rel.attrib.get("Id"): rel for rel in relationships.all_of(source_rels.getroot())}
+        for node in copied.iter():
+            relationship = by_id.get(node.attrib.get(_RELATIONSHIP_ID))
+            if relationship is None:
+                continue  # none, or already dangling on the source page
+            mode = relationship.attrib.get("TargetMode")
+            target = relationship.attrib.get("Target", "")
+            if mode != "External":
+                target = relationship_target(self.filename, target_part_name(source.filename, target))
+            carried = relationships.append_if_absent(
+                self._rels_root(), rel_type=relationship.attrib.get("Type", ""), target=target, mode=mode
+            )
+            node.attrib[_RELATIONSHIP_ID] = carried.attrib["Id"]
 
     def get_connects(self) -> list[Connect]:
         elements = self.xml.findall(f".//{namespace}Connect")  # search recursively
@@ -645,6 +692,7 @@ class Page:
             shape = media.copy_kind(kind_or_prototype, self)
             label = "" if text is None else text
         elif isinstance(kind_or_prototype, Shape):
+            kind_or_prototype._require_attached("Page.create_shape()")
             if kind_or_prototype.page.vis is not self.vis:
                 raise InvalidOperationError(
                     f"shape ID {kind_or_prototype.ID} belongs to another document; "
@@ -663,12 +711,17 @@ class Page:
             shape.get_or_create_cell("PinY", v=str(y))
             _drop_formula(shape, "PinX")
             _drop_formula(shape, "PinY")
+            _detach_from_group(shape)
             if width is not None:
                 shape.width = width
                 _drop_formula(shape, "Width")
         if height is not None:
             shape.height = height
             _drop_formula(shape, "Height")
+        if width is not None or height is not None:
+            # LocPinX is Width*0.5 and the geometry scales with the size: their
+            # values would otherwise describe the old size until Visio opens it
+            shape._refresh_formula_values()
         if label is not None:
             shape.text = label
         return shape

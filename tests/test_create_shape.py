@@ -1,5 +1,6 @@
 """Page.create_shape: a built-in kind or a prototype shape from the same document (#111)."""
 
+import os
 import zipfile
 
 import pytest
@@ -7,9 +8,11 @@ import pytest
 from vsdxkit import media
 from vsdxkit.document import Document
 from vsdxkit.errors import InvalidOperationError
+from vsdxkit.partnames import target_part_name
 from vsdxkit.shape_kind import ShapeKind
 
 BASE = "test8_simple_connector.vsdx"
+R_ID = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
 
 
 def _rounded(value):
@@ -121,6 +124,71 @@ def test_a_prototype_whose_pin_is_a_formula_is_placed_where_asked(vsdx_copy):
     for name, value in (("PinX", 3.0), ("PinY", 4.0), ("Width", 1.25), ("Height", 0.75)):
         assert copy.cells[name].formula is None, name
         assert float(copy.cells[name].value) == pytest.approx(value), name
+
+
+def test_a_group_member_copied_without_a_size_keeps_no_tie_to_its_group(vsdx_copy):
+    """Fails if a prototype's size formulas still name the group it was copied out of."""
+    page = Document.open(vsdx_copy("test_jinja_loop_showif.vsdx")).pages[0]
+    member = page.shapes.require_id("7")  # Width is Sheet.9!Width*1
+    size = (member.width, member.height)
+
+    copy = page.create_shape(member, x=3.0, y=4.0)
+
+    assert [name for name, cell in copy.cells.items() if cell.formula and "!" in cell.formula] == []
+    assert (copy.width, copy.height) == pytest.approx(size)
+
+
+def test_resizing_refreshes_what_the_size_decides(vsdx_copy):
+    """Fails if LocPinX (Width*0.5) keeps the old width's value, putting the copy off-centre."""
+    page = Document.open(vsdx_copy(BASE)).pages[0]
+    prototype = page.shapes.require_text("Shape A")
+
+    copy = page.create_shape(prototype, x=5.0, y=2.0, width=1.0, height=0.5)
+
+    assert float(copy.cells["LocPinX"].value) == pytest.approx(0.5)
+    assert float(copy.cells["LocPinY"].value) == pytest.approx(0.25)
+    left, bottom, right, top = copy.bounds
+    assert ((left + right) / 2, (bottom + top) / 2) == pytest.approx((5.0, 2.0))
+
+
+def test_a_prototype_on_another_page_brings_its_relationships(vsdx_copy):
+    """Fails if an image's r:id is copied onto a page that has no relationship by that id."""
+    path = vsdx_copy(os.path.join("fixtures", "com_reference", "s05_swimlanes_cfflow.vsdx"))
+    vis = Document.open(path)
+    image = vis.pages[0].shapes.require_id("79")
+    (source_id,) = _relationship_ids(image)
+    source_target = _target(vis.pages[0], source_id)
+    page = vis.add_page("Elsewhere")
+
+    copy = page.create_shape(image, x=2.0, y=2.0)
+
+    (copied_id,) = _relationship_ids(copy)
+    assert _target(page, copied_id) == source_target
+    vis.save()
+    reopened = Document.open(path).pages.require_name("Elsewhere")
+    (reopened_id,) = _relationship_ids(next(iter(reopened.children)))
+    assert _target(reopened, reopened_id) == source_target
+
+
+def _relationship_ids(shape):
+    return [node.attrib[R_ID] for node in shape.xml.iter() if R_ID in node.attrib]
+
+
+def _target(page, relationship_id):
+    (relationship,) = [rel for rel in page.rels_xml.getroot() if rel.attrib["Id"] == relationship_id]
+    return target_part_name(page.filename, relationship.attrib["Target"])
+
+
+def test_a_deleted_prototype_is_refused(vsdx_copy):
+    page = Document.open(vsdx_copy(BASE)).pages[0]
+    prototype = page.shapes.require_text("Shape A")
+    page.delete_shape(prototype)
+    before = [shape.ID for shape in page.shapes]
+
+    with pytest.raises(InvalidOperationError):
+        page.create_shape(prototype, x=1.0, y=1.0)
+
+    assert [shape.ID for shape in page.shapes] == before
 
 
 def test_a_masterless_connector_keeps_what_kind_of_connector_it_is(vsdx_copy):

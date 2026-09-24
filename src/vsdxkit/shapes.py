@@ -761,6 +761,8 @@ class Shape:
         # writes it; a copy onto another page of this document adds one too
         for master in masters.values():
             dst_page._ensure_page_master_rel(master.filename)
+        if not cross_document and dst_page is not self.page:
+            dst_page._carry_relationships(new_shape_xml, self.page)
 
         # copy_shape put it at the page's top level, whatever the source sat in
         return Shape(xml=new_shape_xml, parent=dst_page, page=dst_page)
