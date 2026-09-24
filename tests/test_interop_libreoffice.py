@@ -79,8 +79,8 @@ def test_created_connector_package_converts_in_libreoffice(tmp_path):
         page = vis.pages[0]
         connector = Connect.create(
             page=page,
-            from_shape=page.find_shape_by_text("Shape to copy"),
-            to_shape=page.find_shape_by_text("Shape to remove"),
+            from_shape=page.shapes.by_text("Shape to copy"),
+            to_shape=page.shapes.by_text("Shape to remove"),
         )
         connector.text = "created by vsdx"
         vis.save_vsdx(out)

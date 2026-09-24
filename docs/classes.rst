@@ -16,7 +16,7 @@ Page, PageCollection and PagePosition
 -------------------------------------
 
 .. autoclass:: vsdxkit.pages.Page
-   :members: all_shapes, child_shapes, children, connect_shapes, connects, delete_shape, find_shape_by_id, find_shape_by_text, find_shapes_by_text, get_connectors_between, get_container, shapes, add_swimlane, add_shape_to_lane, reanchor_connector
+   :members: all_shapes, child_shapes, children, connect_shapes, connects, delete_shape, get_connectors_between, get_container, shapes, add_swimlane, add_shape_to_lane, reanchor_connector
    :undoc-members:
 
 .. autoclass:: vsdxkit.pages.PageCollection
@@ -30,7 +30,7 @@ Shape, ShapeCollection, Cell and DataProperty
 ---------------------------------------------
 
 .. autoclass:: vsdxkit.shapes.Shape
-   :members: ID, all_shapes, bounds, cell_value, cells, center_x_y, child_shapes, children, connected_shapes, connects, copy, data_properties, descendants, fill_color, is_attached, find_replace, find_shape_by_text, find_shapes_by_text, geometry, get_or_create_cell, height, line_color, line_weight, master_page_ID, master_shape_ID, move, remove, shape_name, shape_type, tag, text, text_color, width, x, y
+   :members: ID, all_shapes, bounds, cell_value, cells, center_x_y, child_shapes, children, connected_shapes, connects, copy, data_properties, descendants, fill_color, is_attached, find_replace, geometry, get_or_create_cell, height, line_color, line_weight, master_page_ID, master_shape_ID, move, remove, shape_name, shape_type, tag, text, text_color, width, x, y
    :undoc-members:
 
 .. autoclass:: vsdxkit.shapes.ShapeCollection

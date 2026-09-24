@@ -123,7 +123,7 @@ def test_reads_still_work_after_close(closed_document):
     vis, page, shape_a, _, _ = closed_document
     assert page.name
     assert page.width > 0
-    assert page.find_shape_by_id(str(shape_a.ID)) is not None
+    assert page.shapes.by_id(str(shape_a.ID)) is not None
     assert vis.get_page_names()
     with pytest.deprecated_call():
         assert page.page_name == page.name
@@ -143,7 +143,7 @@ def test_the_guard_follows_the_page_not_the_receiver(vsdx_copy):
 
     source.close_vsdx()
     copied = from_closed_source.copy(destination.pages[0])
-    assert destination.pages[0].find_shape_by_id(str(copied.ID)) is not None
+    assert destination.pages[0].shapes.by_id(str(copied.ID)) is not None
 
     destination.close_vsdx()
     with pytest.raises(VisioFileNotOpen):
@@ -294,7 +294,7 @@ def test_data_property_mutation_after_close_raises(vsdx_copy):
     """Kept out of the table: only this fixture carries data properties."""
     vis = VisioFile(vsdx_copy("test6_shape_properties.vsdx"))
     page = vis.pages[0]
-    shape = page.find_shape_by_id("1")
+    shape = page.shapes.by_id("1")
     assert shape is not None
     prop = shape.data_properties["my_property_label"]
     before = ET.tostring(page.xml.getroot())
@@ -381,7 +381,7 @@ def test_materialising_an_inherited_data_property_after_close_raises(vsdx_copy):
     inherits anything, so the whole materialisation path went untested and
     unguarded."""
     vis = VisioFile(vsdx_copy("test_master_multiple_child_shapes.vsdx"))
-    shape = vis.pages[0].find_shape_by_id("3")
+    shape = vis.pages[0].shapes.by_id("3")
     assert shape is not None
     prop = shape.data_properties["title"]
     assert prop.inherited, "fixture property is no longer inherited"
@@ -397,7 +397,7 @@ def test_materialising_an_inherited_data_property_after_close_raises(vsdx_copy):
 
 def test_materialising_an_inherited_geometry_row_after_close_raises(vsdx_copy):
     vis = VisioFile(vsdx_copy(CFF_FIXTURE))
-    shape = vis.pages[0].find_shape_by_id("36")
+    shape = vis.pages[0].shapes.by_id("36")
     assert shape is not None
     row = _geometry(shape).rows["1"]
     assert row.inherited, "fixture row is no longer inherited"
@@ -416,7 +416,7 @@ def test_materialising_an_inherited_geometry_row_after_close_raises(vsdx_copy):
 def test_building_a_geometry_cell_after_close_raises_before_it_appends(vsdx_copy):
     """The constructor wrote the element and then raised on the name."""
     vis = VisioFile(vsdx_copy(CFF_FIXTURE))
-    shape = vis.pages[0].find_shape_by_id("36")
+    shape = vis.pages[0].shapes.by_id("36")
     assert shape is not None
     geometry = _geometry(shape)
     row = geometry.rows["1"]

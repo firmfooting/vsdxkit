@@ -4,6 +4,7 @@ import copy
 import posixpath
 import re
 import sys
+import warnings
 import xml.etree.ElementTree as ET
 from types import TracebackType
 from typing import TYPE_CHECKING, NamedTuple
@@ -1100,8 +1101,14 @@ class VisioFile(JinjaTemplatingMixin):
 
         return new_page
 
-    # TODO: dead code - never used
     def get_sub_shapes(self, shape: Element, nth: int = 1) -> Element | None:
+        """The `nth` ``<Shapes>`` element directly inside `shape`, or None. Deprecated; nothing here uses it."""
+        warnings.warn(
+            "VisioFile.get_sub_shapes() is deprecated and will be removed in 1.0.0. "
+            "Use Shape.children for the shapes inside a group.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         for e in shape:
             if "Shapes" in e.tag:
                 nth -= 1
@@ -1198,11 +1205,11 @@ class VisioFile(JinjaTemplatingMixin):
         # the donor belongs to the document being changed, which is also the
         # one that will close it
         media = page.vis._shared_media()
-        source = media.palette.pages[0].find_shape_by_text(palette_name)
+        source = next((shape for shape in media.palette.pages[0].shapes if palette_name in shape.text), None)
         if source is None:
             raise NotFoundError(f"palette has no shape named {palette_name}")
         new_shape_xml = self.copy_shape(source.xml, page)
-        new_shape = page.find_shape_by_id(new_shape_xml.attrib["ID"])
+        new_shape = page.shapes.by_id(new_shape_xml.attrib["ID"])
         if new_shape is None:
             raise NotFoundError("newly created shape not found on page")
 

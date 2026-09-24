@@ -29,7 +29,7 @@ def test_renumbering_a_shape_moves_the_records_glued_to_it(vsdx_copy, tmp_path):
     """The renumbered shape is the `ToSheet` of two connectors' records."""
     with VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
         page = vis.pages[0]
-        shape = page.find_shape_by_id("2")
+        shape = page.shapes.require_id("2")
         assert ("6", "2") in _records(page) and ("7", "2") in _records(page)
 
         new_id = str(vis.increment_sub_shape_ids(shape, page)["2"])
@@ -44,7 +44,7 @@ def test_renumbering_a_connector_moves_the_records_leading_from_it(vsdx_copy, tm
     """The renumbered shape is the `FromSheet`: it is the connector itself."""
     with VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
         page = vis.pages[0]
-        connector = page.find_shape_by_id("7")
+        connector = page.shapes.require_id("7")
 
         new_id = str(vis.increment_sub_shape_ids(connector, page)["7"])
 
@@ -58,10 +58,10 @@ def test_renumbering_a_group_moves_records_naming_a_shape_inside_it(vsdx_copy, t
     """#275 widened the fault: the whole subtree is renumbered now, not the root alone."""
     with VisioFile(vsdx_copy("test4_connectors.vsdx")) as vis:
         page = vis.pages[2]
-        group = page.find_shape_by_id("1")
+        group = page.shapes.require_id("1")
         child = group.child_shapes[0]
         old_child_id = child.ID
-        page.connect_shapes(child, page.find_shape_by_id("11"))
+        page.connect_shapes(child, page.shapes.require_id("11"))
 
         new_child_id = str(vis.increment_sub_shape_ids(group, page)[old_child_id])
 
@@ -84,12 +84,12 @@ def test_renumbering_a_shape_moves_the_formulas_elsewhere_that_name_it(vsdx_copy
     """
     with VisioFile(vsdx_copy(POINT_GLUE_FIXTURE)) as vis:
         page = vis.pages[0]
-        connector = page.find_shape_by_id("3")
+        connector = page.shapes.require_id("3")
         assert "Sheet.2!" in connector.cell_formula("EndX")
 
-        new_id = str(vis.increment_sub_shape_ids(page.find_shape_by_id("2"), page)["2"])
+        new_id = str(vis.increment_sub_shape_ids(page.shapes.require_id("2"), page)["2"])
 
-        connector = page.find_shape_by_id("3")
+        connector = page.shapes.require_id("3")
         for cell in ("EndX", "EndY", "EndTrigger"):
             assert f"Sheet.{new_id}!" in connector.cell_formula(cell)
             assert "Sheet.2!" not in connector.cell_formula(cell)
@@ -102,7 +102,7 @@ def test_copying_a_shape_leaves_the_records_of_the_original_alone(vsdx_copy, tmp
         page = vis.pages[0]
         before = _records(page)
 
-        page.find_shape_by_id("2").copy()
+        page.shapes.require_id("2").copy()
 
         assert _records(page) == before
         vis.save_vsdx(str(tmp_path / "copied_shape.vsdx"))
@@ -116,11 +116,11 @@ def test_copying_a_shape_leaves_the_formulas_naming_the_original_alone(vsdx_copy
     """
     with VisioFile(vsdx_copy(POINT_GLUE_FIXTURE)) as vis:
         page = vis.pages[0]
-        before = page.find_shape_by_id("3").cell_formula("EndX")
+        before = page.shapes.require_id("3").cell_formula("EndX")
 
-        page.find_shape_by_id("2").copy()
+        page.shapes.require_id("2").copy()
 
-        assert page.find_shape_by_id("3").cell_formula("EndX") == before
+        assert page.shapes.require_id("3").cell_formula("EndX") == before
         vis.save_vsdx(str(tmp_path / "copied_glued_shape.vsdx"))
 
 
@@ -132,7 +132,7 @@ def _drop_shape(page, shape_id: str) -> None:
     file without shipping a broken fixture.
     """
     shapes = page.xml.getroot().find(f"{namespace}Shapes")
-    shapes.remove(page.find_shape_by_id(shape_id).xml)
+    shapes.remove(page.shapes.require_id(shape_id).xml)
 
 
 def test_a_copy_does_not_inherit_glue_from_a_record_naming_a_missing_shape(vsdx_copy):
@@ -146,7 +146,7 @@ def test_a_copy_does_not_inherit_glue_from_a_record_naming_a_missing_shape(vsdx_
         _drop_shape(page, "2")
         assert ("6", "2") in _records(page)
 
-        vis.copy_shape(vis.pages[1].find_shape_by_id("2").xml, page)
+        vis.copy_shape(vis.pages[1].shapes.require_id("2").xml, page)
 
         assert ("6", "2") in _records(page)
 
@@ -158,7 +158,7 @@ def test_an_appended_shape_does_not_inherit_glue_from_a_record_naming_a_missing_
         _drop_shape(page, "2")
         arriving = Shape(xml=ET.fromstring(f'<Shape xmlns="{namespace[1:-1]}" ID="2" Type="Shape"/>'), parent=page, page=page)
 
-        page._shapes[0].append_shape(arriving)
+        placed = vis.copy_shape(arriving.xml, page)
 
         assert ("6", "2") in _records(page)
-        assert arriving.ID != "2"  # it was renumbered, it just did not take the glue
+        assert placed.attrib["ID"] != "2"  # it was renumbered, it just did not take the glue

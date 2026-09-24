@@ -45,8 +45,8 @@ def test_update_ids_remaps_point_glue_formulas():
     """A point-glue formula carries two references to the same shape."""
     with VisioFile(POINT_GLUE_FIXTURE) as vis:
         page = vis.pages[0]
-        start = page.find_shape_by_id("90")
-        end = page.find_shape_by_id("97")
+        start = page.shapes.require_id("90")
+        end = page.shapes.require_id("97")
         connector = page.connect_shapes(start, end, route="point")
 
         shapes_element = page.xml.getroot().find(f"{namespace}Shapes")
@@ -159,7 +159,7 @@ def test_copy_page_keeps_connector_glue(vsdx_copy):
 
         copied = vis.copy_page(page)
 
-        copied_connector = copied.find_shape_by_id(connector.ID)
+        copied_connector = copied.shapes.by_id(connector.ID)
         assert copied_connector is not None
         assert {name: _formula(copied_connector, name) for name in expected} == expected
         connects = [c for c in copied.connects if c.from_id == connector.ID]

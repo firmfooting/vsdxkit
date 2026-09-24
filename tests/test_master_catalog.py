@@ -73,7 +73,7 @@ def test_copying_a_master_instance_into_another_document_declares_its_master(vsd
         target.save_vsdx(saved)
 
     with VisioFile(saved) as reopened:
-        copied = reopened.pages[0].find_shape_by_id(copy_id)
+        copied = reopened.pages[0].shapes.by_id(copy_id)
         assert copied is not None
         assert copied.master_page is not None
         assert copied.master_page.name == master_name
@@ -99,7 +99,7 @@ def test_a_sub_shape_copied_onto_another_documents_page_names_its_master(vsdx_co
         target.save_vsdx(saved)
 
     with VisioFile(saved) as reopened:
-        copied = reopened.pages[0].find_shape_by_id(copy_id)
+        copied = reopened.pages[0].shapes.by_id(copy_id)
         assert copied is not None
         assert copied.master_shape is not None
 

@@ -66,8 +66,7 @@ class JinjaTemplatingMixin:
             # check if page should be removed
             if JinjaTemplatingMixin.jinja_page_showif(page, context):
                 loop_shape_ids = list()
-                for shapes_by_id in page._shapes:  # type: Shape
-                    JinjaTemplatingMixin.jinja_render_shape(shape=shapes_by_id, context=context, loop_shape_ids=loop_shape_ids)
+                JinjaTemplatingMixin.jinja_render_shape(shape=page, context=context, loop_shape_ids=loop_shape_ids)
 
                 page_root = page.xml.getroot()
                 if page_root is None:
@@ -84,7 +83,8 @@ class JinjaTemplatingMixin:
 
                 # update loop shape IDs which have been duplicated by Jinja template
                 for shape_id in loop_shape_ids:
-                    shapes_by_id = page._find_shapes_by_id(shape_id)  # type: list[Shape]
+                    # every copy the loop made carries the template shape's ID
+                    shapes_by_id = [shape for shape in page.shapes if shape_id == shape.ID]
                     if shapes_by_id and len(shapes_by_id) > 1:
                         delta = 0.0
                         for shape in shapes_by_id[1:]:  # from the 2nd onwards - leaving original unchanged
@@ -102,7 +102,8 @@ class JinjaTemplatingMixin:
                 self.remove_page_by_index(p.index_num)
 
     @staticmethod
-    def jinja_render_shape(shape: Shape, context: dict[str, object], loop_shape_ids: list[str]) -> None:
+    def jinja_render_shape(shape: Page | Shape, context: dict[str, object], loop_shape_ids: list[str]) -> None:
+        """Render the statements in the text of every shape inside `shape`, a page or a group."""
         prev_shape = None
         for s in shape.child_shapes:  # type: Shape
             # manage for loops in template
@@ -208,14 +209,11 @@ class JinjaTemplatingMixin:
                 else:
                     previous_shape.xml.tail = jinja_loop_text  # add jinja loop text after previous shape, before this element
             else:
-                parent_xml = shape.parent.xml
-                # Page.xml is an ElementTree; Shape.xml is an Element
-                parent_root = parent_xml.getroot() if isinstance(parent_xml, ET.ElementTree) else parent_xml
-                parent_text = parent_root.text or "" if parent_root is not None else ""
-                if parent_root is not None:
-                    parent_root.text = (
-                        parent_text + jinja_loop_text
-                    )  # add jinja loop at start of parent, just before this element
+                # at the start of the Shapes element the shape sits in, just
+                # before it: the {% end... %} goes on its tail, inside the same element
+                container = shape._container()
+                if container is not None:
+                    container.text = (container.text or "") + jinja_loop_text
             shape.text = (shape.text or "").replace(jinja_loop_text, "")  # remove jinja loop from <Text> tag in element
 
             # add closing 'endfor' to just inside the shapes element, after last shape
@@ -232,14 +230,11 @@ class JinjaTemplatingMixin:
             if previous_shape:
                 previous_shape.xml.tail = (previous_shape.xml.tail or "") + jinja_show_if
             else:
-                parent_xml = shape.parent.xml
-                # Page.xml is an ElementTree; Shape.xml is an Element
-                parent_root = parent_xml.getroot() if isinstance(parent_xml, ET.ElementTree) else parent_xml
-                parent_text = parent_root.text or "" if parent_root is not None else ""
-                if parent_root is not None:
-                    parent_root.text = (
-                        parent_text + jinja_show_if
-                    )  # add jinja loop at start of parent, just before this element
+                # at the start of the Shapes element the shape sits in, just
+                # before it: the {% end... %} goes on its tail, inside the same element
+                container = shape._container()
+                if container is not None:
+                    container.text = (container.text or "") + jinja_show_if
 
             # remove original jinja showif from <Text> tag in element
             shape.text = (shape.text or "").replace(f"{{% showif {show_if} %}}", "")

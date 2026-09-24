@@ -103,7 +103,7 @@ def test_setting_text_preserves_the_formatting_runs_as_elements(tmp_path):
     regex, which broke the moment the Visio namespace stopped being prefixed.
     """
     with VisioFile(os.path.join(FIXTURES, "test2.vsdx")) as vis:
-        shape = vis.pages[0].find_shape_by_id("9")
+        shape = vis.pages[0].shapes.require_id("9")
         text_element = shape.xml.find(f"{namespace}Text")
         before = [(child.tag, dict(child.attrib)) for child in text_element]
         assert before, "fixture shape is expected to carry formatting runs"

@@ -14,12 +14,12 @@ BASE = "test8_simple_connector.vsdx"
 def test_save_vsdx_no_filename_saves_in_place(vsdx_copy):
     src = vsdx_copy(BASE)
     with VisioFile(src) as vis:
-        shape = vis.pages[0].find_shape_by_text("Shape A")
+        shape = vis.pages[0].shapes.by_text("Shape A")
         assert shape is not None
         shape.text = "Renamed A"
         vis.save_vsdx()
     with VisioFile(src) as vis:
-        assert vis.pages[0].find_shape_by_text("Renamed A") is not None
+        assert vis.pages[0].shapes.by_text("Renamed A") is not None
 
 
 def test_save_vsdx_appends_vsdx_suffix(vsdx_copy):

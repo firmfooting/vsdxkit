@@ -80,8 +80,8 @@ Pass ``None`` to retain an existing endpoint.
 
 .. code-block:: python
 
-   connector = page.find_shape_by_id("9")
-   new_target = page.find_shape_by_text("Store")
+   connector = page.shapes.by_id("9")
+   new_target = page.shapes.by_text("Store")
 
    if connector is not None and new_target is not None:
        page.reanchor_connector(connector, to_shape=new_target)
@@ -95,6 +95,6 @@ removes the requested shape.
 
 .. code-block:: python
 
-   obsolete = page.find_shape_by_text("Obsolete")
+   obsolete = page.shapes.by_text("Obsolete")
    if obsolete is not None:
        page.delete_shape(obsolete)

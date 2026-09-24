@@ -194,7 +194,7 @@ def test_importing_a_master_keeps_masters_parts_as_the_stores_trees(vsdx_copy):
     masters.xml.rels."""
     with VisioFile(vsdx_copy("test3_house.vsdx")) as vis:
         page = vis.pages[0]
-        page.connect_shapes(page.find_shape_by_id("1"), page.find_shape_by_id("5"))
+        page.connect_shapes(page.shapes.require_id("1"), page.shapes.require_id("5"))
         masters = vis._package.part("/visio/masters/masters.xml")
         rels = vis._package.part("/visio/masters/_rels/masters.xml.rels")
         assert isinstance(masters, XmlPart) and masters.tree.getroot() is vis.masters_xml

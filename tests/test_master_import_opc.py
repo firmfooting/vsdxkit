@@ -143,8 +143,8 @@ def imported_master(vsdx_copy, tmp_path) -> ImportedMaster:
         page = vis.pages[0]
         connector = Connect.create(
             page=page,
-            from_shape=page.find_shape_by_text("Shape to copy"),
-            to_shape=page.find_shape_by_text("Shape to remove"),
+            from_shape=page.shapes.by_text("Shape to copy"),
+            to_shape=page.shapes.by_text("Shape to remove"),
         )
         master_id = connector.xml.attrib["Master"]
         vis.save_vsdx(document)

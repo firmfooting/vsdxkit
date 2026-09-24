@@ -41,7 +41,7 @@ def test_one_edit_changes_one_member(vsdx_copy, tmp_path):
     source = vsdx_copy("test8_simple_connector.vsdx")
     target = tmp_path / "out.vsdx"
     with VisioFile(source) as vis:
-        shape = vis.pages[0].find_shape_by_text("Shape A")
+        shape = vis.pages[0].shapes.by_text("Shape A")
         assert shape is not None
         shape.text = "Renamed A"
         page_member = vis.pages[0].filename[1:]
@@ -56,14 +56,14 @@ def test_a_second_save_carries_a_second_edit(vsdx_copy, tmp_path):
     source = vsdx_copy("test8_simple_connector.vsdx")
     first, second = tmp_path / "first.vsdx", tmp_path / "second.vsdx"
     with VisioFile(source) as vis:
-        shape = vis.pages[0].find_shape_by_text("Shape A")
+        shape = vis.pages[0].shapes.by_text("Shape A")
         assert shape is not None
         shape.text = "Once"
         vis.save_vsdx(str(first))
         shape.text = "Twice"
         vis.save_vsdx(str(second))
     with VisioFile(str(second)) as vis:
-        assert vis.pages[0].find_shape_by_text("Twice") is not None
+        assert vis.pages[0].shapes.by_text("Twice") is not None
 
 
 def test_save_as_then_save_writes_the_original(vsdx_copy, tmp_path):
@@ -72,14 +72,14 @@ def test_save_as_then_save_writes_the_original(vsdx_copy, tmp_path):
     elsewhere = tmp_path / "elsewhere.vsdx"
     with VisioFile(source) as vis:
         vis.save_vsdx(str(elsewhere))
-        shape = vis.pages[0].find_shape_by_text("Shape A")
+        shape = vis.pages[0].shapes.by_text("Shape A")
         assert shape is not None
         shape.text = "In place"
         vis.save_vsdx()
     with VisioFile(source) as vis:
-        assert vis.pages[0].find_shape_by_text("In place") is not None
+        assert vis.pages[0].shapes.by_text("In place") is not None
     with VisioFile(str(elsewhere)) as vis:
-        assert vis.pages[0].find_shape_by_text("In place") is None
+        assert vis.pages[0].shapes.by_text("In place") is None
 
 
 def test_reassigning_filename_redirects_an_in_place_save(vsdx_copy, tmp_path):
@@ -96,13 +96,13 @@ def test_reassigning_filename_redirects_an_in_place_save(vsdx_copy, tmp_path):
         original = handle.read()
     other = str(tmp_path / "other.vsdx")
     with VisioFile(source) as vis:
-        shape = vis.pages[0].find_shape_by_text("Shape A")
+        shape = vis.pages[0].shapes.by_text("Shape A")
         assert shape is not None
         shape.text = "Redirected"
         vis.filename = other
         vis.save_vsdx()
     with VisioFile(other) as vis:
-        assert vis.pages[0].find_shape_by_text("Redirected") is not None
+        assert vis.pages[0].shapes.by_text("Redirected") is not None
     with open(source, "rb") as handle:
         assert handle.read() == original
 

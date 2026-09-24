@@ -40,7 +40,7 @@ def test_master_identifiers_are_populated(filename: str, attribute: str, basedir
 def test_find_master_shape(filename: str, shape_text: str, basedir):
     with VisioFile(os.path.join(basedir, filename)) as vis:
         master_page = vis.master_pages[0]  # type: Page
-        s = master_page.find_shape_by_text(shape_text)
+        s = master_page.shapes.by_text(shape_text)
         assert s
 
 
@@ -48,8 +48,8 @@ def test_find_master_shape(filename: str, shape_text: str, basedir):
 def test_master_inheritance(filename: str, basedir):
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.get_page(0)  # type: Page
-        shape_a = page.find_shape_by_text("Shape A")  # type: Shape
-        shape_b = page.find_shape_by_text("Shape B")  # type: Shape
+        shape_a = page.shapes.by_text("Shape A")  # type: Shape
+        shape_b = page.shapes.by_text("Shape B")  # type: Shape
 
         assert shape_a
         assert shape_b
@@ -70,7 +70,7 @@ def test_set_master_child_property(filename: str, tmp_path, basedir):
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.get_page(0)
         # find shape with master and set a child property
-        sub_shape_b = page.find_shape_by_text("Shape B").child_shapes[0]
+        sub_shape_b = page.shapes.by_text("Shape B").child_shapes[0]
 
         sub_shape_b.line_weight = 0.5
 
@@ -79,7 +79,7 @@ def test_set_master_child_property(filename: str, tmp_path, basedir):
     with VisioFile(out_file) as vis:
         page = vis.get_page(0)
 
-        sub_shape_b = page.find_shape_by_text("Shape B").child_shapes[0]
+        sub_shape_b = page.shapes.by_text("Shape B").child_shapes[0]
         assert sub_shape_b.master_shape  # shape has a master
         assert sub_shape_b.line_weight == 0.5  # child shape has value set
 
@@ -91,7 +91,7 @@ def test_master_property_change_is_inherited(filename: str, weight, tmp_path, ba
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.get_page(0)
 
-        sub_shape_a = page.find_shape_by_text("Shape A").child_shapes[0]
+        sub_shape_a = page.shapes.by_text("Shape A").child_shapes[0]
         master = sub_shape_a.master_shape
         master.line_weight = weight
 
@@ -100,8 +100,8 @@ def test_master_property_change_is_inherited(filename: str, weight, tmp_path, ba
     with VisioFile(out_file) as vis:
         page = vis.get_page(0)
 
-        sub_shape_a = page.find_shape_by_text("Shape A").child_shapes[0]
-        sub_shape_b = page.find_shape_by_text("Shape B").child_shapes[0]
+        sub_shape_a = page.shapes.by_text("Shape A").child_shapes[0]
+        sub_shape_b = page.shapes.by_text("Shape B").child_shapes[0]
 
         # check that both sub_shape values have changed based on master
         assert sub_shape_a.line_weight == weight
@@ -115,7 +115,7 @@ def test_child_property_change_is_not_inherited(filename: str, weight, tmp_path,
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.get_page(0)
 
-        shape_a = page.find_shape_by_text("Shape A")
+        shape_a = page.shapes.by_text("Shape A")
         sub_shape_a = shape_a.child_shapes[0]
         master = sub_shape_a.master_shape
         original_master_weight = master.line_weight
@@ -128,7 +128,7 @@ def test_child_property_change_is_not_inherited(filename: str, weight, tmp_path,
     with VisioFile(out_file) as vis:
         page = vis.get_page(0)
 
-        sub_shape_a = page.find_shape_by_text("Shape A").child_shapes[0]
+        sub_shape_a = page.shapes.by_text("Shape A").child_shapes[0]
         master = sub_shape_a.master_shape
 
         # check that child shape has changed to expected value
@@ -150,7 +150,7 @@ def test_master_find_shapes(filename: str, shape_text: str, basedir):
     # Check that shape with text can be found - whether in page, master or overridden in master
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.get_page(0)  # type: Page
-        shape = page.find_shape_by_text(shape_text)
+        shape = page.shapes.by_text(shape_text)
         assert shape  # shape found
 
 
@@ -168,7 +168,7 @@ def test_shape_has_master(filename: str, shape_text: str, has_master: bool, base
     # Check that shape.master_shape returns a shape or None as expected
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.get_page(0)  # type: Page
-        shape = page.find_shape_by_text(shape_text)
+        shape = page.shapes.by_text(shape_text)
         assert shape  # shape found
         if has_master:
             assert shape.master_shape  # shape has a master
@@ -190,7 +190,7 @@ def test_master_check_text_inheritance(filename: str, shape_text: str, has_maste
     # Check that shape with text can be found and that it has a master (or not) and inherits text (or not)
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.get_page(0)  # type: Page
-        shape = page.find_shape_by_text(shape_text)
+        shape = page.shapes.by_text(shape_text)
 
         if shape.master_shape:
             assert has_master
@@ -210,9 +210,11 @@ def test_find_shapes_by_master_id(filename: str, master_shape_text: str, number_
     # test that a shapes master has 'number_shapes' shapes that inherit from it
     with VisioFile(os.path.join(basedir, filename)) as vis:
         page = vis.get_page(0)
-        shape = page.find_shape_by_text(master_shape_text)  # get shape which has a master
+        shape = page.shapes.by_text(master_shape_text)  # get shape which has a master
         # print(f"master_shape: {master_shape} {master_shape_.master_shape_ID}")
-        shapes = page.find_shapes_with_same_master(shape)
+        shapes = [
+            s for s in page.shapes if s.master_page_ID == shape.master_page_ID and s.master_shape_ID == shape.master_shape_ID
+        ]
         print(f"shapes: {shapes}")
         assert len(shapes) == number_shapes
 
@@ -242,8 +244,8 @@ def test_master_inheritance_master_shape_set_text(
         page = vis.get_page(0)
 
         # get master shape of Shape with search text
-        master_shape = page.find_shapes_by_text(master_shape_search_text)[0].master_shape
-        shape = page.find_shape_by_text(shape_search_text)
+        master_shape = page.shapes.by_text(master_shape_search_text).master_shape
+        shape = page.shapes.by_text(shape_search_text)
         shape_id = shape.ID
         shape_text = shape.text
         master_shape.text = master_text
@@ -259,7 +261,7 @@ def test_master_inheritance_master_shape_set_text(
         page = vis.get_page(0)
 
         # get same shape and confirm inheritance works as expected
-        shape = page.find_shape_by_id(shape_id)
+        shape = page.shapes.require_id(shape_id)
         if expect_inherit:
             assert shape.text == master_text  # inherited from master change
         else:
@@ -281,5 +283,5 @@ def test_get_text_from_master_shape(filename: str, shape_id: str, expected_text:
         for s in vis.pages[0].all_shapes:
             print(f"ID={s.ID} text='{s.text}'")
 
-        child_shape = vis.pages[0].find_shape_by_id(shape_id)
+        child_shape = vis.pages[0].shapes.require_id(shape_id)
         assert child_shape.text == expected_text

@@ -212,8 +212,8 @@ def test_the_imported_master_is_named_and_counted_in_the_masters_section(vsdx_co
         page = vis.pages[0]
         Connect.create(
             page=page,
-            from_shape=page.find_shape_by_text("Shape to copy"),
-            to_shape=page.find_shape_by_text("Shape to remove"),
+            from_shape=page.shapes.by_text("Shape to copy"),
+            to_shape=page.shapes.by_text("Shape to remove"),
         )
         saved = _saved(vis, tmp_path, "house-connected.vsdx")
 

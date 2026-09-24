@@ -52,7 +52,7 @@ def test_text_color_reaches_a_shape_that_has_no_character_cell(filename, shape_i
     """The write has to land, and has to still be there after a save."""
     out_file = os.path.join(str(tmp_path), "out.vsdx")
     with VisioFile(os.path.join(basedir, filename)) as vis:
-        shape = vis.pages[0].find_shape_by_id(shape_id)
+        shape = vis.pages[0].shapes.require_id(shape_id)
         assert colour_cells(shape) == [], "fixture already carries the cell; this case proves nothing"
 
         shape.text_color = "#00ff00"
@@ -61,7 +61,7 @@ def test_text_color_reaches_a_shape_that_has_no_character_cell(filename, shape_i
         vis.save_vsdx(out_file)
 
     with VisioFile(out_file) as vis:
-        assert vis.pages[0].find_shape_by_id(shape_id).text_color == "#00ff00"
+        assert vis.pages[0].shapes.require_id(shape_id).text_color == "#00ff00"
 
 
 @pytest.mark.parametrize(("filename", "shape_id"), SHAPES_WITHOUT_A_CHARACTER_COLOUR)
@@ -75,7 +75,7 @@ def test_a_created_character_row_is_referenced_by_a_run(filename, shape_id, base
     before.
     """
     with VisioFile(os.path.join(basedir, filename)) as vis:
-        shape = vis.pages[0].find_shape_by_id(shape_id)
+        shape = vis.pages[0].shapes.require_id(shape_id)
         text_before = shape.text
 
         shape.text_color = "#00ff00"
@@ -93,7 +93,7 @@ def test_a_created_character_row_is_referenced_by_a_run(filename, shape_id, base
 def test_text_color_updates_the_existing_cell_in_place(basedir):
     """An existing cell is updated, not duplicated, and the runs are left alone."""
     with VisioFile(os.path.join(basedir, "test12_colors.vsdx")) as vis:
-        shape = vis.pages[0].find_shape_by_id("2")
+        shape = vis.pages[0].shapes.require_id("2")
         runs_before = [run.attrib.get("IX") for run in character_runs(shape)]
 
         shape.text_color = "#0000ff"
@@ -110,7 +110,7 @@ def test_text_color_updates_the_existing_cell_in_place(basedir):
 def test_text_color_fills_in_a_character_row_that_has_no_colour_cell(basedir):
     """A Character section may exist for an unrelated attribute, e.g. font size."""
     with VisioFile(os.path.join(basedir, "test1.vsdx")) as vis:
-        shape = vis.pages[0].find_shape_by_id("1")
+        shape = vis.pages[0].shapes.require_id("1")
         section = ET.SubElement(shape.xml, f"{namespace}Section", {"N": "Character"})
         ET.SubElement(ET.SubElement(section, f"{namespace}Row", {"IX": "0"}), f"{namespace}Cell", {"N": "Size", "V": "0.16"})
 
@@ -128,7 +128,7 @@ def test_text_color_lands_on_the_row_the_text_actually_names(vsdx_copy):
     colours nothing, which is issue #263 by another route.
     """
     with VisioFile(vsdx_copy(CFF_FIXTURE)) as vis:
-        shape = vis.pages[0].find_shape_by_id("37")
+        shape = vis.pages[0].shapes.require_id("37")
         runs = [run.attrib.get("IX") for run in character_runs(shape)]
         assert runs and runs[0] != "1", "fixture no longer has a row the first run does not name"
 
@@ -146,7 +146,7 @@ def test_text_color_lands_on_the_row_the_text_actually_names(vsdx_copy):
 def test_text_color_follows_a_run_that_names_a_row_out_of_range(basedir):
     """The row index comes from the text, not from counting from zero."""
     with VisioFile(os.path.join(basedir, "test1.vsdx")) as vis:
-        shape = vis.pages[0].find_shape_by_id("1")
+        shape = vis.pages[0].shapes.require_id("1")
         text = shape.xml.find(f"{namespace}Text")
         run = ET.Element(f"{namespace}cp", {"IX": "3"})
         run.tail, text.text = text.text, None
@@ -176,7 +176,7 @@ def test_a_created_section_goes_where_visio_puts_one(vsdx_copy):
 def test_a_rejected_colour_leaves_the_shape_untouched(basedir):
     """A setter that raises must not have half-written first."""
     with VisioFile(os.path.join(basedir, "test1.vsdx")) as vis:
-        shape = vis.pages[0].find_shape_by_id("1")
+        shape = vis.pages[0].shapes.require_id("1")
         before = ET.tostring(shape.xml)
 
         with pytest.raises(TypeError):

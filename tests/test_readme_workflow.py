@@ -139,7 +139,7 @@ def _connector_count(path) -> int:
 def _is_glued_to(path, text: str) -> bool:
     with VisioFile(str(path)) as document:
         page = document.pages[0]
-        target = page.find_shape_by_text(text)
+        target = next((s for s in page.shapes if text in s.text), None)
         if target is None:
             return False
         return any(record.to_id == str(target.ID) for record in page.connects)

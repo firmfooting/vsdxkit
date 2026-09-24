@@ -103,12 +103,39 @@ readable, so it can still be named in a message.
 Earlier finders
 ---------------
 
-The ``find_shape_*`` and ``find_shapes_*`` methods, ``child_shapes`` and
-``all_shapes`` still work and will be removed before 1.0. They differ from the
-collections in two ways: text is matched as a substring, and a lookup of one
-shape returns the first match without saying that there were several.
+The ``find_shape_*`` and ``find_shapes_*`` methods of ``Page`` and ``Shape``
+still work, and warn with a ``DeprecationWarning`` that names the
+replacement; they are removed in 1.0. ``child_shapes`` and ``all_shapes`` are
+removed with them. The finders differ from the collections in two ways: text
+is matched as a substring, and a lookup of one shape returns the first match
+without saying that there were several.
+
+A page's finders searched ``page.shapes`` and a shape's searched
+``shape.descendants``. For a finder with no collection method, filter the
+collection:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Deprecated
+     - Replacement
+   * - ``find_shape_by_id(id)``, ``find_shapes_by_id(id)``
+     - ``by_id(id)``, or ``require_id(id)``
+   * - ``find_shape_by_text(text)``, ``find_shapes_by_text(text)``
+     - ``by_text(text)``, ``matching_text(text)`` for the whole text;
+       ``[s for s in page.shapes if text in s.text]`` for a substring
+   * - ``find_shape_by_property_label(label)``,
+       ``find_shape_by_property_label_value(label, value)``
+     - ``by_property(label)``, ``by_property(label, value)``
+   * - ``find_shapes_by_property_label(label)``,
+       ``find_shapes_by_property_label_value(label, value)``
+     - ``matching_property(label)``, ``matching_property(label, value)``
+   * - ``find_shapes_by_regex``, ``find_shape_by_attr``,
+       ``find_shapes_by_master``, ``find_shapes_with_same_master``
+     - a comprehension over the collection
 
 .. code-block:: python
 
-   by_text = page.find_shape_by_text("Assessment")
-   numbered_steps = page.find_shapes_by_regex(r"Step \d+")
+   import re
+
+   numbered_steps = [shape for shape in page.shapes if re.search(r"Step \d+", shape.text)]
