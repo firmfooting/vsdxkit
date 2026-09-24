@@ -149,10 +149,13 @@ from :class:`vsdxkit.errors.VsdxError`, and every such class is defined in
 ``vsdxkit.errors``. A class that replaced a ``ValueError`` is still a
 ``ValueError``, so ``except ValueError:`` keeps working.
 
-An argument of the wrong type or out of range raises a plain ``TypeError`` or
-``ValueError``, not a ``VsdxError``. Examples are ``Document.open("file.txt")``,
-a page width that is not positive, and a ``ConnectorOptions`` field of the
-wrong type. ``except VsdxError:`` does not catch these.
+An argument of the wrong type or out of range usually raises a plain
+``TypeError`` or ``ValueError``, not a ``VsdxError``, and ``except VsdxError:``
+does not catch it. Examples are ``Document.open("file.txt")``, a page width
+that is not positive, and a ``ConnectorOptions`` ``glue`` or ``routing`` that
+is not a ``Glue`` or ``Routing``. A connection point that is not a
+non-negative ``int`` (``ConnectorOptions(from_point=-1)``) is the exception:
+it raises :class:`vsdxkit.errors.InvalidOperationError`, which is both.
 
 ``except zipfile.BadZipFile:``, ``except RuntimeError:``, ``except KeyError:`` around an open
    ``except MalformedPackageError:``. Opening a package that is not a zip,
@@ -216,10 +219,14 @@ OPC name, and the file-system view of 0.x is gone.
    Gone. The document parts are properties of ``Document``, such as
    ``document.pages_xml``.
 
-``vsdx.masters.MastersImportMixin``, ``VisioFile.load_master_pages()``
+``vsdx.masters.MastersImportMixin``
    Gone as a base class. The document's masters are
    ``document.master_pages`` and ``document.master_index``, which are now
    read-only.
+
+``vis.load_master_pages()``
+   Unchanged, as ``document.load_master_pages()``: it re-reads the masters
+   from the package, after the masters' XML has been edited.
 
 Pages and shapes are collections
 --------------------------------
@@ -267,6 +274,13 @@ Reading or writing a deleted shape
    XML. Assigning into the dict changes nothing; set a cell with
    ``shape.set_cell_value`` or ``shape.set_cell_formula``.
 
+``shape.data_properties``
+   Also a new ``dict`` on each read; 0.8 returned the same one while the
+   property rows were unchanged. A key added to the dict, or a dict kept
+   from an earlier read, is not the shape's. Change a property through its
+   :class:`vsdxkit.shapes.DataProperty`:
+   ``shape.data_properties["Status"].value = "Done"``.
+
 A page creates its own shapes
 -----------------------------
 
@@ -292,9 +306,13 @@ A copy of an existing shape
 
    - ``Media.rectangle``, ``Media.rectangle_text``: ``page.create_shape(ShapeKind.RECTANGLE, ...)``;
    - ``Media.circle``, ``Media.circle_text``: ``page.create_shape(ShapeKind.CIRCLE, ...)``;
-   - ``Media.straight_connector``, ``Media.straight_connector_text``,
-     ``Media.curved_connector``, ``Media.curved_connector_text``:
-     ``page.connect(a, b, routing=...)``;
+   - ``Media.straight_connector``, ``Media.straight_connector_text``:
+     ``page.connect(a, b, routing=Routing.STRAIGHT)`` for a connector glued
+     at both ends, or ``page.create_shape(ShapeKind.LINE, x=..., y=...,
+     width=...)`` for a free-standing straight line;
+   - ``Media.curved_connector``, ``Media.curved_connector_text``:
+     ``page.connect(a, b, routing=Routing.CURVED)``. There is no free-standing
+     curved connector; ``connector.retarget`` can move its ends later;
    - ``Media.palette``, ``Media.media``, ``Media.rels_xml``: the donor
      documents themselves, no longer handed out;
    - ``Media.close()``: nothing to close.
