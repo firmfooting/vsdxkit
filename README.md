@@ -84,7 +84,7 @@ A save writes every part you did not change exactly as it arrived. A part you di
 
 ## Find shapes
 
-`page.shapes` is every shape on the page, inside groups too; `page.children` is only the page's top-level shapes, and a group's `children` and `descendants` are its own. Each is a collection: iterate it, or look shapes up in it. A lookup says how many shapes it expects: `require_*` wants exactly one and raises `NotFoundError` for none, `by_*` wants at most one and returns `None` for none, and `matching_*` returns every match. Two matches for a text or property lookup that wanted one raise `InvalidOperationError` instead of picking one. IDs are unique on a valid page, so two shapes sharing one make a lookup by ID raise `PackageError`: the page is malformed.
+`page.shapes` is every shape on the page, inside groups too; `page.children` is only the page's top-level shapes, and a group's `children` and `descendants` are its own. Each is a collection: iterate it, or look shapes up in it. A lookup says how many shapes it expects: `require_*` wants exactly one and raises `NotFoundError` for none, `by_*` wants at most one and returns `None` for none, and `matching_*` returns every match. Two matches for a text or property lookup that wanted one raise `InvalidOperationError` instead of picking one. IDs are unique on a valid page, so a lookup by ID that finds two shapes with one ID in the collection it searches raises `PackageError`: the page is malformed. Only `page.shapes` searches the whole page; `page.children` sees one shape of a top-level and nested pair.
 
 ```python
 vis = Document.open("diagram.vsdx")
