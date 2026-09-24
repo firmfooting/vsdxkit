@@ -1,7 +1,8 @@
 # The public surface of vsdx 0.8.0, the last release before 1.0: every name in
 # vsdx.__all__ and every other name the package root defined, every public name
-# a vsdx module defined, and every public member of a class it defined.
-# tools/check_migration_guide.py reads it; it never changes.
+# a vsdx module defined, and every public member of a class it defined, including
+# the attributes its methods assign on self. tools/check_migration_guide.py reads
+# it; it never changes.
 vsdx.Cell
 vsdx.Connect
 vsdx.Container
@@ -33,11 +34,13 @@ vsdx.connectors.Connect.connector_shape_id
 vsdx.connectors.Connect.create
 vsdx.connectors.Connect.from_id
 vsdx.connectors.Connect.from_rel
+vsdx.connectors.Connect.page
 vsdx.connectors.Connect.retarget
 vsdx.connectors.Connect.shape
 vsdx.connectors.Connect.shape_id
 vsdx.connectors.Connect.to_id
 vsdx.connectors.Connect.to_rel
+vsdx.connectors.Connect.xml
 vsdx.containers.LANE_PITCH_INCHES
 vsdx.containers.ROW_HEADING_TEXT
 vsdx.containers.ROW_SWIMLANE_GUID
@@ -53,6 +56,7 @@ vsdx.containers.Container.lane_heading
 vsdx.containers.Container.lane_of
 vsdx.containers.Container.lanes
 vsdx.containers.Container.members
+vsdx.containers.Container.page
 vsdx.containers.Container.set_lane_label
 vsdx.containers.Container.swimlane_list
 vsdx.document_part.DocumentPart
@@ -69,26 +73,36 @@ vsdx.formulae.height
 vsdx.formulae.func_map
 vsdx.formulae.calc_value
 vsdx.geometry.Geometry
+vsdx.geometry.Geometry.cells
 vsdx.geometry.Geometry.move
+vsdx.geometry.Geometry.rows
 vsdx.geometry.Geometry.set_line_to
 vsdx.geometry.Geometry.set_move_to
+vsdx.geometry.Geometry.shape
 vsdx.geometry.Geometry.start_pos
+vsdx.geometry.Geometry.xml
 vsdx.geometry.GeometryRow
+vsdx.geometry.GeometryRow.cells
 vsdx.geometry.GeometryRow.create_row_xml
 vsdx.geometry.GeometryRow.del_bool
+vsdx.geometry.GeometryRow.geometry
 vsdx.geometry.GeometryRow.index
 vsdx.geometry.GeometryRow.inherited
 vsdx.geometry.GeometryRow.inherited_by
 vsdx.geometry.GeometryRow.make_local
 vsdx.geometry.GeometryRow.row_type
 vsdx.geometry.GeometryRow.x
+vsdx.geometry.GeometryRow.xml
 vsdx.geometry.GeometryRow.y
 vsdx.geometry.GeometryCell
 vsdx.geometry.GeometryCell.create_cell_xml
 vsdx.geometry.GeometryCell.formula
 vsdx.geometry.GeometryCell.func
 vsdx.geometry.GeometryCell.name
+vsdx.geometry.GeometryCell.parent
+vsdx.geometry.GeometryCell.parent_xml
 vsdx.geometry.GeometryCell.value
+vsdx.geometry.GeometryCell.xml
 vsdx.inheritance.InheritedRow
 vsdx.inheritance.InheritedRow.inherited
 vsdx.inheritance.InheritedRow.make_local
@@ -96,6 +110,7 @@ vsdx.logging_support.get_logger
 vsdx.logging_support.attach_debug_stream_handler
 vsdx.masters.MastersImportMixin
 vsdx.masters.MastersImportMixin.load_master_pages
+vsdx.masters.MastersImportMixin.masters_xml
 vsdx.media.Media
 vsdx.media.Media.circle
 vsdx.media.Media.circle_text
@@ -126,6 +141,7 @@ vsdx.pages.Page.child_shapes
 vsdx.pages.Page.connect_shapes
 vsdx.pages.Page.connects
 vsdx.pages.Page.delete_shape
+vsdx.pages.Page.filename
 vsdx.pages.Page.find_replace
 vsdx.pages.Page.find_shape_by_attr
 vsdx.pages.Page.find_shape_by_id
@@ -143,13 +159,20 @@ vsdx.pages.Page.get_container
 vsdx.pages.Page.height
 vsdx.pages.Page.index_num
 vsdx.pages.Page.is_master_page
+vsdx.pages.Page.master_base_id
+vsdx.pages.Page.master_unique_id
 vsdx.pages.Page.name
+vsdx.pages.Page.page_id
 vsdx.pages.Page.page_name
 vsdx.pages.Page.reanchor_connector
+vsdx.pages.Page.rel_id
+vsdx.pages.Page.rels_xml
+vsdx.pages.Page.rels_xml_filename
 vsdx.pages.Page.remove_connect_records
 vsdx.pages.Page.set_name
 vsdx.pages.Page.shapes
 vsdx.pages.Page.sub_shapes
+vsdx.pages.Page.vis
 vsdx.pages.Page.width
 vsdx.pages.Page.xml
 vsdx.relationships.CONTENT_TYPES_NS
@@ -170,15 +193,24 @@ vsdx.shapes.Cell
 vsdx.shapes.Cell.formula
 vsdx.shapes.Cell.func
 vsdx.shapes.Cell.name
+vsdx.shapes.Cell.shape
 vsdx.shapes.Cell.value
+vsdx.shapes.Cell.xml
 vsdx.shapes.DataProperty
 vsdx.shapes.DataProperty.get_attribute
 vsdx.shapes.DataProperty.inherited
 vsdx.shapes.DataProperty.inherited_by
+vsdx.shapes.DataProperty.label
 vsdx.shapes.DataProperty.make_local
+vsdx.shapes.DataProperty.name
+vsdx.shapes.DataProperty.prompt
 vsdx.shapes.DataProperty.remove_attribute
 vsdx.shapes.DataProperty.set_attribute
+vsdx.shapes.DataProperty.shape
+vsdx.shapes.DataProperty.sort_key
 vsdx.shapes.DataProperty.value
+vsdx.shapes.DataProperty.value_type
+vsdx.shapes.DataProperty.xml
 vsdx.shapes.Shape
 vsdx.shapes.Shape.ID
 vsdx.shapes.Shape.all_shapes
@@ -190,6 +222,7 @@ vsdx.shapes.Shape.begin_y
 vsdx.shapes.Shape.bounds
 vsdx.shapes.Shape.cell_formula
 vsdx.shapes.Shape.cell_value
+vsdx.shapes.Shape.cells
 vsdx.shapes.Shape.center_x_y
 vsdx.shapes.Shape.child_shapes
 vsdx.shapes.Shape.connected_shapes
@@ -232,6 +265,8 @@ vsdx.shapes.Shape.master_page_ID
 vsdx.shapes.Shape.master_shape
 vsdx.shapes.Shape.master_shape_ID
 vsdx.shapes.Shape.move
+vsdx.shapes.Shape.page
+vsdx.shapes.Shape.parent
 vsdx.shapes.Shape.relative_bounds
 vsdx.shapes.Shape.remove
 vsdx.shapes.Shape.set_cell_formula
@@ -249,6 +284,7 @@ vsdx.shapes.Shape.text_style_id
 vsdx.shapes.Shape.universal_name
 vsdx.shapes.Shape.width
 vsdx.shapes.Shape.x
+vsdx.shapes.Shape.xml
 vsdx.shapes.Shape.y
 vsdx.templating.JinjaTemplatingMixin
 vsdx.templating.JinjaTemplatingMixin.increment_sub_shape_ids
@@ -267,12 +303,18 @@ vsdx.vsdxdiff.VisioFileDiff.break_all_xml_into_lines
 vsdx.vsdxdiff.VisioFileDiff.break_xml_into_lines
 vsdx.vsdxdiff.VisioFileDiff.common_members
 vsdx.vsdxdiff.VisioFileDiff.compare_members
+vsdx.vsdxdiff.VisioFileDiff.contents_a
+vsdx.vsdxdiff.VisioFileDiff.contents_b
+vsdx.vsdxdiff.VisioFileDiff.diffs
 vsdx.vsdxdiff.VisioFileDiff.extract_file_data
+vsdx.vsdxdiff.VisioFileDiff.filepath_a
+vsdx.vsdxdiff.VisioFileDiff.filepath_b
 vsdx.vsdxdiff.VisioFileDiff.get_file_diffs
 vsdx.vsdxdiff.VisioFileDiff.removed_members
 vsdx.vsdxfile.MACRO_ENABLED_CONTENT_TYPE
 vsdx.vsdxfile.DRAWING_CONTENT_TYPE
 vsdx.vsdxfile.PackageLimitError
+vsdx.vsdxfile.PackageLimitError.reason
 vsdx.vsdxfile.PackageLimits
 vsdx.vsdxfile.PackageLimits.from_json_file
 vsdx.vsdxfile.PackageLimits.max_member_size
@@ -283,12 +325,20 @@ vsdx.vsdxfile.VisioFileNotOpen
 vsdx.vsdxfile.VisioFile
 vsdx.vsdxfile.VisioFile.add_page
 vsdx.vsdxfile.VisioFile.add_page_at
+vsdx.vsdxfile.VisioFile.app_xml
 vsdx.vsdxfile.VisioFile.apply_text_context
 vsdx.vsdxfile.VisioFile.close_vsdx
+vsdx.vsdxfile.VisioFile.content_types_xml
 vsdx.vsdxfile.VisioFile.copy_page
 vsdx.vsdxfile.VisioFile.copy_shape
 vsdx.vsdxfile.VisioFile.create_shape
+vsdx.vsdxfile.VisioFile.debug
+vsdx.vsdxfile.VisioFile.directory
 vsdx.vsdxfile.VisioFile.document_rels
+vsdx.vsdxfile.VisioFile.document_xml
+vsdx.vsdxfile.VisioFile.document_xml_rels
+vsdx.vsdxfile.VisioFile.file_open
+vsdx.vsdxfile.VisioFile.filename
 vsdx.vsdxfile.VisioFile.get_master_page_by_id
 vsdx.vsdxfile.VisioFile.get_page
 vsdx.vsdxfile.VisioFile.get_page_by_name
@@ -305,9 +355,16 @@ vsdx.vsdxfile.VisioFile.jinja_page_showif
 vsdx.vsdxfile.VisioFile.jinja_render_shape
 vsdx.vsdxfile.VisioFile.jinja_render_vsdx
 vsdx.vsdxfile.VisioFile.jinja_set_selfs
+vsdx.vsdxfile.VisioFile.limits
 vsdx.vsdxfile.VisioFile.load_master_pages
 vsdx.vsdxfile.VisioFile.load_pages
+vsdx.vsdxfile.VisioFile.master_index
+vsdx.vsdxfile.VisioFile.master_pages
+vsdx.vsdxfile.VisioFile.masters_xml
 vsdx.vsdxfile.VisioFile.open_vsdx_file
+vsdx.vsdxfile.VisioFile.pages
+vsdx.vsdxfile.VisioFile.pages_xml
+vsdx.vsdxfile.VisioFile.pages_xml_rels
 vsdx.vsdxfile.VisioFile.pretty_print_element
 vsdx.vsdxfile.VisioFile.remove_page_by_index
 vsdx.vsdxfile.VisioFile.remove_page_by_name
@@ -317,6 +374,7 @@ vsdx.vsdxfile.VisioFile.set_new_id
 vsdx.vsdxfile.VisioFile.set_shape_location
 vsdx.vsdxfile.VisioFile.unescape_jinja_statements
 vsdx.vsdxfile.VisioFile.update_ids
+vsdx.vsdxfile.VisioFile.zip_file_contents
 vsdx.xmlio.NAMESPACE_PREFIXES
 vsdx.xmlio.register_namespaces
 vsdx.xmlio.make_cell_element

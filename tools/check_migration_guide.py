@@ -2,8 +2,11 @@
 
 The 0.8.0 surface is `tools/api-0.8.0.txt`. Each name is looked up where 1.0
 keeps it: `vsdx` is `vsdxkit`, `VisioFile` is `vsdxkit.document.Document` and
-`Container` is `vsdxkit.swimlanes.SwimlaneDiagram`. A name that is not found
-there must be named, qualified, in an inline literal or code block of
+`Container` is `vsdxkit.swimlanes.SwimlaneDiagram`. A module keeps a name
+only if its own source defines it at the top level: a name it imports for its
+own use has moved. A class keeps a member it or a vsdxkit base defines, or
+assigns on ``self``. A name that is not kept must be named, qualified, in an
+inline literal or code block of
 `docs/migration-1.0.rst`, so an entry for one owner's name never stands in for
 another's:
 
@@ -15,9 +18,13 @@ another's:
 
 from __future__ import annotations
 
+import ast
 import importlib
+import inspect
 import re
 import sys
+import textwrap
+from functools import cache
 from pathlib import Path
 
 SNAPSHOT = Path("tools") / "api-0.8.0.txt"
@@ -62,14 +69,49 @@ def vsdxkit_modules() -> list[str]:
     return [path.stem for path in sorted((Path("src") / "vsdxkit").glob("*.py")) if not path.stem.startswith("_")]
 
 
+@cache
+def defined_names(module_name: str) -> frozenset[str]:
+    """The names a vsdxkit module's own source binds at its top level: not the ones it imports."""
+    path = Path("src") / "vsdxkit" / f"{module_name}.py"
+    if not path.is_file():
+        return frozenset()
+    names = set()
+    for node in ast.parse(path.read_text(encoding="utf-8")).body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, ast.Assign):
+            names |= {target.id for target in node.targets if isinstance(target, ast.Name)}
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names.add(node.target.id)
+    return frozenset(names)
+
+
 def lookup(module_name: str, name: str) -> object | None:
     """The 1.0 object a 0.8.0 module-level name became, where 1.0 keeps it under that module."""
     module_name, name = CLASS_RENAMES.get((module_name, name), (module_name, name))
-    try:
-        module = importlib.import_module(f"vsdxkit.{module_name}")
-    except ModuleNotFoundError:
+    if name not in defined_names(module_name):
         return None
-    return getattr(module, name, None)
+    return getattr(importlib.import_module(f"vsdxkit.{module_name}"), name, None)
+
+
+def instance_attributes(owner: type) -> set[str]:
+    """The public names the methods of `owner`, and of its vsdxkit bases, assign on ``self``."""
+    names = set()
+    for klass in owner.__mro__:
+        if not klass.__module__.startswith("vsdxkit."):
+            continue
+        for node in ast.walk(ast.parse(textwrap.dedent(inspect.getsource(klass)))):
+            targets = (
+                node.targets if isinstance(node, ast.Assign) else [node.target] if isinstance(node, ast.AnnAssign) else []
+            )
+            for target in targets:
+                if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == "self":
+                    names.add(target.attr)
+    return {name for name in names if not name.startswith("_")}
+
+
+def keeps(owner: object, member: str) -> bool:
+    return hasattr(owner, member) or (isinstance(owner, type) and member in instance_attributes(owner))
 
 
 def moved(name: str, modules: list[str]) -> object | None:
@@ -108,7 +150,7 @@ def unexplained(names: list[str], literals: list[str], modules: list[str]) -> li
         member = parts[2]
         # a member of a class that moved is looked for where it moved to
         owner = owner or moved(name, modules)
-        if owner is not None and hasattr(owner, member):
+        if owner is not None and keeps(owner, member):
             continue
         if not any((qualifier, member) in qualified for qualifier in owner_names(name)):
             missing.append(f"{dotted} (as `{name}.{member}`)")

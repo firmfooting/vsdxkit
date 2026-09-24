@@ -62,6 +62,19 @@ def test_a_name_1_0_keeps_needs_no_entry(modules):
     assert check.unexplained(["vsdx.pages.Page.name", "vsdx.shapes.Shape.text", "vsdx.namespace"], [], modules) == []
 
 
+def test_a_name_a_module_only_imports_is_not_kept(modules):
+    """Fails if an incidental import counts as the module keeping the name, as `vsdxkit.shapes.to_float` did."""
+    assert check.unexplained(["vsdx.shapes.to_float"], [], modules) == ["vsdx.shapes.to_float (as `shapes.to_float`)"]
+
+
+def test_an_attribute_assigned_on_self_is_kept(modules):
+    """Fails if a member 1.0 keeps as an instance attribute is reported, or one it dropped is not."""
+    assert check.unexplained(["vsdx.pages.Page.vis", "vsdx.shapes.DataProperty.label"], [], modules) == []
+    assert check.unexplained(["vsdx.containers.Container.page"], [], modules) == [
+        "vsdx.containers.Container.page (as `Container.page`)"
+    ]
+
+
 def test_a_renamed_class_is_looked_up_under_its_new_name(modules):
     assert check.unexplained(["vsdx.vsdxfile.VisioFile.save"], [], modules) == []
     assert check.unexplained(["vsdx.containers.Container.lanes"], [], modules) == []

@@ -215,6 +215,10 @@ OPC name, and the file-system view of 0.x is gone.
 ``vsdx.vsdxfile.PackageLimits``
    ``vsdxkit.package.PackageLimits``.
 
+``vsdx.relationships.CONTENT_TYPES_NS``, ``relationships.RELATIONSHIPS_NS``
+   ``vsdxkit.cont_types_namespace`` and ``vsdxkit.document_rels_namespace``,
+   which they were copies of.
+
 ``vsdx.document_part.DocumentPart``
    Gone. The document parts are properties of ``Document``, such as
    ``document.pages_xml``.
@@ -223,6 +227,10 @@ OPC name, and the file-system view of 0.x is gone.
    Gone as a base class. The document's masters are
    ``document.master_pages`` and ``document.master_index``, which are now
    read-only.
+
+``vis.masters_xml``
+   Unchanged, as ``document.masters_xml``: it was the mixin's, and is now the
+   document's own.
 
 ``vis.load_master_pages()``
    Unchanged, as ``document.load_master_pages()``: it re-reads the masters
@@ -402,6 +410,9 @@ which is gone along with its module. Membership is still geometric.
 
 ``container.container_shape``
    ``diagram.container``.
+
+``container.page``
+   ``diagram.container.page``.
 
 ``container.lane_band(lane)``, ``container.swimlane_list``, ``container.lane_heading(lane)``, ``Container.find(page)``
    Gone. A lane's band is its ``y`` plus or minus half its ``height``.

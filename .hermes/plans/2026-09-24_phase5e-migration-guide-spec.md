@@ -25,11 +25,9 @@ everything since the `v0.8.0` tag is unreleased. The package imported as
   `pretty_print_element`;
 - every public name a `vsdx` module defined (not ones it imported, loggers or
   type variables);
-- every public class-level member of a class it defined, including
-  inherited members from `vsdx` bases.
-
-Instance attributes (`zip_file_contents`, `directory`, `debug`) are not
-visible to the snapshot, so the guide covers them by hand.
+- every public member of a class it defined, including inherited members
+  from `vsdx` bases, and the attributes its methods assign on `self`
+  (`container.page`, `vis.zip_file_contents`), read from the class's source.
 
 ## The check
 
@@ -39,6 +37,10 @@ visible to the snapshot, so the guide covers them by hand.
   `VisioFile`, which becomes `vsdxkit.document.Document`, and `Container`,
   which becomes `vsdxkit.swimlanes.SwimlaneDiagram`. A member of a class that
   moved is looked up where it moved to.
+- A module keeps a name only if its own source binds it at the top level. A
+  name it imports for its own use has moved (Codex on #409:
+  `vsdxkit.shapes.to_float`). A class keeps a member it or a vsdxkit base
+  defines, or assigns on `self`.
 - A name 1.0 does not have must be named, qualified, in an inline literal or
   a code-block line of `docs/migration-1.0.rst`. A bare token is not enough,
   so an entry for one owner's name never stands in for another's (Codex on
