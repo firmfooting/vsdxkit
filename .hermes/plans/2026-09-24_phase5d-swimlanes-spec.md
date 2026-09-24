@@ -34,14 +34,23 @@ of `lanes` raises `InvalidOperationError`.
 
 A lane's band is half-open, `bottom <= y < top`, so a shape on the edge two lanes
 share belongs to the upper lane only. Visio's own lanes meet only to within
-rounding (1e-15 in the capture), so both edges sit 1e-9 inch low. `shapes_in`
-and `lane_for` use the same predicate. The 0.x band was closed at both ends, which put a shape on the edge in
-two lanes, and `lane_of` then returned whichever it found first.
+rounding (3.6e-15 in the capture). So the lanes' edges are snapped: each edge
+takes the value of the first edge already seen within 1e-9 of it. Adjoining
+lanes then share one float, and the bands leave no gap and no overlap. Shifting
+each edge by a tolerance instead kept the discrepancy, one tolerance lower
+(Codex on #408). `shapes_in`, `lane_for` and `move_to_lane` use the same
+snapped bands. The 0.x band was closed at both ends, which put a shape on the
+edge in two lanes, and `lane_of` then returned whichever it found first.
 
 ## Discovery
 
 The container and lanes are found among `page.children`, the shared top-level
-walk. The container is the child named `CFF Container` or `CFF Container.<n>`.
+walk. The container is the child named `CFF Container` or `CFF Container.<n>`,
+where `<n>` is a number: `CFF Container.backup` is not a copy Visio made.
+
+A diagram whose container has been deleted, or whose page has, refuses every
+operation with `InvalidOperationError`, before anything is written. `lanes`,
+which every operation reads first, checks it.
 The 0.x finder searched every shape at any depth for an exact name, while the
 container property searched the top level by prefix; there is now one rule.
 

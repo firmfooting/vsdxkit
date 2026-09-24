@@ -48,9 +48,14 @@ _CFF_MACHINERY = (CONTAINER_NAME, _SWIMLANE_LIST_NAME, "Phase List", "Separator"
 
 
 def _named(shape: Shape, name: str) -> bool:
-    """Whether the shape is `name`, or a numbered copy of it: Visio names the second one `name.12`."""
+    """Whether the shape is `name`, or a numbered copy of it: Visio names the second one `name.12`.
+
+    Only a number follows the dot. A shape its author named `name.backup` is
+    not a copy Visio made.
+    """
     shape_name = shape.shape_name or ""
-    return shape_name == name or shape_name.startswith(f"{name}.")
+    base, dot, suffix = shape_name.partition(".")
+    return base == name and (not dot or suffix.isdigit())
 
 
 def _is_lane(shape: Shape) -> bool:
@@ -82,17 +87,38 @@ def _band(lane: Shape) -> tuple[float, float]:
     return centre - height / 2, centre + height / 2
 
 
-def _holds(lane: Shape, shape: Shape) -> bool:
-    """Whether the shape's centre is in the lane's band.
+def _bands(lanes: tuple[Shape, ...]) -> dict[Shape, tuple[float, float]]:
+    """Each lane's (bottom, top), with edges that meet to within rounding made one edge.
+
+    Visio's own lanes meet only to within rounding: 3.6e-15 apart in the
+    reference capture. Each edge is snapped to the first edge already seen
+    within `_EDGE_TOLERANCE` of it, so adjoining lanes share one value and
+    their half-open bands leave no gap and no overlap between them.
+    """
+    edges: list[float] = []
+
+    def snap(value: float) -> float:
+        for edge in edges:
+            if abs(edge - value) <= _EDGE_TOLERANCE:
+                return edge
+        edges.append(value)
+        return value
+
+    bands = {}
+    for lane in lanes:
+        bottom, top = _band(lane)
+        bands[lane] = (snap(bottom), snap(top))
+    return bands
+
+
+def _holds(band: tuple[float, float], shape: Shape) -> bool:
+    """Whether the shape's centre is in the band.
 
     The band includes its bottom edge and not its top, so a shape on the edge
-    two lanes share is in the upper one only. Visio's own lanes meet only to
-    within rounding, so both edges sit `_EDGE_TOLERANCE` low: a shape on the
-    edge, or a hair either side of it, is still in one lane.
+    two lanes share is in the upper one only.
     """
-    bottom, top = _band(lane)
-    y = shape.y or 0.0
-    return bottom - _EDGE_TOLERANCE <= y < top - _EDGE_TOLERANCE
+    bottom, top = band
+    return bottom <= (shape.y or 0.0) < top
 
 
 def _heading(lane: Shape) -> Shape | None:
@@ -138,7 +164,15 @@ class SwimlaneDiagram:
 
     @property
     def lanes(self) -> tuple[Shape, ...]:
-        """The lane shapes, top lane first."""
+        """The lane shapes, top lane first.
+
+        Every other operation reads the lanes first, so a diagram whose
+        container has been deleted, or whose page has, refuses here before
+        anything is written.
+
+        :raises InvalidOperationError: the container is no longer in the document
+        """
+        self._container._require_attached("reading a swimlane diagram's lanes")
         lanes = [shape for shape in self._page.children if _is_lane(shape)]
         lanes.sort(key=lambda lane: -(lane.y or 0.0))
         return tuple(lanes)
@@ -151,12 +185,13 @@ class SwimlaneDiagram:
         :raises InvalidOperationError: ``lane`` is not one of :attr:`lanes`
         """
         self._require_lane(lane)
+        band = _bands(self.lanes)[lane]
         return tuple(
             shape
             for shape in self._page.children
             if not (shape.shape_name or "").startswith((*_CFF_MACHINERY, "Swimlane"))
             and not is_connector(shape)
-            and _holds(lane, shape)
+            and _holds(band, shape)
         )
 
     def lane_for(self, shape: Shape) -> Shape | None:
@@ -164,7 +199,7 @@ class SwimlaneDiagram:
 
         :raises InvalidOperationError: lanes overlap where the shape is, so it is in more than one
         """
-        holding = [lane for lane in self.lanes if _holds(lane, shape)]
+        holding = [lane for lane, band in _bands(self.lanes).items() if _holds(band, shape)]
         if len(holding) > 1:
             ids = ", ".join(str(lane.ID) for lane in holding)
             raise InvalidOperationError(f"shape {shape.ID} is in {len(holding)} overlapping lanes (shapes {ids})")
@@ -222,7 +257,7 @@ class SwimlaneDiagram:
         :raises InvalidOperationError: ``lane`` is not one of :attr:`lanes`
         """
         self._require_lane(lane)
-        if _holds(lane, shape):
+        if _holds(_bands(self.lanes)[lane], shape):
             return
         shape.get_or_create_cell("PinY", v=str(lane.y or 0.0))
 

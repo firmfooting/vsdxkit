@@ -1,6 +1,8 @@
 """SwimlaneDiagram against the real Visio CFF capture (#110)."""
 
 import copy
+import itertools
+import xml.etree.ElementTree as ET
 import zipfile
 
 import pytest
@@ -22,6 +24,10 @@ def _label(lane):
 def _diagram(vsdx_copy):
     page = Document.open(vsdx_copy(FIXTURE)).pages[0]
     return page, page.require_swimlanes()
+
+
+def _xml(element):
+    return ET.tostring(element)
 
 
 def test_a_cff_page_has_one_diagram_bound_to_its_container(vsdx_copy):
@@ -81,6 +87,57 @@ def test_a_shape_on_a_shared_edge_is_in_the_upper_lane_only(vsdx_copy):
     assert diagram.lane_for(decision) == upper
     assert decision in diagram.shapes_in(upper)
     assert decision not in diagram.shapes_in(lower)
+
+
+def test_a_shape_near_an_edge_visio_rounded_is_in_exactly_one_lane(vsdx_copy):
+    """Fails if two lanes whose edges meet only to within rounding both hold, or neither holds, a shape between them.
+
+    In the capture, one pair of adjoining lane edges differs by about 3.6e-15.
+    Shifting each lane's edges by the same tolerance keeps that discrepancy,
+    one tolerance lower, so the shapes centred there are in both lanes or in
+    neither.
+    """
+    page, diagram = _diagram(vsdx_copy)
+    lanes = diagram.lanes
+    pairs = [(upper, lower) for upper, lower in itertools.pairwise(lanes) if _band(upper)[0] != _band(lower)[1]]
+    assert pairs, "the capture is expected to hold a pair of edges Visio rounded apart"
+    decision = page.shapes.require_text("Decision")
+    for upper, lower in pairs:
+        edge = _band(lower)[1]
+        for step in range(-40, 41):
+            for base in (0.0, -1e-9, 1e-9):
+                decision.y = edge + base + step * 2.5e-16
+                assert diagram.lane_for(decision) in (upper, lower), decision.y
+
+
+def test_only_a_numbered_copy_of_the_container_is_a_container(vsdx_copy):
+    """Fails if a shape merely named like the container, such as `CFF Container.backup`, is taken for one."""
+    page, diagram = _diagram(vsdx_copy)
+    lookalike = copy.deepcopy(next(iter(diagram.shapes_in(diagram.lanes[0]))).xml)
+    lookalike.attrib["ID"] = "9999"
+    lookalike.attrib["NameU"] = "CFF Container.backup"
+    page.xml.getroot().find(f"{namespace}Shapes").append(lookalike)
+
+    assert page.require_swimlanes().container == diagram.container
+
+    plain = Document.open(vsdx_copy("test1.vsdx")).pages[0]
+    plain.xml.getroot().find(f"{namespace}Shapes").append(copy.deepcopy(lookalike))
+    assert plain.swimlanes is None
+
+
+def test_a_diagram_whose_container_is_deleted_refuses_before_writing(vsdx_copy):
+    """Fails if `add_lane` copies a lane and grows the Swimlane List for a container that is gone."""
+    page, diagram = _diagram(vsdx_copy)
+    page.delete_shape(diagram.container)
+    before = page.xml.getroot()
+    snapshot = copy.deepcopy(before)
+
+    with pytest.raises(InvalidOperationError, match="no longer in the document"):
+        diagram.add_lane("Late")
+    with pytest.raises(InvalidOperationError, match="no longer in the document"):
+        diagram.lanes  # noqa: B018
+
+    assert _xml(before) == _xml(snapshot)
 
 
 def test_overlapping_lanes_make_lane_for_refuse(vsdx_copy):
