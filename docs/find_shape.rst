@@ -87,6 +87,19 @@ A property is matched by its Shape Data label, the name shown in Visio's Shape
 Data window, including properties the shape inherits from its master. A value,
 where one is given, is compared as text.
 
+Shape identity
+--------------
+
+Every traversal hands back new :class:`vsdxkit.shapes.Shape` objects, and two
+of them for one shape are equal and hash alike. A shape stays the same key in a
+set or a dict when its ID, its page's name or the file's name changes. Shapes
+from two documents are never equal, even two opens of one file.
+
+A shape deleted from its page, or on a page removed from the document, is
+detached: ``shape.is_attached`` is ``False``, and reading or changing it raises
+:class:`vsdxkit.errors.InvalidOperationError`. Its ``ID`` and its ``repr`` stay
+readable, so it can still be named in a message.
+
 Earlier finders
 ---------------
 

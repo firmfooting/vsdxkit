@@ -35,8 +35,7 @@ class GeometryOwner(Protocol):
     @property
     def master_shape(self) -> GeometryOwner | None: ...
 
-    @property
-    def _document(self) -> GuardedDocument: ...
+    def _require_open(self, operation: str) -> None: ...
 
 
 namespace = "{http://schemas.microsoft.com/office/visio/2012/main}"  # visio file name space
@@ -108,7 +107,9 @@ class Geometry(DocumentPart):
     @property
     @override
     def _document(self) -> GuardedDocument:
-        return self.shape._document
+        # the shape, not its document: a write to a deleted shape's geometry is
+        # refused, as a write to the shape itself is
+        return self.shape
 
     def start_pos(self) -> tuple[float | None, float | None] | None:
         """The start of the path, from the first MoveTo or RelMoveTo row.

@@ -20,7 +20,7 @@ import deprecation
 import vsdxkit
 from vsdxkit import namespace
 from vsdxkit.connectors import Connect
-from vsdxkit.document_part import DocumentPart
+from vsdxkit.document_part import DocumentPart, GuardedDocument
 from vsdxkit.errors import InvalidOperationError, NotFoundError, PackageError
 from vsdxkit.formulae import calc_value
 from vsdxkit.geometry import Geometry, GeometryCell
@@ -224,8 +224,10 @@ class Cell(DocumentPart):
 
     @property
     @override
-    def _document(self) -> VisioFile:
-        return self.shape._document
+    def _document(self) -> GuardedDocument:
+        # the shape, not its document: a write through a part of a deleted
+        # shape is refused, as a write to the shape itself is
+        return self.shape
 
     @property
     def value(self) -> str | None:
@@ -318,8 +320,10 @@ class DataProperty(InheritedRow, DocumentPart):
 
     @property
     @override
-    def _document(self) -> VisioFile:
-        return self.shape._document
+    def _document(self) -> GuardedDocument:
+        # the shape, not its document: a write through a part of a deleted
+        # shape is refused, as a write to the shape itself is
+        return self.shape
 
     def inherited_by(self, shape: Shape) -> DataProperty:
         """This property as an instance of the master sees it, marked inherited.
@@ -456,6 +460,7 @@ class Shape(DocumentPart):
     _master_shape_key: tuple[str | None, str | None, tuple[Element, ...] | None] | None
     _data_properties: dict[str, DataProperty] | None
     _data_properties_key: tuple[Element, ...] | None
+    _slot: int | None
 
     def __init__(self, xml: Element, parent: Page | Shape, page: Page):
         self.xml = xml
@@ -467,6 +472,7 @@ class Shape(DocumentPart):
         self._geometry = None
         self._master_shape = None
         self._master_shape_resolved = False
+        self._slot = None  # where this element last sat among its container's children
         self._master_shape_key = None
         for e in self.xml.findall(f"{namespace}Cell"):
             cell = Cell(xml=e, shape=self)
@@ -502,17 +508,85 @@ class Shape(DocumentPart):
         self._data_properties = None  # internal field to hold Shape.data_properties, set by property
         self._data_properties_key = None  # the Property section state the cache was built from
 
-    def __repr__(self):
+    def __repr__(self) -> str:
+        if not self.is_attached:
+            return f"<Shape tag={self.tag} ID={self.ID} detached >"
         return f"<Shape tag={self.tag} ID={self.ID} is_master=({self.is_master_shape}) type={self.shape_type} text='{self.text}' >"
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Shape):
+        """The same shape: the same element, whichever wrapper, of whichever class, holds it.
+
+        An element belongs to one document, so its identity is the document's
+        too. Nothing that can change - the shape's ID, its page's name, the
+        file's name - takes part.
+        """
+        return isinstance(other, Shape) and other.xml is self.xml
+
+    def __hash__(self) -> int:
+        """Stable for the wrapper's life, through renames, renumbering, saves and deletion."""
+        return id(self.xml)
+
+    @property
+    def is_attached(self) -> bool:
+        """Whether this shape is still on its page, and its page still in its document.
+
+        A shape deleted from its page, or on a page removed from the document,
+        is detached. Its ``ID``, ``xml``, ``repr`` and hash stay readable; any
+        other read or write raises :class:`InvalidOperationError`.
+        """
+        page = self.page
+        if not page._attached():
             return False
+        # the wrapper's own parent chain first: each link is checked against
+        # its container's children, so a chain that holds proves the element is
+        # on the page, at the cost of the siblings on the way up rather than
+        # every element on the page. A chain that breaks is not proof of the
+        # opposite - another wrapper may have moved the element into a group -
+        # so only then is the page walked.
+        return self._held_by_parents() or self.xml in page.xml.getroot().iter(self.xml.tag)
 
-        return hash(self) == hash(other)
+    def _held_by_parents(self) -> bool:
+        root = self.page.xml.getroot()
+        shape: Shape = self
+        while True:
+            parent = shape.parent
+            if not isinstance(parent, Shape):
+                shapes = root.find(f"{namespace}Shapes")
+                return shapes is not None and shape._held_by(shapes)
+            if parent.xml.tag == f"{namespace}Shapes":
+                # the page's own Shapes element, held as a Shape until #103
+                return shape._held_by(parent.xml) and parent.xml in root
+            shapes = parent.xml.find(f"{namespace}Shapes")
+            if shapes is None or not shape._held_by(shapes):
+                return False
+            shape = parent
 
-    def __hash__(self):
-        return hash((self.ID, self.page.name, self.page.vis.filename))
+    def _held_by(self, container: Element) -> bool:
+        """Whether `container` holds this element among its children.
+
+        Where the element last sat is tried first, so a shape read over and
+        over costs one comparison rather than a pass over all its siblings.
+        """
+        slot = self._slot
+        if slot is not None and slot < len(container) and container[slot] is self.xml:
+            return True
+        children = list(container)
+        if self.xml not in children:
+            return False
+        self._slot = children.index(self.xml)
+        return True
+
+    def _require_attached(self, operation: str) -> None:
+        if not self.is_attached:
+            raise InvalidOperationError(
+                f"{operation} refused: shape {self.ID} on page {self.page.name!r} is no longer in the document"
+            )
+
+    @override
+    def _require_open(self, operation: str) -> None:
+        """Refuse `operation` on a closed document, or on a shape no longer in it."""
+        super()._require_open(operation)
+        self._require_attached(operation)
 
     # A Shape is a view onto its element, not a snapshot of it. Everything below
     # is read from `self.xml` on each access rather than copied in __init__,
@@ -607,6 +681,7 @@ class Shape(DocumentPart):
         from the XML afterwards is seen by neither until the shape is read
         again.
         """
+        self._require_attached("reading a shape's geometry")
         if self._geometry_xml is None:
             return None
         if self._geometry is None:
@@ -803,6 +878,7 @@ class Shape(DocumentPart):
 
         :return: Dict[str, DataProperty]
         """
+        self._require_attached("reading a shape's data properties")
         properties_xml = self.xml.find(f'{namespace}Section[@N="Property"]')
         property_rows: list[Element] = [] if properties_xml is None else properties_xml.findall(f"{namespace}Row")
         # The rows themselves, by identity: a tuple of them costs no more to
@@ -831,6 +907,7 @@ class Shape(DocumentPart):
         return self.xml.attrib.get(name, None)
 
     def cell_value(self, name: str) -> str | None:
+        self._require_attached(f"reading cell {name}")
         cell = self.cells.get(name)
         if cell:
             return cell.value
@@ -842,6 +919,7 @@ class Shape(DocumentPart):
         return None
 
     def cell_formula(self, name: str) -> str | None:
+        self._require_attached(f"reading cell {name}")
         cell = self.cells.get(name)
         if cell:
             return cell.formula
@@ -1385,6 +1463,7 @@ class Shape(DocumentPart):
 
     @property
     def text(self) -> str:
+        self._require_attached("reading a shape's text")
         return self._text_runs()[1]
 
     @text.setter
@@ -1409,7 +1488,13 @@ class Shape(DocumentPart):
         :returns: list of Shape objects
         :rtype: List[Shape]
         """
-        return [Shape(xml=child, parent=self, page=self.page) for child in iter_children(self.xml)]
+        self._require_attached("reading a shape's children")
+        children = []
+        for slot, child in enumerate(iter_children(self.xml)):
+            shape = Shape(xml=child, parent=self, page=self.page)
+            shape._slot = slot
+            children.append(shape)
+        return children
 
     @property
     def children(self) -> ShapeCollection:
@@ -1431,10 +1516,15 @@ class Shape(DocumentPart):
         Each is given the wrapper of the shape it sits in as its parent: a
         sub-shape with no ``Master`` of its own instances its group's.
         """
+        self._require_attached("reading a shape's descendants")
         wrappers: dict[Element, Shape] = {self.xml: self}
+        slots: dict[Element, int] = {}
         shapes: list[Shape] = []
         for parent, child in iter_edges(self.xml):
             shape = Shape(xml=child, parent=wrappers[parent], page=self.page)
+            # where the walk found it, for is_attached to try first
+            shape._slot = slots.get(parent, 0)
+            slots[parent] = shape._slot + 1
             wrappers[child] = shape
             shapes.append(shape)
         return shapes

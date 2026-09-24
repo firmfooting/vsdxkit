@@ -559,23 +559,16 @@ def test_get_shape_geometry(filename: str, page_index: str, shape_text: str, exp
         assert coords == expected_coords
 
 
-@pytest.mark.parametrize(
-    "filename_1, page_index_1, shape_text_1, filename_2, page_index_2, shape_text_2, are_equal",
-    [
-        ("test1.vsdx", 0, "Shape Text", "test1.vsdx", 0, "Shape Text", True),
-        ("test1.vsdx", 0, "Shape Text", "test2.vsdx", 0, "Shape Text", False),
-    ],
-)
-def test_shape_equality(filename_1, page_index_1, shape_text_1, filename_2, page_index_2, shape_text_2, are_equal, basedir):
-    with VisioFile(os.path.join(basedir, filename_1)) as vis:
-        page = vis.pages[page_index_1]
-        shape_1 = page.find_shape_by_text(shape_text_1)
+@pytest.mark.parametrize("filename_2", ["test1.vsdx", "test2.vsdx"])
+def test_shapes_of_two_documents_are_never_equal(filename_2, basedir):
+    """Fails if a shape equals one in another document: two opens of one file are two documents (#101)."""
+    with VisioFile(os.path.join(basedir, "test1.vsdx")) as vis:
+        shape_1 = vis.pages[0].find_shape_by_text("Shape Text")
 
     with VisioFile(os.path.join(basedir, filename_2)) as vis:
-        page = vis.pages[page_index_2]
-        shape_2 = page.find_shape_by_text(shape_text_2)
+        shape_2 = vis.pages[0].find_shape_by_text("Shape Text")
 
-    assert (shape_1 == shape_2) == are_equal
+    assert shape_1 != shape_2
 
 
 @pytest.mark.parametrize(
