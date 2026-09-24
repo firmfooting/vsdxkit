@@ -16,7 +16,7 @@ else:
 
 import vsdxkit
 from vsdxkit import namespace
-from vsdxkit.connectors import Connect, _glued_ends, _retarget_connector
+from vsdxkit.connectors import _glued_ends, _retarget_connector
 from vsdxkit.errors import InvalidOperationError, NotFoundError, PackageError
 from vsdxkit.formulae import calc_value
 from vsdxkit.geometry import Geometry, GeometryCell
@@ -822,8 +822,8 @@ class Shape:
     def _master_shape_state(self) -> tuple[str | None, str | None, int, tuple[Element, ...] | None]:
         """What the memo was built from.
 
-        The reference this shape holds, which is writable - ``Connect.create``
-        repoints ``master_page_ID``; the catalog's count of master changes; and
+        The reference this shape holds, which is writable - creating a
+        connector repoints ``master_page_ID``; the catalog's count of master changes; and
         the master element's children, so a section added to, removed from or
         swapped on the master rebuilds the Shape that reads it.
         """
@@ -1651,20 +1651,6 @@ class Shape:
         append_shape.parent = self
 
     @property
-    def connects(self) -> list[Connect]:
-        """Connect items linking this shape to others.
-
-        ``vsdxkit.connectors`` needs this module only for annotations, so
-        ``Connect`` is imported here at load time and ``typing.get_type_hints``
-        resolves it.
-        """
-        connects = list()
-        for c in self.page.connects:
-            if self.ID in [c.shape_id, c.connector_shape_id]:
-                connects.append(c)
-        return connects
-
-    @property
     def connectors(self) -> tuple[Connector, ...]:
         """Every connector on the page glued to this shape at either end, in page order."""
         return tuple(connector for connector, _ in self._incidence())
@@ -1692,7 +1678,7 @@ class Shape:
         """
         self._require_attached("reading the connectors glued to a shape")
         ends: dict[str, dict[str, str]] = {}
-        for record in self.page.connects:
+        for record in self.page._connects():
             if record.from_rel in ("BeginX", "EndX"):
                 ends.setdefault(record.from_id, {})[record.from_rel] = record.to_id
         glued = {connector_id for connector_id, named in ends.items() if self.ID in named.values()}

@@ -20,11 +20,6 @@ from collections.abc import Callable, Iterator
 import vsdxkit
 
 UNRESOLVED = {
-    # Phase 4B and 5: `Connect` becomes the data-only `ConnectionRecord` and the
-    # public `Connector(Shape)`, so the record stops reaching up to a Page.
-    "vsdxkit.connectors.Connect.__init__",
-    "vsdxkit.connectors.Connect.connector_shape",
-    "vsdxkit.connectors.Connect.shape",
     # Phase 3: a page holds a document token rather than its `Document`.
     "vsdxkit.pages.Page.__init__",
     # Phase 2 moves master lookup to `MasterCatalog`; Phase 3 replaces the

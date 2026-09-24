@@ -15,6 +15,8 @@ the first before #278 and the second before #328.
 import os
 import xml.etree.ElementTree as ET
 
+from helpers.connect_records import page_records
+
 from vsdxkit import namespace
 from vsdxkit.document import Document
 from vsdxkit.shapes import Shape
@@ -22,7 +24,7 @@ from vsdxkit.shapes import Shape
 
 def _records(page) -> list[tuple[str | None, str | None]]:
     """Every Connect record on the page, as (FromSheet, ToSheet)."""
-    return [(c.from_id, c.to_id) for c in page.connects]
+    return [(c.from_id, c.to_id) for c in page_records(page)]
 
 
 def test_renumbering_a_shape_moves_the_records_glued_to_it(vsdx_copy, tmp_path):

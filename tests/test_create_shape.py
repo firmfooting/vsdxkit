@@ -4,6 +4,7 @@ import os
 import zipfile
 
 import pytest
+from helpers.connect_records import page_records
 
 from vsdxkit import media
 from vsdxkit.document import Document
@@ -99,7 +100,7 @@ def test_a_glued_connector_prototype_is_copied_with_both_ends_floating(vsdx_copy
     """Fails if the copy keeps glue formulas naming the prototype's shapes, which Visio would pull it back to."""
     page = Document.open(vsdx_copy("test4_connectors.vsdx")).pages[0]
     glued = page.shapes.require_id("6")  # glued from shape 1 to shape 2
-    records = sorted((c.from_id, c.from_rel, c.to_id) for c in page.connects)
+    records = sorted((c.from_id, c.from_rel, c.to_id) for c in page_records(page))
     formulas = {name: glued.cells[name].formula for name in ("BeginX", "EndX", "BegTrigger", "EndTrigger")}
 
     copy = page.create_shape(glued, x=10.0, y=1.0, width=2.0)
@@ -108,8 +109,8 @@ def test_a_glued_connector_prototype_is_copied_with_both_ends_floating(vsdx_copy
     assert "BegTrigger" not in copy.cells and "EndTrigger" not in copy.cells
     assert (copy.begin_x + copy.end_x) / 2 == pytest.approx(10.0)
     assert (copy.begin_y + copy.end_y) / 2 == pytest.approx(1.0)
-    assert copy.ID not in {c.from_id for c in page.connects}
-    assert sorted((c.from_id, c.from_rel, c.to_id) for c in page.connects) == records
+    assert copy.ID not in {c.from_id for c in page_records(page)}
+    assert sorted((c.from_id, c.from_rel, c.to_id) for c in page_records(page)) == records
     assert {name: glued.cells[name].formula for name in formulas} == formulas
 
 

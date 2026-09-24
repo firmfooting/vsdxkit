@@ -4,6 +4,7 @@ import os
 import xml.etree.ElementTree as ET
 
 import pytest
+from helpers.connect_records import records_naming
 
 from vsdxkit import namespace
 from vsdxkit.document import Document
@@ -485,10 +486,10 @@ def test_find_connected_shape_relationships(
 
     shape = page.shapes.require_id(shape_id)
     shape_ids = [s.ID for s in shape.connected_shapes]
-    from_ids = [c.from_id for c in shape.connects]
-    to_ids = [c.to_id for c in shape.connects]
-    from_rels = [c.from_rel for c in shape.connects]
-    to_rels = [c.to_rel for c in shape.connects]
+    from_ids = [c.from_id for c in records_naming(shape)]
+    to_ids = [c.to_id for c in records_naming(shape)]
+    from_rels = [c.from_rel for c in records_naming(shape)]
+    to_rels = [c.to_rel for c in records_naming(shape)]
 
     assert sorted(shape_ids) == sorted(expected_shape_ids)
     assert sorted(from_ids) == sorted(expected_from)

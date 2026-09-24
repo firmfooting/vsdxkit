@@ -2,6 +2,8 @@
 
 import os
 
+from helpers.connect_records import page_records
+
 from vsdxkit.document import Document
 from vsdxkit.vsdxdiff import VisioFileDiff
 
@@ -27,7 +29,7 @@ def test_connect_create_writes_connection_records(vsdx_copy, tmp_path):
     vis = Document.open(output)
     page = vis.pages[0]
     shape_ids = {s.ID for s in page.shapes}
-    connects = page.connects
+    connects = page_records(page)
     assert len(connects) >= 2  # one Connect element per end of the connector
     for connect in connects:
         assert connect.from_id in shape_ids
@@ -115,22 +117,3 @@ def test_page_bounds_match_declared_shape_bounds(vsdx_copy):
         assert box[1] >= min_y - 0.001
         assert box[2] <= max_x + 0.001
         assert box[3] <= max_y + 0.001
-
-
-def test_remove_connect_records_removes_their_records(vsdx_copy, tmp_path):
-    path = vsdx_copy("test4_connectors.vsdx")
-    output = os.path.join(str(tmp_path), "removed.vsdx")
-    vis = Document.open(path)
-    page = vis.pages[0]
-    connectors = [s for s in page.shapes if "BeginX" in s.cells]
-    assert connectors
-    connector_ids = [str(connector.ID) for connector in connectors if connector.ID is not None]
-    assert connector_ids
-    assert page.connects  # the fixture has connection records to remove
-    page.remove_connect_records(connector_ids)
-    assert all(connect.from_id not in set(connector_ids) for connect in page.connects)
-    vis.save(output)
-
-    vis = Document.open(output)
-    page = vis.pages[0]
-    assert all(connect.from_id not in {"6", "7"} for connect in page.connects)

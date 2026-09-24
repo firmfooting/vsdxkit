@@ -10,13 +10,14 @@ record naming a shape that is not there is its `dangling-glue` defect.
 """
 
 import pytest
+from helpers.connect_records import page_records
 
 from vsdxkit.document import Document
 
 
 def _records(page) -> list[tuple[str | None, str | None]]:
     """Every Connect record on the page, as (FromSheet, ToSheet)."""
-    return [(c.from_id, c.to_id) for c in page.connects]
+    return [(c.from_id, c.to_id) for c in page_records(page)]
 
 
 def test_glue_written_after_a_renumber_names_the_shape_that_is_there(vsdx_copy, tmp_path):
@@ -46,28 +47,29 @@ def test_renumbering_moves_the_shape_object_with_its_element(vsdx_copy):
     assert renumbered == shape.ID
 
 
-def test_a_renumbered_shape_still_finds_the_records_glued_to_it(vsdx_copy):
-    """`Shape.connects` filters the page's records on this shape's id."""
+def test_a_renumbered_shape_still_finds_the_connectors_glued_to_it(vsdx_copy):
+    """`Shape.connectors` matches the page's records on this shape's id."""
     vis = Document.open(vsdx_copy("test4_connectors.vsdx"))
     page = vis.pages[0]
     shape = page.shapes.require_id("2")
-    assert len(shape.connects) == 2
+    assert len(shape.connectors) == 2
 
     vis.increment_sub_shape_ids(shape, page)
 
-    assert len(shape.connects) == 2
+    assert len(shape.connectors) == 2
 
 
-def test_a_connect_held_across_a_renumber_names_the_new_id(vsdx_copy):
-    """`Connect` cached the same attributes `_remap_connect_records` rewrites."""
+def test_a_connector_held_across_a_renumber_resolves_to_the_new_id(vsdx_copy):
+    """A connector's ends read the records `_remap_connect_records` rewrites, not a copy of them."""
     vis = Document.open(vsdx_copy("test4_connectors.vsdx"))
     page = vis.pages[0]
     shape = page.shapes.require_id("2")
-    record = next(c for c in page.connects if c.to_id == "2")
+    held = shape.connectors
 
     new_id = str(vis.increment_sub_shape_ids(shape, page)["2"])
 
-    assert record.to_id == new_id
+    assert [(c.source, c.target) for c in held].count((None, None)) == 0
+    assert all(new_id in {end.ID for end in (c.source, c.target) if end is not None} for c in held)
 
 
 def test_deleting_a_renumbered_shape_takes_its_connectors_with_it(vsdx_copy, tmp_path):

@@ -17,6 +17,7 @@ import shutil
 import zipfile
 
 import pytest
+from helpers.connect_records import page_records
 
 from vsdxkit.document import Document
 
@@ -133,7 +134,7 @@ def _connector_count(path) -> int:
     """
     document = Document.open(str(path))
     page = document.pages[0]
-    return len({record.from_id for record in page.connects})
+    return len({record.from_id for record in page_records(page)})
 
 
 def _is_glued_to(path, text: str) -> bool:
@@ -142,7 +143,7 @@ def _is_glued_to(path, text: str) -> bool:
     target = next((s for s in page.shapes if text in s.text), None)
     if target is None:
         return False
-    return any(record.to_id == str(target.ID) for record in page.connects)
+    return any(record.to_id == str(target.ID) for record in page_records(page))
 
 
 def _readme() -> str:

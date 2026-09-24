@@ -9,6 +9,7 @@ and prove rejected inputs change nothing.
 import os
 
 import pytest
+from helpers.connect_records import page_records
 
 from vsdxkit.document import Document
 from vsdxkit.glue import ConnectorOptions, Glue
@@ -19,7 +20,7 @@ FIXTURES = os.path.dirname(os.path.realpath(__file__))
 def _snapshot(page):
     """Observable package state: shapes, cells, records, masters, page rels."""
     shapes = sorted((s.ID, s.text, tuple(sorted(s.cells))) for s in page.shapes)
-    records = sorted((c.from_id, c.to_id, c.from_rel, c.to_rel) for c in page.connects)
+    records = sorted((c.from_id, c.to_id, c.from_rel, c.to_rel) for c in page_records(page))
     document = page.vis
     names = document._package.names()
     master_parts = sorted(name for name in names if name.endswith((".xml", ".rels")) and "/masters/" in name)
@@ -64,10 +65,10 @@ def test_retarget_rejects_invalid_connection_point_without_mutating_package(vsdx
     assert connectors, "fixture must contain a connector"
     connector = connectors[0]
     other = next(s for s in page.shapes if "BeginX" not in s.cells)
-    records_before = sorted((c.from_id, c.to_id, c.from_rel, c.to_rel) for c in page.connects)
+    records_before = sorted((c.from_id, c.to_id, c.from_rel, c.to_rel) for c in page_records(page))
     with pytest.raises(ValueError, match="connection point"):
         connector.retarget(target=other, options=ConnectorOptions(glue=Glue.POINT, to_point=999))
-    records_after = sorted((c.from_id, c.to_id, c.from_rel, c.to_rel) for c in page.connects)
+    records_after = sorted((c.from_id, c.to_id, c.from_rel, c.to_rel) for c in page_records(page))
     assert records_after == records_before, "rejected retarget removed the connector's records"
 
 
@@ -79,7 +80,7 @@ def test_create_with_valid_point_glue_still_works(vsdx_copy):
     a = page.shapes.by_id("90")
     b = page.shapes.by_id("97")
     assert a is not None and b is not None
-    records_before = len(page.connects)
+    records_before = len(page_records(page))
     connector = page.connect(a, b, glue=Glue.POINT)
     assert connector is not None
-    assert len(page.connects) == records_before + 2
+    assert len(page_records(page)) == records_before + 2

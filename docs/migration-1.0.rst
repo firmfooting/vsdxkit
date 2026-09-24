@@ -571,6 +571,43 @@ are gone; glue and routing are :class:`vsdxkit.glue.Glue` and
 ``ConnectorOptions.from_route(route)``
    Gone with the route strings.
 
+The ``<Connect>`` records are internal
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The records that glue a connector's ends are how the package stores the graph,
+and the library keeps them in step with every connect, retarget, copy and
+delete. The graph is read through connectors and shapes instead.
+
+``connectors.Connect``, and ``page.connects`` or ``page.get_connects()``
+   The records are no longer objects. ``page.connectors`` lists the page's
+   connectors; ``connector.source`` and ``connector.target`` are the shapes
+   its ends are glued to, or ``None`` for a floating end.
+
+``shape.connects``
+   ``shape.connectors`` for the connectors glued to ``shape``, and
+   ``shape.connected_shapes`` for what is at their other ends.
+
+``Connect.connector_shape``, ``Connect.connector_shape_id``, ``Connect.from_id``
+   The connector itself, and its ``ID``.
+
+``Connect.shape``, ``Connect.shape_id``, ``Connect.to_id``
+   ``connector.source`` or ``connector.target``, and its ``ID``.
+
+``Connect.from_rel``, ``Connect.to_rel``
+   Which end is glued, and to what, are the connector's ``BeginX`` and
+   ``EndX`` cell formulas: a formula that refers to a shape glues that end.
+
+``Connect.page``, ``Connect.xml``
+   ``connector.page`` and ``connector.xml``. The ``<Connect>`` elements are
+   under ``page.xml``'s ``Connects`` element, for code that needs the raw
+   records.
+
+``page.add_connect(connect)``, ``page.remove_connect_records(ids)``
+   ``page.connect(a, b)`` writes a connector with its records,
+   ``connector.retarget(...)`` rewrites them, and ``shape.delete()`` removes
+   those that name the shape. A record written by hand is not checked
+   against the shapes it names.
+
 A swimlane diagram replaces the container
 -----------------------------------------
 

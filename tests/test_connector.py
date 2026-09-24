@@ -5,6 +5,7 @@ import os
 import xml.etree.ElementTree as ET
 
 import pytest
+from helpers.connect_records import page_records
 
 from vsdxkit.document import Document
 from vsdxkit.errors import InvalidOperationError, PackageError
@@ -32,13 +33,13 @@ def _ends(page):
 
 
 def _drop_record(page, connector, end):
-    (record,) = [c for c in page.connects if c.from_id == connector.ID and c.from_rel == end]
+    (record,) = [c for c in page_records(page) if c.from_id == connector.ID and c.from_rel == end]
     page.xml.find(f".//{NS}Connects").remove(record.xml)
 
 
 def _state(page, connector):
     cells = sorted((name, cell.formula, cell.value) for name, cell in connector.cells.items())
-    records = sorted((c.from_id, c.from_rel, c.to_id, c.to_rel) for c in page.connects)
+    records = sorted((c.from_id, c.from_rel, c.to_id, c.to_rel) for c in page_records(page))
     return cells, records
 
 
@@ -85,7 +86,7 @@ def test_connect_takes_glue_and_routing_as_keywords(vsdx_copy):
 
     connector = page.connect(source, target, glue=Glue.POINT, routing=Routing.CURVED, from_point=1, to_point=2)
 
-    records = {c.from_rel: (c.to_id, c.to_rel) for c in page.connects if c.from_id == connector.ID}
+    records = {c.from_rel: (c.to_id, c.to_rel) for c in page_records(page) if c.from_id == connector.ID}
     assert records == {"BeginX": ("90", "Connections.X2"), "EndX": ("97", "Connections.X3")}
     assert connector.cells["ShapeRouteStyle"].value == "17"
 
@@ -248,7 +249,7 @@ def test_retarget_keeps_the_connection_point_without_options(vsdx_copy):
 
     connector.retarget(target=other)
 
-    records = {c.from_rel: (c.to_id, c.to_rel) for c in page.connects if c.from_id == connector.ID}
+    records = {c.from_rel: (c.to_id, c.to_rel) for c in page_records(page) if c.from_id == connector.ID}
     assert records == {"BeginX": ("90", "Connections.X2"), "EndX": ("102", "Connections.X3")}
 
 
@@ -259,7 +260,7 @@ def test_retarget_with_options_replaces_the_glue(vsdx_copy):
 
     connector.retarget(source=source, options=ConnectorOptions())
 
-    records = {c.from_rel: (c.to_id, c.to_rel) for c in page.connects if c.from_id == connector.ID}
+    records = {c.from_rel: (c.to_id, c.to_rel) for c in page_records(page) if c.from_id == connector.ID}
     assert records == {"BeginX": ("90", "PinX"), "EndX": ("97", "PinX")}
 
 
@@ -309,8 +310,7 @@ def test_the_0x_connector_calls_are_gone(owner, name):
     assert not hasattr(owner, name)
 
 
-def test_connect_create_is_gone():
-    from vsdxkit.connectors import Connect
+def test_the_connection_record_class_is_gone():
+    from vsdxkit import connectors
 
-    assert not hasattr(Connect, "create")
-    assert not hasattr(Connect, "retarget")
+    assert not hasattr(connectors, "Connect")

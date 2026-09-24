@@ -15,7 +15,7 @@ Page and PageCollection
 -----------------------
 
 .. autoclass:: vsdxkit.pages.Page
-   :members: children, connect, connectors, connects, create_shape, shapes, swimlanes, require_swimlanes
+   :members: children, connect, connectors, create_shape, shapes, swimlanes, require_swimlanes
    :undoc-members:
 
 .. autoclass:: vsdxkit.pages.PageCollection
@@ -32,7 +32,7 @@ Shape, Connector, ShapeCollection, Cell and DataProperty
 --------------------------------------------------------
 
 .. autoclass:: vsdxkit.shapes.Shape
-   :members: ID, bounds, cell_value, cells, center_x_y, children, connected_shapes, connectors, connects, copy, data_properties, delete, descendants, fill_color, is_attached, find_replace, geometry, get_or_create_cell, height, line_color, line_weight, master_page_ID, master_shape_ID, move, shape_name, shape_type, tag, text, text_color, width, x, y
+   :members: ID, bounds, cell_value, cells, center_x_y, children, connected_shapes, connectors, copy, data_properties, delete, descendants, fill_color, is_attached, find_replace, geometry, get_or_create_cell, height, line_color, line_weight, master_page_ID, master_shape_ID, move, shape_name, shape_type, tag, text, text_color, width, x, y
    :undoc-members:
 
 .. autoclass:: vsdxkit.shapes.Connector
@@ -50,12 +50,8 @@ Shape, Connector, ShapeCollection, Cell and DataProperty
    :members:
    :undoc-members:
 
-Connect and SwimlaneDiagram
----------------------------
-
-.. autoclass:: vsdxkit.connectors.Connect
-   :members: connector_shape, connector_shape_id, shape, shape_id
-   :undoc-members:
+Glue, routing and SwimlaneDiagram
+---------------------------------
 
 .. autoclass:: vsdxkit.glue.ConnectorOptions
    :members: end_point
@@ -67,24 +63,6 @@ Connect and SwimlaneDiagram
 .. autoclass:: vsdxkit.glue.Routing
    :members:
    :undoc-members:
-
-Connection records also expose the raw ``from_id``, ``to_id``, ``from_rel``
-and ``to_rel`` values from the Visio ``Connect`` element. ``from_id`` is the
-connector shape ID. ``to_id`` is the connected shape ID. The relationship
-fields identify the source and target cells, such as ``BeginX``, ``EndX``,
-``PinX`` or ``Connections.X1``.
-
-.. py:attribute:: vsdxkit.connectors.Connect.from_id
-   :type: str | None
-
-.. py:attribute:: vsdxkit.connectors.Connect.to_id
-   :type: str | None
-
-.. py:attribute:: vsdxkit.connectors.Connect.from_rel
-   :type: str | None
-
-.. py:attribute:: vsdxkit.connectors.Connect.to_rel
-   :type: str | None
 
 .. autoclass:: vsdxkit.swimlanes.SwimlaneDiagram
    :members: container, lanes, shapes_in, lane_for, add_lane, set_lane_label, move_to_lane

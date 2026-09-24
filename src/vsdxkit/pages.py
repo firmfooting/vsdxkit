@@ -18,7 +18,7 @@ else:
 
 
 from vsdxkit import namespace, r_namespace, relationships
-from vsdxkit.connectors import Connect, _create_connector, _float_ends
+from vsdxkit.connectors import _Connect, _create_connector, _float_ends
 from vsdxkit.errors import InvalidOperationError, MissingPartError, NotFoundError, PackageError
 from vsdxkit.glue import ConnectorOptions, Glue, Routing
 from vsdxkit.package import XmlPart
@@ -159,9 +159,6 @@ class Page:
     :type vis: :class:`Document`
     :param name: the name of the page
     :type name: str
-    :param connects: a list of Connect objects in the page
-    :type connects: List of :class:`Connect`
-
     """
 
     xml: PartTree
@@ -183,9 +180,9 @@ class Page:
     def __repr__(self):
         return f"<Page name={self.name} file={self.filename} >"
 
-    @property
-    def connects(self) -> list[Connect]:
-        return self.get_connects()
+    def _connects(self) -> list[_Connect]:
+        """Every ``<Connect>`` record on the page, in document order."""
+        return [_Connect(element) for element in self.xml.findall(f".//{namespace}Connect")]
 
     @property
     def name(self) -> str:
@@ -387,7 +384,7 @@ class Page:
         # return zero-based index of this page in parent Document.pages list
         return self.vis.pages.index(self) if self in self.vis.pages else None
 
-    def add_connect(self, connect: Connect) -> None:
+    def _add_connect(self, element: ET.Element) -> None:
         connects = self.xml.find(f".//{namespace}Connects")
         if connects is None:
             connects = ET.fromstring(
@@ -396,7 +393,7 @@ class Page:
             root = require_element(self.xml.getroot(), "page root")
             root.append(connects)
             connects = require_element(self.xml.find(f".//{namespace}Connects"), "Connects")
-        connects.append(connect.xml)
+        connects.append(element)
 
     def _ensure_page_master_rel(self, master_part_name: str) -> None:
         """Ensure this page's rels relate it to the master part named `master_part_name`.
@@ -449,11 +446,6 @@ class Page:
                 self._rels_root(), rel_type=relationship.attrib.get("Type", ""), target=target, mode=mode
             )
             node.attrib[_RELATIONSHIP_ID] = carried.attrib["Id"]
-
-    def get_connects(self) -> list[Connect]:
-        elements = self.xml.findall(f".//{namespace}Connect")  # search recursively
-        connects = [Connect(xml=e, page=self) for e in elements]
-        return connects
 
     def apply_text_context(self, context: dict[str, object]) -> None:
         for shape in self._children():
@@ -600,7 +592,7 @@ class Page:
         """
         # connectors are the FromSheet of Connect records whose ToSheet is one
         # of the shapes going, on a begin/end relationship
-        connector_ids = {c.from_id for c in self.connects if c.to_id in gone_ids and c.from_rel in ("BeginX", "EndX")}
+        connector_ids = {c.from_id for c in self._connects() if c.to_id in gone_ids and c.from_rel in ("BeginX", "EndX")}
         doomed = set(shapes)
         for s in self._descendants():
             # the master too: a connector may inherit BeginX from it, and one
@@ -612,7 +604,7 @@ class Page:
             self._remove_shape_xml(s)
         # a record naming a group child outlives the child otherwise: the child
         # goes with the group element rather than through _remove_shape_xml
-        self.remove_connect_records(gone_ids, match="either")
+        self._remove_connect_records(gone_ids, match="either")
 
     def _remove_shape_xml(self, shape: Shape) -> None:
         """Remove a shape's xml and every Connect record that names it.
@@ -622,12 +614,12 @@ class Page:
         glued to the shape are separate shapes and are passed through here in
         their own right by :meth:`vsdxkit.shapes.Shape.delete`.
         """
-        self.remove_connect_records({str(shape.ID)}, match="either")
+        self._remove_connect_records({str(shape.ID)}, match="either")
         container = parent_of(self.xml.getroot(), shape.xml)
         if container is not None:
             container.remove(shape.xml)
 
-    def remove_connect_records(self, connector_ids: Iterable[str | int], *, match: str = "from") -> None:
+    def _remove_connect_records(self, connector_ids: Iterable[str | int], *, match: str = "from") -> None:
         """Remove Connect records naming any of these shapes.
 
         Single record-removal path, shared by the delete cascade and connector

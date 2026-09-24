@@ -4,6 +4,7 @@ import re
 from datetime import datetime
 
 import pytest
+from helpers.connect_records import page_records
 
 from vsdxkit import namespace
 from vsdxkit.document import Document
@@ -373,7 +374,7 @@ def test_find_page_connects(filename: str, expected_connects: list, basedir):
     vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[0]  # type: Page
     actual_connects = list()
-    for c in page.connects:  # type: Connect
+    for c in page_records(page):
         actual_connects.append(f"from {c.from_id} to {c.to_id}")
     assert sorted(actual_connects) == sorted(expected_connects)
 
@@ -444,7 +445,7 @@ def test_add_connect_between_shapes(filename: str, page_index: int, shape_a_text
     # re-open saved file and check it is changed as expected
     vis = Document.open(out_file)
     page = vis.pages[page_index]
-    connector_ids = [c.connector_shape_id for c in page.connects]
+    connector_ids = [c.from_id for c in page_records(page)]
     # new shape is referenced as connector_shape for new connector relationship
     assert new_connector_id in connector_ids
     # new shape exists in page
@@ -483,7 +484,7 @@ def test_add_multiple_connectors(filename: str, tmp_path, basedir):
     # record per endpoint, so group endpoints by connector and require
     # both created pairs to appear in full
     endpoints_by_connector: dict[str, set[str]] = {}
-    for connect in new_page.connects:
+    for connect in page_records(new_page):
         if connect.from_id is not None:
             endpoints_by_connector.setdefault(connect.from_id, set()).add(str(connect.to_id))
     endpoint_sets = [set(ids) for ids in endpoints_by_connector.values()]
@@ -530,7 +531,7 @@ def test_add_connect_between_shapes_by_property(
     # re-open saved file and check it is changed as expected
     vis = Document.open(out_file)
     page = vis.pages[page_index]
-    connector_ids = [c.connector_shape_id for c in page.connects]
+    connector_ids = [c.from_id for c in page_records(page)]
     # new shape is referenced as connector_shape for new connector relationship
     assert new_connector_id in connector_ids
     # new shape exists in page

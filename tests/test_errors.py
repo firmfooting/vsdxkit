@@ -447,16 +447,6 @@ def test_a_malformed_geometry_coordinate_raises_malformed_package_error(vsdx_cop
         getattr(row, coordinate.lower())
 
 
-def test_a_connect_record_missing_its_sheet_attributes_raises_malformed_package_error(vsdx_copy):
-    """Reading `page.connects` builds these from package XML, so it is content, not an argument."""
-    vis = Document.open(vsdx_copy("test4_connectors.vsdx"))
-    page = vis.pages[0]
-    connect = page.connects[0]
-    del connect.xml.attrib["FromSheet"]
-    with pytest.raises(MalformedPackageError, match="FromSheet"):
-        _ = page.connects
-
-
 @pytest.mark.allow_invalid_package
 def test_an_encrypted_member_raises_malformed_package_error(vsdx_copy, tmp_path):
     """`ZipFile.open` reports an encrypted member as `RuntimeError`, not `BadZipFile`.
