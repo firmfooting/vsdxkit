@@ -256,8 +256,9 @@ Pages and shapes are collections
    ``<Shapes>`` element.
 
 ``shape.append_shape(other)``
-   Takes a group only. ``document.copy_shape(element, page)`` places a
-   shape at a page's top level.
+   Takes a group only. ``other.copy(page)`` places a copy of ``other`` at a
+   page's top level, importing its master and the page relationships it
+   needs.
 
 A lookup by ID on a page where two shapes share the ID
    Raises :class:`vsdxkit.errors.PackageError`, because the page is not
@@ -275,7 +276,8 @@ A shape is its element
 Reading or writing a deleted shape
    Raises :class:`vsdxkit.errors.InvalidOperationError`, as does a shape on
    a deleted page. ``shape.is_attached`` says whether a shape is still in
-   its document. ``ID``, ``xml``, ``repr`` and ``hash`` keep working.
+   its document. ``ID``, ``xml``, ``page``, ``parent``, ``repr`` and
+   ``hash`` keep working: ``page`` and ``parent`` are where the shape was.
 
 ``shape.cells``
    A read-only property that returns a new ``dict`` on each read, from the
@@ -360,7 +362,8 @@ are gone; glue and routing are :class:`vsdxkit.glue.Glue` and
 ``Connect.retarget(page, connector_shape, from_shape=a, to_shape=b, route=...)``
    ``connector.retarget(source=a, target=b, options=...)``, as for
    ``reanchor_connector`` below. The connector is the shape itself, so the
-   page is not passed.
+   page is not passed, and nothing is returned: keep the connector you
+   called it on.
 
 ``page.reanchor_connector(connector, from_shape=a, to_shape=b, route=...)``
    ``connector.retarget(source=a, target=b, options=ConnectorOptions(...))``.
@@ -371,6 +374,17 @@ are gone; glue and routing are :class:`vsdxkit.glue.Glue` and
    instead of falling back to dynamic glue. A connector with a floating end
    can now be retargeted. An endpoint on another page, and the connector
    itself as an endpoint, are refused before anything is written.
+
+   ``retarget`` returns ``None``; 0.x returned the connector. Replace
+   ``connector = page.reanchor_connector(connector, ...)`` with the call
+   alone.
+
+``page.reanchor_connector(connector, route="curved")``, with neither shape
+   Name an end where it already is, and give the glue and connection points
+   with the routing, because ``options`` replaces them all:
+   ``connector.retarget(source=connector.source, options=ConnectorOptions(glue=Glue.DYNAMIC, routing=Routing.CURVED))``.
+   Use ``target=connector.target`` when the begin end floats. A call that
+   names neither end raises :class:`vsdxkit.errors.InvalidOperationError`.
 
 ``page.get_connectors_between(shape_a_id=..., shape_b_id=...)``
    ``set(a.connectors) & set(b.connectors)``. The text form matched a
