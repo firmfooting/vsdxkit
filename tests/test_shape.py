@@ -8,6 +8,7 @@ from helpers.connect_records import records_naming
 
 from vsdxkit import namespace
 from vsdxkit.document import Document
+from vsdxkit.errors import InvalidOperationError
 from vsdxkit.shapes import DataProperty, Shape, _as_shape
 
 
@@ -958,6 +959,28 @@ def test_copy_onto_something_that_is_not_a_page_is_refused(vsdx_copy):
     shape = next(iter(Document.open(vsdx_copy("test1.vsdx")).pages[0].children))
     with pytest.raises(TypeError, match="LooksLikeAPage"):
         shape.copy(LooksLikeAPage())
+
+
+@pytest.mark.parametrize("other_document", [False, True], ids=["same document", "other document"])
+def test_copy_onto_a_removed_page_writes_nothing(vsdx_copy, other_document):
+    """Fails if a page no longer in its document takes a copy, or imports the copy's masters, before refusing.
+
+    From another document, the copy's master is imported into the removed
+    page's document before the shape is copied.
+    """
+    vis = Document.open(vsdx_copy("test1.vsdx"))
+    removed = vis.pages[2]
+    source = Document.open(vsdx_copy("test5_master.vsdx")) if other_document else vis
+    shape = next(iter(source.pages[0].children))
+    vis.pages.delete(removed)
+    parts = {name: vis._package.read_bytes(name) for name in vis._package.names()}
+    page_xml = ET.tostring(removed.xml.getroot())
+
+    with pytest.raises(InvalidOperationError, match="no longer in its document, so nothing can be copied onto it"):
+        shape.copy(removed)
+
+    assert {name: vis._package.read_bytes(name) for name in vis._package.names()} == parts
+    assert ET.tostring(removed.xml.getroot()) == page_xml
 
 
 def test_an_end_that_is_not_a_shape_is_refused():

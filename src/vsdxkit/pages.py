@@ -584,10 +584,12 @@ class Page:
             nearest side; :attr:`Glue.POINT` glues the ends to ``from_point``
             and ``to_point``, 0-based rows of each shape's ``Connection`` section
         :param routing: the path between the ends; :attr:`Routing.DEFAULT` is Visio's own
-        :raises InvalidOperationError: a shape is not on this page, or a connection point does not exist;
-            nothing is written
+        :raises InvalidOperationError: the page is no longer in its document, a shape is not on this page,
+            or a connection point does not exist; nothing is written
         :returns: the new connector
         """
+        if not self._attached():
+            raise InvalidOperationError(f"page {self.name!r} is no longer in its document, so nothing can be connected on it")
         options = ConnectorOptions(glue=glue, routing=routing, from_point=from_point, to_point=to_point)
         begin, end = _plan_connector(self, source, target, options)
         connector = self._document._copy_connector(self)

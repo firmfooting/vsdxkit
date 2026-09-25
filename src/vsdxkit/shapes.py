@@ -875,10 +875,15 @@ class Shape:
             If not specified, the copy will be placed in the original shape's page.
         :type page: :class:`PageView` (Optional), which must be a :class:`vsdxkit.pages.Page` at runtime
         :raises TypeError: if ``page`` is not a :class:`vsdxkit.pages.Page`
+        :raises InvalidOperationError: if the destination page is no longer in its document; nothing is written
 
         :return: :class:`Shape` the new copy of shape
         """
         dst_page = self._page if page is None else self._page._peer(page)
+        if not dst_page._attached():
+            raise InvalidOperationError(
+                f"page {dst_page.name!r} is no longer in its document, so nothing can be copied onto it"
+            )
         master_ids = [node.attrib["Master"] for node in self.xml.iter(f"{namespace}Shape") if node.attrib.get("Master")]
         # A sub-shape of a master instance names no master itself: it inherits
         # its group's. Copied onto a page it leaves that group, so the copy has

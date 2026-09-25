@@ -13,7 +13,11 @@ reads every `import` in `src/vsdxkit` with `ast` and fails:
   type checker sees and the runtime does not;
 - on an import inside a function, which is how a cycle is hidden.
 
-There is no list of exceptions.
+A relative import is read as the absolute import it spells. There is no list
+of exceptions. The known blind spots are an import in the ``else:`` of
+``if not TYPE_CHECKING:``, one under ``TYPE_CHECKING`` imported by another
+name, and ``importlib.import_module``: the package uses none of them, and
+ruff and review cover them.
 """
 
 from __future__ import annotations
@@ -65,6 +69,20 @@ def _imports(tree: ast.Module) -> Iterator[tuple[ast.Import | ast.ImportFrom, st
     yield from walk(tree.body, "module")
 
 
+def _absolute(node: ast.ImportFrom) -> str | None:
+    """The module a `from` import names, spelled from the top: `from .beta import B` names `vsdxkit.beta`.
+
+    Every module sits at the package's top level, `__init__` included, so one
+    dot is the package. More dots reach above it, which no import can do, so
+    they name nothing here.
+    """
+    if node.level == 0:
+        return node.module
+    if node.level > 1:
+        return None
+    return PACKAGE if node.module is None else f"{PACKAGE}.{node.module}"
+
+
 def edges_of(importer: str, source: str, modules: set[str]) -> Iterator[Edge]:
     """The package-internal imports in one module's source.
 
@@ -73,6 +91,9 @@ def edges_of(importer: str, source: str, modules: set[str]) -> Iterator[Edge]:
     """
     tree = ast.parse(source)
     root_names: set[str] = set()
+    # the modules `import vsdxkit.<module>` names: `vsdxkit.<module>` is then
+    # how that import is used, not a way round it
+    dotted: set[str] = set()
     for node, where in _imports(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
@@ -82,7 +103,10 @@ def edges_of(importer: str, source: str, modules: set[str]) -> Iterator[Edge]:
                     yield Edge(importer, alias.name.split(".")[1], where)
                     if alias.asname is None:
                         root_names.add(PACKAGE)
-        elif node.level == 0 and node.module == PACKAGE:
+                        dotted.add(alias.name.split(".")[1])
+            continue
+        imported = _absolute(node)
+        if imported == PACKAGE:
             for alias in node.names:
                 if alias.name in modules:
                     yield Edge(importer, alias.name, where)
@@ -93,14 +117,15 @@ def edges_of(importer: str, source: str, modules: set[str]) -> Iterator[Edge]:
                     # call still resolves it against the root and a
                     # module-level runtime import does not
                     yield Edge(importer, PACKAGE, where)
-        elif node.level == 0 and node.module is not None and node.module.startswith(f"{PACKAGE}."):
-            yield Edge(importer, node.module.split(".")[1], where)
+        elif imported is not None and imported.startswith(f"{PACKAGE}."):
+            yield Edge(importer, imported.split(".")[1], where)
     for node in ast.walk(tree):
         if (
             isinstance(node, ast.Attribute)
             and isinstance(node.value, ast.Name)
             and node.value.id in root_names
             and node.attr in modules
+            and not (node.value.id == PACKAGE and node.attr in dotted)
         ):
             yield Edge(importer, node.attr, "module")
             yield Edge(importer, node.attr, "root")
@@ -220,6 +245,30 @@ def test_a_sibling_reached_through_a_dotted_import_binding_is_a_root_edge():
         Edge("gamma", "beta", "module"),
         Edge("gamma", "beta", "root"),
     }
+
+
+def test_a_dotted_import_used_by_its_own_name_is_a_module_edge():
+    """Fails if `vsdxkit.beta.B` after `import vsdxkit.beta`, the one way to use that import, is taken for a root edge."""
+    source = "import vsdxkit.beta\nvalue = vsdxkit.beta.B\n"
+    assert set(edges_of("gamma", source, MODULES)) == {Edge("gamma", "beta", "module")}
+
+
+def test_a_relative_import_inside_a_function_is_a_function_edge():
+    """Fails if a relative import is skipped, which hides an upward edge or a cycle behind a leading dot."""
+    source = "def f():\n    from .beta import B\n    return B\n"
+    assert set(edges_of("alpha", source, MODULES)) == {Edge("alpha", "beta", "function")}
+
+
+def test_a_relative_import_of_a_sibling_is_the_root_import_of_it():
+    """Fails if `from . import beta` is not read as `from vsdxkit import beta`, the form it spells."""
+    source = "from . import beta, namespace\n"
+    assert set(edges_of("alpha", source, MODULES)) == {Edge("alpha", "beta", "module"), Edge("alpha", "beta", "root")}
+
+
+def test_a_relative_import_in_the_root_is_the_root_importing_from_the_package():
+    """Fails if `__init__.py` can pull a name in from a sibling module behind a leading dot."""
+    source = "from .beta import B\n"
+    assert set(edges_of("__init__", source, MODULES)) == {Edge("__init__", "beta", "module")}
 
 
 def test_an_import_inside_a_match_case_is_found():
