@@ -10,6 +10,8 @@ import inspect
 import re
 from pathlib import Path
 
+import pytest
+
 from vsdxkit.document import Document
 from vsdxkit.pages import DocumentView, Page
 from vsdxkit.shapes import PageView
@@ -74,6 +76,8 @@ def test_the_views_are_read_only():
 
 def test_the_reference_documents_every_page_member_the_view_lists():
     """Fails if `docs/classes.rst` misses a `PageView` member, or names one `Page` no longer has."""
+    if not CLASSES_RST.exists():
+        pytest.skip("docs/ is not in the sdist; the checkout runs this")
     match = re.search(r"autoclass:: vsdxkit\.pages\.Page\n\s+:members: (.+)\n", CLASSES_RST.read_text(encoding="utf-8"))
     assert match is not None, "the Page autoclass has no :members: line"
     documented = {name.strip() for name in match.group(1).split(",")}
