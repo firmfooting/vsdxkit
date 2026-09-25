@@ -239,11 +239,18 @@ def _plan_connector(
     return begin, end
 
 
-def _glue_connector(connector: _ConnectorShape, begin: _Glued, end: _Glued, options: ConnectorOptions) -> None:
-    """Glue a new connector's ends as :func:`_plan_connector` planned them."""
-    _write(connector, begin, end, routing_cells(options.routing, dynamic=options.glue is Glue.DYNAMIC))
-    # initial endpoints so the file renders sensibly even before Visio recalculates
-    connector.set_start_and_finish(begin[0].center_x_y, end[0].center_x_y)
+def _glue_connector(connector: _ConnectorShape, begin: _End, end: _End, options: ConnectorOptions | None) -> None:
+    """Glue the connector's ends as planned, by :func:`_plan_connector` or :func:`_retarget_connector`.
+
+    Without `options`, no routing cell is written. An end planned as `None`
+    stays where it is.
+    """
+    routing = () if options is None else routing_cells(options.routing, dynamic=options.glue is Glue.DYNAMIC)
+    _write(connector, begin, end, routing)
+    # endpoints so the file renders sensibly even before Visio recalculates
+    start = begin[0].center_x_y if begin else (connector.begin_x, connector.begin_y)
+    finish = end[0].center_x_y if end else (connector.end_x, connector.end_y)
+    connector.set_start_and_finish(start, finish)
 
 
 def _retarget_connector(
@@ -262,12 +269,7 @@ def _retarget_connector(
     end = _next_end(current_end, target, options, begin=False)
     for glued in (begin, end):
         _check_point(glued)
-
-    routing = () if options is None else routing_cells(options.routing, dynamic=options.glue is Glue.DYNAMIC)
-    _write(connector, begin, end, routing)
-    start = begin[0].center_x_y if begin else (connector.begin_x, connector.begin_y)
-    finish = end[0].center_x_y if end else (connector.end_x, connector.end_y)
-    connector.set_start_and_finish(start, finish)
+    _glue_connector(connector, begin, end, options)
 
 
 def _glued_ends(connector: _ConnectorShape) -> tuple[_End, _End]:

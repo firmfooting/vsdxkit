@@ -131,8 +131,13 @@ def edges_of(importer: str, source: str, modules: set[str]) -> Iterator[Edge]:
             yield Edge(importer, node.attr, "root")
 
 
+def package_modules() -> set[str]:
+    """The package's sibling modules: every module but the root."""
+    return {path.stem for path in SOURCE.glob("*.py") if path.stem != "__init__"}
+
+
 def package_edges() -> set[Edge]:
-    modules = {path.stem for path in SOURCE.glob("*.py") if path.stem != "__init__"}
+    modules = package_modules()
     edges: set[Edge] = set()
     for module in sorted(modules):
         source = (SOURCE / f"{module}.py").read_text(encoding="utf-8")
@@ -182,9 +187,8 @@ def test_the_package_root_imports_nothing_from_the_package():
     sibling module, a caller reaching it through the root would be taking a
     hidden edge to that sibling, and nothing above would ever see it.
     """
-    modules = {path.stem for path in SOURCE.glob("*.py") if path.stem != "__init__"}
     source = (SOURCE / "__init__.py").read_text(encoding="utf-8")
-    assert set(edges_of("__init__", source, modules)) == set()
+    assert set(edges_of("__init__", source, package_modules())) == set()
 
 
 def test_every_import_points_down_in_plain_sight():

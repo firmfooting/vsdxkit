@@ -111,10 +111,6 @@ class _PageSeam(PageView, _ConnectorPage, Protocol):
     @property
     def filename(self) -> str: ...
 
-    # read by `Page._carry_relationships`, through its `source: _PageSeam`
-    @property
-    def rels_xml(self) -> PartTree | None: ...
-
     @property
     def _pagesheet_xml(self) -> Element: ...
 
@@ -142,7 +138,7 @@ class _PageSeam(PageView, _ConnectorPage, Protocol):
 
     def _copy_shape_xml(self, element: Element) -> Element: ...
 
-    def _renumber_shape_ids(self, element: Element, id_map: dict[str, int] | None = None) -> dict[str, int]: ...
+    def _renumber_shape_ids(self, element: Element) -> None: ...
 
 
 def parent_of(root: Element, element: Element) -> Element | None:

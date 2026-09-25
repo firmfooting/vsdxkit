@@ -518,8 +518,8 @@ class Page:
         """A copy of `element` at this page's top level, with IDs unused on this page."""
         return self._document.copy_shape(element, self)
 
-    def _renumber_shape_ids(self, element: ET.Element, id_map: dict[str, int] | None = None) -> dict[str, int]:
-        return self._document.renumber_shape_ids(element, self, id_map)
+    def _renumber_shape_ids(self, element: ET.Element) -> None:
+        self._document.renumber_shape_ids(element, self)
 
     def _same_document(self, other: _PageSeam) -> bool:
         return _as_page(other)._document is self._document
@@ -543,7 +543,7 @@ class Page:
         document the part is shared, so the copy needs only a relationship of
         its own to the same part.
         """
-        source_rels = source.rels_xml
+        source_rels = _as_page(source).rels_xml
         if source_rels is None:
             return
         by_id = {rel.attrib.get("Id"): rel for rel in all_of(source_rels.getroot())}
