@@ -73,8 +73,12 @@ Each lookup says how many shapes it expects:
 
 When several shapes match, the ``by_*`` and ``require_*`` forms raise
 :class:`vsdxkit.errors.InvalidOperationError` naming them instead of picking
-one. Shape IDs are unique on a page, so two shapes with one ID raise
-:class:`vsdxkit.errors.PackageError`.
+one. Shape IDs are unique on a valid page, so a lookup by ID that finds two
+shapes with one ID in the collection it searches raises
+:class:`vsdxkit.errors.PackageError`: the page is malformed. Only
+``page.shapes`` searches the whole page. ``page.children`` holds only the
+top-level shapes, so it sees just one shape of a pair where one is top-level
+and the other nested.
 
 Text is matched exactly: ``require_text("Start")`` finds the shape that reads
 "Start", not one that mentions it. For a looser search, filter the collection:

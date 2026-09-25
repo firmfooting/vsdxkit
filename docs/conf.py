@@ -38,3 +38,21 @@ html_static_path = ["_static"]
 html_css_files = ["sphinx-rtd.css"]
 html_logo = "_static/mark_white.svg"
 html_favicon = "_static/favicon.ico"
+
+# The theme's "Edit on GitHub" link, pointing at the source of each page on main.
+html_context = {
+    "display_github": True,
+    "github_user": "firmfooting",
+    "github_repo": "vsdxkit",
+    "github_version": "main",
+    "conf_py_path": "/docs/",
+}
+
+html_theme_options = {
+    # mark links that leave the site, such as the GitHub and PyPI links
+    "style_external_links": True,
+    # show every section heading of a guide in the sidebar
+    "navigation_depth": 3,
+    "collapse_navigation": False,
+    "prev_next_buttons_location": "both",
+}

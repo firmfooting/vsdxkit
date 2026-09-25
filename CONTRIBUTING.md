@@ -5,17 +5,44 @@ installs as `vsdxkit` and imports as `vsdxkit`. Python 3.10 or later is required
 
 #### Development environment
 
-The repository uses [uv](https://docs.astral.sh/uv/) with a committed lockfile:
+The repository uses [uv](https://docs.astral.sh/uv/) with a committed lockfile.
+Clone it and sync the development environment:
 
 ```
-uv sync --group docs    # test, lint and build groups plus Sphinx (needs Python 3.12+)
-uv run pytest tests -q
-uv run ruff check src tests tools
-uv run ruff format --check src tests tools
-uv run pyrefly check src/vsdxkit --min-severity warn
-uv run zizmor .github/workflows
-uv run sphinx-build -W --keep-going -b html docs docs/_build/html
+git clone https://github.com/firmfooting/vsdxkit.git
+cd vsdxkit
+uv sync --locked                 # the dev group: test, lint, build and coverage
+uv sync --locked --group docs    # the same, plus Sphinx (needs Python 3.12+)
 ```
+
+The library supports Python 3.10–3.14 on Linux, Windows and macOS. Sphinx is
+pinned in the `docs` dependency group, which requires Python 3.12 or later, so
+run the documentation build on a 3.12+ interpreter. Drop `--group docs` from the
+sync to work on the library itself under Python 3.10 or 3.11.
+
+#### Checks to run before submitting
+
+```
+uv run --no-sync python -m pytest tests -q
+uv run --no-sync ruff check src tests tools
+uv run --no-sync ruff format --check src tests tools
+uv run --no-sync pyrefly check src/vsdxkit --min-severity warn --output-format min-text
+uv run --no-sync zizmor .github/workflows
+uv run --no-sync sphinx-build -W --keep-going -b html docs docs/_build/html
+uv run --no-sync python -m build
+```
+
+The package is held at pyrefly's `strict` preset.
+
+The Sphinx source is in [`docs/`](docs/), and the build above writes the site to
+`docs/_build/html` (`python -m sphinx` in place of `sphinx-build` runs the same
+build). The Docs workflow publishes the site to
+<https://firmfooting.github.io/vsdxkit/> on every push to `main` that touches the
+docs, the package or its dependencies.
+
+`tests/test_readme_workflow.py` runs the README's Python examples in order and
+checks what each one promises, and it pins how many examples there are. If you
+add, remove or re-fence a `python` block in the README, update that test too.
 
 CI runs the tests across Python 3.10–3.14 on Linux and Windows, and on 3.10 and
 3.14 on macOS. The ruff, pyrefly and Sphinx gates run once, on Linux under
@@ -70,7 +97,9 @@ Windows runs the harness.
 package claims, read from its XML, and what Visio reports over COM. Where they
 disagree, at least one of them is wrong, and neither is our own opinion of our
 own output. It needs Windows and a licensed desktop Visio; Visio for the web has
-no COM and cannot do this.
+no COM and cannot do this. It opens the file in an invisible Visio instance. The
+run is manual, on a maintainer's Windows machine, because GitHub's runners have
+no Visio.
 
 ```console
 $ python tools/visio_verify.py check out/generated.vsdx
