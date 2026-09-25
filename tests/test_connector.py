@@ -91,6 +91,32 @@ def test_connect_takes_glue_and_routing_as_keywords(vsdx_copy):
     assert connector.cells["ShapeRouteStyle"].value == "17"
 
 
+@pytest.mark.parametrize("routing", [Routing.DEFAULT, Routing.CURVED])
+def test_a_new_connector_carries_no_sentinel_text(vsdx_copy, routing):
+    """Fails if a connector keeps the text it was found by in the bundled document, which Visio shows as its label."""
+    page = _page(vsdx_copy)
+    a, b = _ends(page)
+    assert page.connect(a, b, routing=routing).text == ""
+
+
+def test_connect_imports_the_line_style_its_master_names_once(vsdx_copy):
+    """Fails if the connector's line style is not imported, so it names a StyleSheet the file lacks, or is imported again on each connect."""
+    path = vsdx_copy("test1.vsdx")
+    vis = Document.open(path)
+    before = [style.attrib["ID"] for style in vis._style_sheets()]
+    page = vis.pages[0]
+    a, b = list(page.children)[:2]
+
+    style_id = page.connect(a, b).master_shape.line_style_id
+    page.connect(b, a)
+    vis.save()
+
+    assert style_id is not None and style_id not in before
+    after = [style.attrib["ID"] for style in Document.open(path)._style_sheets()]
+    assert after.count(style_id) == 1
+    assert len(after) == len(before) + 1
+
+
 def test_connect_takes_no_positional_options(vsdx_copy):
     page = _page(vsdx_copy)
     a, b = _ends(page)

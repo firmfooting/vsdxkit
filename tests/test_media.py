@@ -1,10 +1,11 @@
 """The bundled donors, and the shapes found in them by sentinel text (#104, #310)."""
 
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
 
-from vsdxkit import media
+from vsdxkit import media, namespace
 from vsdxkit.document import Document
 from vsdxkit.errors import NotFoundError
 from vsdxkit.shape_kind import ShapeKind
@@ -41,8 +42,12 @@ def test_a_truncated_sentinel_is_refused():
         media._sentinel(media.PALETTE, "PALETTE_PRO", Document.open)
 
 
-def test_what_the_module_hands_out_is_a_copy(vsdx_copy):
-    """Fails if a caller is given a donor's own elements, which it could edit past the closed guard."""
+def test_what_the_library_creates_from_a_donor_is_a_copy(vsdx_copy):
+    """Fails if a created shape, connector or style is a donor's own element, which a caller could edit past the closed guard.
+
+    `media` hands its donor shapes out uncopied, to the library alone:
+    `Page.create_shape`, `Document._copy_connector` and `_style_copy` copy them.
+    """
     donor = media._donor(media.PALETTE, Document.open)
     donor_elements = set(donor.pages[0].xml.getroot().iter())
     vis = Document.open(vsdx_copy("test1.vsdx"))
@@ -51,6 +56,13 @@ def test_what_the_module_hands_out_is_a_copy(vsdx_copy):
     connector = vis._copy_connector(page)
     assert not donor_elements & set(shape.xml.iter())
     assert shape.page is page and connector.page is page
+    donor_connector = media._connector_shape(Document.open)
+    assert not set(donor_connector.xml.iter()) & set(connector.xml.iter())
+    # the same cells and sections: only the ID and the sentinel text differ
+    text = f"{namespace}Text"
+    assert [ET.tostring(child) for child in connector.xml if child.tag != text] == [
+        ET.tostring(child) for child in donor_connector.xml if child.tag != text
+    ]
     media_donor = media._donor(media.MEDIA, Document.open)
     style_id = next(iter(media_donor._style_sheets())).attrib["ID"]
     assert media._style_copy(style_id, Document.open) is not media_donor._get_style_by_id(style_id)

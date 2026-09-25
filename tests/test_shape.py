@@ -9,7 +9,7 @@ from helpers.connect_records import records_naming
 from vsdxkit import namespace
 from vsdxkit.document import Document
 from vsdxkit.errors import InvalidOperationError
-from vsdxkit.shapes import DataProperty, Shape, _as_shape
+from vsdxkit.shapes import DataProperty, Shape
 
 
 def _first_shape_containing(shapes, text: str):
@@ -983,7 +983,14 @@ def test_copy_onto_a_removed_page_writes_nothing(vsdx_copy, other_document):
     assert ET.tostring(removed.xml.getroot()) == page_xml
 
 
-def test_an_end_that_is_not_a_shape_is_refused():
-    """Fails if a look-alike end gets past the narrowing `Connector.source` and `target` rely on."""
-    with pytest.raises(TypeError, match="object"):
-        _as_shape(object())
+@pytest.mark.parametrize("end", ["source", "target"])
+def test_an_end_that_is_not_a_shape_is_refused(vsdx_copy, monkeypatch, end):
+    """Fails if `Connector.source` or `target` hands out a look-alike end rather than refusing it and naming its type.
+
+    The engine finds ends in ``page.shapes``, so only a stand-in engine can
+    hand one out.
+    """
+    connector = Document.open(vsdx_copy("test4_connectors.vsdx")).pages[0].connectors[0]
+    monkeypatch.setattr("vsdxkit.shapes._glued_ends", lambda _: ((object(), None), (object(), None)))
+    with pytest.raises(TypeError, match=r"^expected a vsdxkit Shape, got object$"):
+        getattr(connector, end)

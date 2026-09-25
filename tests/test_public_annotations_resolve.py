@@ -37,9 +37,27 @@ def _public_signatures() -> Iterator[tuple[str, Callable[..., object]]]:
                     yield f"{module.__name__}.{name}.{attribute}", member
 
 
+# signatures the walk must reach, so a walk that finds nothing cannot pass:
+# the ones that named an upward type before the seams, and the public entries
+# the seams were built for
+FLOOR = {
+    "vsdxkit.pages.Page.__init__",
+    "vsdxkit.pages.Page.connect",
+    "vsdxkit.pages.Page.vis",
+    "vsdxkit.shapes.Shape.__init__",
+    "vsdxkit.shapes.Shape.copy",
+    "vsdxkit.shapes.Shape.master_page",
+    "vsdxkit.shapes.Shape.page",
+    "vsdxkit.templating.render_document",
+}
+
+
 def test_public_annotations_resolve_at_runtime():
+    """Fails if a public annotation names a type its module cannot import, or the walk misses a signature it must see."""
+    signatures = dict(_public_signatures())
+    assert set(signatures) >= FLOOR, "the walk no longer reaches every public signature"
     unresolved = set()
-    for qualified_name, function in _public_signatures():
+    for qualified_name, function in signatures.items():
         try:
             typing.get_type_hints(function)
         except (NameError, TypeError, AttributeError):

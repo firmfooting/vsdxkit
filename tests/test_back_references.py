@@ -10,6 +10,11 @@ import pytest
 from vsdxkit.document import Document
 
 
+def _no_setter(name: str, owner: object) -> str:
+    """What CPython says to an assignment to a property with no setter: 3.10's wording, then 3.11's."""
+    return rf"^(can't set attribute '{name}'|property '{name}' of '{type(owner).__name__}' object has no setter)$"
+
+
 def test_back_references_are_the_owning_objects(vsdx_copy):
     document = Document.open(vsdx_copy("test1.vsdx"))
     page = document.pages[0]
@@ -41,9 +46,9 @@ def test_the_back_references_are_read_only(vsdx_copy):
     document = Document.open(vsdx_copy("test1.vsdx"))
     page = document.pages[0]
     shape = next(iter(page.children))
-    with pytest.raises(AttributeError):
+    with pytest.raises(AttributeError, match=_no_setter("page", shape)):
         shape.page = page
-    with pytest.raises(AttributeError):
+    with pytest.raises(AttributeError, match=_no_setter("parent", shape)):
         shape.parent = page
-    with pytest.raises(AttributeError):
+    with pytest.raises(AttributeError, match=_no_setter("vis", page)):
         page.vis = document
