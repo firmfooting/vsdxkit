@@ -4,19 +4,27 @@ Quick start
 Installation
 ------------
 
-**As of 2026-09-13 there is no release on PyPI.** The first release was
-withdrawn after a security defect and cannot be republished, so
-``pip install vsdxkit`` finds no versions until the next one lands. The `PyPI
-project page <https://pypi.org/project/vsdxkit/>`_ shows the current state.
+Python 3.10–3.14 is supported on Linux, Windows and macOS.
 
-Install from GitHub in the meantime:
+These pages describe the 1.0 API, which ``main`` carries. It is not on PyPI
+yet, so install it from GitHub:
 
 .. code-block:: console
 
    python -m pip install "vsdxkit @ git+https://github.com/firmfooting/vsdxkit.git"
 
-That tracks ``main``, so pin a commit if you need a reproducible install. Once
-there is a release on the index, install it with ``pip install vsdxkit``.
+That tracks ``main``, so pin a commit if you need a reproducible install. Until
+1.0 is released, an install from ``main`` reports its version as 0.8.0, because
+the version is only bumped when a release is cut.
+
+``pip install vsdxkit`` installs 0.8.0, the latest release on `PyPI
+<https://pypi.org/project/vsdxkit/>`_, published on 2026-09-13. It has the 0.x
+API: it imports as ``vsdx``, its document class is ``VisioFile``, and the
+examples on these pages do not run on it. Pin ``vsdxkit<1`` to stay on the 0.x
+names once 1.0 is released, and read :doc:`migration-1.0` when you move.
+
+0.7.0 was withdrawn from PyPI because its Jinja rendering could run code from a
+crafted document. 0.7.1 and later render templates in Jinja's sandbox.
 
 Import each name from the module that defines it; the package root re-exports
 nothing:
@@ -24,8 +32,6 @@ nothing:
 .. code-block:: python
 
    from vsdxkit.document import Document
-
-Python 3.10–3.14 is supported.
 
 Open a document
 ---------------
@@ -71,20 +77,17 @@ the source file. Nothing is saved until you call it.
    vis.pages[0].name = "Current state"
    vis.save()
 
+Where next
+----------
+
+* :doc:`find_shape` to select pages and look shapes up.
+* :doc:`create_connect` to add shapes and connectors.
+* :doc:`swimlanes` to extend a cross-functional flowchart.
+* :doc:`templating` to fill a template with data.
+
 Development install
 -------------------
 
-.. code-block:: console
-
-   git clone https://github.com/firmfooting/vsdxkit.git
-   cd vsdxkit
-   uv sync --locked --group docs
-   uv run --no-sync python -m pytest tests -q
-   uv run --no-sync ruff check src tests tools
-   uv run --no-sync ruff format --check src tests tools
-   uv run --no-sync pyrefly check src/vsdxkit --min-severity warn --output-format min-text
-   uv run --no-sync sphinx-build -W --keep-going -b html docs docs/_build/html
-
-The ``docs`` group pins Sphinx, which requires Python 3.12 or later. Drop
-``--group docs`` from the sync to work on the library itself under Python 3.10
-or 3.11.
+To work on vsdxkit itself, follow the development environment and checks in
+`CONTRIBUTING.md
+<https://github.com/firmfooting/vsdxkit/blob/main/CONTRIBUTING.md>`_.

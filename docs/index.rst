@@ -2,14 +2,8 @@ vsdxkit documentation
 =====================
 
 ``vsdxkit`` creates, edits and analyses Microsoft Visio ``.vsdx`` files with
-Python. The distribution and the import package are both called ``vsdxkit``.
-Microsoft Visio is not required at runtime.
-
-.. note::
-
-   **The 1.0 API.** These pages describe the 1.0 API. Code written for 0.x
-   will not run unchanged: :doc:`migration-1.0` gives the replacement for
-   every 0.x name 1.0 removes. Pin ``vsdxkit<1`` to stay on the 0.x names.
+Python. Microsoft Visio is not required at runtime. The distribution and the
+import package are both called ``vsdxkit``.
 
 The library works on the XML parts inside an existing Visio package. It can
 query and edit shapes, create common flowchart shapes, create and retarget
@@ -18,15 +12,38 @@ Jinja-backed templates.
 
 .. note::
 
-   **As of 2026-09-13 there is no release on PyPI.** The first release was
-   withdrawn after a security defect and cannot be republished, so
-   ``pip install vsdxkit`` finds no versions until the next one lands. Install
-   from the GitHub repository as described in :doc:`quickstart`. The `PyPI
-   project page <https://pypi.org/project/vsdxkit/>`_ shows the current state.
+   **The 1.0 API.** These pages describe the 1.0 API, which ``main`` carries
+   and which is not yet released. Code written for 0.x will not run
+   unchanged: :doc:`migration-1.0` gives the replacement for every 0.x name
+   1.0 removes. Pin ``vsdxkit<1`` to stay on the 0.x names.
+
+Install
+-------
+
+The 1.0 API is not on PyPI yet. Install it from GitHub:
+
+.. code-block:: console
+
+   python -m pip install "vsdxkit @ git+https://github.com/firmfooting/vsdxkit.git"
+
+``pip install vsdxkit`` installs 0.8.0, the latest release, which has the 0.x
+API and imports as ``vsdx``. :doc:`quickstart` says more about both.
+
+Where to go next
+----------------
+
+* Install, open a document and save it: :doc:`quickstart`.
+* Select, add, copy and delete pages, and find shapes: :doc:`find_shape`.
+* Create, connect, retarget and delete shapes: :doc:`create_connect`.
+* Extend a cross-functional flowchart: :doc:`swimlanes`.
+* Fill a Visio template with data: :doc:`templating`.
+* Look up a class or an error: :doc:`classes`.
+* Move code from 0.x to 1.0: :doc:`migration-1.0`.
 
 .. toctree::
    :maxdepth: 2
    :caption: Guides
+   :hidden:
 
    quickstart
    create_connect
@@ -58,6 +75,9 @@ Project
 -------
 
 Source and issues: https://github.com/firmfooting/vsdxkit
+
+Contributing: `CONTRIBUTING.md
+<https://github.com/firmfooting/vsdxkit/blob/main/CONTRIBUTING.md>`_
 
 Descended from: https://github.com/dave-howard/vsdx
 
