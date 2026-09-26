@@ -117,7 +117,9 @@ A page name holding ``{{ ... }}``
    rendered, where 0.8 took one out only when it opened the name. Nothing
    checks that the names rendered are unique: give each page a name the
    others do not render to, because ``document.pages.by_name`` refuses a
-   name two pages share.
+   name two pages share. A name meant to keep a literal ``{{`` or ``{%``
+   now needs escaping, as in shape text: ``{{ '{{' }}``. A broken
+   template in a name raises ``jinja2.TemplateSyntaxError``.
 
 ``vsdx.templating.JinjaTemplatingMixin``
    Gone. ``Document`` has no base class. ``Document.render(context)`` calls
