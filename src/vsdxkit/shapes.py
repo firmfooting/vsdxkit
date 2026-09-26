@@ -836,10 +836,14 @@ class Shape:
             If not specified, the copy will be placed in the original shape's page.
         :type page: :class:`PageView` (Optional), which must be a :class:`vsdxkit.pages.Page` at runtime
         :raises TypeError: if ``page`` is not a :class:`vsdxkit.pages.Page`
-        :raises InvalidOperationError: if the destination page is no longer in its document; nothing is written
+        :raises InvalidOperationError: if this shape has been deleted or its page removed, or if the
+            destination page is no longer in its document; nothing is written
 
         :return: :class:`Shape` the new copy of shape
         """
+        # the source first: a deleted shape, or one on a removed page, is read
+        # no more than it is written, and copying it would bring it back
+        self._require_attached("Shape.copy()")
         dst_page = self._page if page is None else self._page._peer(page)
         if not dst_page._attached():
             raise InvalidOperationError(

@@ -456,6 +456,15 @@ Reading or writing a deleted shape
    its document. ``ID``, ``xml``, ``page``, ``parent``, ``repr`` and
    ``hash`` keep working: ``page`` and ``parent`` are where the shape was.
 
+``deleted_shape.copy()``, ``shape.copy(removed_page)``
+   Both raise :class:`vsdxkit.errors.InvalidOperationError` and write
+   nothing. A copy reads the whole shape, so a shape that has been deleted,
+   or that is on a page removed from its document, is refused as any other
+   read of it is; 0.8 copied it back onto a page. A copy onto a page removed
+   from its document is refused too, where 0.8 returned a shape that was in
+   no document. ``page.create_shape(...)`` and ``page.connect(...)`` on a
+   removed page are refused the same way.
+
 ``shape.cells``
    A read-only property that returns a new ``dict`` on each read, from the
    XML. Assigning into the dict changes nothing; set a cell with

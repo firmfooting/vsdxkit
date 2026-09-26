@@ -984,6 +984,36 @@ def test_copy_onto_a_removed_page_writes_nothing(vsdx_copy, other_document):
     assert ET.tostring(removed.xml.getroot()) == page_xml
 
 
+@pytest.mark.parametrize("onto", ["its own page", "a live page"])
+@pytest.mark.parametrize("gone", ["deleted", "on a removed page"])
+def test_copying_a_shape_no_longer_in_its_document_is_refused_and_writes_nothing(vsdx_copy, gone, onto):
+    """Fails if `copy` reads a source that is no longer in its document, as `create_shape(prototype)` refuses to.
+
+    `deleted_shape.copy()` brought the shape back, and a shape on a removed
+    page copied onto a live one. Reading a deleted shape raises everywhere
+    else, and a copy reads the whole shape.
+    """
+    vis = Document.open(vsdx_copy("test1.vsdx"))
+    live = vis.pages[0]
+    if gone == "deleted":
+        shape = live.children.require_id("5")
+        shape.delete()
+    else:
+        removed = vis.pages[2]
+        shape = removed.children.require_id("1")
+        vis.pages.delete(removed)
+    destination = None if onto == "its own page" else live
+    parts = {name: vis._package.read_bytes(name) for name in vis._package.names()}
+    live_xml = ET.tostring(live.xml.getroot())
+    refused = r"^Shape\.copy\(\) refused: shape \d+ on page '[^']+' is no longer in the document$"
+
+    with pytest.raises(InvalidOperationError, match=refused):
+        shape.copy(destination)
+
+    assert {name: vis._package.read_bytes(name) for name in vis._package.names()} == parts
+    assert ET.tostring(live.xml.getroot()) == live_xml
+
+
 @pytest.mark.parametrize("end", ["source", "target"])
 def test_an_end_that_is_not_a_shape_is_refused(vsdx_copy, monkeypatch, end):
     """Fails if `Connector.source` or `target` hands out a look-alike end rather than refusing it and naming its type.
