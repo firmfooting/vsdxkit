@@ -275,12 +275,12 @@ def test_shape_copy_other_page(filename: str, shape_name: str, tmp_path, basedir
     print(f"Found shape id:{shape.ID}")
 
     new_shape = shape.copy(page2)
-    assert new_shape  # check copy_shape returns xml
+    assert new_shape  # check copy returns the new shape
     print(f"created new shape {type(new_shape)} {new_shape} {new_shape.ID}")
     page2_new_shape_id = new_shape.ID
 
     new_shape = shape.copy(page3)
-    assert new_shape  # check copy_shape returns xml
+    assert new_shape  # check copy returns the new shape
     print(f"created new shape {type(new_shape)} {new_shape} {new_shape.ID}")
     page3_new_shape_id = new_shape.ID
 

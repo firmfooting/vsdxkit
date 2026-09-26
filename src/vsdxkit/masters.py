@@ -111,7 +111,7 @@ class MasterCatalog:
         if self._by_id_revision != self._revision:
             self._by_id = {}
             for page in self._pages:
-                self._by_id.setdefault(page.page_id, page)
+                self._by_id.setdefault(page._page_id, page)
             self._by_id_revision = self._revision
         return self._by_id.get(master_id)
 
@@ -135,7 +135,7 @@ class MasterCatalog:
         unique_id = master.attrib.get("UniqueID")
         name = _master_name(master)
         for page in self._pages:
-            element = self.element_by_id(page.page_id)
+            element = self.element_by_id(page._page_id)
             if element is None:
                 continue
             if unique_id and element.attrib.get("UniqueID") == unique_id:
@@ -203,7 +203,7 @@ class MasterCatalog:
                 require_attribute(master, "ID", "masters.xml Master"),
                 rel_id,
             )
-            page.master_unique_id = master.attrib.get("UniqueID")
+            page._master_unique_id = master.attrib.get("UniqueID")
             pages.append(page)
         self._pages = pages
         self._revision += 1
@@ -268,15 +268,15 @@ class MasterCatalog:
             if identity is not None and identity in first_by_identity:
                 aliases[master_id] = first_by_identity[identity]
                 continue
-            if source._store.part(source_page.filename) is None:
+            if source._store.part(source_page._filename) is None:
                 continue
             # The check above says the part is there, so None is a source
             # store contradicting itself; empty bytes in its place would be a
             # master part no reader can parse.
-            master_bytes = source._store.read_bytes(source_page.filename)
+            master_bytes = source._store.read_bytes(source_page._filename)
             if master_bytes is None:
                 raise MissingPartError(
-                    f"source master part {source_page.filename} could not be read, though the package lists it"
+                    f"source master part {source_page._filename} could not be read, though the package lists it"
                 )
             pending.append((master_id, element, master_bytes))
             if identity is not None:
@@ -287,7 +287,7 @@ class MasterCatalog:
             rels_root = self._required_root(relationships_part_name(MASTERS_PART))
             for master_id, element, master_bytes in pending:
                 found[master_id] = self._add(element, master_bytes, rels_root)
-                self._imported.setdefault(source, {})[master_id] = found[master_id].page_id
+                self._imported.setdefault(source, {})[master_id] = found[master_id]._page_id
         for master_id, first in aliases.items():
             if first in found:
                 found[master_id] = found[first]
@@ -343,7 +343,7 @@ class MasterCatalog:
 
         tree = self._store.require_xml(part_name)
         page = self._make_page(tree, part_name, _page_name(element), new_id, relationship.attrib["Id"])
-        page.master_unique_id = element.attrib.get("UniqueID")
+        page._master_unique_id = element.attrib.get("UniqueID")
         self._pages.append(page)
         self._revision += 1
         return page

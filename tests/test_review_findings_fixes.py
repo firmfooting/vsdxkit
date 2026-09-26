@@ -6,11 +6,11 @@ import zipfile
 
 import pytest
 from helpers.broken_package import make_package
+from helpers.package_diff import PackageDiff, PackageDiffLimitError
 
 from vsdxkit.document import Document
 from vsdxkit.errors import PackageLimitError
 from vsdxkit.package import PackageLimits, _preflight_eocd
-from vsdxkit.vsdxdiff import VisioFileDiff
 
 # Most packages here are synthetic archives built to exercise the zip reader:
 # declared entry counts that lie, directories that disagree with their bounds,
@@ -60,13 +60,13 @@ def test_diff_rejects_member_above_cap(tmp_path):
     with open(document, "rb") as reader:
         payload = bytearray(reader.read())
     cd = payload.find(b"PK\x01\x02")
-    struct.pack_into("<I", payload, cd + 24, VisioFileDiff.MAX_MEMBER_BYTES + 1)
+    struct.pack_into("<I", payload, cd + 24, PackageDiff.MAX_MEMBER_BYTES + 1)
     over = os.path.join(str(tmp_path), "over.vsdx")
     with open(over, "wb") as handle:
         handle.write(payload)
 
-    with pytest.raises(PackageLimitError) as excinfo:
-        VisioFileDiff.extract_file_data(over)
+    with pytest.raises(PackageDiffLimitError) as excinfo:
+        PackageDiff.extract_file_data(over)
     assert excinfo.value.reason == "member_size"
 
 
@@ -192,13 +192,13 @@ def test_diff_chunk_boundary_crlf_is_one_newline(tmp_path):
     document = str(tmp_path / "split.vsdx")
     other = str(tmp_path / "plain.vsdx")
     # pad so the CR is the final byte of chunk one and the LF opens chunk two
-    padding = b" " * (VisioFileDiff._CHUNK - len(b"<xml>") - 1)
+    padding = b" " * (PackageDiff._CHUNK - len(b"<xml>") - 1)
     payload = b"<xml>" + padding + b"\r\n</xml>"
-    assert payload[VisioFileDiff._CHUNK - 1 : VisioFileDiff._CHUNK + 1] == b"\r\n"
+    assert payload[PackageDiff._CHUNK - 1 : PackageDiff._CHUNK + 1] == b"\r\n"
     make_package(document, {"visio/document.xml": payload})
     make_package(other, {"visio/document.xml": b"<xml>" + padding + b"\n</xml>"})
 
-    file_diff = VisioFileDiff(document, other)
+    file_diff = PackageDiff(document, other)
     assert file_diff.diffs == {}
     # and the split line count matches a plain-LF document exactly
     assert file_diff.contents_a == file_diff.contents_b
@@ -213,7 +213,7 @@ def test_diff_incomplete_utf8_at_eof_is_binary(tmp_path):
     make_package(document, {"custom/binary.dat": b"ok\xc3"})
     make_package(other, {"custom/binary.dat": b"ok\xc4"})
 
-    file_diff = VisioFileDiff(document, other)
+    file_diff = PackageDiff(document, other)
     assert "custom/binary.dat" in file_diff.diffs
     assert file_diff.contents_a["custom/binary.dat"][0].startswith("binary sha256:")
     assert file_diff.contents_a["custom/binary.dat"] != file_diff.contents_b["custom/binary.dat"]

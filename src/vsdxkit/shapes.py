@@ -24,7 +24,7 @@ from vsdxkit.inheritance import InheritedRow
 from vsdxkit.logging_support import get_logger
 from vsdxkit.shape_kind import ShapeKind
 from vsdxkit.shape_part import AttachedShape, ShapePart
-from vsdxkit.shape_tree import is_connector_element, iter_children, iter_edges
+from vsdxkit.shape_tree import find_or_create_shapes_tag, is_connector_element, iter_children, iter_edges, parent_of
 from vsdxkit.xmlio import PartTree, make_cell_element, to_float, xml_value
 
 logger = get_logger(__name__)
@@ -36,10 +36,8 @@ class PageView(Protocol):
     The type of a shape's back-reference to its page. It is read-only: it
     lists the page's public API apart from ``swimlanes``,
     ``require_swimlanes`` and ``vis``, whose types are declared above this
-    module, and apart from the page's part-level attributes, such as
-    ``filename``, ``page_id`` and ``rel_id``. To change a page (set
-    ``name``, ``width``, ``height``, ``background`` and so on), or to reach
-    those part-level attributes, use the :class:`vsdxkit.pages.Page` you
+    module. To change a page (set ``name``, ``width``, ``height``,
+    ``background`` and so on), use the :class:`vsdxkit.pages.Page` you
     hold, such as ``document.pages[0]``. At runtime the object is that
     ``Page`` itself.
     """
@@ -103,13 +101,13 @@ class PageView(Protocol):
 
 class _PageSeam(PageView, _ConnectorPage, Protocol):
     """What a shape needs from its page beyond the public view: the page's
-    own bookkeeping, and the document operations the page forwards."""
+    own bookkeeping, and the document operations the page passes on."""
 
     @property
-    def page_id(self) -> str: ...
+    def _page_id(self) -> str: ...
 
     @property
-    def filename(self) -> str: ...
+    def _filename(self) -> str: ...
 
     @property
     def _pagesheet_xml(self) -> Element: ...
@@ -138,15 +136,7 @@ class _PageSeam(PageView, _ConnectorPage, Protocol):
 
     def _copy_shape_xml(self, element: Element) -> Element: ...
 
-    def _renumber_shape_ids(self, element: Element) -> None: ...
-
-
-def parent_of(root: Element, element: Element) -> Element | None:
-    """The element that holds `element`, or None if it is not in this tree."""
-    for candidate in root.iter():
-        if element in list(candidate):
-            return candidate
-    return None
+    def _renumber_shape_ids(self, subtree: Element, id_map: dict[str, int] | None = None) -> dict[str, int]: ...
 
 
 def is_connector(shape: Shape) -> bool:
@@ -200,21 +190,6 @@ def _drop_unreachable_master_shapes(
     for parent, child in iter_edges(root):
         masters[child] = None if child in dropped else child.attrib.get("Master") or masters[parent]
         check(child, masters[child], own_counts=False)
-
-
-def find_or_create_shapes_tag(parent: Element) -> Element:
-    """Return the ``<Shapes>`` container inside ``parent``, creating it if absent.
-
-    A ``<Shape>`` is never a legal child of a ``<Shape>``: a group holds its
-    children in a ``<Shapes>`` container, and a group that is currently empty
-    has no such container until something is put into it. The same is true of a
-    page, whose contents hang off one ``<Shapes>`` tag under ``<PageContents>``.
-    """
-    shapes_tag = parent.find(f"{namespace}Shapes")
-    if shapes_tag is None:
-        shapes_tag = Element(f"{namespace}Shapes")
-        parent.append(shapes_tag)
-    return shapes_tag
 
 
 def _coordinate_value(value: float | str | None) -> str:
@@ -709,7 +684,7 @@ class Shape:
     # A Shape is a view onto its element, not a snapshot of it. Everything below
     # is read from `self.xml` on each access rather than copied in __init__,
     # because a copy is a second store of the same fact and every writer of the
-    # element then has to remember to update it. `renumber_shape_ids` did not,
+    # element then has to remember to update it. The ID allocator did not,
     # which left a live Shape naming an id that was no longer on the page: glue
     # written from it dangled, and deleting it missed the connectors glued to
     # it. See #320, and #278 for the same pattern in the Connect records.
@@ -725,8 +700,9 @@ class Shape:
 
         Read-only. An id is not the shape's alone to change: the element
         attribute, the page's ``Connect`` records and the ``Sheet.N!``
-        references in other shapes' formulas all name it, and only
-        :meth:`Document.renumber_shape_ids` moves the three together.
+        references in other shapes' formulas all name it, and only the
+        page's allocator, ``Page._renumber_shape_ids``, moves the three
+        together.
         """
         return self.xml.attrib.get("ID")
 
@@ -810,20 +786,6 @@ class Shape:
             self._geometry = Geometry(xml=self._geometry_xml, shape=self)
         return self._geometry
 
-    @geometry.setter
-    def geometry(self, value: Geometry | None) -> None:
-        """Give the shape a Geometry, or ``None`` to report none at all.
-
-        Here because this was a plain attribute before it was built on demand,
-        and assigning it worked. It writes nothing to the shape's XML, so the
-        two part company until the shape is read again.
-        """
-        # guarded although it writes no XML: it points the Shape at geometry
-        # that the document it belongs to can no longer be saved with
-        self._require_attached("replacing a shape's geometry")
-        self._geometry = value
-        self._geometry_xml = value.xml if value is not None else None
-
     @property
     def is_master_shape(self) -> bool:
         """Returns True if the shape is a master or False if the shape inherits from a master shape or has no master"""
@@ -880,7 +842,7 @@ class Shape:
             if not master_id:
                 continue
             if master_id in masters:
-                node.attrib["Master"] = masters[master_id].page_id
+                node.attrib["Master"] = masters[master_id]._page_id
             elif cross_document:
                 # a master the source could not resolve: in another document it
                 # would name a master that package does not declare, and Visio
@@ -892,16 +854,16 @@ class Shape:
             # the master a copy now names may be built differently from the one
             # it was copied under - a MatchByName master answers for its name
             # alone - or may be gone altogether
-            members = {master.page_id: _shape_ids(master) for master in masters.values()}
+            members = {master._page_id: _shape_ids(master) for master in masters.values()}
             _drop_unreachable_master_shapes(new_shape_xml, members, dropped, root_names_inherited=bool(inherited))
         # every page that shows an instance of a master relates to it, as Visio
         # writes it; a copy onto another page of this document adds one too
         for master in masters.values():
-            dst_page._ensure_page_master_rel(master.filename)
+            dst_page._ensure_page_master_rel(master._filename)
         if not cross_document and dst_page is not self._page:
             dst_page._carry_relationships(new_shape_xml, self._page)
 
-        # copy_shape put it at the page's top level, whatever the source sat in
+        # _copy_shape_xml put it at the page's top level, whatever the source sat in
         return _wrap(new_shape_xml, dst_page, dst_page)
 
     @property

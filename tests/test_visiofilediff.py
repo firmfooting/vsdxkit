@@ -2,9 +2,9 @@ import os
 import pprint
 
 import pytest
+from helpers.package_diff import PackageDiff
 
 from vsdxkit.document import Document
-from vsdxkit.vsdxdiff import VisioFileDiff
 
 
 @pytest.mark.parametrize(("filename_a", "filename_b"), [("test1.vsdx", "test2.vsdx"), ("test1.vsdx", "test4_connectors.vsdx")])
@@ -13,7 +13,7 @@ def test_create_visiodiff(filename_a: str, filename_b: str, basedir):
     filepath_b = os.path.join(basedir, filename_b)
     print(basedir)
     print(filepath_a)
-    fd = VisioFileDiff(filepath_a, filepath_b)
+    fd = PackageDiff(filepath_a, filepath_b)
     print(f"fd={fd}")
     print(f"Added in {filename_b} {fd.added_members()}")
     print(f"Removed in {filename_b} {fd.removed_members()}")
@@ -36,7 +36,7 @@ def test_visiodiff_before_after(filename_a: str, filename_b: str, vsdx_copy, tmp
     vis = Document.open(filepath_a)
     vis.save(filepath_b)
 
-    file_diff = VisioFileDiff(filepath_a, filepath_b)
+    file_diff = PackageDiff(filepath_a, filepath_b)
 
     # a round trip must not add or remove package members
     assert file_diff.added_members() == set()
@@ -55,7 +55,7 @@ def test_visiodiff_detects_added_connector(vsdx_copy, tmp_path):
     page.connect(shapes[0], shapes[1])
     vis.save(filepath_b)
 
-    file_diff = VisioFileDiff(filepath_a, filepath_b)
+    file_diff = PackageDiff(filepath_a, filepath_b)
     # connector creation legitimately imports media masters and the page rels
     # part, so members are added but none are removed
     assert file_diff.removed_members() == set()
@@ -67,7 +67,7 @@ def test_visiodiff_detects_added_connector(vsdx_copy, tmp_path):
 
     # the same two files the other way round, so `removed_members` is pinned on
     # a non-empty answer as well
-    reversed_diff = VisioFileDiff(filepath_b, filepath_a)
+    reversed_diff = PackageDiff(filepath_b, filepath_a)
     assert reversed_diff.removed_members() == added
     assert reversed_diff.added_members() == set()
 
@@ -88,3 +88,17 @@ def test_visiodiff_detects_added_connector(vsdx_copy, tmp_path):
     # prefixes vary, so match on the attribute, not the tag)
     connect_records = [line for line in added_lines if "FromSheet" in line]
     assert connect_records, f"no Connect records among added lines: {added_lines[:10]}"
+
+
+def test_the_differ_is_a_test_helper_only():
+    """Fails if `vsdxkit.vsdxdiff` comes back, or the helper starts importing the library it checks (#116)."""
+    import ast
+    import importlib.util
+    from pathlib import Path
+
+    assert importlib.util.find_spec("vsdxkit.vsdxdiff") is None
+    source = (Path(__file__).parent / "helpers" / "package_diff.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    imported = {alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names}
+    imported |= {node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
+    assert not any(name.split(".")[0] == "vsdxkit" for name in imported), imported

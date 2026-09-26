@@ -1,6 +1,6 @@
 """Copying a group must renumber every shape below it, however deep it goes.
 
-`increment_shape_ids` used to stop one level short: it stamped the group and
+`_increment_shape_ids` used to stop one level short: it stamped the group and
 the group's direct children, then walked no further, so the grandchildren of a
 three-level group arrived in the copy still carrying their original ids. One
 `Shape.copy()` on `test10_nested_shapes.vsdx` left four duplicates, and a
@@ -105,7 +105,7 @@ def test_copied_subtree_matches_the_original_and_shares_no_ids_with_it(vsdx_copy
 
 
 def test_formulas_referencing_a_grandchild_follow_it_to_its_new_id(vsdx_copy, tmp_path):
-    """`update_ids` can only remap an id that the walk reallocated."""
+    """`remap_sheet_references` can only remap an id that the walk reallocated."""
     out_file = os.path.join(str(tmp_path), "grandchild_formula.vsdx")
     vis = Document.open(vsdx_copy(NESTED))
     page = vis.pages[0]

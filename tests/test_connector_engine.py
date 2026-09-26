@@ -187,7 +187,7 @@ def test_master_import_on_own_masters_document(tmp_path, basedir):
     connector = page.connect(a, b)
     assert connector is not None
     # the connector now references a master that exists in THIS document
-    assert vis.get_master_page_by_id(connector.master_page_ID) is not None
+    assert vis._master_page_by_id(connector.master_page_ID) is not None
     vis.save(src)
     with zipfile.ZipFile(src) as z:
         assert z.testzip() is None

@@ -244,10 +244,10 @@ def test_every_master_name_is_listed_in_titles_of_parts(imported_master: Importe
 def test_imported_master_survives_a_reopen(imported_master: ImportedMaster):
     """Reopening must find the imported master where the saved graph says it is."""
     vis = Document.open(imported_master.document)
-    master_page = vis.get_master_page_by_id(imported_master.master_id)
+    master_page = vis._master_page_by_id(imported_master.master_id)
     assert master_page is not None, f"master {imported_master.master_id} did not survive the round trip"
     assert master_page.name == imported_master.master_name
-    assert vis._package.part(master_page.filename) is not None
+    assert vis._package.part(master_page._filename) is not None
 
 
 def test_import_survives_masters_declared_with_no_masters_parts(vsdx_copy):
@@ -296,7 +296,7 @@ def test_import_survives_masters_declared_with_no_masters_parts(vsdx_copy):
         # the reopen itself is the assertion the fixture's own KeyError made:
         # a dangling relationship id there raises before this line returns
         reopened = Document.open(document)
-        masters_root = reopened.masters_xml
+        masters_root = reopened._masters_xml
         assert masters_root is not None
         master = next(m for m in masters_root if m.attrib.get("ID") == master_id)
         rel = master.find(f"{VISIO_NS}Rel")

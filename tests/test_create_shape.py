@@ -176,8 +176,8 @@ def _relationship_ids(shape):
 
 
 def _target(page, relationship_id):
-    (relationship,) = [rel for rel in page.rels_xml.getroot() if rel.attrib["Id"] == relationship_id]
-    return target_part_name(page.filename, relationship.attrib["Target"])
+    (relationship,) = [rel for rel in page._rels_xml.getroot() if rel.attrib["Id"] == relationship_id]
+    return target_part_name(page._filename, relationship.attrib["Target"])
 
 
 def test_a_deleted_prototype_is_refused(vsdx_copy):

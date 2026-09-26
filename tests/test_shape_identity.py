@@ -46,7 +46,7 @@ def test_a_shape_s_hash_survives_rename_renumber_and_save(vsdx_copy, tmp_path):
     shape = page.shapes.require_id("5")
     members = {shape}
     page.name = "Renamed"
-    vis.renumber_shape_ids(shape.xml, page)
+    page._renumber_shape_ids(shape.xml)
     assert shape.ID != "5"
     vis.save(str(tmp_path / "saved.vsdx"))
     assert shape in members

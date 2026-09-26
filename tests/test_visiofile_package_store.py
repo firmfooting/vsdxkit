@@ -21,25 +21,25 @@ def test_the_page_tree_is_the_stores_tree(vsdx_copy):
     """Fails if the loader parses its own copy instead of promoting the store's part."""
     vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
-    held = vis._package.part(page.filename)
+    held = vis._package.part(page._filename)
     assert isinstance(held, XmlPart) and held.tree is page.xml
 
 
 def test_the_document_parts_are_the_stores_trees(vsdx_copy):
-    """Fails if load_pages/load_master_pages parse a private copy instead of the store's tree."""
+    """Fails if _load_pages/load_master_pages parse a private copy instead of the store's tree."""
     vis = Document.open(vsdx_copy("test4_connectors.vsdx"))
     for name, tree in [
-        ("/visio/pages/pages.xml", vis.pages_xml),
-        ("/visio/pages/_rels/pages.xml.rels", vis.pages_xml_rels),
-        ("/[Content_Types].xml", vis.content_types_xml),
-        ("/docProps/app.xml", vis.app_xml),
-        ("/visio/document.xml", vis.document_xml),
-        ("/visio/_rels/document.xml.rels", vis.document_xml_rels),
+        ("/visio/pages/pages.xml", vis._pages_xml),
+        ("/visio/pages/_rels/pages.xml.rels", vis._pages_xml_rels),
+        ("/[Content_Types].xml", vis._content_types_xml),
+        ("/docProps/app.xml", vis._app_xml),
+        ("/visio/document.xml", vis._document_xml),
+        ("/visio/_rels/document.xml.rels", vis._document_xml_rels),
     ]:
         held = vis._package.part(name)
         assert isinstance(held, XmlPart) and held.tree is tree, name
     masters = vis._package.part("/visio/masters/masters.xml")
-    assert isinstance(masters, XmlPart) and masters.tree.getroot() is vis.masters_xml
+    assert isinstance(masters, XmlPart) and masters.tree.getroot() is vis._masters_xml
 
 
 @pytest.mark.allow_invalid_package  # a page that is not XML is the point
@@ -99,14 +99,14 @@ def test_malformed_xml_at_open_is_also_a_vsdx_error_with_its_position(basedir, t
 
 
 def test_assigning_a_document_part_replaces_it_in_the_store(vsdx_copy):
-    """Fails if the `app_xml` setter stops writing the new tree through to the store."""
+    """Fails if the `_app_xml` setter stops writing the new tree through to the store."""
     vis = Document.open(vsdx_copy("test1.vsdx"))
-    replacement = ET.ElementTree(ET.fromstring(serialise_part(vis.app_xml)))
+    replacement = ET.ElementTree(ET.fromstring(serialise_part(vis._app_xml)))
     root = replacement.getroot()
     assert root is not None
     root.set("VsdxkitMarker", "1")
-    vis.app_xml = replacement
-    assert vis.app_xml is replacement
+    vis._app_xml = replacement
+    assert vis._app_xml is replacement
     assert b"VsdxkitMarker" in (vis._package.read_bytes("/docProps/app.xml") or b"")
 
 
@@ -119,7 +119,7 @@ def test_assigning_page_xml_replaces_the_page_part(vsdx_copy):
     replacement.getroot().set("VsdxkitMarker", "1")
     page.xml = replacement
     assert page.xml is replacement
-    assert b"VsdxkitMarker" in (vis._package.read_bytes(page.filename) or b"")
+    assert b"VsdxkitMarker" in (vis._package.read_bytes(page._filename) or b"")
 
 
 def test_a_removed_page_does_not_write_its_part_back(vsdx_copy):
@@ -128,19 +128,19 @@ def test_a_removed_page_does_not_write_its_part_back(vsdx_copy):
     already removed."""
     vis = Document.open(vsdx_copy("test4_connectors.vsdx"))
     page = vis.pages[1]
-    name = page.filename
+    name = page._filename
     vis.pages.delete(vis.pages[1])
     page.xml = ET.ElementTree(ET.Element("PageContents"))
     assert vis._package.part(name) is None
 
 
 def test_reassigning_the_same_tree_keeps_the_promotion_baseline(vsdx_copy):
-    """Fails if the `app_xml` setter re-writes the part even when handed back
+    """Fails if the `_app_xml` setter re-writes the part even when handed back
     the tree the store already holds, discarding the promotion baseline that
     lets an untouched part save as the bytes it arrived as."""
     vis = Document.open(vsdx_copy("test1.vsdx"))
     before = vis._package.part("/docProps/app.xml")
-    vis.app_xml = vis.app_xml
+    vis._app_xml = vis._app_xml
     assert vis._package.part("/docProps/app.xml") is before
 
 
@@ -150,20 +150,20 @@ def test_an_added_page_is_in_the_store_before_any_save(vsdx_copy):
     disk at all."""
     vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages.create("Added")
-    held = vis._package.part(page.filename)
+    held = vis._package.part(page._filename)
     assert isinstance(held, XmlPart) and held.tree is page.xml
 
 
 def test_a_copied_page_brings_its_rels_part_into_the_store(vsdx_copy):
-    """Fails if `_create_page` assigns a copied page's `rels_xml` before its
-    `rels_xml_filename`, so the `rels_xml` setter's write-through guard never
+    """Fails if `_create_page` assigns a copied page's `_rels_xml` before its
+    `_rels_xml_filename`, so the `_rels_xml` setter's write-through guard never
     sees a filename and the rels part never reaches the store."""
     vis = Document.open(vsdx_copy("test4_connectors.vsdx"))
-    source = next(p for p in vis.pages if p.rels_xml is not None)
+    source = next(p for p in vis.pages if p._rels_xml is not None)
     copy = vis.pages.copy(source)
-    assert copy.rels_xml_filename is not None
-    held = vis._package.part(copy.rels_xml_filename)
-    assert isinstance(held, XmlPart) and held.tree is copy.rels_xml
+    assert copy._rels_xml_filename is not None
+    held = vis._package.part(copy._rels_xml_filename)
+    assert isinstance(held, XmlPart) and held.tree is copy._rels_xml
 
 
 def test_a_copied_page_still_writes_its_rels_past_an_orphan_at_the_next_name(vsdx_copy):
@@ -171,18 +171,18 @@ def test_a_copied_page_still_writes_its_rels_past_an_orphan_at_the_next_name(vsd
 
     An orphan `pages/_rels/pageN.xml.rels` at the name a new page is about to
     take makes the store already hold a part there before the copied page's
-    `rels_xml` is ever assigned. `Page._rels_attached()` then finds a rels
+    `_rels_xml` is ever assigned. `Page._rels_attached()` then finds a rels
     part that is not this page's own tree and refuses to write over it, so
     the assignment silently never reaches the store.
     """
     vis = Document.open(vsdx_copy("test4_connectors.vsdx"))
-    source = next(p for p in vis.pages if p.rels_xml is not None)
+    source = next(p for p in vis.pages if p._rels_xml is not None)
     candidate = vis._unused_page_part_name()
     orphan_name = f"/visio/pages/_rels/{candidate}.rels"
     vis._package.write_xml(orphan_name, ET.ElementTree(ET.Element("Relationships")))
     copy = vis.pages.copy(source)
-    held = vis._package.part(copy.rels_xml_filename)
-    assert isinstance(held, XmlPart) and held.tree is copy.rels_xml
+    held = vis._package.part(copy._rels_xml_filename)
+    assert isinstance(held, XmlPart) and held.tree is copy._rels_xml
 
 
 def test_importing_a_master_keeps_masters_parts_as_the_stores_trees(vsdx_copy):
@@ -197,9 +197,9 @@ def test_importing_a_master_keeps_masters_parts_as_the_stores_trees(vsdx_copy):
     page.connect(page.shapes.require_id("1"), page.shapes.require_id("5"))
     masters = vis._package.part("/visio/masters/masters.xml")
     rels = vis._package.part("/visio/masters/_rels/masters.xml.rels")
-    assert isinstance(masters, XmlPart) and masters.tree.getroot() is vis.masters_xml
+    assert isinstance(masters, XmlPart) and masters.tree.getroot() is vis._masters_xml
     assert isinstance(rels, XmlPart)
-    masters_root = vis.masters_xml
+    masters_root = vis._masters_xml
     assert masters_root is not None
     imported_master = max(masters_root, key=lambda m: int(m.attrib["ID"]))
     imported_rel = imported_master.find(f"{namespace}Rel")
@@ -224,18 +224,18 @@ def test_a_removed_page_does_not_clobber_a_page_that_reuses_its_part_name(vsdx_c
 
     Removing a page frees its part name, and the next page added takes it.
     A caller still holding the removed page then finds "its" part present
-    again, and an assignment to its `xml` or `rels_xml` writes over the new
+    again, and an assignment to its `xml` or `_rels_xml` writes over the new
     page's part -- or gives the new page a relationship part it never had.
     """
     vis = Document.open(vsdx_copy("test4_connectors.vsdx"))
     removed = vis.pages[0]
     vis.pages.delete(vis.pages[0])
     fresh = vis.pages.create(name="Fresh")
-    assert fresh.filename == removed.filename  # the fixture has changed if this does not hold
-    name = fresh.filename
-    rels_name = removed.rels_xml_filename
+    assert fresh._filename == removed._filename  # the fixture has changed if this does not hold
+    name = fresh._filename
+    rels_name = removed._rels_xml_filename
     removed.xml = ET.ElementTree(ET.Element(f"{namespace}PageContents"))
-    removed.rels_xml = ET.ElementTree(ET.Element("Relationships"))
+    removed._rels_xml = ET.ElementTree(ET.Element("Relationships"))
     held = vis._package.part(name)
     assert isinstance(held, XmlPart) and held.tree is fresh.xml
     assert vis._package.part(rels_name) is None
@@ -251,13 +251,13 @@ def test_a_removed_page_does_not_clobber_a_page_that_reuses_its_part_name(vsdx_c
 @pytest.mark.parametrize(
     ("attribute", "name"),
     [
-        ("app_xml", "/docProps/app.xml"),
-        ("document_xml", "/visio/document.xml"),
-        ("document_xml_rels", "/visio/_rels/document.xml.rels"),
-        ("pages_xml", "/visio/pages/pages.xml"),
-        ("pages_xml_rels", "/visio/pages/_rels/pages.xml.rels"),
-        ("content_types_xml", "/[Content_Types].xml"),
-        ("masters_xml", "/visio/masters/masters.xml"),
+        ("_app_xml", "/docProps/app.xml"),
+        ("_document_xml", "/visio/document.xml"),
+        ("_document_xml_rels", "/visio/_rels/document.xml.rels"),
+        ("_pages_xml", "/visio/pages/pages.xml"),
+        ("_pages_xml_rels", "/visio/pages/_rels/pages.xml.rels"),
+        ("_content_types_xml", "/[Content_Types].xml"),
+        ("_masters_xml", "/visio/masters/masters.xml"),
     ],
 )
 def test_setting_a_document_part_to_none_is_refused(vsdx_copy, attribute, name):
@@ -277,7 +277,7 @@ def test_setting_a_document_part_to_none_is_refused(vsdx_copy, attribute, name):
 
 
 def test_assigning_masters_xml_over_a_malformed_part_does_not_parse_it(vsdx_copy):
-    """Fails if the `masters_xml` setter reads the current part through `read_xml`, which promotes it.
+    """Fails if the `_masters_xml` setter reads the current part through `read_xml`, which promotes it.
 
     The setter only needs to know whether the root it is handed is already
     the part's own. Asking that by promoting the part parses it, and a part
@@ -287,19 +287,19 @@ def test_assigning_masters_xml_over_a_malformed_part_does_not_parse_it(vsdx_copy
     vis = Document.open(vsdx_copy("test4_connectors.vsdx"))
     vis._package.write_bytes("/visio/masters/masters.xml", b"<Masters")
     root = ET.Element(f"{namespace}Masters")
-    vis.masters_xml = root
+    vis._masters_xml = root
     held = vis._package.part("/visio/masters/masters.xml")
     assert isinstance(held, XmlPart) and held.tree.getroot() is root
 
 
 def test_assigning_masters_xml_writes_through_to_disk(vsdx_copy, tmp_path):
-    """Fails if the `masters_xml` setter stops putting the new root into the store, so the save never sees it."""
+    """Fails if the `_masters_xml` setter stops putting the new root into the store, so the save never sees it."""
     vis = Document.open(vsdx_copy("test4_connectors.vsdx"))
-    root = copy.deepcopy(vis.masters_xml)
+    root = copy.deepcopy(vis._masters_xml)
     assert root is not None
     root.set("VsdxkitMarker", "1")
-    vis.masters_xml = root
-    assert vis.masters_xml is root
+    vis._masters_xml = root
+    assert vis._masters_xml is root
     out = str(tmp_path / "test4_connectors-masters.vsdx")
     vis.save(out)
     with zipfile.ZipFile(out) as archive:
@@ -310,7 +310,7 @@ def test_a_page_rename_renames_the_page_in_the_saved_file(vsdx_copy, tmp_path):
     """Fails if a rename writes a private copy of pages.xml over the store's tree.
 
     0.x's `Page.set_name` parsed pages.xml afresh, set only `Name` on that copy,
-    and assigned the copy to `vis.pages_xml`, after `self.name = value` had
+    and assigned the copy to `vis._pages_xml`, after `self.name = value` had
     already set `Name` and `NameU` on the store's own tree. The copy then
     replaced that tree, so the saved `NameU` kept the old name, and Visio shows
     `NameU`.

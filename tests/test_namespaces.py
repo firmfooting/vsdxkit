@@ -343,7 +343,7 @@ def test_bootstrapping_masters_writes_the_visio_default_namespace(vsdx_copy):
     writes is the store's own, and a save writes it out as it stands.
     """
     vis = Document.open(vsdx_copy("test1.vsdx"))
-    assert vis.masters_xml is None, "fixture is expected to have no masters part"
+    assert vis._masters_xml is None, "fixture is expected to have no masters part"
     vis._masters.bootstrap()
     written = vis._package.read_bytes("/visio/masters/masters.xml")
 

@@ -19,7 +19,6 @@ from vsdxkit import media
 from vsdxkit.document import Document
 from vsdxkit.errors import MalformedPackageError
 from vsdxkit.partnames import relationships_part_name
-from vsdxkit.shapes import find_or_create_shapes_tag
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
@@ -27,12 +26,12 @@ FIXTURES = os.path.dirname(os.path.realpath(__file__))
 def test_loaded_pages_and_masters_are_named_by_part_name(vsdx_copy):
     """Fails if a loaded page or master is named by anything but its part name."""
     vis = Document.open(vsdx_copy("test4_connectors.vsdx"))
-    assert vis.pages[0].filename == "/visio/pages/page1.xml"
-    assert all(page.filename.startswith("/visio/pages/page") for page in vis.pages)
+    assert vis.pages[0]._filename == "/visio/pages/page1.xml"
+    assert all(page._filename.startswith("/visio/pages/page") for page in vis.pages)
     assert vis.master_pages, "the fixture has changed: it should carry masters"
-    assert all(master.filename.startswith("/visio/masters/master") for master in vis.master_pages)
-    with_rels = [page for page in vis.pages if page.rels_xml_filename is not None]
-    assert all(page.rels_xml_filename.startswith("/visio/pages/_rels/") for page in with_rels)
+    assert all(master._filename.startswith("/visio/masters/master") for master in vis.master_pages)
+    with_rels = [page for page in vis.pages if page._rels_xml_filename is not None]
+    assert all(page._rels_xml_filename.startswith("/visio/pages/_rels/") for page in with_rels)
 
 
 def test_added_and_copied_pages_are_named_by_part_name(vsdx_copy):
@@ -41,9 +40,9 @@ def test_added_and_copied_pages_are_named_by_part_name(vsdx_copy):
     added = vis.pages.create("Added")
     copied = vis.pages.copy(vis.pages[0], name="Copied")
     for page in (added, copied):
-        assert page.filename.startswith("/visio/pages/page")
-        assert vis._package.part(page.filename) is not None
-    assert copied.rels_xml_filename == relationships_part_name(copied.filename)
+        assert page._filename.startswith("/visio/pages/page")
+        assert vis._package.part(page._filename) is not None
+    assert copied._rels_xml_filename == relationships_part_name(copied._filename)
 
 
 def test_a_document_has_no_directory_prefix_in_any_page_name(vsdx_copy):
@@ -51,7 +50,7 @@ def test_a_document_has_no_directory_prefix_in_any_page_name(vsdx_copy):
     path = vsdx_copy("test2.vsdx")
     vis = Document.open(path)
     stem = os.path.splitext(os.path.abspath(path))[0]
-    assert not any(stem in page.filename for page in (*vis.pages, *vis.master_pages))
+    assert not any(stem in page._filename for page in (*vis.pages, *vis.master_pages))
 
 
 def test_a_page_rels_created_under_a_visio_pages_directory_lands_in_the_package(tmp_path):
@@ -70,7 +69,7 @@ def test_a_page_rels_created_under_a_visio_pages_directory_lands_in_the_package(
     page = vis.pages[0]
     shapes = list(page.children)
     page.connect(shapes[0], shapes[1])
-    assert page.rels_xml_filename == "/visio/pages/_rels/page1.xml.rels"
+    assert page._rels_xml_filename == "/visio/pages/_rels/page1.xml.rels"
     vis.save(str(out))
     with zipfile.ZipFile(out) as archive:
         assert "visio/pages/_rels/page1.xml.rels" in archive.namelist()
@@ -94,18 +93,6 @@ def test_a_page_target_outside_the_pages_folder_still_fails_the_open(tmp_path, t
         Document.open(str(crafted))
 
 
-def test_insert_shape_takes_the_pages_part_name(vsdx_copy):
-    """Fails if `insert_shape` refuses the name `Page.filename` now holds, or accepts another page's."""
-    vis = Document.open(vsdx_copy("test2.vsdx"))
-    assert len(vis.pages) > 1, "the fixture has changed: it should have more than one page"
-    page, other = vis.pages[0], vis.pages[1]
-    shapes = find_or_create_shapes_tag(page.xml.getroot())
-    source = next(iter(page.children)).xml
-    vis.insert_shape(ET.fromstring(ET.tostring(source)), shapes, page, page.filename)
-    with pytest.raises(ValueError):
-        vis.insert_shape(ET.fromstring(ET.tostring(source)), shapes, page, other.filename)
-
-
 def test_the_connector_master_is_imported_from_the_donor_not_the_target(vsdx_copy):
     """Fails if importing a master reads the target document's part of the same name.
 
@@ -115,18 +102,18 @@ def test_the_connector_master_is_imported_from_the_donor_not_the_target(vsdx_cop
     branch (see tests/test_master_import_opc.py).
     """
     vis = Document.open(vsdx_copy("test3_house.vsdx"))
-    target_before = {master.filename: vis._package.read_bytes(master.filename) for master in vis.master_pages}
+    target_before = {master._filename: vis._package.read_bytes(master._filename) for master in vis.master_pages}
     page = vis.pages[0]
     shapes = list(page.children)
     page.connect(shapes[0], shapes[1])
     donor = media._donor(media.MEDIA, Document.open)
     master_page_id = media._sentinel(media.MEDIA, media.STRAIGHT_CONNECTOR, Document.open).master_page_ID
     assert master_page_id is not None
-    connector_master = donor.get_master_page_by_id(master_page_id)
+    connector_master = donor._master_page_by_id(master_page_id)
     assert connector_master is not None
     imported = vis.master_index[connector_master.name]
-    assert imported.filename not in target_before, "the import wrote over one of the target's own masters"
-    assert vis._package.read_bytes(imported.filename) == donor._package.read_bytes(connector_master.filename)
+    assert imported._filename not in target_before, "the import wrote over one of the target's own masters"
+    assert vis._package.read_bytes(imported._filename) == donor._package.read_bytes(connector_master._filename)
     for name, data in target_before.items():
         assert vis._package.read_bytes(name) == data
 
@@ -162,13 +149,13 @@ def test_a_connector_reaches_a_master_kept_in_a_subfolder_of_the_masters_folder(
     page = vis.pages[0]
     shapes = list(page.children)
     page.connect(shapes[0], shapes[1])
-    rels_root = page.rels_xml.getroot()
+    rels_root = page._rels_xml.getroot()
     assert rels_root is not None
     targets = [rel.attrib["Target"] for rel in rels_root]
     assert targets
     # resolved here, `..` and all, because `target_part_name` joins a
     # Target as written; resolving it the way OPC does is #378
-    resolved = {t: posixpath.normpath(posixpath.join(posixpath.dirname(page.filename), t)) for t in targets}
+    resolved = {t: posixpath.normpath(posixpath.join(posixpath.dirname(page._filename), t)) for t in targets}
     assert {t: name for t, name in resolved.items() if vis._package.part(name) is None} == {}
     vis.save(str(tmp_path / "out.vsdx"))
 
@@ -193,7 +180,7 @@ def test_a_removed_pages_xml_assignment_writes_nothing(vsdx_copy):
     """Fails if a page removed from the document can still write its part."""
     vis = Document.open(vsdx_copy("test2.vsdx"))
     removed = vis.pages[-1]
-    name = removed.filename
+    name = removed._filename
     vis.pages.delete(vis.pages[len(vis.pages) - 1])
     removed.xml = ET.ElementTree(ET.fromstring(ET.tostring(removed.xml.getroot())))
     assert vis._package.part(name) is None
@@ -203,9 +190,9 @@ def test_a_page_with_no_rels_part_gets_one_on_assignment(vsdx_copy):
     """Fails if a live page with no relationship part cannot be given one."""
     vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
-    assert page.rels_xml is None, "the fixture has changed: page 1 should have no rels part"
-    page.rels_xml_filename = f"/visio/pages/_rels/{page.filename.rsplit('/', 1)[-1]}.rels"
-    page.rels_xml = ET.ElementTree(
+    assert page._rels_xml is None, "the fixture has changed: page 1 should have no rels part"
+    page._rels_xml_filename = f"/visio/pages/_rels/{page._filename.rsplit('/', 1)[-1]}.rels"
+    page._rels_xml = ET.ElementTree(
         ET.fromstring('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
     )
-    assert vis._package.part(page.rels_xml_filename) is not None
+    assert vis._package.part(page._rels_xml_filename) is not None

@@ -17,7 +17,16 @@ import pytest
 
 from vsdxkit import namespace
 from vsdxkit.document import Document
-from vsdxkit.shape_tree import is_connector_element, iter_children, iter_descendants, iter_edges
+from vsdxkit.shape_tree import (
+    SHEET_REFERENCE,
+    find_or_create_shapes_tag,
+    is_connector_element,
+    iter_children,
+    iter_descendants,
+    iter_edges,
+    parent_of,
+    remap_sheet_references,
+)
 
 BASEDIR = os.path.dirname(os.path.realpath(__file__))
 SHAPE = f"{namespace}Shape"
@@ -96,6 +105,61 @@ def test_a_shape_that_inherits_begin_x_from_its_master_is_a_connector():
     master = _shape("5", begin_x=True)
     assert is_connector_element(_shape("1"), master)
     assert not is_connector_element(_shape("1"), _shape("5"))
+
+
+def test_parent_of_names_the_element_a_shape_sits_in():
+    member = _shape("2")
+    group = _shape("1", member)
+    page = _page(group)
+
+    assert parent_of(page, member) is group.find(SHAPES)
+    assert parent_of(page, group) is page.find(SHAPES)
+    assert parent_of(page, _shape("9")) is None
+
+
+def test_find_or_create_shapes_tag_adds_one_container_and_reuses_it():
+    shape = _shape("1")
+
+    created = find_or_create_shapes_tag(shape)
+
+    assert created.tag == SHAPES
+    assert find_or_create_shapes_tag(shape) is created
+    assert len(shape.findall(SHAPES)) == 1
+
+
+def test_one_pattern_finds_a_sheet_reference_in_either_form():
+    """Fails if a second sheet-reference pattern comes back beside `SHEET_REFERENCE` (#116).
+
+    `tests/helpers/package_validator.py` keeps its own copy on purpose, as the
+    oracle; the library has this one.
+    """
+    import vsdxkit.document
+    import vsdxkit.pages
+
+    assert not hasattr(vsdxkit.pages, "_SHEET_REFERENCE")
+    assert not hasattr(vsdxkit.document, "_SHEET_REFERENCE_RE")
+    formula = "Sheet.5!Width+Sheet7!Height+Pages[Page-2]!Sheet.9!PinX"
+    assert [match.groups() for match in SHEET_REFERENCE.finditer(formula)] == [(".", "5"), ("", "7")]
+
+
+def test_remap_sheet_references_keeps_each_reference_s_form_and_its_page():
+    member = _shape("2")
+    ET.SubElement(member, CELL, N="PinX", F="Sheet.1!Width*0.5+Sheet1!Height+Pages[P]!Sheet.1!PinX")
+    ET.SubElement(member, CELL, N="PinY", F="Sheet.3!Height")
+    group = _shape("1", member)
+
+    remap_sheet_references(group, {"1": 7})
+
+    assert member.find(f'{CELL}[@N="PinX"]').attrib["F"] == "Sheet.7!Width*0.5+Sheet7!Height+Pages[P]!Sheet.1!PinX"
+    assert member.find(f'{CELL}[@N="PinY"]').attrib["F"] == "Sheet.3!Height"
+
+
+def test_the_tree_helpers_live_in_shape_tree_only():
+    """Fails if `shapes` defines a `parent_of` or `find_or_create_shapes_tag` of its own again (#116)."""
+    import vsdxkit.shapes
+
+    for name in ("parent_of", "find_or_create_shapes_tag"):
+        assert getattr(vsdxkit.shapes, name).__module__ == "vsdxkit.shape_tree", name
 
 
 def _random_tree(rng: random.Random, next_id: list[int], depth: int) -> ET.Element:

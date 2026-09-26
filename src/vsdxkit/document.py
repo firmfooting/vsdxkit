@@ -3,8 +3,6 @@ from __future__ import annotations
 import copy
 import logging
 import os
-import posixpath
-import re
 import xml.etree.ElementTree as ET
 from collections.abc import Mapping
 from pathlib import Path
@@ -35,7 +33,7 @@ from vsdxkit.partnames import (
 )
 from vsdxkit.relationships import append_if_absent, ensure_override, remove, remove_override
 from vsdxkit.shape_kind import ShapeKind
-from vsdxkit.shapes import Connector, Shape, find_or_create_shapes_tag
+from vsdxkit.shapes import Connector, Shape
 from vsdxkit.templating import render_document
 from vsdxkit.xmlio import (
     PartTree,
@@ -58,11 +56,6 @@ def _page_part_taken(taken: set[str], filename: str) -> bool:
     return part_name in taken or relationships_part_name(part_name) in taken
 
 
-def _normalise_page_path(path: str) -> str:
-    """Normalise mixed platform separators without changing OPC case."""
-    return posixpath.normpath(path.replace("\\", "/"))
-
-
 # The main document part's content type, not the file extension, is what tells
 # a consumer whether a package carries macros. Visio reports a package whose
 # extension and content type disagree as corrupt, so the two must be kept in
@@ -70,37 +63,6 @@ def _normalise_page_path(path: str) -> str:
 MACRO_ENABLED_CONTENT_TYPE = "application/vnd.ms-visio.drawing.macroEnabled.main+xml"
 DRAWING_CONTENT_TYPE = "application/vnd.ms-visio.drawing.main+xml"
 _SUFFIX_BY_CONTENT_TYPE = {MACRO_ENABLED_CONTENT_TYPE: ".vsdm", DRAWING_CONTENT_TYPE: ".vsdx"}
-
-# A ShapeSheet formula addresses another shape as `Sheet.5!Cell` or `Sheet5!Cell`.
-# Visio writes the dotted form. This library's connector glue has written the
-# undotted one -- `_XFTRIGGER(Sheet5!EventXFMod)`,
-# `PAR(PNT(Sheet5!Connections.X1,...))` -- and files it saved carry it (#400).
-# In both, the reference is nested inside a function call rather than at the
-# start of the formula.
-#
-# The lookbehind excludes the sheet of a cross-page reference: the `Sheet.5!` in
-# `Pages[Page-2]!Sheet.5!Width` is an id on the page named in front of it, and
-# ids are page-scoped, so remapping it through this page's map would repoint the
-# reference at an unrelated shape. `tests/helpers/package_validator.py` draws
-# the same line, and the two have to agree or one of them is wrong about which
-# references a page owns.
-_SHEET_REFERENCE_RE = re.compile(r"(?<!!)\bSheet(\.?)(\d+)!")
-
-
-def _remap_sheet_references(formula: str, id_map: dict[str, int]) -> str:
-    """Rewrite the shape ids in a formula, keeping each reference's own form.
-
-    Ids absent from ``id_map`` address shapes outside the copied subtree (the
-    Swimlane List, for instance) and are left exactly as they are.
-    """
-
-    def replace(match: re.Match[str]) -> str:
-        separator, shape_id = match.group(1), match.group(2)
-        if shape_id not in id_map:
-            return match.group(0)
-        return f"Sheet{separator}{id_map[shape_id]}!"
-
-    return _SHEET_REFERENCE_RE.sub(replace, formula)
 
 
 class Document:
@@ -113,21 +75,18 @@ class Document:
 
     def __init__(self, package: PackageStore, filename: str) -> None:
         """Wrap a package already read into memory. Use :meth:`open` to open a file."""
-        self.filename = filename
-        # pages_xml, pages_xml_rels, content_types_xml, app_xml, document_xml,
-        # document_xml_rels and masters_xml are store-backed properties, defined
-        # below -- there is nothing to initialise here, since the store itself
-        # is the state.
+        self._filename = filename
+        # the raw part XML (`_pages_xml`, `_app_xml` and the rest) is a set of
+        # store-backed properties, defined below -- there is nothing to
+        # initialise here, since the store itself is the state.
         self._package = package
-        # `filename` as the store was opened from it; see save
-        self._opened_filename = filename
         self._pages: list[Page] = []
-        self.load_pages()
+        self._load_pages()
         self._masters = MasterCatalog(self._package, self._master_page)
         self._masters.load()
         if logger.isEnabledFor(logging.DEBUG):
             for master in self._masters.pages:
-                logger.debug("Master(%s, id=%s)\n%s", master.filename, master.page_id, pretty_print_element(master.xml))
+                logger.debug("Master(%s, id=%s)\n%s", master._filename, master._page_id, pretty_print_element(master.xml))
 
     @classmethod
     def open(
@@ -152,6 +111,15 @@ class Document:
         if limits_path is not None:
             limits = PackageLimits.from_json_file(os.fspath(limits_path))
         return cls(PackageStore.open(filename, limits=limits if limits is not None else PackageLimits()), filename)
+
+    @property
+    def filename(self) -> str:
+        """The path this document was opened from, as it was given to :meth:`open`.
+
+        Read-only: ``save()`` with no target writes back over this file. To
+        write somewhere else, name the destination: ``document.save(target)``.
+        """
+        return self._filename
 
     @staticmethod
     def _part_root(tree: PartTree | None, description: str) -> ET.Element:
@@ -187,7 +155,7 @@ class Document:
         relationship and described by a content-type override. Taking one out
         of the store leaves both behind, and the saved package promises a part
         it does not hold. A page's rels part is different -- nothing points at
-        it -- so `Page.rels_xml = None` still removes it, through
+        it -- so `Page._rels_xml = None` still removes it, through
         `_set_part_xml` directly.
         """
         if tree is None:
@@ -200,63 +168,63 @@ class Document:
         self._set_part_xml(name, tree)
 
     @property
-    def pages_xml(self) -> PartTree | None:
+    def _pages_xml(self) -> PartTree | None:
         return self._package.read_xml(PAGES_PART)
 
-    @pages_xml.setter
-    def pages_xml(self, tree: PartTree | None) -> None:
-        self._set_document_part_xml("pages_xml", PAGES_PART, tree)
+    @_pages_xml.setter
+    def _pages_xml(self, tree: PartTree | None) -> None:
+        self._set_document_part_xml("_pages_xml", PAGES_PART, tree)
 
     @property
-    def pages_xml_rels(self) -> PartTree | None:
+    def _pages_xml_rels(self) -> PartTree | None:
         return self._package.read_xml(relationships_part_name(PAGES_PART))
 
-    @pages_xml_rels.setter
-    def pages_xml_rels(self, tree: PartTree | None) -> None:
-        self._set_document_part_xml("pages_xml_rels", relationships_part_name(PAGES_PART), tree)
+    @_pages_xml_rels.setter
+    def _pages_xml_rels(self, tree: PartTree | None) -> None:
+        self._set_document_part_xml("_pages_xml_rels", relationships_part_name(PAGES_PART), tree)
 
     @property
-    def content_types_xml(self) -> PartTree | None:
+    def _content_types_xml(self) -> PartTree | None:
         return self._package.read_xml(CONTENT_TYPES_PART)
 
-    @content_types_xml.setter
-    def content_types_xml(self, tree: PartTree | None) -> None:
-        self._set_document_part_xml("content_types_xml", CONTENT_TYPES_PART, tree)
+    @_content_types_xml.setter
+    def _content_types_xml(self, tree: PartTree | None) -> None:
+        self._set_document_part_xml("_content_types_xml", CONTENT_TYPES_PART, tree)
 
     @property
-    def app_xml(self) -> PartTree | None:
+    def _app_xml(self) -> PartTree | None:
         return self._package.read_xml(APP_PART)
 
-    @app_xml.setter
-    def app_xml(self, tree: PartTree | None) -> None:
-        self._set_document_part_xml("app_xml", APP_PART, tree)
+    @_app_xml.setter
+    def _app_xml(self, tree: PartTree | None) -> None:
+        self._set_document_part_xml("_app_xml", APP_PART, tree)
 
     @property
-    def document_xml(self) -> PartTree | None:
+    def _document_xml(self) -> PartTree | None:
         return self._package.read_xml(DOCUMENT_PART)
 
-    @document_xml.setter
-    def document_xml(self, tree: PartTree | None) -> None:
-        self._set_document_part_xml("document_xml", DOCUMENT_PART, tree)
+    @_document_xml.setter
+    def _document_xml(self, tree: PartTree | None) -> None:
+        self._set_document_part_xml("_document_xml", DOCUMENT_PART, tree)
 
     @property
-    def document_xml_rels(self) -> PartTree | None:
+    def _document_xml_rels(self) -> PartTree | None:
         return self._package.read_xml(relationships_part_name(DOCUMENT_PART))
 
-    @document_xml_rels.setter
-    def document_xml_rels(self, tree: PartTree | None) -> None:
-        self._set_document_part_xml("document_xml_rels", relationships_part_name(DOCUMENT_PART), tree)
+    @_document_xml_rels.setter
+    def _document_xml_rels(self, tree: PartTree | None) -> None:
+        self._set_document_part_xml("_document_xml_rels", relationships_part_name(DOCUMENT_PART), tree)
 
     @property
-    def masters_xml(self) -> ET.Element | None:
+    def _masters_xml(self) -> ET.Element | None:
         """The `<Masters>` root, read from the store so it can never be a stale copy."""
         tree = self._package.read_xml(MASTERS_PART)
         return None if tree is None else tree.getroot()
 
-    @masters_xml.setter
-    def masters_xml(self, root: ET.Element | None) -> None:
+    @_masters_xml.setter
+    def _masters_xml(self, root: ET.Element | None) -> None:
         if root is None:
-            self._set_document_part_xml("masters_xml", MASTERS_PART, None)  # raises: see there
+            self._set_document_part_xml("_masters_xml", MASTERS_PART, None)  # raises: see there
             return
         # asked of the part as held rather than through `read_xml`: whether the
         # root is already the part's own needs no parse, and promoting the part
@@ -264,7 +232,7 @@ class Document:
         held = self._package.part(MASTERS_PART)
         if isinstance(held, XmlPart) and held.tree.getroot() is root:
             return
-        self._set_document_part_xml("masters_xml", MASTERS_PART, ET.ElementTree(root))
+        self._set_document_part_xml("_masters_xml", MASTERS_PART, ET.ElementTree(root))
 
     def _master_page(self, tree: PartTree, part_name: str, name: str, master_id: str, rel_id: str) -> Page:
         """The page a master is read as; the factory this document hands its catalog."""
@@ -295,7 +263,7 @@ class Document:
         """Whether the master shape an instance inherits from is 1-D; see :meth:`MasterCatalog.is_one_d`."""
         return self._masters.is_one_d(master_id, master_shape_id)
 
-    def get_master_page_by_id(self, id: str) -> Page | None:
+    def _master_page_by_id(self, id: str) -> Page | None:
         """The master page with this ID, as :attr:`Shape.master_page_ID` names it, or None."""
         return self._masters.by_id(id)
 
@@ -317,16 +285,16 @@ class Document:
             raise TypeError(f"expected a vsdxkit Document, got {type(source).__name__}")
         lists_titles = self._lists_titles()
         if lists_titles:
-            self._titles_of_parts_section(self.MASTERS, self._page_titles())
-        known = {page.page_id for page in self._masters.pages}
+            self._titles_of_parts_section(self._MASTERS, self._page_titles())
+        known = {page._page_id for page in self._masters.pages}
         masters = self._masters.import_masters(source._masters, master_ids)
         for master in masters.values():
-            if lists_titles and master.page_id not in known:
-                self._titles_of_parts_insert(master.name, self.MASTERS)
-                known.add(master.page_id)
+            if lists_titles and master._page_id not in known:
+                self._titles_of_parts_insert(master.name, self._MASTERS)
+                known.add(master._page_id)
         return masters
 
-    def load_pages(self) -> None:
+    def _load_pages(self) -> None:
         rels_name = relationships_part_name(PAGES_PART)
         pages_xml_rels = self._package.require_xml(rels_name)
         rels = require_element(pages_xml_rels.getroot(), "pages.xml.rels")
@@ -363,24 +331,25 @@ class Document:
             page_rels_path = relationships_part_name(page_path)
 
             if self._package.part(page_rels_path) is not None:
-                new_page.rels_xml_filename = page_rels_path
+                new_page._rels_xml_filename = page_rels_path
                 # past the setter: the document is not open yet, which the
                 # setter refuses, and the tree is the store's own, so there is
                 # nothing for it to write through
-                new_page._rels_xml = self._package.read_xml(page_rels_path)
+                new_page._rels_tree = self._package.read_xml(page_rels_path)
             self._pages.append(new_page)
 
             if logger.isEnabledFor(logging.DEBUG):
-                logger.debug("Page(%s)\n%s", new_page.filename, pretty_print_element(new_page.xml))
+                logger.debug("Page(%s)\n%s", new_page._filename, pretty_print_element(new_page.xml))
 
-        # content_types_xml, app_xml, document_xml and document_xml_rels are
-        # store-backed properties, but promoted here rather than left to the
-        # first later access: a part promoted at load is an `XmlPart` from the
-        # moment the document opens, which is what lets a caller compare the
-        # store's own identity for a part it has not yet touched (app.xml, in
-        # particular, may simply be missing, and promoting a missing part is
-        # just None), and a part that is not well-formed XML fails the open
-        # itself, with a `PartParseError`, rather than the first access to it.
+        # `_content_types_xml`, `_app_xml`, `_document_xml` and
+        # `_document_xml_rels` are store-backed properties, but promoted here
+        # rather than left to the first later access: a part promoted at load
+        # is an `XmlPart` from the moment the document opens, which is what
+        # lets a caller compare the store's own identity for a part it has not
+        # yet touched (app.xml, in particular, may simply be missing, and
+        # promoting a missing part is just None), and a part that is not
+        # well-formed XML fails the open itself, with a `PartParseError`,
+        # rather than the first access to it.
         self._package.read_xml(CONTENT_TYPES_PART)
         self._package.read_xml(APP_PART)
         self._package.read_xml(DOCUMENT_PART)
@@ -404,7 +373,7 @@ class Document:
 
         # remove Page element from pages.xml file - zero based index
         if isinstance(index, int):
-            pages_root = self._part_root(self.pages_xml, "pages.xml")
+            pages_root = self._part_root(self._pages_xml, "pages.xml")
             page = pages_root.find(f"{namespace}Page[{index + 1}]")
             if isinstance(page, Element):
                 pages_root.remove(page)
@@ -415,24 +384,24 @@ class Document:
 
                 # issue #7: a dangling rId pointing at a deleted part corrupts
                 # the OPC graph, and so does an Override naming one
-                remove(self._part_root(self.pages_xml_rels, "pages.xml.rels"), page.rel_id or "")
+                remove(self._part_root(self._pages_xml_rels, "pages.xml.rels"), page._rel_id or "")
                 remove_override(
-                    self._part_root(self.content_types_xml, "[Content_Types].xml"),
-                    page.filename,
+                    self._part_root(self._content_types_xml, "[Content_Types].xml"),
+                    page._filename,
                 )
 
                 # remove the page's own rels part if one exists
-                if page.rels_xml_filename and self._package.part(page.rels_xml_filename) is not None:
-                    self._package.remove(page.rels_xml_filename)
+                if page._rels_xml_filename and self._package.part(page._rels_xml_filename) is not None:
+                    self._package.remove(page._rels_xml_filename)
 
                 # remove page<index>.xml file
-                self._package.remove(self.pages[index].filename)
+                self._package.remove(self.pages[index]._filename)
                 del self._pages[index]
 
     def _update_pages_xml_rels(self, new_page_filename: str) -> str:
         """Updates the pages.xml.rels file with a reference to the new page and returns the new relid"""
 
-        rels_root = self._part_root(self.pages_xml_rels, "pages.xml.rels")
+        rels_root = self._part_root(self._pages_xml_rels, "pages.xml.rels")
         relationship = append_if_absent(
             rels_root,
             rel_type="http://schemas.microsoft.com/visio/2010/relationships/page",
@@ -462,11 +431,11 @@ class Document:
         different member name than the one being tested -- so a new page
         reusing ``pageN.xml`` would find the store already holding a part at
         its rels name. `Page._rels_attached()` treats that as not the page's
-        own tree and refuses to write over it, so the new page's `rels_xml`
+        own tree and refuses to write over it, so the new page's `_rels_xml`
         assignment becomes a silent no-op.
         """
         taken = set(self._package.names())
-        rels_root = self._part_root(self.pages_xml_rels, "pages.xml.rels")
+        rels_root = self._part_root(self._pages_xml_rels, "pages.xml.rels")
         taken.update(target_part_name(PAGES_PART, rel.attrib["Target"]) for rel in rels_root)
         counter = 1
         while _page_part_taken(taken, f"page{counter}.xml"):
@@ -474,7 +443,7 @@ class Document:
         return f"page{counter}.xml"
 
     def _get_max_page_id(self) -> int:
-        pages_root = self._part_root(self.pages_xml, "pages.xml")
+        pages_root = self._part_root(self._pages_xml, "pages.xml")
         page_with_max_id = max(pages_root, key=lambda page: int(page.attrib["ID"]))
         max_page_id = int(page_with_max_id.attrib["ID"])
 
@@ -494,11 +463,11 @@ class Document:
         return self.pages.index(page) + 1
 
     def _add_content_types_override(self, part_name_path: str, content_type: str) -> None:
-        ensure_override(self._part_root(self.content_types_xml, "[Content_Types].xml"), part_name_path, content_type)
+        ensure_override(self._part_root(self._content_types_xml, "[Content_Types].xml"), part_name_path, content_type)
 
     def _style_sheets(self) -> Element:
         # return StyleSheets element from document.xml
-        root = self._part_root(self.document_xml, "document.xml")
+        root = self._part_root(self._document_xml, "document.xml")
         return require_element(root.find(f"{namespace}StyleSheets"), "document.xml StyleSheets")
 
     def _get_style_by_id(self, ID: str) -> Element | None:
@@ -531,7 +500,7 @@ class Document:
 
     def _heading_pairs(self) -> Element:
         # return HeadingPairs element from app.xml
-        root = self._part_root(self.app_xml, "docProps/app.xml")
+        root = self._part_root(self._app_xml, "docProps/app.xml")
         return require_element(root.find(f"{ext_prop_namespace}HeadingPairs"), "app.xml HeadingPairs")
 
     def _lists_titles(self) -> bool:
@@ -541,16 +510,16 @@ class Document:
         Without HeadingPairs no title belongs to a section, so there is no
         section for a new one to join.
         """
-        if self.app_xml is None:
+        if self._app_xml is None:
             return False
-        root = self._part_root(self.app_xml, "docProps/app.xml")
+        root = self._part_root(self._app_xml, "docProps/app.xml")
         titles = root.find(f"{ext_prop_namespace}TitlesOfParts")
         has_titles = titles is not None and titles.find(f"{vt_namespace}vector") is not None
         return has_titles and root.find(f"{ext_prop_namespace}HeadingPairs") is not None
 
     def _titles_of_parts(self) -> Element:
         # return TitlesOfParts element from app.xml
-        root = self._part_root(self.app_xml, "docProps/app.xml")
+        root = self._part_root(self._app_xml, "docProps/app.xml")
         return require_element(root.find(f"{ext_prop_namespace}TitlesOfParts"), "app.xml TitlesOfParts")
 
     class _Section(NamedTuple):
@@ -569,8 +538,8 @@ class Document:
         label: str
         is_pages: bool
 
-    PAGES = _Section("Pages", is_pages=True)
-    MASTERS = _Section("Masters", is_pages=False)
+    _PAGES = _Section("Pages", is_pages=True)
+    _MASTERS = _Section("Masters", is_pages=False)
 
     def _heading_pairs_list(self) -> list[tuple[str, Element]]:
         """Each section HeadingPairs names, as (name, the element holding its count).
@@ -783,12 +752,12 @@ class Document:
         vector.attrib["size"] = str(int(vector.attrib.get("size", 0)) + 2)
 
     def _add_page_to_app_xml(self, new_page_name: str) -> None:
-        self._titles_of_parts_insert(new_page_name, Document.PAGES)
+        self._titles_of_parts_insert(new_page_name, Document._PAGES)
 
     def _remove_page_from_app_xml(self, page_name: str) -> None:
-        if self.app_xml is not None:
+        if self._app_xml is not None:
             logger.debug("_remove_page_from_app_xml()")
-            self._titles_of_parts_remove(page_name, Document.PAGES)
+            self._titles_of_parts_remove(page_name, Document._PAGES)
 
     def _rename_page_in_app_xml(self, old_page_name: str, new_page_name: str) -> None:
         """Keep app.xml's list of page names in step with a page that was renamed.
@@ -798,9 +767,9 @@ class Document:
         writes nothing, so a document whose metadata never listed the parts is
         left as it is rather than made to raise over a property assignment.
         """
-        if self.app_xml is None:
+        if self._app_xml is None:
             return
-        root = self._part_root(self.app_xml, "docProps/app.xml")
+        root = self._part_root(self._app_xml, "docProps/app.xml")
         if root.find(f"{ext_prop_namespace}HeadingPairs") is None:
             return
         if root.find(f"{ext_prop_namespace}TitlesOfParts") is None:
@@ -809,7 +778,7 @@ class Document:
         # one, so the titles to look for are today's with that swap undone. On a
         # one-page document nothing else identifies the section.
         expected = (self._page_titles() - {new_page_name}) | {old_page_name}
-        self._titles_of_parts_rename(old_page_name, new_page_name, Document.PAGES, expected)
+        self._titles_of_parts_rename(old_page_name, new_page_name, Document._PAGES, expected)
 
     def _create_page(
         self,
@@ -840,13 +809,13 @@ class Document:
 
         # update pages.xml - insert the PageElement Element in it's correct location
         index = self._get_index(index=index, page=source_page)
-        self._part_root(self.pages_xml, "pages.xml").insert(index, new_page_element)
+        self._part_root(self._pages_xml, "pages.xml").insert(index, new_page_element)
 
         # update [Content_Types].xml - insert reference to the new page
         self._add_content_types_override(new_page_path, "application/vnd.ms-visio.page+xml")
 
         # update app.xml, if it exists
-        if self.app_xml:
+        if self._app_xml:
             self._add_page_to_app_xml(page_name)
 
         # Update Document object; the page carries its real ID and relationship
@@ -859,13 +828,13 @@ class Document:
         # store and nothing else
         self._package.write_xml(new_page_path, new_page_xml)
         new_page = Page(new_page_xml, new_page_path, page_name, page_id, new_page_relid, self)
-        if source_page is not None and source_page.rels_xml is not None:
-            source_rels_root = require_element(source_page.rels_xml.getroot(), "source page relationships root")
-            # the filename first: the `rels_xml` setter only writes through when
-            # `rels_xml_filename` is already set (and the page's own tree, above,
-            # is already its part)
-            new_page.rels_xml_filename = relationships_part_name(new_page_path)
-            new_page.rels_xml = ET.ElementTree(copy.deepcopy(source_rels_root))
+        if source_page is not None and source_page._rels_xml is not None:
+            source_rels_root = require_element(source_page._rels_xml.getroot(), "source page relationships root")
+            # the filename first: the `_rels_xml` setter only writes through
+            # when `_rels_xml_filename` is already set (and the page's own
+            # tree, above, is already its part)
+            new_page._rels_xml_filename = relationships_part_name(new_page_path)
+            new_page._rels_xml = ET.ElementTree(copy.deepcopy(source_rels_root))
 
         self._pages.insert(index, new_page)  # insert new page at defined index
 
@@ -964,7 +933,7 @@ class Document:
         new_page_relid = self._update_pages_xml_rels(new_page_filename)
 
         # Copy the source page and update relevant attributes
-        pages_root = self._part_root(self.pages_xml, "pages.xml")
+        pages_root = self._part_root(self._pages_xml, "pages.xml")
         page_element = require_element(
             pages_root.find(f"{namespace}Page[@Name='{page.name}']"), f"pages.xml Page named {page.name}"
         )
@@ -990,168 +959,9 @@ class Document:
 
         return new_page
 
-    def increment_sub_shape_ids(self, shape: Shape, page: Page, id_map: dict[str, int] | None = None) -> dict[str, int]:
-        """Renumber a shape and everything under it, then remap its formulas.
-
-        The layer-by-layer re-walk this used to do is gone: it made up for an
-        allocation walk that stopped short, and gave every child a second ID it
-        then threw away. ``increment_shape_ids`` now reaches the whole subtree.
-        """
-        return self.renumber_shape_ids(shape.xml, page, id_map)
-
-    def copy_shape(self, shape: Element, page: Page) -> Element:
-        """Insert shape into first Shapes tag in destination page, and return the copy.
-
-        If destination page does not have a Shapes tag yet, create it.
-
-        Parameters:
-            shape (Element): The source shape to be copied. Use Shape.xml
-            page (ElementTree): The page where the new Shape will be placed. Use Page.xml
-            page_path (str): The filename of the page where the new Shape will be placed. Use Page.filename
-
-        Returns:
-            ElementTree: The new shape ElementTree
-
-        """
-
-        new_shape = ET.fromstring(ET.tostring(shape))
-
-        shapes_tag = find_or_create_shapes_tag(page.xml.getroot())
-
-        self.renumber_shape_ids(new_shape, page)
-        shapes_tag.append(new_shape)
-
-        return new_shape
-
-    def insert_shape(self, shape: Element, shapes: Element, page: Page, page_path: str) -> Element:
-        # Keep page_path for the current API, but never let it select a different
-        # page from the typed Page argument that owns ID allocation.
-        if _normalise_page_path(page.filename) != _normalise_page_path(page_path):
-            raise ValueError(f"page_path {page_path!r} does not match page filename {page.filename!r}")
-
-        self.renumber_shape_ids(shape, page)
-        shapes.append(shape)
-        return shapes
-
-    def renumber_shape_ids(self, shape: Element, page: Page, id_map: dict[str, int] | None = None) -> dict[str, int]:
-        """Give a subtree IDs unused by ``page``, and follow them everywhere the page writes them.
-
-        One primitive, because a shape ID is written in two places: the
-        ``Sheet.N!`` references inside cell formulas, and the ``FromSheet`` and
-        ``ToSheet`` attributes of the page's ``Connect`` records. Allocating and
-        then sweeping only the formulas is what left a renumbered shape's glue
-        naming an ID that was no longer on the page.
-
-        Both stores are swept over the same ground: the whole page. Sweeping the
-        records page-wide and the formulas only inside the renumbered subtree
-        left behind every *other* shape that named the vacated ID in a cell
-        formula, so a connector's record moved on while the formula placing its
-        endpoint still addressed a sheet that had gone (#328).
-
-        A vacated ID is one that was on the page before and is gone after.
-        Renumbering does not always retire an ID - ``copy_shape`` leaves the
-        original where it was, and the Jinja loop renumbers the duplicates while
-        the shape they were copied from keeps its ID. Nor is every ID in the map
-        one this page ever had: a subtree arriving from elsewhere brings its own,
-        and a stale record that happens to name one of those numbers belongs to
-        whatever wrote the file, not to the shape now carrying it. When nothing
-        was vacated neither sweep runs, and nothing on the page is rewritten.
-
-        The subtree is swept twice when it is already on the page, and the second
-        sweep cannot chain onto what the first wrote. A subtree on the page has
-        every allocated ID stamped onto one of its shapes, so every allocated ID
-        is in ``after`` and none of them can be a vacated ID; a subtree that is
-        not on the page leaves ``before`` and ``after`` equal and vacates
-        nothing. The one way past that is a caller seeding ``id_map`` with a
-        mapping onto an ID the page is still using, which is not what the
-        parameter is for.
-
-        :param shape: root of the subtree to renumber, normally a ``Shape`` element
-        :param page: page that owns the ID high-water mark and the records
-        :param id_map: mapping to extend, so several subtrees renumbered
-            together share one map; a new one is started when omitted
-        :return: the ID map, old ID -> new ID
-        """
-        before = page._shape_ids()
-        id_map = self.increment_shape_ids(shape, page, id_map)
-        self.update_ids(shape, id_map)
-        after = page._shape_ids()
-        vacated = {old: new for old, new in id_map.items() if old in before and old not in after}
-        if vacated:
-            self.update_ids(require_element(page.xml.getroot(), "page root"), vacated)
-            page._remap_connect_records(vacated)
-        return id_map
-
-    def increment_shape_ids(self, shape: Element, page: Page, id_map: dict[str, int] | None = None) -> dict[str, int]:
-        """Give ``shape`` and the shapes inside it IDs unused by ``page``, and map old to new.
-
-        Allocation owns the page's high-water mark rather than trusting callers
-        to prime it: ``Page._max_id`` is 0 on a freshly loaded page, so a caller
-        that forgot handed out 1 to a page whose first shape was already 1.
-        Duplicate IDs make ``Connect`` records ambiguous and Visio offers to
-        repair the file. Every entry into this method syncs, including one that
-        passes an ``id_map`` to collect the mapping, because a caller who has to
-        remember is the fault being fixed. The page is scanned once here, and
-        the walk below allocates without scanning again.
-
-        That walk covers the whole subtree, to any depth. It used to descend
-        into a ``Shapes`` container but then only stamp the ``Shape`` elements
-        directly inside it, so a group's grandchildren arrived in the copy
-        still carrying their original IDs.
-
-        Only ``Shape`` elements are numbered. A ``Shapes`` container is not a
-        shape and takes no ``ID`` in the schema, and numbering one consumed an
-        ID that ``Page._set_max_ids`` could not see, since that scan looks at
-        shapes; a later allocation could then hand the same number to a real
-        shape. A root element outside the Visio namespace is left alone for the
-        same reason, so a caller that hand-builds one must namespace it to have
-        it numbered.
-
-        :param shape: root of the copied subtree, normally a ``Shape`` element
-        :param page: destination page, which owns the ID high-water mark
-        :param id_map: mapping to extend, so several subtrees copied together
-            share one map; a new one is started when omitted
-        :return: the ID map, old ID -> new ID, for ``update_ids`` to apply
-        """
-        page._set_max_ids()
-        if id_map is None:
-            id_map = {}
-        for element in shape.iter(f"{namespace}Shape"):
-            self.set_new_id(element, page, id_map)
-        return id_map
-
-    def set_new_id(self, element: Element, page: Page, id_map: dict[str, int]) -> int:
-        """Stamp the next free page ID onto one Shape element.
-
-        Call this only for a ``Shape``; ``increment_shape_ids`` is what decides
-        which elements qualify.
-        """
-        max_id = page._next_shape_id()
-        if element.attrib.get("ID"):
-            current_id = element.attrib["ID"]
-            id_map[current_id] = max_id  # record mappings
-        element.attrib["ID"] = str(max_id)
-        return max_id  # return new id for info
-
-    def update_ids(self, shape: Element, id_map: dict[str, int]) -> Element:
-        """Remap every sheet reference in a copied subtree through ``id_map``.
-
-        Covers the shape's own cells as well as its descendants', and cells
-        nested inside Sections, since a formula anywhere in the subtree may
-        address a shape whose id the copy has just changed.
-        """
-        for cell in shape.iter(f"{namespace}Cell"):
-            formula = cell.attrib.get("F")
-            if formula is None or "Sheet" not in formula:
-                continue
-            remapped = _remap_sheet_references(formula, id_map)
-            if remapped != formula:
-                cell.attrib["F"] = remapped
-        return shape
-
     def _main_part_content_type(self) -> str:
         """The declared content type of `/visio/document.xml`."""
-        content_types = self._part_root(self.content_types_xml, "[Content_Types].xml")
+        content_types = self._part_root(self._content_types_xml, "[Content_Types].xml")
         overrides = content_types.findall(f"{cont_types_namespace}Override")
         for override in overrides:
             if override.attrib.get("PartName") == DOCUMENT_PART:
@@ -1204,46 +1014,31 @@ class Document:
             return new_filename
         return new_filename + (".vsdm" if self.is_macro_enabled else ".vsdx")
 
-    def _in_place_filename(self) -> str:
-        """The source path, checked against the package kind but never renamed.
-
-        A save with no destination keeps the name it was opened under, so the
-        check can only refuse -- silently rewriting the caller's path would be
-        a worse surprise than the mismatch itself. The constructor already
-        rejects anything but a .vsdx or .vsdm name, so there is never a missing
-        extension to append here.
-        """
-        self._check_destination_kind(self.filename)
-        return self.filename
-
     def save(self, target: str | os.PathLike[str] | None = None) -> Path:
         """Write the document, and return the absolute path it was written to.
 
         :param target: where to write. A ``.vsdx`` or ``.vsdm`` extension must
             match the package's own kind; any other name gets the matching
-            extension appended. Omit it to save over the source file, or over
-            ``filename`` if that has been reassigned since the document was
-            opened; that name is checked the same way but never renamed.
+            extension appended. Omit it to save over the file the document
+            was opened from; that name is checked the same way but never renamed.
         :raises InvalidOperationError: if the extension contradicts the package kind
         """
         if not self._package.names():
             raise InvalidOperationError("cannot save an empty package")
 
-        new_filename = None if target is None else os.fspath(target)
+        if target is None:
+            # the name it was opened under can only be refused, never rewritten:
+            # silently renaming the caller's file would be a worse surprise than
+            # the mismatch. `open` already refused anything but .vsdx or .vsdm.
+            self._check_destination_kind(self._filename)
+            # every change is already in the store -- the trees this document
+            # edits are the store's own -- so saving is writing it, member by
+            # member. In place, that is over the absolute path the store
+            # captured at open: `filename` may be relative, and resolve against
+            # another working directory by the time this runs.
+            return self._package.save()
         # resolve the destination first, so a refused extension writes nothing
-        destination = self._in_place_filename() if new_filename is None else self._destination_filename(new_filename)
-
-        # every change is already in the store -- the trees this document edits
-        # are the store's own -- so saving is writing it, once, member by member.
-        # An in-place save writes back over the absolute source `PackageStore`
-        # captured at open, not over `self.filename`, which may be relative and
-        # resolve against a different working directory by the time this runs.
-        # The exception is a `filename` the caller has reassigned since open:
-        # a plain save went to `self.filename` before the store existed, so a
-        # new one is where the caller means the save to go. It goes there as an
-        # explicit target, which leaves the store's source where it was.
-        redirected = new_filename is None and self.filename != self._opened_filename
-        return self._package.save(destination if new_filename is not None or redirected else None)
+        return self._package.save(self._destination_filename(os.fspath(target)))
 
     def render(self, context: Mapping[str, object]) -> None:
         """Render the document as a Jinja template, in place.

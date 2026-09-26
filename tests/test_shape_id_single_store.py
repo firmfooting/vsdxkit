@@ -27,7 +27,7 @@ def test_glue_written_after_a_renumber_names_the_shape_that_is_there(vsdx_copy, 
     shape = page.shapes.require_id("2")
     other = page.shapes.require_id("5")
 
-    vis.increment_sub_shape_ids(shape, page)
+    page._renumber_shape_ids(shape.xml)
     page.connect(shape, other)
 
     assert "2" not in [to_id for _, to_id in _records(page)]
@@ -40,7 +40,7 @@ def test_renumbering_moves_the_shape_object_with_its_element(vsdx_copy):
     page = vis.pages[0]
     shape = page.shapes.require_id("2")
 
-    vis.increment_sub_shape_ids(shape, page)
+    page._renumber_shape_ids(shape.xml)
 
     renumbered = shape.xml.attrib["ID"]
     assert renumbered != "2"
@@ -54,7 +54,7 @@ def test_a_renumbered_shape_still_finds_the_connectors_glued_to_it(vsdx_copy):
     shape = page.shapes.require_id("2")
     assert len(shape.connectors) == 2
 
-    vis.increment_sub_shape_ids(shape, page)
+    page._renumber_shape_ids(shape.xml)
 
     assert len(shape.connectors) == 2
 
@@ -66,7 +66,7 @@ def test_a_connector_held_across_a_renumber_resolves_to_the_new_id(vsdx_copy):
     shape = page.shapes.require_id("2")
     held = shape.connectors
 
-    new_id = str(vis.increment_sub_shape_ids(shape, page)["2"])
+    new_id = str(page._renumber_shape_ids(shape.xml)["2"])
 
     assert [(c.source, c.target) for c in held].count((None, None)) == 0
     assert all(new_id in {end.ID for end in (c.source, c.target) if end is not None} for c in held)
@@ -84,7 +84,7 @@ def test_deleting_a_renumbered_shape_takes_its_connectors_with_it(vsdx_copy, tmp
     shape = page.shapes.require_id("2")
     connector_id = next(from_id for from_id, to_id in _records(page) if to_id == "2")
 
-    vis.increment_sub_shape_ids(shape, page)
+    page._renumber_shape_ids(shape.xml)
     shape.delete()
 
     assert page.shapes.by_id(connector_id) is None

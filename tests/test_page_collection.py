@@ -105,7 +105,7 @@ def test_delete_removes_the_page_and_its_parts(vsdx_copy, tmp_path):
     vis.pages.delete(doomed)
     assert _names(vis) == ["Page-1", "Page-3"]
     assert doomed not in vis.pages
-    assert vis._package.part(doomed.filename) is None
+    assert vis._package.part(doomed._filename) is None
     vis.save(saved)
 
 

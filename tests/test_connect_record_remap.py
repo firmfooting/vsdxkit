@@ -1,6 +1,6 @@
 """Renumbering a shape must take everything that names it with it.
 
-`Document.renumber_shape_ids` is the code under test and carries the reasoning;
+`Page._renumber_shape_ids` is the code under test and carries the reasoning;
 these pin it from the outside: a record naming the renumbered shape at either
 end, a shape nested inside a renumbered group, the formulas elsewhere on the
 page that address it, and the case where all of it must stay put because the id
@@ -34,7 +34,7 @@ def test_renumbering_a_shape_moves_the_records_glued_to_it(vsdx_copy, tmp_path):
     shape = page.shapes.require_id("2")
     assert ("6", "2") in _records(page) and ("7", "2") in _records(page)
 
-    new_id = str(vis.increment_sub_shape_ids(shape, page)["2"])
+    new_id = str(page._renumber_shape_ids(shape.xml)["2"])
 
     assert ("6", new_id) in _records(page)
     assert ("7", new_id) in _records(page)
@@ -48,7 +48,7 @@ def test_renumbering_a_connector_moves_the_records_leading_from_it(vsdx_copy, tm
     page = vis.pages[0]
     connector = page.shapes.require_id("7")
 
-    new_id = str(vis.increment_sub_shape_ids(connector, page)["7"])
+    new_id = str(page._renumber_shape_ids(connector.xml)["7"])
 
     from_ids = [from_id for from_id, _ in _records(page)]
     assert from_ids.count(new_id) == 2  # the connector's begin and end
@@ -65,7 +65,7 @@ def test_renumbering_a_group_moves_records_naming_a_shape_inside_it(vsdx_copy, t
     old_child_id = child.ID
     page.connect(child, page.shapes.require_id("11"))
 
-    new_child_id = str(vis.increment_sub_shape_ids(group, page)[old_child_id])
+    new_child_id = str(page._renumber_shape_ids(group.xml)[old_child_id])
 
     to_ids = [to_id for _, to_id in _records(page)]
     assert new_child_id in to_ids
@@ -89,7 +89,7 @@ def test_renumbering_a_shape_moves_the_formulas_elsewhere_that_name_it(vsdx_copy
     connector = page.shapes.require_id("3")
     assert "Sheet.2!" in connector.cell_formula("EndX")
 
-    new_id = str(vis.increment_sub_shape_ids(page.shapes.require_id("2"), page)["2"])
+    new_id = str(page._renumber_shape_ids(page.shapes.require_id("2").xml)["2"])
 
     connector = page.shapes.require_id("3")
     for cell in ("EndX", "EndY", "EndTrigger"):
@@ -148,7 +148,7 @@ def test_a_copy_does_not_inherit_glue_from_a_record_naming_a_missing_shape(vsdx_
     _drop_shape(page, "2")
     assert ("6", "2") in _records(page)
 
-    vis.copy_shape(vis.pages[1].shapes.require_id("2").xml, page)
+    page._copy_shape_xml(vis.pages[1].shapes.require_id("2").xml)
 
     assert ("6", "2") in _records(page)
 
@@ -160,7 +160,7 @@ def test_an_appended_shape_does_not_inherit_glue_from_a_record_naming_a_missing_
     _drop_shape(page, "2")
     arriving = Shape(xml=ET.fromstring(f'<Shape xmlns="{namespace[1:-1]}" ID="2" Type="Shape"/>'), parent=page, page=page)
 
-    placed = vis.copy_shape(arriving.xml, page)
+    placed = page._copy_shape_xml(arriving.xml)
 
     assert ("6", "2") in _records(page)
     assert placed.attrib["ID"] != "2"  # it was renumbered, it just did not take the glue

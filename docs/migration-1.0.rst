@@ -106,7 +106,8 @@ The class is :class:`vsdxkit.document.Document`, in the module
    :class:`~vsdxkit.templating.RenderTarget`. The context may be any mapping,
    not only a ``dict``. The mixin's
    ``JinjaTemplatingMixin.increment_sub_shape_ids`` was a placeholder for the
-   document's own method, which stays.
+   document's own method, which is gone as well; see "The page allocates
+   shape IDs" below.
 
 ``vis.jinja_render_shape``, ``vis.jinja_set_selfs``, ``vis.unescape_jinja_statements``, ``vis.jinja_create_for_loop_if``, ``vis.jinja_page_showif``
    Gone. They were the steps of one render, not something to call on their
@@ -206,20 +207,11 @@ arrived. 0.x re-serialised every XML part it had parsed, so tooling that
 relied on the library normalising every part's declaration, prefixes or
 quoting now sees the producer's own spelling on the parts left alone.
 
-``vis.pages_xml = None``, and the same for ``app_xml``, ``document_xml``, ``masters_xml`` and the other document parts
-   Refused with ``ValueError``. Removing the part would leave relationships
-   and content-type overrides naming it. ``page.rels_xml = None`` still
-   removes a page's relationships part.
-
 Parts are named by part name
 ----------------------------
 
 A document holds its package in memory, part by part, under each part's
 OPC name, and the file-system view of 0.x is gone.
-
-``page.filename``, ``page.rels_xml_filename``
-   Now the part names, such as ``/visio/pages/page1.xml``, not paths on
-   disk. ``Document.insert_shape``'s ``page_path`` takes the same part name.
 
 ``VisioFile.zip_file_contents``, ``VisioFile.directory``
    Gone. Work through the object model; to read a part's raw bytes, open
@@ -233,9 +225,9 @@ OPC name, and the file-system view of 0.x is gone.
    Gone. They read a named part from the zip, refused one that was absent
    with the description given, and ``require_root`` returned the root. The
    parts are already parsed: take the tree from the object model, such as
-   ``document.pages_xml`` or ``page.xml``, and compose the two checks 1.0
-   keeps. ``vsdxkit.xmlio.require_tree(tree, description)`` refuses ``None``
-   with :class:`vsdxkit.errors.MissingPartError`, and
+   ``page.xml``, and compose the two checks 1.0 keeps.
+   ``vsdxkit.xmlio.require_tree(tree, description)`` refuses ``None`` with
+   :class:`vsdxkit.errors.MissingPartError`, and
    ``require_element(tree.getroot(), description)`` gives the root.
 
 ``vsdx.shapes.to_float``
@@ -265,10 +257,6 @@ OPC name, and the file-system view of 0.x is gone.
    read-only. Each read builds a new list or dict: one kept from before a
    master is imported does not show it, and changing the list or dict changes
    nothing in the document. Read the property again after a master changes.
-
-``vis.masters_xml``
-   Unchanged, as ``document.masters_xml``: it was the mixin's, and is now the
-   document's own.
 
 ``vis.load_master_pages()``
    Unchanged, as ``document.load_master_pages()``: it re-reads the masters
@@ -470,18 +458,14 @@ Reading or writing a deleted shape
    one only ever made the wrapper lie. Move a shape into a group with
    ``group.append_shape(shape)``.
 
-``shape.page.swimlanes``, ``shape.page.vis``, ``shape.page.filename``, ``page.vis``
+``shape.page.swimlanes``, ``shape.page.vis``, ``page.vis``
    Typed code sees ``shape.page`` as :class:`vsdxkit.shapes.PageView`, a
    read-only view. The same type is the page half of ``shape.parent``
    (``PageView | Shape``) and of ``shape.master_page`` (``PageView | None``).
    ``PageView`` lists the page's API apart from ``swimlanes``,
    ``require_swimlanes`` and ``vis``, whose types are declared above
-   ``shapes``, and apart from the page's part-level attributes, such as
-   ``filename``, ``page_id`` and ``rel_id``. For ``shape.master_page``,
-   those part-level attributes — ``page_id``, ``filename`` and
-   ``master_unique_id`` — are exactly what the view leaves out. At runtime
-   it is the same ``Page``. For all of those, use the ``Page`` you hold,
-   such as ``document.pages[0]``.
+   ``shapes``. At runtime it is the same ``Page``. For those three, use the
+   ``Page`` you hold, such as ``document.pages[0]``.
 
    The same holds one level up. Typed code sees ``page.vis`` as
    :class:`vsdxkit.pages.DocumentView`, which lists the document's
@@ -795,3 +779,98 @@ These had no caller in the library, repeated a 1.0 name, or did nothing.
 
 ``page.master_base_id``
    Gone, with no replacement: nothing read it.
+
+The page allocates shape IDs
+----------------------------
+
+A shape ID is written in three places: the shape's own element, the
+``Sheet.N!`` references in other shapes' formulas, and the page's glue
+records. The page allocates IDs and moves all three together, whenever a
+shape is created, copied or repeated by a ``{% for %}`` loop, so there is
+nothing left for a caller to renumber.
+
+``shapes.parent_of(root, element)``, ``shapes.find_or_create_shapes_tag(parent)``
+   ``vsdxkit.shape_tree.parent_of`` and
+   ``vsdxkit.shape_tree.find_or_create_shapes_tag``, unchanged, beside the
+   other element-level walks. For a shape, ``shape.parent`` is its page or
+   group.
+
+``vis.copy_shape(element, page)``, ``vis.insert_shape(element, shapes, page, page_path)``
+   ``shape.copy(page)``: a copy of the shape at the page's top level, with
+   IDs the page does not use, the master it instances and the page
+   relationships it needs. ``group.append_shape(shape)`` moves a shape into
+   a group.
+
+``vis.renumber_shape_ids(...)``, ``vis.increment_shape_ids(...)``, ``vis.increment_sub_shape_ids(...)``, ``vis.set_new_id(...)``
+   Internal in 1.0; no public replacement. The page renumbers what it needs
+   to, as above.
+
+``vis.update_ids(element, id_map)``
+   ``vsdxkit.shape_tree.remap_sheet_references(element, id_map)`` rewrites
+   the ``Sheet.N!`` and ``SheetN!`` references in every formula under
+   ``element``, keeping each one's form. It returns ``None``, where
+   ``update_ids`` returned the element.
+
+Package internals are private
+-----------------------------
+
+The document keeps its package parts in step itself, and a page's
+part-level bookkeeping is the document's, so 1.0 makes both private. The
+part names are in :mod:`vsdxkit.partnames`. To read a part's bytes, save the
+document and open the file with :mod:`zipfile`. If you need one of these,
+open an issue asking for an API.
+
+``vis.pages_xml``, ``vis.pages_xml_rels``, ``vis.content_types_xml``, ``vis.app_xml``, ``vis.document_xml``, ``vis.document_xml_rels``, ``vis.masters_xml``
+   Internal in 1.0; no public replacement. Assigning a tree to one replaced
+   the part without the relationships and content types that name it; the
+   library's own writes keep those in step.
+
+``vis.load_pages()``
+   Internal in 1.0; no public replacement. The document reads its pages when
+   it opens, and calling this again added every page a second time.
+
+``vis.get_master_page_by_id(master_id)``
+   Internal in 1.0. ``shape.master_page`` is the master a shape instances,
+   and ``document.master_index[name]`` finds a master by name.
+
+``page.filename``, ``page.rels_xml_filename``, ``page.rels_xml``
+   Internal in 1.0; no public replacement. They were the page's part name,
+   the name of its relationships part, and that part's tree.
+
+``page.page_id``, ``page.rel_id``, ``page.master_unique_id``
+   Internal in 1.0; no public replacement. A page is known by ``page.name``
+   and by its place in ``document.pages``.
+
+Two 0.x holdovers go
+--------------------
+
+``vis.filename = path``
+   Read-only. ``document.filename`` is the path the document was opened
+   from, and ``save()`` with no target writes back over it. Assigning it used
+   to send the next plain save somewhere else; that is
+   ``document.save(path)`` now, and the assignment raises ``AttributeError``.
+
+``shape.geometry = geometry``
+   Read-only. The assignment wrote nothing to the shape's XML, so the shape
+   and its file disagreed. Change the geometry through the rows and cells
+   of ``shape.geometry``.
+
+The package differ is gone
+--------------------------
+
+``vsdxdiff.VisioFileDiff``, ``from vsdxkit.vsdxdiff import VisioFileDiff``
+   Gone, with no replacement. It compared two packages member by member,
+   under limits of its own rather than
+   :class:`~vsdxkit.package.PackageLimits`, and only this project's tests
+   used it; they keep a private copy. To compare two saved files, read both
+   with :mod:`zipfile` and compare the members with :mod:`difflib`.
+
+   Its members went with it: ``VisioFileDiff.MAX_MEMBER_BYTES``,
+   ``VisioFileDiff.MAX_TOTAL_BYTES``, ``VisioFileDiff.added_members``,
+   ``VisioFileDiff.break_all_xml_into_lines``,
+   ``VisioFileDiff.break_xml_into_lines``, ``VisioFileDiff.common_members``,
+   ``VisioFileDiff.compare_members``, ``VisioFileDiff.contents_a``,
+   ``VisioFileDiff.contents_b``, ``VisioFileDiff.diffs``,
+   ``VisioFileDiff.extract_file_data``, ``VisioFileDiff.filepath_a``,
+   ``VisioFileDiff.filepath_b``, ``VisioFileDiff.get_file_diffs`` and
+   ``VisioFileDiff.removed_members``.

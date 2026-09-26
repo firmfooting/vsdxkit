@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import math
 import os
-import re
 import sys
 import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
@@ -24,7 +23,13 @@ from vsdxkit.package import PackageStore, XmlPart
 from vsdxkit.partnames import relationship_target, relationships_part_name, target_part_name
 from vsdxkit.relationships import all_of, append_if_absent
 from vsdxkit.shape_kind import ShapeKind
-from vsdxkit.shape_tree import iter_descendants
+from vsdxkit.shape_tree import (
+    SHEET_REFERENCE,
+    find_or_create_shapes_tag,
+    iter_descendants,
+    parent_of,
+    remap_sheet_references,
+)
 from vsdxkit.shapes import (
     Connector,
     PageView,
@@ -34,7 +39,6 @@ from vsdxkit.shapes import (
     _wrap_children,
     _wrap_descendants,
     is_connector,
-    parent_of,
 )
 from vsdxkit.swimlanes import SwimlaneDiagram, _diagram_on
 from vsdxkit.xmlio import PartTree, require_element, to_float, xml_value
@@ -48,9 +52,6 @@ _RELATIONSHIP_ID = f"{r_namespace}id"
 
 # the cells that size and place a 2-D shape, which a group member ties to its group
 _TRANSFORM_CELLS = ("Width", "Height", "LocPinX", "LocPinY", "Angle", "FlipX", "FlipY")
-
-# a formula names another shape on its page as Sheet.5! (Visio) or Sheet5!
-_SHEET_REFERENCE = re.compile(r"(?<!!)\bSheet\.?(\d+)!")
 
 
 def _dimension_value(value: float | str | None) -> str:
@@ -109,7 +110,7 @@ def _detach(shape: Shape, left_behind: Callable[[str], bool]) -> None:
         formula = None if cell is None else cell.formula
         if formula is None:
             continue
-        named = {match.group(1) for match in _SHEET_REFERENCE.finditer(formula)}
+        named = {match.group(2) for match in SHEET_REFERENCE.finditer(formula)}
         if any(sheet not in own and left_behind(sheet) for sheet in named):
             _drop_formula(shape, name)
 
@@ -153,7 +154,7 @@ def _page_dimension(cell: ET.Element, name: str) -> float:
 
 def _pages_root(vis: _DocumentSeam) -> ET.Element:
     """The required root element of the document's pages.xml part."""
-    pages_xml = vis.pages_xml
+    pages_xml = vis._pages_xml
     if pages_xml is None:
         raise MissingPartError("document has no pages.xml part")
     return require_element(pages_xml.getroot(), "Pages root")
@@ -191,17 +192,16 @@ class _DocumentSeam(DocumentView, Protocol):
     """What a page needs from its document beyond the public view.
 
     A page's part, its entry in pages.xml and its title in app.xml live in
-    the document's package. The masters, shape-ID allocation and the shapes
-    a new shape is copied from are the document's. `document` imports this
-    module, so the page declares what it reads rather than importing
-    `Document`.
+    the document's package. The masters, and the shapes a new shape is copied
+    from, are the document's. `document` imports this module, so the page
+    declares what it reads rather than importing `Document`.
     """
 
     @property
-    def pages_xml(self) -> PartTree | None: ...
+    def _pages_xml(self) -> PartTree | None: ...
 
     @property
-    def masters_xml(self) -> ET.Element | None: ...
+    def _masters_xml(self) -> ET.Element | None: ...
 
     @property
     def _package(self) -> PackageStore: ...
@@ -210,11 +210,7 @@ class _DocumentSeam(DocumentView, Protocol):
 
     def _rename_page_in_app_xml(self, old_page_name: str, new_page_name: str) -> None: ...
 
-    def get_master_page_by_id(self, id: str) -> Page | None: ...
-
-    def copy_shape(self, shape: ET.Element, page: Page) -> ET.Element: ...
-
-    def renumber_shape_ids(self, shape: ET.Element, page: Page, id_map: dict[str, int] | None = None) -> dict[str, int]: ...
+    def _master_page_by_id(self, id: str) -> Page | None: ...
 
     def _master_is_one_d(self, master_id: str, master_shape_id: str | None) -> bool: ...
 
@@ -240,18 +236,18 @@ class Page:
 
     def __init__(self, xml: PartTree, filename: str, page_name: str, page_id: str, rel_id: str, vis: _DocumentSeam):
         self._xml = xml
-        self.filename = filename
+        self._filename = filename
         self._name = page_name
-        self.page_id = page_id
-        self.rel_id = rel_id
-        self.master_unique_id: str | None = None
-        self.rels_xml_filename: str | None = None
-        self._rels_xml: PartTree | None = None
+        self._page_id = page_id
+        self._rel_id = rel_id
+        self._master_unique_id: str | None = None
+        self._rels_xml_filename: str | None = None
+        self._rels_tree: PartTree | None = None
         self._document = vis
-        self._max_id = 0  # ID high-water mark, maintained by Document's ID allocator
+        self._max_id = 0  # ID high-water mark, maintained by _increment_shape_ids
 
     def __repr__(self):
-        return f"<Page name={self.name} file={self.filename} >"
+        return f"<Page name={self.name} file={self._filename} >"
 
     @property
     def vis(self) -> DocumentView:
@@ -307,21 +303,21 @@ class Page:
     @property
     def is_master_page(self) -> bool:
         """Return True if this page has a master unique id and there is a match in masters xml"""
-        if self._document.masters_xml is not None and self.master_unique_id:
-            master_match = f'{namespace}Master[@UniqueID="{self.master_unique_id}"]'
-            master_element = self._document.masters_xml.find(master_match)
+        if self._document._masters_xml is not None and self._master_unique_id:
+            master_match = f'{namespace}Master[@UniqueID="{self._master_unique_id}"]'
+            master_element = self._document._masters_xml.find(master_match)
             return master_element is not None
         return False
 
     @property
     def _pagesheet_xml(self) -> ET.Element:
-        # get PageSheet element from pages_xml based on page_id
-        ps = _pages_root(self._document).find(f'{namespace}Page[@ID="{self.page_id}"]/{namespace}PageSheet')
+        # get PageSheet element from _pages_xml based on _page_id
+        ps = _pages_root(self._document).find(f'{namespace}Page[@ID="{self._page_id}"]/{namespace}PageSheet')
         if not isinstance(ps, ET.Element):
-            masters_xml = self._document.masters_xml
+            masters_xml = self._document._masters_xml
             if masters_xml is not None:
-                ps = masters_xml.find(f'{namespace}Master[@ID="{self.page_id}"]/{namespace}PageSheet')
-        return require_element(ps, f"PageSheet for page_id={self.page_id}")
+                ps = masters_xml.find(f'{namespace}Master[@ID="{self._page_id}"]/{namespace}PageSheet')
+        return require_element(ps, f"PageSheet for page_id={self._page_id}")
 
     def _pagesheet_cell(self, name: str) -> ET.Element:
         """A named Cell element on this page's PageSheet."""
@@ -351,14 +347,14 @@ class Page:
     def xml(self, value: PartTree | None) -> None:
         if value is None:
             raise InvalidOperationError(
-                f"Page.xml cannot be set to None: {self.filename} cannot be removed through "
+                f"Page.xml cannot be set to None: {self._filename} cannot be removed through "
                 f"this property, because pages.xml, pages.xml.rels and the content-type "
                 f"override would still name it"
             )
         attached = self._attached()
         self._xml = value
         if attached:
-            self._document._set_part_xml(self.filename, value)
+            self._document._set_part_xml(self._filename, value)
 
     def _holds(self, filename: str, tree: PartTree | None) -> bool:
         """Whether the package's part at `filename` is `tree` itself."""
@@ -381,12 +377,12 @@ class Page:
         takes the part out from under the other. pages.xml still names the
         part, so a tree assigned to the page left behind must bring it back.
         """
-        if self._holds(self.filename, self._xml):
+        if self._holds(self._filename, self._xml):
             return True
-        return self._document._package.part(self.filename) is None and any(page is self for page in self._document.pages)
+        return self._document._package.part(self._filename) is None and any(page is self for page in self._document.pages)
 
     def _rels_attached(self) -> bool:
-        """Whether an assignment to `rels_xml` may write this page's relationship part.
+        """Whether an assignment to `_rels_xml` may write this page's relationship part.
 
         Only while the page itself is attached, and only over the relationship
         part the page holds -- or where the package holds none yet, which is
@@ -394,26 +390,26 @@ class Page:
         with its page's, and the page that takes the name must not be given
         the removed page's relationships.
         """
-        if self.rels_xml_filename is None or not self._attached():
+        if self._rels_xml_filename is None or not self._attached():
             return False
-        held = self._document._package.part(self.rels_xml_filename)
+        held = self._document._package.part(self._rels_xml_filename)
         if held is None:
             return True
-        return isinstance(held, XmlPart) and held.tree is self._rels_xml
+        return isinstance(held, XmlPart) and held.tree is self._rels_tree
 
     @property
-    def rels_xml(self) -> PartTree | None:
-        return self._rels_xml
+    def _rels_xml(self) -> PartTree | None:
+        return self._rels_tree
 
-    @rels_xml.setter
-    def rels_xml(self, value: PartTree | None) -> None:
+    @_rels_xml.setter
+    def _rels_xml(self, value: PartTree | None) -> None:
         # None takes the rels part out of the package as well: the save writes
         # whatever the store holds, so a part left behind would reach the file
         attached = self._rels_attached()
-        self._rels_xml = value
+        self._rels_tree = value
         if attached:
-            assert self.rels_xml_filename is not None  # _rels_attached() says so
-            self._document._set_part_xml(self.rels_xml_filename, value)
+            assert self._rels_xml_filename is not None  # _rels_attached() says so
+            self._document._set_part_xml(self._rels_xml_filename, value)
 
     @property
     def shapes(self) -> ShapeCollection:
@@ -441,7 +437,7 @@ class Page:
     def _set_max_ids(self) -> None:
         """Raise this page's ID high-water mark to cover every shape now on it.
 
-        Private plumbing for ``Document.increment_shape_ids()``, which calls it
+        Private plumbing for ``_increment_shape_ids()``, which calls it
         at the start of each allocation run. It was public, and every caller
         that inserted a shape was expected to remember to call it first; the
         ones that forgot handed out IDs the page was already using. Monotonic
@@ -486,14 +482,14 @@ class Page:
         append_if_absent(
             self._rels_root(),
             rel_type="http://schemas.microsoft.com/visio/2010/relationships/master",
-            target=relationship_target(self.filename, master_part_name),
+            target=relationship_target(self._filename, master_part_name),
         )
 
     # A shape asks its page, and the page asks its document: a shape never
     # reaches through the page to the document (#114).
 
     def _master_by_id(self, master_id: str) -> Page | None:
-        return self._document.get_master_page_by_id(master_id)
+        return self._document._master_page_by_id(master_id)
 
     def _master_is_one_d(self, master_id: str, master_shape_id: str | None) -> bool:
         return self._document._master_is_one_d(master_id, master_shape_id)
@@ -511,24 +507,123 @@ class Page:
 
     def _copy_shape_xml(self, element: ET.Element) -> ET.Element:
         """A copy of `element` at this page's top level, with IDs unused on this page."""
-        return self._document.copy_shape(element, self)
+        copied = ET.fromstring(ET.tostring(element))
+        shapes = find_or_create_shapes_tag(self.xml.getroot())
+        self._renumber_shape_ids(copied)
+        shapes.append(copied)
+        return copied
 
-    def _renumber_shape_ids(self, element: ET.Element) -> None:
-        self._document.renumber_shape_ids(element, self)
+    def _renumber_shape_ids(self, subtree: ET.Element, id_map: dict[str, int] | None = None) -> dict[str, int]:
+        """Give a subtree IDs unused on this page, and follow them everywhere the page writes them.
+
+        One primitive, because a shape ID is written in two places: the
+        ``Sheet.N!`` references inside cell formulas, and the ``FromSheet`` and
+        ``ToSheet`` attributes of the page's ``Connect`` records. Allocating and
+        then sweeping only the formulas is what left a renumbered shape's glue
+        naming an ID that was no longer on the page.
+
+        Both stores are swept over the same ground: the whole page. Sweeping the
+        records page-wide and the formulas only inside the renumbered subtree
+        left behind every *other* shape that named the vacated ID in a cell
+        formula, so a connector's record moved on while the formula placing its
+        endpoint still addressed a sheet that had gone (#328).
+
+        A vacated ID is one that was on the page before and is gone after.
+        Renumbering does not always retire an ID - ``_copy_shape_xml`` leaves the
+        original where it was, and the Jinja loop renumbers the duplicates while
+        the shape they were copied from keeps its ID. Nor is every ID in the map
+        one this page ever had: a subtree arriving from elsewhere brings its own,
+        and a stale record that happens to name one of those numbers belongs to
+        whatever wrote the file, not to the shape now carrying it. When nothing
+        was vacated neither sweep runs, and nothing on the page is rewritten.
+
+        The subtree is swept twice when it is already on the page, and the second
+        sweep cannot chain onto what the first wrote. A subtree on the page has
+        every allocated ID stamped onto one of its shapes, so every allocated ID
+        is in ``after`` and none of them can be a vacated ID; a subtree that is
+        not on the page leaves ``before`` and ``after`` equal and vacates
+        nothing. The one way past that is a caller seeding ``id_map`` with a
+        mapping onto an ID the page is still using, which is not what the
+        parameter is for.
+
+        :param subtree: root of the subtree to renumber, normally a ``Shape`` element
+        :param id_map: mapping to extend, so several subtrees renumbered
+            together share one map; a new one is started when omitted
+        :return: the ID map, old ID -> new ID
+        """
+        before = self._shape_ids()
+        id_map = self._increment_shape_ids(subtree, id_map)
+        remap_sheet_references(subtree, id_map)
+        after = self._shape_ids()
+        vacated = {old: new for old, new in id_map.items() if old in before and old not in after}
+        if vacated:
+            remap_sheet_references(require_element(self.xml.getroot(), "page root"), vacated)
+            self._remap_connect_records(vacated)
+        return id_map
+
+    def _increment_shape_ids(self, subtree: ET.Element, id_map: dict[str, int] | None = None) -> dict[str, int]:
+        """Give ``subtree`` and the shapes inside it IDs unused on this page, and map old to new.
+
+        Allocation owns the page's high-water mark rather than trusting callers
+        to prime it: ``_max_id`` is 0 on a freshly loaded page, so a caller that
+        forgot handed out 1 to a page whose first shape was already 1.
+        Duplicate IDs make ``Connect`` records ambiguous and Visio offers to
+        repair the file. Every entry into this method syncs, including one that
+        passes an ``id_map`` to collect the mapping, because a caller who has to
+        remember is the fault being fixed. The page is scanned once here, and
+        the walk below allocates without scanning again.
+
+        That walk covers the whole subtree, to any depth. It used to descend
+        into a ``Shapes`` container but then only stamp the ``Shape`` elements
+        directly inside it, so a group's grandchildren arrived in the copy
+        still carrying their original IDs.
+
+        Only ``Shape`` elements are numbered. A ``Shapes`` container is not a
+        shape and takes no ``ID`` in the schema, and numbering one consumed an
+        ID that ``_set_max_ids`` could not see, since that scan looks at
+        shapes; a later allocation could then hand the same number to a real
+        shape. A root element outside the Visio namespace is left alone for the
+        same reason, so a caller that hand-builds one must namespace it to have
+        it numbered.
+
+        :param subtree: root of the copied subtree, normally a ``Shape`` element
+        :param id_map: mapping to extend, so several subtrees copied together
+            share one map; a new one is started when omitted
+        :return: the ID map, old ID -> new ID, for ``remap_sheet_references`` to apply
+        """
+        self._set_max_ids()
+        if id_map is None:
+            id_map = {}
+        for element in subtree.iter(f"{namespace}Shape"):
+            self._set_new_id(element, id_map)
+        return id_map
+
+    def _set_new_id(self, element: ET.Element, id_map: dict[str, int]) -> int:
+        """Stamp the next free page ID onto one Shape element.
+
+        Call this only for a ``Shape``; ``_increment_shape_ids`` is what decides
+        which elements qualify.
+        """
+        max_id = self._next_shape_id()
+        if element.attrib.get("ID"):
+            current_id = element.attrib["ID"]
+            id_map[current_id] = max_id  # record mappings
+        element.attrib["ID"] = str(max_id)
+        return max_id  # return new id for info
 
     def _same_document(self, other: _PageSeam) -> bool:
         return _as_page(other)._document is self._document
 
     def _rels_root(self) -> ET.Element:
         """This page's `<Relationships>` element, creating the part on demand; assigning it writes it into the package."""
-        rels_xml: PartTree | None = self.rels_xml
+        rels_xml: PartTree | None = self._rels_xml
         if rels_xml is None:
-            self.rels_xml_filename = relationships_part_name(self.filename)
+            self._rels_xml_filename = relationships_part_name(self._filename)
             rels_xml = ET.ElementTree(
                 ET.fromstring('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
             )
-            self.rels_xml = rels_xml
-        return require_element(rels_xml.getroot(), f"{self.rels_xml_filename} root")
+            self._rels_xml = rels_xml
+        return require_element(rels_xml.getroot(), f"{self._rels_xml_filename} root")
 
     def _carry_relationships(self, copied: ET.Element, source: _PageSeam) -> None:
         """Relate this page to what each ``r:id`` in `copied` names on `source`, and point the copy at it.
@@ -538,7 +633,7 @@ class Page:
         document the part is shared, so the copy needs only a relationship of
         its own to the same part.
         """
-        source_rels = _as_page(source).rels_xml
+        source_rels = _as_page(source)._rels_xml
         if source_rels is None:
             return
         by_id = {rel.attrib.get("Id"): rel for rel in all_of(source_rels.getroot())}
@@ -549,7 +644,7 @@ class Page:
             mode = relationship.attrib.get("TargetMode")
             target = relationship.attrib.get("Target", "")
             if mode != "External":
-                target = relationship_target(self.filename, target_part_name(source.filename, target))
+                target = relationship_target(self._filename, target_part_name(source._filename, target))
             carried = append_if_absent(
                 self._rels_root(), rel_type=relationship.attrib.get("Type", ""), target=target, mode=mode
             )
@@ -748,12 +843,12 @@ class Page:
         """Point the records at the new ids of shapes this page has renumbered.
 
         Shape ids live in two places: the ``Sheet.N!`` references inside cell
-        formulas, which ``Document.update_ids`` rewrites, and the ``FromSheet``
+        formulas, which ``remap_sheet_references`` rewrites, and the ``FromSheet``
         and ``ToSheet`` attributes here. Records left behind when a shape is
         renumbered name an id that is no longer on the page, and Visio rebinds
         glue like that silently.
 
-        Private plumbing for ``Document.renumber_shape_ids()``, which runs this
+        Private plumbing for ``_renumber_shape_ids()``, which runs this
         and the formula sweep over the same page with the same map, and decides
         what belongs in that map: only the ids renumbering vacated. An id still
         in use, or one that was never on this page, names a record that means

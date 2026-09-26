@@ -20,7 +20,7 @@ def test_palette_shape_copies_into_stock_template(tmp_path, basedir):
     decision = palette.pages[0].shapes.require_text("PALETTE_DECISION")
     target = Document.open(dst)
     page = target.pages[0]
-    target.copy_shape(decision.xml, page)
+    page._copy_shape_xml(decision.xml)
     target.save(dst)
     check = Document.open(dst)
     assert check.pages[0].shapes.by_text("PALETTE_DECISION") is not None
