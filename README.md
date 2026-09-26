@@ -174,7 +174,7 @@ The full documentation is at <https://firmfooting.github.io/vsdxkit/>.
 | Create, connect, retarget and delete shapes | [Create shapes and connectors](https://firmfooting.github.io/vsdxkit/create_connect.html) |
 | Extend a cross-functional flowchart | [Cross-functional flowchart swimlanes](https://firmfooting.github.io/vsdxkit/swimlanes.html) |
 | Fill a Visio template with data | [Jinja templates](https://firmfooting.github.io/vsdxkit/templating.html) |
-| Look up a class or an error | [API reference](https://firmfooting.github.io/vsdxkit/classes.html) |
+| Look up a class or an error | [API reference](https://firmfooting.github.io/vsdxkit/api/index.html) |
 | Move code from 0.x to 1.0 | [Migrating to 1.0](https://firmfooting.github.io/vsdxkit/migration-1.0.html) |
 
 ## Limits
