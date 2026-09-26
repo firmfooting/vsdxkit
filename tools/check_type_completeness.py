@@ -72,6 +72,15 @@ def problem_with(report: dict[str, object], venv: Path) -> str | None:
     root = Path(str(completeness.get("packageRootDirectory", "")))
     if not root.is_relative_to(venv):
         return f"pyright measured {root}, not the wheel installed in {venv}"
+    # A report with pyTypedPath set and the right root can still count zero
+    # exported symbols - an empty package, or a broken import - in which case
+    # the score is 100% of nothing, not a clean bill of health.
+    counts = completeness.get("exportedSymbolCounts")
+    if not isinstance(counts, dict):
+        return "pyright wrote no exportedSymbolCounts, so the score cannot be checked"
+    exported = sum(int(counts.get(key, 0)) for key in ("withKnownType", "withAmbiguousType", "withUnknownType"))
+    if exported == 0:
+        return "pyright counted zero exported symbols, so the score is vacuous"
     return None
 
 

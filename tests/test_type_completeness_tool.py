@@ -22,13 +22,24 @@ def _load(name):
 tool = _load("check_type_completeness")
 
 
-def _report(root: str, score: float, symbols: list[dict] | None = None, py_typed: str | None = "py.typed") -> dict:
+def _report(
+    root: str,
+    score: float,
+    symbols: list[dict] | None = None,
+    py_typed: str | None = "py.typed",
+    exported_symbol_counts: dict[str, int] | None = None,
+) -> dict:
     return {
         "typeCompleteness": {
             "packageRootDirectory": root,
             "pyTypedPath": py_typed,
             "completenessScore": score,
             "symbols": symbols or [],
+            # pyright's real shape (confirmed against a report built from a
+            # fresh wheel): a non-zero default so tests aimed at the other
+            # checks in `problem_with` do not trip this one too.
+            "exportedSymbolCounts": exported_symbol_counts
+            or {"withKnownType": 1, "withAmbiguousType": 0, "withUnknownType": 0},
         }
     }
 
@@ -95,3 +106,14 @@ def test_a_report_on_the_installed_wheel_is_accepted(tmp_path):
     venv = tmp_path / "venv"
     report = _report(str(venv / "lib" / "python3.12" / "site-packages" / "vsdxkit"), 1.0)
     assert tool.problem_with(report, venv) is None
+
+
+def test_a_report_with_zero_exported_symbols_is_refused(tmp_path):
+    """A wheel with a good py.typed path and root still scores a vacuous 100% if nothing is exported."""
+    venv = tmp_path / "venv"
+    report = _report(
+        str(venv / "lib" / "python3.12" / "site-packages" / "vsdxkit"),
+        1.0,
+        exported_symbol_counts={"withKnownType": 0, "withAmbiguousType": 0, "withUnknownType": 0},
+    )
+    assert tool.problem_with(report, venv) == "pyright counted zero exported symbols, so the score is vacuous"
