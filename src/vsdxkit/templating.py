@@ -53,6 +53,12 @@ _SELF_REFERENCE = re.compile(r"self\.([A-Za-z_]\w*)")
 # may reference any attribute of the shape.
 _SETTABLE = ("x", "y")
 
+# A `{% showif <expression> %}` in a page name, anywhere in it. `findall`
+# gives the expressions; `sub` removes whole statements, since it replaces the
+# match and not the group. The statement is not Jinja, so it is taken out of
+# the name before the name is rendered.
+_PAGE_SHOWIF = re.compile(r"{% showif\s(.*?)\s%}")
+
 
 class RenderTarget(Protocol):
     """What rendering needs from a document: its pages.
@@ -84,6 +90,7 @@ def render_document(document: RenderTarget, context: Mapping[str, object]) -> No
     for page in document.pages:  # type: Page
         # check if page should be removed
         if _page_is_shown(page, context):
+            _render_page_name(page, context)
             loop_shape_ids = list()
             shown_before = page._shape_ids()
             _render_statements(shape=page, context=context, loop_shape_ids=loop_shape_ids)
@@ -261,21 +268,31 @@ def _open_block(shape: Shape, previous_shape: Shape | None) -> str | None:
 
 
 def _page_is_shown(page: Page, context: Mapping[str, object]) -> bool:
-    text = page.name
-    jinja_source = re.findall(r"{% showif\s(.*?)\s%}", text)
-    if len(jinja_source):
-        # process last matching value
-        template_source = "{{ " + jinja_source[-1] + " }}"
-        template = _template(template_source)  # value might be '{{ 1.0+2.4*3 }}'
-        value = template.render(context)
-        # is the value truthy - i.e. not 0, False, or empty string, tuple, list or dict
-        logger.debug("_page_is_shown(context=%s) statement: %s returns: %s %s", context, template_source, type(value), value)
-        if value in ["False", "0", "", "()", "[]", "{}"]:
-            logger.debug("value in ['False', '0', '', '()', '[]', '{}']")
-            return False  # page should be hidden
-        # remove jinja statement from page name
-        page_name = page.name or ""
-        jinja_statement = re.match("{%.*?%}", page_name)
-        if jinja_statement:
-            page.name = page_name.replace(jinja_statement[0], "")
-    return True  # page should be left in
+    """Whether `page` survives the render: every ``{% showif %}`` in its name is true.
+
+    Each expression is evaluated as ``{% if %}`` evaluates one, so a page is
+    kept exactly when a shape with the same ``showif`` would be. Its rendered
+    string was tested before, which kept a page for ``None`` or ``0.0`` and
+    dropped one for the strings ``"0"`` and ``"False"`` (Phase 7). A showif
+    may sit anywhere in the name, and a name with none is always kept.
+    """
+    for expression in _PAGE_SHOWIF.findall(page.name):
+        shown = bool(_ENVIRONMENT.compile_expression(expression)(context))
+        logger.debug("page %r: showif %s is %s", page.name, expression, shown)
+        if not shown:
+            return False
+    return True
+
+
+def _render_page_name(page: Page, context: Mapping[str, object]) -> None:
+    """Render a kept page's name as a template, without its ``{% showif %}`` statements.
+
+    The name is set through :attr:`Page.name`, which renames the page's title
+    in app.xml as well, and only when rendering changed it: setting a name
+    writes both ``Name`` and ``NameU``, and a page whose two differ would
+    otherwise lose its universal name to a render that changed nothing.
+    """
+    name = page.name
+    rendered = _template(_PAGE_SHOWIF.sub("", name)).render(context)
+    if rendered != name:
+        page.name = rendered

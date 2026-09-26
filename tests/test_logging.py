@@ -21,7 +21,11 @@ _LOG_METHODS = frozenset({"debug", "info", "warning", "warn", "error", "exceptio
 # `tests/helpers/package_diff.py` (#116, #376): that module's one
 # `logger.debug` call went with it, and the helper's own copy is outside
 # `vsdxkit`, so this walk no longer sees it.
-_LOG_CALLS_IN_THE_PACKAGE = 17
+#
+# Dropped from 17 to 16 when a page's showif came to be judged as a shape's is
+# (Phase 7, F2): `_page_is_shown` logged the rendered string and then, again,
+# that it was a falsy spelling; it now logs its verdict once.
+_LOG_CALLS_IN_THE_PACKAGE = 16
 
 
 def _is_logger(node: ast.expr) -> bool:

@@ -100,6 +100,27 @@ The class is :class:`vsdxkit.document.Document`, in the module
 ``VisioFile.jinja_render_vsdx(context)``
    ``Document.render(context)``.
 
+A ``{% showif %}`` in a page name
+   Judged as ``{% if %}`` judges it, so a page is kept exactly when a shape
+   behind the same ``showif`` is. 0.8 rendered the expression to a string
+   and hid the page only for ``False``, ``0``, an empty string and the
+   empty ``()``, ``[]`` and ``{}``. It kept a page for ``None``, ``0.0`` or
+   an empty ``set()``, and hid one for the strings ``"0"`` and ``"False"``,
+   which are true. A name with two ``showif`` statements is kept only when
+   both are true, where 0.8 read the last one.
+
+A page name holding ``{{ ... }}``
+   Rendered with the context, as shape text is: a page named
+   ``{{ title }}`` is named ``Quarterly`` after
+   ``document.render({"title": "Quarterly"})``. 0.8 left the name as it was.
+   A ``showif`` anywhere in the name is taken out of it before it is
+   rendered, where 0.8 took one out only when it opened the name. Nothing
+   checks that the names rendered are unique: give each page a name the
+   others do not render to, because ``document.pages.by_name`` refuses a
+   name two pages share. A name meant to keep a literal ``{{`` or ``{%``
+   now needs escaping, as in shape text: ``{{ '{{' }}``. A broken
+   template in a name raises ``jinja2.TemplateSyntaxError``.
+
 ``vsdx.templating.JinjaTemplatingMixin``
    Gone. ``Document`` has no base class. ``Document.render(context)`` calls
    ``vsdxkit.templating.render_document(document, context)``, which takes a
@@ -437,6 +458,15 @@ Reading or writing a deleted shape
    its document. ``ID``, ``xml``, ``page``, ``parent``, ``repr`` and
    ``hash`` keep working: ``page`` and ``parent`` are where the shape was.
 
+``deleted_shape.copy()``, ``shape.copy(removed_page)``
+   Both raise :class:`vsdxkit.errors.InvalidOperationError` and write
+   nothing. A copy reads the whole shape, so a shape that has been deleted,
+   or that is on a page removed from its document, is refused as any other
+   read of it is; 0.8 copied it back onto a page. A copy onto a page removed
+   from its document is refused too, where 0.8 returned a shape that was in
+   no document. ``page.create_shape(...)`` and ``page.connect(...)`` on a
+   removed page are refused the same way.
+
 ``shape.cells``
    A read-only property that returns a new ``dict`` on each read, from the
    XML. Assigning into the dict changes nothing; set a cell with
@@ -455,13 +485,14 @@ Reading or writing a deleted shape
    ``group.append_shape(shape)``.
 
 ``shape.page.swimlanes``, ``shape.page.vis``, ``page.vis``
-   Typed code sees ``shape.page`` as :class:`vsdxkit.shapes.PageView`, a
-   read-only view. The same type is the page half of ``shape.parent``
-   (``PageView | Shape``) and of ``shape.master_page`` (``PageView | None``).
-   ``PageView`` lists the page's API apart from ``swimlanes``,
-   ``require_swimlanes`` and ``vis``, whose types are declared above
-   ``shapes``. At runtime it is the same ``Page``. For those three, use the
-   ``Page`` you hold, such as ``document.pages[0]``.
+   Typed code sees ``shape.page`` as :class:`vsdxkit.shapes.PageView`. The
+   same type is the page half of ``shape.parent`` (``PageView | Shape``) and
+   of ``shape.master_page`` (``PageView | None``). ``PageView`` lists the
+   page's API apart from ``swimlanes``, ``require_swimlanes`` and ``vis``,
+   whose types are declared above ``shapes``. It has the page's setters, so
+   ``shape.page.name = "Summary"`` type-checks. At runtime it is the same
+   ``Page``. For those three, use the ``Page`` you hold, such as
+   ``document.pages[0]``.
 
    The same holds one level up. Typed code sees ``page.vis`` as
    :class:`vsdxkit.pages.DocumentView`, which lists the document's

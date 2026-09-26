@@ -34,20 +34,29 @@ logger: Logger = get_logger(__name__)
 class PageView(Protocol):
     """A page, as :attr:`Shape.page` gives it.
 
-    The type of a shape's back-reference to its page. It is read-only: it
-    lists the page's public API apart from ``swimlanes``,
-    ``require_swimlanes`` and ``vis``, whose types are declared above this
-    module. To change a page (set ``name``, ``width``, ``height``,
-    ``background`` and so on), use the :class:`vsdxkit.pages.Page` you
-    hold, such as ``document.pages[0]``. At runtime the object is that
-    ``Page`` itself.
+    The type of a shape's back-reference to its page. It lists the page's
+    public API apart from ``swimlanes``, ``require_swimlanes`` and ``vis``,
+    whose types are declared above this module, and it can be written as the
+    page can: ``shape.page.name = "Summary"`` renames the page. At runtime
+    the object is that :class:`vsdxkit.pages.Page` itself.
+
+    A shape on a master page has a master page here. Renaming one, or
+    reading or setting its ``background``, raises
+    :class:`vsdxkit.errors.InvalidOperationError`, because a master page has
+    no entry in the document's page list.
     """
 
     @property
     def name(self) -> str: ...
 
+    @name.setter
+    def name(self, value: str) -> None: ...
+
     @property
     def background(self) -> bool: ...
+
+    @background.setter
+    def background(self, value: bool) -> None: ...
 
     @property
     def index_num(self) -> int | None: ...
@@ -55,11 +64,23 @@ class PageView(Protocol):
     @property
     def xml(self) -> PartTree: ...
 
+    # `PartTree`, where `Page.xml`'s setter takes `PartTree | None`: mypy reads
+    # `Page`'s class-level `xml: PartTree` as its setter type, and a wider
+    # setter here would stop `Page` satisfying this protocol
+    @xml.setter
+    def xml(self, value: PartTree) -> None: ...
+
     @property
     def width(self) -> float: ...
 
+    @width.setter
+    def width(self, value: float | str | None) -> None: ...
+
     @property
     def height(self) -> float: ...
+
+    @height.setter
+    def height(self, value: float | str | None) -> None: ...
 
     @property
     def is_master_page(self) -> bool: ...
@@ -815,10 +836,14 @@ class Shape:
             If not specified, the copy will be placed in the original shape's page.
         :type page: :class:`PageView` (Optional), which must be a :class:`vsdxkit.pages.Page` at runtime
         :raises TypeError: if ``page`` is not a :class:`vsdxkit.pages.Page`
-        :raises InvalidOperationError: if the destination page is no longer in its document; nothing is written
+        :raises InvalidOperationError: if this shape has been deleted or its page removed, or if the
+            destination page is no longer in its document; nothing is written
 
         :return: :class:`Shape` the new copy of shape
         """
+        # the source first: a deleted shape, or one on a removed page, is read
+        # no more than it is written, and copying it would bring it back
+        self._require_attached("Shape.copy()")
         dst_page = self._page if page is None else self._page._peer(page)
         if not dst_page._attached():
             raise InvalidOperationError(

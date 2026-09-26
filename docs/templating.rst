@@ -47,6 +47,17 @@ executable reference for the exact shape arrangement:
 * ``tests/test_jinja_loop_showif.vsdx``
 * ``tests/test_jinja_page_showif.vsdx``
 
+Page names
+----------
+
+A page's name is a template too. A page named ``{{ quarter }} report`` is
+named ``Q3 report`` after ``document.render({"quarter": "Q3"})``. A
+``{% showif expression %}`` anywhere in the name decides whether the page is
+kept, as it decides for a shape, and comes out of the name before the name is
+rendered. The render does not check that the names it gives are unique, and
+``document.pages.by_name`` refuses a name two pages share, so give each page a
+name no other page renders to.
+
 Self assignments
 ----------------
 
