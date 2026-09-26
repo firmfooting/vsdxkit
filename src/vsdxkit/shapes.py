@@ -815,8 +815,18 @@ class Shape:
         """Whether this shape is still on its page, and its page still in its document.
 
         A shape deleted from its page, or on a page removed from the document,
-        is detached. Its ``ID``, ``xml``, ``repr`` and hash stay readable; any
-        other read or write raises :class:`InvalidOperationError`.
+        is detached. What its element's attributes and its place say stays
+        readable: ``ID``, ``xml``, ``tag``, ``shape_type``, ``shape_name``,
+        ``master_page_ID``, ``master_shape_ID``, the three style IDs,
+        ``text_color``, ``page``, ``parent``, ``repr``, equality and hash. So
+        does what is found through its page and master: ``is_master_shape``,
+        ``master_page``, ``master_shape`` and ``universal_name``. ``children``
+        and ``descendants`` hand out a collection, which raises when read.
+
+        Reading its cells, coordinates, sizes, text, geometry, data properties
+        or connectors raises :class:`InvalidOperationError`, as does every
+        write but one: the ``master_page_ID`` setter is not guarded, and
+        writes to the detached element.
         """
         page = self._page
         if not page._attached():
@@ -891,7 +901,7 @@ class Shape:
 
     @property
     def tag(self) -> str:
-        """The element's tag: ``<Shape>``, or ``<Shapes>`` for a group's container."""
+        """The element's tag in ElementTree's ``{uri}name`` form: ``{http://schemas.microsoft.com/office/visio/2012/main}Shape``."""
         return self.xml.tag
 
     @property
@@ -1378,6 +1388,8 @@ class Shape:
 
         Setting it writes the cell's value: a number, or a string written as
         it stands. A formula the cell has is kept.
+
+        :raises MalformedPackageError: if the ``LineWeight`` value is not a number
         """
         val = self.cell_value("LineWeight")
         return to_float(val, cell="LineWeight")
@@ -1561,6 +1573,8 @@ class Shape:
         Setting it moves the shape: it writes the cell's value, a number or a
         string written as it stands, and keeps a formula the cell has.
         ``None`` raises :class:`TypeError`.
+
+        :raises MalformedPackageError: if the ``PinX`` value is not a number
         """
         return to_float(self.cell_value("PinX"), cell="PinX")
 
@@ -1573,6 +1587,8 @@ class Shape:
         """The y of the shape's pin, in inches from its parent's bottom edge; ``None`` where neither the shape nor its master has a ``PinY`` cell.
 
         Setting it writes the cell's value, as :attr:`x` does.
+
+        :raises MalformedPackageError: if the ``PinY`` value is not a number
         """
         return to_float(self.cell_value("PinY"), cell="PinY")
 
@@ -1585,6 +1601,8 @@ class Shape:
         """The x of the pin in the shape's own coordinates, in inches from its left edge; ``None`` where neither the shape nor its master has a ``LocPinX`` cell.
 
         Setting it writes the cell's value, as :attr:`x` does.
+
+        :raises MalformedPackageError: if the ``LocPinX`` value is not a number
         """
         return to_float(self.cell_value("LocPinX"), cell="LocPinX")
 
@@ -1597,6 +1615,8 @@ class Shape:
         """The y of the pin in the shape's own coordinates, in inches from its bottom edge; ``None`` where neither the shape nor its master has a ``LocPinY`` cell.
 
         Setting it writes the cell's value, as :attr:`x` does.
+
+        :raises MalformedPackageError: if the ``LocPinY`` value is not a number
         """
         return to_float(self.cell_value("LocPinY"), cell="LocPinY")
 
@@ -1610,6 +1630,8 @@ class Shape:
 
         Setting it writes the cell's value, as :attr:`x` does; the glue is
         left as it was.
+
+        :raises MalformedPackageError: if the ``BeginX`` value is not a number
         """
         return to_float(self.cell_value("BeginX"), cell="BeginX")
 
@@ -1622,6 +1644,8 @@ class Shape:
         """The y of a 1-D shape's begin point, in inches in its parent's coordinates; ``None`` where neither the shape nor its master has a ``BeginY`` cell.
 
         Setting it writes the cell's value, as :attr:`begin_x` does.
+
+        :raises MalformedPackageError: if the ``BeginY`` value is not a number
         """
         return to_float(self.cell_value("BeginY"), cell="BeginY")
 
@@ -1634,6 +1658,8 @@ class Shape:
         """The x of a 1-D shape's end point, in inches in its parent's coordinates; ``None`` where neither the shape nor its master has an ``EndX`` cell.
 
         Setting it writes the cell's value, as :attr:`begin_x` does.
+
+        :raises MalformedPackageError: if the ``EndX`` value is not a number
         """
         return to_float(self.cell_value("EndX"), cell="EndX")
 
@@ -1646,6 +1672,8 @@ class Shape:
         """The y of a 1-D shape's end point, in inches in its parent's coordinates; ``None`` where neither the shape nor its master has an ``EndY`` cell.
 
         Setting it writes the cell's value, as :attr:`begin_x` does.
+
+        :raises MalformedPackageError: if the ``EndY`` value is not a number
         """
         return to_float(self.cell_value("EndY"), cell="EndY")
 
@@ -1711,6 +1739,8 @@ class Shape:
 
         Setting it writes the cell's value, as :attr:`x` does; the geometry
         is left as it was.
+
+        :raises MalformedPackageError: if the ``Height`` value is not a number
         """
         return to_float(self.cell_value("Height"), cell="Height")
 
@@ -1723,6 +1753,8 @@ class Shape:
         """The shape's width, in inches, which for a 1-D shape is its length; ``None`` where neither the shape nor its master has a ``Width`` cell.
 
         Setting it writes the cell's value, as :attr:`height` does.
+
+        :raises MalformedPackageError: if the ``Width`` value is not a number
         """
         return to_float(self.cell_value("Width"), cell="Width")
 
@@ -1735,6 +1767,8 @@ class Shape:
         """The shape's rotation about its pin, in radians, anticlockwise; ``None`` where neither the shape nor its master has an ``Angle`` cell.
 
         Setting it writes the cell's value, as :attr:`x` does.
+
+        :raises MalformedPackageError: if the ``Angle`` value is not a number
         """
         return to_float(self.cell_value("Angle"), cell="Angle")
 
@@ -1752,7 +1786,7 @@ class Shape:
         rotation is not applied. A missing cell counts as 0, and a shape with
         none of ``BeginX``, ``PinX`` and ``LocPinX`` gives four zeros.
         """
-        # get absolute bounds of a shape relative to page
+        # the extent in the parent's coordinates: the page's only for a top-level shape
         s = self
         if s.begin_x is None and s.x is None and s.loc_x is None:
             return 0.0, 0.0, 0.0, 0.0  # shape has no bounds
@@ -1772,7 +1806,8 @@ class Shape:
         is added, so a shape two groups deep is not brought to the page. A
         shape outside any group gives its :attr:`bounds` unchanged.
         """
-        # get bounds of a shape relative to it's parent (if shape has a parent)
+        # a group member's bounds are in the group's coordinates; adding the
+        # group's corner puts them in the coordinates the group sits in
         bx, by, ex, ey = self.bounds
         if isinstance(self._parent, Shape) and self._parent.shape_type == "Group":
             pbx, pby, _pex, _pey = self._parent.bounds
@@ -1869,7 +1904,7 @@ class Shape:
                     c.value = v
 
     def _text_runs(self) -> tuple[list[Element], str, list[Element], str]:
-        """This shape's text, split by `text_runs`, with master inheritance applied.
+        """This shape's text, split by `_text_runs_of`, with master inheritance applied.
 
         Inheritance is the part only a Shape can resolve: a shape with no Text
         element of its own shows its master's text, and inherits none of the
@@ -1982,11 +2017,17 @@ class Shape:
         the schema does not allow and which this library's own traversal cannot
         see, neither through ``children`` nor through ``Page._descendants()``.
 
-        This places a shape, it does not move one. An element already in a page
-        gains a second parent rather than changing parent, because
-        ElementTree's elements have no parent to change; the page would then
-        hold the same shape twice, under one ID and at one position. Copy the
-        shape and append the copy instead.
+        A shape already on this page, such as a fresh ``shape.copy()``, is
+        moved: its element is taken out of whatever held it first, so it never
+        has two parents, and it keeps its IDs, so the ``Connect`` records
+        naming it still hold. A shape whose element is not on the page, such
+        as one built by hand or one deleted from this page, is placed, with
+        IDs the page is not using. A shape on another page is refused; copy
+        it onto this page first.
+
+        :raises InvalidOperationError: if this shape is detached or is not a
+            group, if ``append_shape`` is on another page, or if it would end
+            up inside itself
         """
         # ahead of every check and every write, so a detached group refuses
         # before anything is moved into it
@@ -2163,8 +2204,10 @@ class ShapeCollection:
     Lookups say how many shapes they expect. ``by_*`` wants at most one and
     answers None for none; ``require_*`` wants exactly one and raises
     :class:`NotFoundError` for none; both raise :class:`InvalidOperationError`
-    when several match, rather than choosing one. ``matching_*`` returns every
-    match.
+    when several match, rather than choosing one. The exception is an ID:
+    two shapes with one ID make the page invalid, so ``by_id`` and
+    ``require_id`` raise :class:`PackageError` for them. ``matching_*``
+    returns every match.
     """
 
     def __init__(self, members: Callable[[], list[Shape]], scope: Callable[[], str]) -> None:
