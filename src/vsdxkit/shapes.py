@@ -1,3 +1,18 @@
+"""Shapes, and the parts of a shape a caller reads and writes.
+
+A :class:`Shape` is one shape on a page, or a group holding others; a
+:class:`Connector` is a 1-D shape whose ends can be glued to shapes. A
+:class:`Cell` is one of a shape's ShapeSheet cells, and a
+:class:`DataProperty` one of its Shape Data properties. A
+:class:`ShapeCollection` is a live scope of shapes to iterate and look shapes
+up in, and :class:`PageView` is the page as a shape sees it.
+
+Reach shapes through a page, as ``page.children`` (its top-level shapes) or
+``page.shapes`` (every shape, at any depth), never by constructing one: each
+is a view onto an element of the page's XML, and the page builds it.
+``page.create_shape(...)`` and :meth:`Shape.copy` make new ones.
+"""
+
 from __future__ import annotations
 
 import copy
@@ -29,6 +44,7 @@ from vsdxkit.glue import ConnectorOptions, Glue, Routing
 from vsdxkit.shape_kind import ShapeKind
 
 _logger: Logger = get_logger(__name__)
+"""This module's logger, under the ``vsdxkit`` hierarchy the library never configures a handler for."""
 
 
 class PageView(Protocol):
@@ -47,22 +63,44 @@ class PageView(Protocol):
     """
 
     @property
-    def name(self) -> str: ...
+    def name(self) -> str:
+        """The page's name.
+
+        Setting it writes the new name as both the page's name and its
+        universal name, in the document's page list and its ``app.xml``
+        titles. On a master page it raises
+        :class:`vsdxkit.errors.InvalidOperationError`.
+        """
+        ...
 
     @name.setter
     def name(self, value: str) -> None: ...
 
     @property
-    def background(self) -> bool: ...
+    def background(self) -> bool:
+        """Whether the page is a background page, which other pages can show behind their own shapes.
+
+        Setting it takes a ``bool``. On a master page, reading or setting it
+        raises :class:`vsdxkit.errors.InvalidOperationError`.
+        """
+        ...
 
     @background.setter
     def background(self, value: bool) -> None: ...
 
     @property
-    def index_num(self) -> int | None: ...
+    def index_num(self) -> int | None:
+        """The page's zero-based position in its document's pages, or ``None`` for a master page or one removed from the document."""
+        ...
 
     @property
-    def xml(self) -> PartTree: ...
+    def xml(self) -> PartTree:
+        """The page's part, parsed: its shapes and its ``Connect`` records.
+
+        Assigning a tree replaces the part the document saves, while the page
+        is still in its document.
+        """
+        ...
 
     # `PartTree`, where `Page.xml`'s setter takes `PartTree | None`: mypy reads
     # `Page`'s class-level `xml: PartTree` as its setter type, and a wider
@@ -71,28 +109,48 @@ class PageView(Protocol):
     def xml(self, value: PartTree) -> None: ...
 
     @property
-    def width(self) -> float: ...
+    def width(self) -> float:
+        """The page's width, in inches, from its page sheet's ``PageWidth`` cell.
+
+        Setting it takes a positive number, or a string that reads as one;
+        anything else raises :class:`ValueError`, and ``None`` raises
+        :class:`TypeError`.
+        """
+        ...
 
     @width.setter
     def width(self, value: float | str | None) -> None: ...
 
     @property
-    def height(self) -> float: ...
+    def height(self) -> float:
+        """The page's height, in inches, from its page sheet's ``PageHeight`` cell.
+
+        Setting it takes what :attr:`width` takes, and refuses what it refuses.
+        """
+        ...
 
     @height.setter
     def height(self, value: float | str | None) -> None: ...
 
     @property
-    def is_master_page(self) -> bool: ...
+    def is_master_page(self) -> bool:
+        """Whether this is one of the document's master pages rather than a drawing page."""
+        ...
 
     @property
-    def children(self) -> ShapeCollection: ...
+    def children(self) -> ShapeCollection:
+        """The page's top-level shapes."""
+        ...
 
     @property
-    def shapes(self) -> ShapeCollection: ...
+    def shapes(self) -> ShapeCollection:
+        """Every shape on the page, at any depth, connectors included: depth first, parents first."""
+        ...
 
     @property
-    def connectors(self) -> tuple[Connector, ...]: ...
+    def connectors(self) -> tuple[Connector, ...]:
+        """Every connector on the page, at any depth, glued at both ends, one or neither."""
+        ...
 
     def connect(
         self,
@@ -103,7 +161,12 @@ class PageView(Protocol):
         routing: Routing = Routing.DEFAULT,
         from_point: int = 0,
         to_point: int = 0,
-    ) -> Connector: ...
+    ) -> Connector:
+        """Create a connector glued from ``source`` to ``target``, both shapes on this page.
+
+        See :meth:`vsdxkit.pages.Page.connect` for the options and what it raises.
+        """
+        ...
 
     def create_shape(
         self,
@@ -114,11 +177,20 @@ class PageView(Protocol):
         width: float | None = None,
         height: float | None = None,
         text: str | None = None,
-    ) -> Shape: ...
+    ) -> Shape:
+        """Create a shape on this page, centred on ``x``, ``y``.
 
-    def apply_text_context(self, context: dict[str, object]) -> None: ...
+        See :meth:`vsdxkit.pages.Page.create_shape` for the arguments and what it raises.
+        """
+        ...
 
-    def find_replace(self, old: str, new: str) -> None: ...
+    def apply_text_context(self, context: dict[str, object]) -> None:
+        """Replace each ``{{key}}`` in the text of every shape on the page with its value from ``context``."""
+        ...
+
+    def find_replace(self, old: str, new: str) -> None:
+        """Replace ``old`` with ``new`` in the text of every shape on the page."""
+        ...
 
 
 class _PageSeam(PageView, _ConnectorPage, Protocol):
@@ -126,39 +198,74 @@ class _PageSeam(PageView, _ConnectorPage, Protocol):
     own bookkeeping, and the document operations the page passes on."""
 
     @property
-    def _page_id(self) -> str: ...
+    def _page_id(self) -> str:
+        """The page's ID in the package: a drawing page's in pages.xml, a master's in masters.xml.
+
+        A copied shape is pointed at the master it instances by this ID.
+        """
+        ...
 
     @property
-    def _filename(self) -> str: ...
+    def _filename(self) -> str:
+        """The name of the page's part, which a copy relates its destination page to for each master it uses."""
+        ...
 
     @property
-    def _pagesheet_xml(self) -> Element: ...
+    def _pagesheet_xml(self) -> Element:
+        """The page's `PageSheet` element, where `universal_name` reads a master's Layer section."""
+        ...
 
-    def _children(self) -> list[Shape]: ...
+    def _children(self) -> list[Shape]:
+        """What :attr:`children` holds, as a list, for the library's own walks."""
+        ...
 
-    def _attached(self) -> bool: ...
+    def _attached(self) -> bool:
+        """Whether the page is still in its document: a shape is attached only while its page is."""
+        ...
 
-    def _delete(self, shapes: Iterable[Shape], gone_ids: set[str]) -> None: ...
+    def _delete(self, shapes: Iterable[Shape], gone_ids: set[str]) -> None:
+        """The one deletion: `shapes`, the connectors glued to any of `gone_ids`, and every record naming them."""
+        ...
 
-    def _ensure_page_master_rel(self, master_part_name: str) -> None: ...
+    def _ensure_page_master_rel(self, master_part_name: str) -> None:
+        """Ensure this page's rels relate it to the master part named `master_part_name`."""
+        ...
 
-    def _carry_relationships(self, copied: Element, source: _PageSeam) -> None: ...
+    def _carry_relationships(self, copied: Element, source: _PageSeam) -> None:
+        """Relate this page to what each ``r:id`` in `copied` names on `source`, and point the copy at it."""
+        ...
 
-    def _peer(self, other: PageView) -> _PageSeam: ...
+    def _peer(self, other: PageView) -> _PageSeam:
+        """`other` as a page of this library, for a shape copied onto it."""
+        ...
 
-    def _same_document(self, other: _PageSeam) -> bool: ...
+    def _same_document(self, other: _PageSeam) -> bool:
+        """Whether `other` is a page of this page's document, which decides whether a copy crosses documents."""
+        ...
 
-    def _master_by_id(self, master_id: str) -> _PageSeam | None: ...
+    def _master_by_id(self, master_id: str) -> _PageSeam | None:
+        """The master page with this ID, as `Shape.master_page_ID` names it, or None."""
+        ...
 
-    def _master_is_one_d(self, master_id: str, master_shape_id: str | None) -> bool: ...
+    def _master_is_one_d(self, master_id: str, master_shape_id: str | None) -> bool:
+        """Whether the master shape an instance inherits from is 1-D, which makes the instance a `Connector`."""
+        ...
 
-    def _master_revision(self) -> int: ...
+    def _master_revision(self) -> int:
+        """The document's count of changes to its masters: `Shape.master_shape`'s memo holds while it stays the same."""
+        ...
 
-    def _masters_for(self, master_ids: list[str], source: _PageSeam) -> Mapping[str, _PageSeam]: ...
+    def _masters_for(self, master_ids: list[str], source: _PageSeam) -> Mapping[str, _PageSeam]:
+        """This document's master for each of `master_ids`, as `source`'s document numbers them."""
+        ...
 
-    def _copy_shape_xml(self, element: Element) -> Element: ...
+    def _copy_shape_xml(self, element: Element) -> Element:
+        """A copy of `element` at this page's top level, with IDs unused on this page."""
+        ...
 
-    def _renumber_shape_ids(self, subtree: Element, id_map: dict[str, int] | None = None) -> dict[str, int]: ...
+    def _renumber_shape_ids(self, subtree: Element, id_map: dict[str, int] | None = None) -> dict[str, int]:
+        """Give a subtree IDs unused on this page, and follow them everywhere the page writes them."""
+        ...
 
 
 def _is_connector(shape: Shape) -> bool:
@@ -202,6 +309,11 @@ def _drop_unreachable_master_shapes(
     """
 
     def check(element: Element, master: str | None, *, own_counts: bool) -> None:
+        """Drop `element`'s `MasterShape` if `master` is None or holds no shape with that ID.
+
+        An element naming its own `Master` is skipped unless `own_counts`
+        says that `Master` is the one it was given from its group.
+        """
         member = element.attrib.get("MasterShape")
         checked = member is not None and (element.attrib.get("Master") is None or own_counts)
         if checked and (master is None or member not in members.get(master, frozenset())):
@@ -227,6 +339,7 @@ def _coordinate_value(value: float | str | None) -> str:
 # take depends on which namespace prefix is in force, and matching it as text
 # is what tied the old implementation to ElementTree's `ns0:` prefix.
 _TEXT_RUN_TAGS = frozenset({f"{namespace}cp", f"{namespace}pp"})
+"""The tags of the character and paragraph formatting runs that editing a shape's text leaves in place."""
 
 
 def _is_formatting_run(element: Element) -> bool:
@@ -329,21 +442,31 @@ class Cell(ShapePart):
     """Represents a Cell element in a vsdx xml file"""
 
     xml: Element
+    """The ``<Cell>`` element this reads and writes."""
     shape: Shape
+    """The shape the cell belongs to. A write through the cell is refused once that shape is detached."""
 
     def __init__(self, xml: Element, shape: Shape):
+        """Wrap `xml`, one of `shape`'s cell elements; `Shape.cells` and the cell writers make these."""
         self.xml = xml
         self.shape = shape
 
     @property
     @override
     def _shape(self) -> AttachedShape:
+        """The shape the detached-shape guard asks, so a write through a cell of a deleted shape is refused."""
         # the shape, not its document: a write through a part of a deleted
         # shape is refused, as a write to the shape itself is
         return self.shape
 
     @property
     def value(self) -> str | None:
+        """The cell's value, its ``V`` attribute, as the text the file holds; ``None`` when it has none.
+
+        Setting it writes ``str(value)`` to ``V`` and leaves the formula as it
+        was. ``None`` raises :class:`TypeError`, and a write to a detached
+        shape's cell raises :class:`InvalidOperationError`.
+        """
         return self.xml.attrib.get("V")
 
     @value.setter
@@ -353,6 +476,12 @@ class Cell(ShapePart):
 
     @property
     def formula(self) -> str | None:
+        """The cell's formula, its ``F`` attribute, or ``None`` when it has none.
+
+        Setting it writes a string to ``F`` and leaves the value as it was:
+        nothing here evaluates the formula. It refuses what :attr:`value`
+        refuses.
+        """
         return self.xml.attrib.get("F")
 
     @formula.setter
@@ -362,9 +491,11 @@ class Cell(ShapePart):
 
     @property
     def name(self) -> str | None:
+        """The cell's name, its ``N`` attribute, such as ``PinX``; ``None`` for a cell without one."""
         return self.xml.attrib.get("N")
 
     def __repr__(self) -> str:
+        """Shows the cell's name, value and formula."""
         return f"Cell: name={self.name} val={self.value} formula={self.formula}"
 
 
@@ -378,12 +509,31 @@ class DataProperty(InheritedRow, ShapePart):
     """
 
     shape: Shape
+    """The shape the property was read through: for a property inherited from a master, the instance."""
     xml: Element
+    """The property's ``<Row>`` element.
+
+    For an inherited property it is the master's row, until the first write
+    through :attr:`value`, or a call to :meth:`make_local`, gives the
+    instance a row of its own.
+    """
     name: str | None
+    """The row's ``N`` attribute, which an override row shares with its master's row; ``None`` for a row without one."""
     value_type: str | None
+    """The ``Type`` cell's value, as Visio numbers property types (``"0"`` text, ``"2"`` number, ``"5"`` date, and so on); ``None`` where there is none."""
     label: str | None
+    """The label Visio shows the property under, which :attr:`Shape.data_properties` keys by; ``None`` where there is none.
+
+    It is read once, when the property is built, as are :attr:`value_type`,
+    :attr:`prompt` and :attr:`sort_key`. A row with no ``Label`` cell, which
+    is how an override of a master's property is written, takes all four from
+    the master's property of the same name, and leaves them ``None`` where
+    the master has none.
+    """
     prompt: str | None
+    """The ``Prompt`` cell's value, the description Visio gives the property; ``None`` where there is none."""
     sort_key: str | None
+    """The ``SortKey`` cell's value, which orders the properties in Visio's Shape Data window; ``None`` where there is none."""
 
     def __init__(self, *, xml: Element, shape: Shape):
         """init a DataProperty from a property xml element in a Shape object"""
@@ -432,6 +582,7 @@ class DataProperty(InheritedRow, ShapePart):
     @property
     @override
     def _shape(self) -> AttachedShape:
+        """The shape the detached-shape guard asks: the instance, for an inherited property, so a write is refused once it is deleted."""
         # the shape, not its document: a write through a part of a deleted
         # shape is refused, as a write to the shape itself is
         return self.shape
@@ -601,16 +752,30 @@ class Shape:
     """Represents a single shape, or a group shape containing other shapes"""
 
     xml: Element
+    """The shape's ``<Shape>`` element, which this object is a view onto: reads come from it and writes go to it."""
     _parent: _PageSeam | Shape
+    """The page, or the group `Shape`, this shape sits in: set by `_wrap`, repointed by `append_shape`."""
     _page: _PageSeam
+    """The page the shape is on, a master page for a master's shape: the seam every page and document operation goes through."""
     _geometry: Geometry | None
+    """The `Geometry` over `_geometry_xml`, built on the first read of `geometry` and held after it; None until then."""
     _geometry_xml: Element | None
+    """The shape's own Geometry section, located when the wrapper is built, or None where it has none."""
     _master_shape: Shape | None
+    """What `master_shape` last resolved, None included; good while `_master_shape_key` still matches."""
     _master_shape_resolved: bool
+    """Whether `_master_shape` holds a resolution at all, since None is one."""
     _master_shape_key: tuple[str | None, str | None, int, tuple[Element, ...] | None] | None
+    """The `_master_shape_state` the memo was built from; a different state resolves the master again."""
     _slot: int | None
+    """Where the element last sat among its container's children, which `_held_by` tries first; None until found."""
 
     def __init__(self, xml: Element, parent: _PageSeam | Shape, page: _PageSeam):
+        """Wrap `xml`, a shape element held by `parent` on `page`.
+
+        The library builds every wrapper through `_wrap`, which picks
+        `Connector` for a 1-D shape; a caller reaches shapes through a page.
+        """
         self.xml = xml
         self._parent = parent
         self._page = page
@@ -627,6 +792,7 @@ class Shape:
         self._geometry_xml = geometry if type(geometry) is Element else None
 
     def __repr__(self) -> str:
+        """Shows the tag, the ID, whether the shape is a master's, its ``Type`` and its text; only the tag and ID once detached."""
         if not self.is_attached:
             return f"<Shape tag={self.tag} ID={self.ID} detached >"
         return f"<Shape tag={self.tag} ID={self.ID} is_master=({self.is_master_shape}) type={self.shape_type} text='{self.text}' >"
@@ -664,6 +830,11 @@ class Shape:
         return self._held_by_parents() or self.xml in page.xml.getroot().iter(self.xml.tag)
 
     def _held_by_parents(self) -> bool:
+        """Whether every link of the wrapper's parent chain, up to the page, is still held by its container.
+
+        True proves the element is on the page; False proves nothing, since
+        another wrapper may have moved the element.
+        """
         shape: Shape = self
         while True:
             container = shape._container()
@@ -700,6 +871,11 @@ class Shape:
         return True
 
     def _require_attached(self, operation: str) -> None:
+        """Raise :class:`InvalidOperationError`, naming `operation`, once the shape is detached.
+
+        This is the guard `AttachedShape` asks for, so a shape's cells and
+        properties refuse through it too.
+        """
         if not self.is_attached:
             raise InvalidOperationError(
                 f"{operation} refused: shape {self.ID} on page {self._page.name!r} is no longer in the document"
@@ -818,6 +994,14 @@ class Shape:
 
     @property
     def universal_name(self) -> str | None:
+        """The shape's universal name, its ``NameU`` attribute, or ``None``.
+
+        Unlike :attr:`shape_name`, it does not fall back to the localised
+        name. For an instance of a master, a ``NameUniv`` cell sitting
+        directly in the Layer section of the master's page sheet takes its
+        place; Visio writes that cell inside a layer's row, where this does
+        not look.
+        """
         name_univ = self.xml.attrib.get("NameU")  # default to shapes own unicode name
         if self.master_shape:
             page_sheet = self.master_shape._page._pagesheet_xml
@@ -932,6 +1116,14 @@ class Shape:
         return (self.master_page_ID, self.master_shape_ID, self._page._master_revision(), children)
 
     def _resolve_master_shape(self) -> Shape | None:
+        """Find `master_shape` afresh, for the memo to hold.
+
+        The master's first top-level shape, or, where this shape names a
+        `MasterShape`, the shape of that ID inside it. None without a master,
+        where the document has no master of that ID, or where no shape inside
+        has the ID `MasterShape` names. A master page with no shapes raises
+        IndexError.
+        """
         if self.master_page_ID is None:
             return None  # no master set for this Shape
         master_page = self._page._master_by_id(self.master_page_ID)
@@ -1042,6 +1234,14 @@ class Shape:
         return None if found is None else Cell(xml=found, shape=self)
 
     def cell_value(self, name: str) -> str | None:
+        """The value of cell ``name``: this shape's own, else its master's; ``None`` where neither has the cell.
+
+        ``name`` takes the forms :attr:`cells` keys by, such as ``PinX`` or
+        ``Geometry/MoveTo/X``. A cell of the shape's own that has no value
+        answers ``None`` without looking at the master.
+
+        :raises InvalidOperationError: if the shape is detached
+        """
         self._require_attached(f"reading cell {name}")
         cell = self._cell(name)
         if cell:
@@ -1054,6 +1254,13 @@ class Shape:
         return None
 
     def cell_formula(self, name: str) -> str | None:
+        """The formula of cell ``name``: this shape's own, else its master's; ``None`` where neither has the cell.
+
+        ``name`` is as :meth:`cell_value` takes it. A cell of the shape's own
+        that has no formula answers ``None`` without looking at the master.
+
+        :raises InvalidOperationError: if the shape is detached
+        """
         self._require_attached(f"reading cell {name}")
         cell = self._cell(name)
         if cell:
@@ -1130,6 +1337,11 @@ class Shape:
 
     @property
     def line_style_id(self) -> str | None:
+        """The ID of the style the shape's line takes, its ``LineStyle`` attribute; ``None`` where it has none of its own.
+
+        Setting it takes an ID as a ``str`` or an ``int``, and does not check
+        that the document has a style of that ID.
+        """
         return self.xml.attrib.get("LineStyle")
 
     @line_style_id.setter
@@ -1138,6 +1350,10 @@ class Shape:
 
     @property
     def fill_style_id(self) -> str | None:
+        """The ID of the style the shape's fill takes, its ``FillStyle`` attribute; ``None`` where it has none of its own.
+
+        Setting it takes what :attr:`line_style_id` takes.
+        """
         return self.xml.attrib.get("FillStyle")
 
     @fill_style_id.setter
@@ -1146,6 +1362,10 @@ class Shape:
 
     @property
     def text_style_id(self) -> str | None:
+        """The ID of the style the shape's text takes, its ``TextStyle`` attribute; ``None`` where it has none of its own.
+
+        Setting it takes what :attr:`line_style_id` takes.
+        """
         return self.xml.attrib.get("TextStyle")
 
     @text_style_id.setter
@@ -1154,6 +1374,11 @@ class Shape:
 
     @property
     def line_weight(self) -> float | None:
+        """The thickness of the shape's line, in inches, from its ``LineWeight`` cell or its master's; ``None`` where neither has one.
+
+        Setting it writes the cell's value: a number, or a string written as
+        it stands. A formula the cell has is kept.
+        """
         val = self.cell_value("LineWeight")
         return to_float(val, cell="LineWeight")
 
@@ -1163,6 +1388,12 @@ class Shape:
 
     @property
     def line_color(self) -> str | None:
+        """The colour of the shape's line, from its ``LineColor`` cell or its master's; ``None`` where neither has one.
+
+        It is the text the file holds, such as ``#FF0000`` or an index into
+        the document's colours. Setting it writes the cell's value as it
+        stands, and keeps a formula the cell has.
+        """
         return self.cell_value("LineColor")
 
     @line_color.setter
@@ -1171,6 +1402,10 @@ class Shape:
 
     @property
     def fill_color(self) -> str | None:
+        """The shape's fill colour, from its ``FillForegnd`` cell or its master's; ``None`` where neither has one.
+
+        It takes and gives what :attr:`line_color` does.
+        """
         return self.cell_value("FillForegnd")
 
     @fill_color.setter
@@ -1200,6 +1435,7 @@ class Shape:
         return row.find(f'{namespace}Cell[@N="Color"]') if row is not None else None
 
     def _character_row(self, section: Element) -> Element | None:
+        """The row of `section` that `_character_row_index` names, which formats the start of the text; None where there is none."""
         index = self._character_row_index()
         for row in section.findall(f"{namespace}Row"):
             if row.attrib.get("IX", "0") == index:
@@ -1301,6 +1537,12 @@ class Shape:
 
     @property
     def end_arrow(self) -> str | None:
+        """The arrowhead at the line's end, from its ``EndArrow`` cell or its master's; ``None`` where neither has one.
+
+        It is the text the file holds: an arrowhead's index, ``"0"`` for none.
+        Setting it takes an index, or ``True`` for arrowhead 13 and ``False``
+        for none.
+        """
         return self.cell_value("EndArrow")
 
     @end_arrow.setter
@@ -1313,6 +1555,13 @@ class Shape:
 
     @property
     def x(self) -> float | None:
+        """The x of the shape's pin, in inches from its parent's left edge; ``None`` where neither the shape nor its master has a ``PinX`` cell.
+
+        The pin is the point the shape rotates about, usually its centre.
+        Setting it moves the shape: it writes the cell's value, a number or a
+        string written as it stands, and keeps a formula the cell has.
+        ``None`` raises :class:`TypeError`.
+        """
         return to_float(self.cell_value("PinX"), cell="PinX")
 
     @x.setter
@@ -1321,6 +1570,10 @@ class Shape:
 
     @property
     def y(self) -> float | None:
+        """The y of the shape's pin, in inches from its parent's bottom edge; ``None`` where neither the shape nor its master has a ``PinY`` cell.
+
+        Setting it writes the cell's value, as :attr:`x` does.
+        """
         return to_float(self.cell_value("PinY"), cell="PinY")
 
     @y.setter
@@ -1329,6 +1582,10 @@ class Shape:
 
     @property
     def loc_x(self) -> float | None:
+        """The x of the pin in the shape's own coordinates, in inches from its left edge; ``None`` where neither the shape nor its master has a ``LocPinX`` cell.
+
+        Setting it writes the cell's value, as :attr:`x` does.
+        """
         return to_float(self.cell_value("LocPinX"), cell="LocPinX")
 
     @loc_x.setter
@@ -1337,6 +1594,10 @@ class Shape:
 
     @property
     def loc_y(self) -> float | None:
+        """The y of the pin in the shape's own coordinates, in inches from its bottom edge; ``None`` where neither the shape nor its master has a ``LocPinY`` cell.
+
+        Setting it writes the cell's value, as :attr:`x` does.
+        """
         return to_float(self.cell_value("LocPinY"), cell="LocPinY")
 
     @loc_y.setter
@@ -1345,6 +1606,11 @@ class Shape:
 
     @property
     def begin_x(self) -> float | None:
+        """The x of a 1-D shape's begin point, in inches in its parent's coordinates; ``None`` where neither the shape nor its master has a ``BeginX`` cell, as on a 2-D shape.
+
+        Setting it writes the cell's value, as :attr:`x` does; the glue is
+        left as it was.
+        """
         return to_float(self.cell_value("BeginX"), cell="BeginX")
 
     @begin_x.setter
@@ -1353,6 +1619,10 @@ class Shape:
 
     @property
     def begin_y(self) -> float | None:
+        """The y of a 1-D shape's begin point, in inches in its parent's coordinates; ``None`` where neither the shape nor its master has a ``BeginY`` cell.
+
+        Setting it writes the cell's value, as :attr:`begin_x` does.
+        """
         return to_float(self.cell_value("BeginY"), cell="BeginY")
 
     @begin_y.setter
@@ -1361,6 +1631,10 @@ class Shape:
 
     @property
     def end_x(self) -> float | None:
+        """The x of a 1-D shape's end point, in inches in its parent's coordinates; ``None`` where neither the shape nor its master has an ``EndX`` cell.
+
+        Setting it writes the cell's value, as :attr:`begin_x` does.
+        """
         return to_float(self.cell_value("EndX"), cell="EndX")
 
     @end_x.setter
@@ -1369,6 +1643,10 @@ class Shape:
 
     @property
     def end_y(self) -> float | None:
+        """The y of a 1-D shape's end point, in inches in its parent's coordinates; ``None`` where neither the shape nor its master has an ``EndY`` cell.
+
+        Setting it writes the cell's value, as :attr:`begin_x` does.
+        """
         return to_float(self.cell_value("EndY"), cell="EndY")
 
     @end_y.setter
@@ -1376,6 +1654,15 @@ class Shape:
         self.set_cell_value("EndY", _coordinate_value(value))
 
     def move(self, x_delta: float, y_delta: float) -> None:
+        """Move the shape by ``x_delta`` and ``y_delta`` inches.
+
+        It shifts the pin, a 1-D shape's begin point, and the ``MoveTo`` and
+        ``LineTo`` rows of the shape's geometry, which are in the shape's own
+        coordinates. A 1-D shape's end point is left where it is. A pin the
+        shape lacks is taken as 0, and written.
+
+        :raises InvalidOperationError: if the shape is detached
+        """
         if self.geometry:
             self.geometry.move(x_delta, y_delta)
         if self.begin_x is not None:
@@ -1420,6 +1707,11 @@ class Shape:
 
     @property
     def height(self) -> float | None:
+        """The shape's height, in inches; ``None`` where neither the shape nor its master has a ``Height`` cell.
+
+        Setting it writes the cell's value, as :attr:`x` does; the geometry
+        is left as it was.
+        """
         return to_float(self.cell_value("Height"), cell="Height")
 
     @height.setter
@@ -1428,6 +1720,10 @@ class Shape:
 
     @property
     def width(self) -> float | None:
+        """The shape's width, in inches, which for a 1-D shape is its length; ``None`` where neither the shape nor its master has a ``Width`` cell.
+
+        Setting it writes the cell's value, as :attr:`height` does.
+        """
         return to_float(self.cell_value("Width"), cell="Width")
 
     @width.setter
@@ -1436,6 +1732,10 @@ class Shape:
 
     @property
     def angle(self) -> float | None:
+        """The shape's rotation about its pin, in radians, anticlockwise; ``None`` where neither the shape nor its master has an ``Angle`` cell.
+
+        Setting it writes the cell's value, as :attr:`x` does.
+        """
         return to_float(self.cell_value("Angle"), cell="Angle")
 
     @angle.setter
@@ -1444,6 +1744,14 @@ class Shape:
 
     @property
     def bounds(self) -> tuple[float, float, float, float]:
+        """The shape's extent as ``(x0, y0, x1, y1)``, in inches in its parent's coordinates.
+
+        For a 1-D shape these are its begin and end points, in that order, so
+        ``x0`` may be greater than ``x1``. For a 2-D shape they are its pin
+        less its local pin, and that corner plus its width and height; the
+        rotation is not applied. A missing cell counts as 0, and a shape with
+        none of ``BeginX``, ``PinX`` and ``LocPinX`` gives four zeros.
+        """
         # get absolute bounds of a shape relative to page
         s = self
         if s.begin_x is None and s.x is None and s.loc_x is None:
@@ -1457,6 +1765,13 @@ class Shape:
 
     @property
     def relative_bounds(self) -> tuple[float, float, float, float]:
+        """The shape's :attr:`bounds`, shifted by its group's ``x0`` and ``y0`` when it sits in a group.
+
+        That puts a group member's extent in the coordinates the group sits
+        in: the page's, for a member of a top-level group. Only the one group
+        is added, so a shape two groups deep is not brought to the page. A
+        shape outside any group gives its :attr:`bounds` unchanged.
+        """
         # get bounds of a shape relative to it's parent (if shape has a parent)
         bx, by, ex, ey = self.bounds
         if isinstance(self._parent, Shape) and self._parent.shape_type == "Group":
@@ -1470,6 +1785,12 @@ class Shape:
 
     @property
     def center_x_y(self) -> tuple[float | None, float | None]:
+        """A centre for the shape as ``(x, y)``, in inches in its parent's coordinates.
+
+        For a 2-D shape it is the pin, either half ``None`` where that cell
+        is missing. For a 1-D shape it is the begin point plus half the
+        width and half the height, a missing cell counting as 0.
+        """
         if self.begin_x is not None:
             x = self.begin_x + ((self.width or 0.0) / 2)
             y = (self.begin_y or 0.0) + ((self.height or 0.0) / 2)
@@ -1563,6 +1884,17 @@ class Shape:
 
     @property
     def text(self) -> str:
+        """The shape's text, without the formatting runs at its start and end or the newline Visio closes it with.
+
+        A shape with no ``Text`` element of its own shows its master's text,
+        and ``""`` where the master has none either. Setting it takes a string, writes it as
+        the shape's own text and puts back the runs at its start and end. A
+        run between two pieces of text is read as its XML markup, and written
+        back as literal text (#317).
+
+        Reading or setting it raises :class:`InvalidOperationError` once the
+        shape is detached.
+        """
         self._require_attached("reading a shape's text")
         return self._text_runs()[1]
 
@@ -1583,6 +1915,7 @@ class Shape:
         return ShapeCollection(self._descendants, self._scope)
 
     def _scope(self) -> str:
+        """How a collection of the shapes inside this one names its scope in a message: ``shape 5 on page 'Page-1'``."""
         return f"shape {self.ID} on page {self._page.name!r}"
 
     def _children(self) -> list[Shape]:
@@ -1741,6 +2074,10 @@ class Shape:
                 by_id.setdefault(shape.ID, []).append(shape)
 
         def resolve(shape_id: str | None) -> Shape | None:
+            """The one shape on the page with ID `shape_id`; None for a floating end or an ID no shape has.
+
+            Two shapes with the ID raise PackageError, as `ShapeCollection.by_id` does.
+            """
             # an end with no record is floating, whatever shapes lack an ID
             if shape_id is None:
                 return None
@@ -1774,6 +2111,7 @@ class Connector(Shape):
 
     @override
     def __repr__(self) -> str:
+        """Shows what a :class:`Shape`'s repr shows, headed ``<Connector`` instead."""
         return super().__repr__().replace("<Shape ", "<Connector ", 1)
 
     @property
@@ -1830,16 +2168,20 @@ class ShapeCollection:
     """
 
     def __init__(self, members: Callable[[], list[Shape]], scope: Callable[[], str]) -> None:
+        """A collection that calls `members` afresh for every read, and names itself in messages with `scope`."""
         self._members = members
         self._scope = scope
 
     def __repr__(self) -> str:
+        """Shows the scope, as ``<ShapeCollection page 'Page-1'>``."""
         return f"<ShapeCollection {self._scope()}>"
 
     def __iter__(self) -> Iterator[Shape]:
+        """The shapes in scope now: the collection is read afresh on each iteration, so it sees shapes added since."""
         return iter(self._members())
 
     def __len__(self) -> int:
+        """How many shapes are in scope now, walking the scope again to count them."""
         return len(self._members())
 
     def by_id(self, shape_id: str) -> Shape | None:
@@ -1889,6 +2231,7 @@ class ShapeCollection:
         return self._required(self.by_property(label, value), _describe_property(label, value))
 
     def _unique(self, matches: tuple[Shape, ...], wanted: str) -> Shape | None:
+        """The one shape in `matches`, or None for none; several raise InvalidOperationError naming their IDs."""
         if len(matches) > 1:
             ids = ", ".join(str(shape.ID) for shape in matches)
             raise InvalidOperationError(
@@ -1898,15 +2241,22 @@ class ShapeCollection:
         return matches[0] if matches else None
 
     def _required(self, found: Shape | None, wanted: str) -> Shape:
+        """`found`, as a `require_*` finder looked it up; None raises NotFoundError naming what was `wanted` and where."""
         if found is None:
             raise NotFoundError(f"no shape matches {wanted} in {self._scope()}")
         return found
 
 
 def _has_property(shape: Shape, label: str, value: str | None) -> bool:
+    """Whether `shape` has a property labelled `label` and, where `value` is given, whose value as text is `value`.
+
+    A property with no value reads as ``"None"`` here, so it matches a
+    `value` of ``"None"``.
+    """
     found = shape.data_properties.get(label)
     return found is not None and (value is None or str(found.value) == value)
 
 
 def _describe_property(label: str, value: str | None) -> str:
+    """How a finder's message names the property it looked for: ``property 'Cost'``, or ``property 'Cost' = '10'``."""
     return f"property {label!r}" if value is None else f"property {label!r} = {value!r}"
