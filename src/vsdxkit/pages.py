@@ -447,9 +447,12 @@ class Page:
     def xml(self) -> PartTree:
         """The page's part, parsed: its shapes and its ``Connect`` records.
 
+        The value is an ``xml.etree.ElementTree.ElementTree``, which a caller
+        reads and edits with the standard library.
+
         Assigning a tree replaces the part the document saves, while the page
         is still in its document; a page removed from it only holds the tree.
-        ``None`` raises :class:`vsdxkit.errors.InvalidOperationError`.
+        The setter takes such a tree; ``None`` raises :class:`vsdxkit.errors.InvalidOperationError`.
         """
         return self._xml
 
@@ -800,10 +803,10 @@ class Page:
     ) -> Connector:
         """Create a connector glued from ``source`` to ``target``, both shapes on this page.
 
-        :param glue: :attr:`Glue.DYNAMIC` walks each end round its shape to the
-            nearest side; :attr:`Glue.POINT` glues the ends to ``from_point``
+        :param glue: :attr:`~vsdxkit.glue.Glue.DYNAMIC` walks each end round its shape to the
+            nearest side; :attr:`~vsdxkit.glue.Glue.POINT` glues the ends to ``from_point``
             and ``to_point``, 0-based rows of each shape's ``Connection`` section
-        :param routing: the path between the ends; :attr:`Routing.DEFAULT` is Visio's own
+        :param routing: the path between the ends; :attr:`~vsdxkit.glue.Routing.DEFAULT` is Visio's own
         :raises InvalidOperationError: the page is no longer in its document, a shape is not on this page,
             or a connection point does not exist; nothing is written
         :returns: the new connector
@@ -855,9 +858,9 @@ class Page:
         ``kind_or_prototype`` is a built-in :class:`~vsdxkit.shape_kind.ShapeKind`,
         or a shape from this document to copy: a prototype is how a shape
         with a custom master is made. Either way the new shape is a copy made
-        by :meth:`Shape.copy`, the one way a shape is created.
+        by :meth:`~vsdxkit.shapes.Shape.copy`, the one way a shape is created.
 
-        A 1-D shape, such as :attr:`ShapeKind.LINE`, is placed by its ends: it
+        A 1-D shape, such as :attr:`~vsdxkit.shape_kind.ShapeKind.LINE`, is placed by its ends: it
         keeps its direction, and ``width`` is its length.
 
         :param width, height: the new size; the kind's or prototype's when omitted
@@ -1065,7 +1068,7 @@ class PageCollection(Sequence[Page]):
         """The page called `name`, or None.
 
         Visio keeps page names unique in a document, so two pages of one name
-        are a :class:`PackageError` rather than a choice between them.
+        are a :class:`~vsdxkit.errors.PackageError` rather than a choice between them.
         """
         matches = [page for page in self._pages if page.name == name]
         if len(matches) > 1:

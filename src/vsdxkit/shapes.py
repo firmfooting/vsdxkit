@@ -10,7 +10,7 @@ up in, and :class:`PageView` is the page as a shape sees it.
 Reach shapes through a page, as ``page.children`` (its top-level shapes) or
 ``page.shapes`` (every shape, at any depth), never by constructing one: each
 is a view onto an element of the page's XML, and the page builds it.
-``page.create_shape(...)`` and :meth:`Shape.copy` make new ones.
+``page.create_shape(...)`` and :meth:`~vsdxkit.shapes.Shape.copy` make new ones.
 """
 
 from __future__ import annotations
@@ -97,8 +97,11 @@ class PageView(Protocol):
     def xml(self) -> PartTree:
         """The page's part, parsed: its shapes and its ``Connect`` records.
 
+        The value is an ``xml.etree.ElementTree.ElementTree``, which a caller
+        reads and edits with the standard library.
+
         Assigning a tree replaces the part the document saves, while the page
-        is still in its document.
+        is still in its document. The setter takes such a tree.
         """
         ...
 
@@ -469,7 +472,7 @@ class Cell(ShapePart):
 
         Setting it writes ``str(value)`` to ``V`` and leaves the formula as it
         was. ``None`` raises :class:`TypeError`, and a write to a detached
-        shape's cell raises :class:`InvalidOperationError`.
+        shape's cell raises :class:`~vsdxkit.errors.InvalidOperationError`.
         """
         return self.xml.attrib.get("V")
 
@@ -834,7 +837,7 @@ class Shape:
         and ``descendants`` hand out a collection, which raises when read.
 
         Reading its cells, coordinates, sizes, text, geometry, data properties
-        or connectors raises :class:`InvalidOperationError`, as does every
+        or connectors raises :class:`~vsdxkit.errors.InvalidOperationError`, as does every
         write but one: the ``master_page_ID`` setter is not guarded, and
         writes to the detached element.
         """
@@ -1937,7 +1940,7 @@ class Shape:
         run between two pieces of text is read as its XML markup, and written
         back as literal text (#317).
 
-        Reading or setting it raises :class:`InvalidOperationError` once the
+        Reading or setting it raises :class:`~vsdxkit.errors.InvalidOperationError` once the
         shape is detached.
         """
         self._require_attached("reading a shape's text")
@@ -2213,10 +2216,10 @@ class ShapeCollection:
 
     Lookups say how many shapes they expect. ``by_*`` wants at most one and
     answers None for none; ``require_*`` wants exactly one and raises
-    :class:`NotFoundError` for none; both raise :class:`InvalidOperationError`
+    :class:`~vsdxkit.errors.NotFoundError` for none; both raise :class:`~vsdxkit.errors.InvalidOperationError`
     when several match, rather than choosing one. The exception is an ID:
     two shapes with one ID make the page invalid, so ``by_id`` and
-    ``require_id`` raise :class:`PackageError` for them. ``matching_*``
+    ``require_id`` raise :class:`~vsdxkit.errors.PackageError` for them. ``matching_*``
     returns every match.
     """
 
@@ -2241,7 +2244,7 @@ class ShapeCollection:
         """The shape with this page-scoped ID, or None.
 
         Two shapes with one ID make the page invalid, which is a
-        :class:`PackageError` rather than a choice between them.
+        :class:`~vsdxkit.errors.PackageError` rather than a choice between them.
         """
         matches = tuple(shape for shape in self._members() if shape_id == shape.ID)
         if len(matches) > 1:

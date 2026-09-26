@@ -13,6 +13,12 @@ author = "Dave Howard and Firm Footing"
 release = vsdxkit.__version__
 version = vsdxkit.__version__
 
+# A single-backtick span is otherwise the `title reference` role, rendered as
+# italic text with no link even when it names a real object. As `py:obj` it
+# links where the name resolves, and falls back to ordinary code styling
+# everywhere else.
+default_role = "py:obj"
+
 extensions = [
     "autoapi.extension",
 ]

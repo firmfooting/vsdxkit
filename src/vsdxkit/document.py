@@ -389,7 +389,7 @@ class Document:
 
     @property
     def pages(self) -> PageCollection:
-        """The document's pages, in order: see :class:`PageCollection`."""
+        """The document's pages, in order: see :class:`~vsdxkit.pages.PageCollection`."""
         return PageCollection(self._pages, self)
 
     def _remove_page_by_index(self, index: int) -> None:

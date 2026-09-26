@@ -76,8 +76,26 @@ uv build --wheel
 uv run python tools/check_type_completeness.py 'dist/*.whl' --fail-under 100.0
 ```
 
+To also run the API-reference completeness gate locally (`tools/check_api_documented.py`,
+which fails on an exported name the reference lacks), build the report the
+wheel step above skips, then build the docs and check the two against each
+other, as the CI build job does:
+
+```
+rm -rf build dist
+uv build --wheel
+uv run python tools/check_type_completeness.py 'dist/*.whl' --fail-under 100.0 --report type-completeness.json
+uv run sphinx-build -W --keep-going -b html docs docs/_build/html
+uv run python tools/check_api_documented.py type-completeness.json docs/_build/html/objects.inv
+```
+
+A new name is private by default: a leading underscore on the name or on its
+module, unless it is meant as user API. A part's folder name is derived only
+through `vsdxkit._partnames`; a folder string is never written anywhere else.
+
 Commit messages follow Conventional Commits (`feat:`, `fix:`, `docs:`, `ci:`,
-`chore:`), matching the existing history.
+`chore:`, `refactor:`, and the `!` breaking-change marker), matching the
+existing history.
 
 #### Ideas / Features
 If you have ideas for new features or improvements please raise a new
