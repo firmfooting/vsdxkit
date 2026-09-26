@@ -54,9 +54,9 @@ class ShapeMetrics(Protocol):
         ...
 
 
-def _f(value: float | str | None) -> float:
-    """Coerce an optional cell value to float (None -> 0.0)."""
-    return float(value) if value is not None else 0.0
+# Each formula below gives None when a metric it reads is None, as Visio could
+# not evaluate it either: `calc_value`'s caller then keeps the value the cell
+# had, where a stand-in 0 would overwrite it with a number no shape reported.
 
 
 def width_x_1(shape: ShapeMetrics) -> float | None:
@@ -69,55 +69,66 @@ def width_x_0(shape: ShapeMetrics) -> int:
     return 0
 
 
-def middle_x(shape: ShapeMetrics) -> float:
+def middle_x(shape: ShapeMetrics) -> float | None:
     """`shape`'s ``(BeginX+EndX)/2`` (or its ``GUARD``ed form): the x midway between its 1-D ends."""
-    # (BeginX+EndX)/2
-    return (_f(shape.begin_x) + _f(shape.end_x)) / 2
+    begin_x, end_x = shape.begin_x, shape.end_x
+    if begin_x is None or end_x is None:
+        return None
+    return (begin_x + end_x) / 2
 
 
-def middle_y(shape: ShapeMetrics) -> float:
+def middle_y(shape: ShapeMetrics) -> float | None:
     """`shape`'s ``(BeginY+EndY)/2`` (or its ``GUARD``ed form): the y midway between its 1-D ends."""
-    # (BeginY+EndY)/2
-    return (_f(shape.begin_y) + _f(shape.end_y)) / 2
+    begin_y, end_y = shape.begin_y, shape.end_y
+    if begin_y is None or end_y is None:
+        return None
+    return (begin_y + end_y) / 2
 
 
-def center_x(shape: ShapeMetrics) -> float:
+def center_x(shape: ShapeMetrics) -> float | None:
     """`shape`'s ``Width*0.5`` (or its ``GUARD``ed form): half its width."""
-    # Width*0.5
-    return _f(shape.width) * 0.5
+    shape_width = shape.width
+    return None if shape_width is None else shape_width * 0.5
 
 
-def center_y(shape: ShapeMetrics) -> float:
+def center_y(shape: ShapeMetrics) -> float | None:
     """`shape`'s ``Height*0.5`` (or its ``GUARD``ed form): half its height."""
-    # Height*0.5
-    return _f(shape.height) * 0.5
+    shape_height = shape.height
+    return None if shape_height is None else shape_height * 0.5
 
 
-def diag_width(shape: ShapeMetrics) -> float:
-    """`shape`'s ``SQRT((EndX-BeginX)^2+(EndY-BeginY)^2)`` formula: the length between its 1-D ends."""
-    # SQRT((EndX-BeginX)^2+(EndY-BeginY)^2)
-    width = _f(shape.end_x) - _f(shape.begin_x)
-    height = _f(shape.end_y) - _f(shape.begin_y)
-    return math.sqrt(width**2 + height**2)
-
-
-def angle(shape: ShapeMetrics) -> float:
-    """`shape`'s ``ATAN2(EndY-BeginY,EndX-BeginX)`` formula: its 1-D ends' angle, in radians."""
-    # ATAN2(EndY-BeginY,EndX-BeginX). Both Visio's ATAN2 and math.atan2 take the
-    # ordinate first, so the rise goes in front of the run.
-    w = _f(shape.end_x) - _f(shape.begin_x)
-    h = _f(shape.end_y) - _f(shape.begin_y)
-    return math.atan2(h, w)
-
-
-def width(shape: ShapeMetrics) -> float:
+def width(shape: ShapeMetrics) -> float | None:
     """`shape`'s ``GUARD(EndX-BeginX)`` formula: the x span between its 1-D ends."""
-    return _f(shape.end_x) - _f(shape.begin_x)
+    begin_x, end_x = shape.begin_x, shape.end_x
+    if begin_x is None or end_x is None:
+        return None
+    return end_x - begin_x
 
 
-def height(shape: ShapeMetrics) -> float:
+def height(shape: ShapeMetrics) -> float | None:
     """`shape`'s ``GUARD(EndY-BeginY)`` formula: the y span between its 1-D ends."""
-    return _f(shape.end_y) - _f(shape.begin_y)
+    begin_y, end_y = shape.begin_y, shape.end_y
+    if begin_y is None or end_y is None:
+        return None
+    return end_y - begin_y
+
+
+def diag_width(shape: ShapeMetrics) -> float | None:
+    """`shape`'s ``SQRT((EndX-BeginX)^2+(EndY-BeginY)^2)`` formula: the length between its 1-D ends."""
+    run, rise = width(shape), height(shape)
+    if run is None or rise is None:
+        return None
+    return math.sqrt(run**2 + rise**2)
+
+
+def angle(shape: ShapeMetrics) -> float | None:
+    """`shape`'s ``ATAN2(EndY-BeginY,EndX-BeginX)`` formula: its 1-D ends' angle, in radians."""
+    run, rise = width(shape), height(shape)
+    if run is None or rise is None:
+        return None
+    # Both Visio's ATAN2 and math.atan2 take the ordinate first, so the rise
+    # goes in front of the run.
+    return math.atan2(rise, run)
 
 
 # map func text to functions
@@ -140,8 +151,8 @@ func_map: dict[str, Callable[[ShapeMetrics], float | None]] = {
 """Every formula text `calc_value` recognises, to the function that evaluates it."""
 
 
-def calc_value(shape: ShapeMetrics, func_text: str) -> float | str | None:
-    """`func_text` evaluated for `shape`, or ``None`` for a formula not in `func_map`."""
+def calc_value(shape: ShapeMetrics, func_text: str) -> float | None:
+    """`func_text` evaluated for `shape`, or ``None`` for a formula not in `func_map` or one reading a metric `shape` lacks."""
     f = func_map.get(func_text)
     if f is None:
         _logger.debug("calc_value(func_text='%s') no method found", func_text)
