@@ -101,7 +101,7 @@ These rulings are mine, not the maintainer's. Each follows from decision 1 or fr
 
 ### The migration guide follows the surface
 
-- `tools/check_migration_guide.py` requires an entry for every 0.8.0 name that goes private or is deleted. The investigation's simulation, run with the real checker, counts **38 new entries**:
+- `tools/check_migration_guide.py` requires an entry for every 0.8.0 name that goes private or is deleted. The investigation's simulation, run with the real checker, counts **38 new entries**, and the plan finds a 39th, `DataProperty.inherited_by`, which the simulation missed:
   - 12 in `formulae`;
   - 7 in `relationships`;
   - 6 in `xmlio`;
@@ -121,13 +121,14 @@ These rulings are mine, not the maintainer's. Each follows from decision 1 or fr
   - `vis.update_ids` (the page renumbers itself);
   - the `partnames` sentence;
   - the `ROW_SWIMLANE_GUID` line.
-- No page in `docs/` or the README names a private module or name as something to use. A test checks this: it searches `README.md` and `docs/*.rst` for `vsdxkit._` and for the eleven old module names. It skips `migration-1.0.rst`'s 0.8.0 headings, which name the old names on purpose.
+- No page in `docs/` or the README names a private module or name as something to use. A test checks this: it searches `README.md` and `docs/*.rst` for `vsdxkit._` and for the eleven old module names. It skips nothing: the guide spells 0.8.0 names `vsdx.<module>`, so any `vsdxkit.<old module>` in it is a 1.0 recommendation.
+- `src/vsdxkit/media/`, the folder the bundled donors ship in, keeps its name. After `media.py` becomes `_media.py`, `import vsdxkit.media` still succeeds, as an empty namespace package with no code, while `from vsdxkit.media import PALETTE` fails.
 
 ### Every definition has a docstring
 
 - A new `tools/check_docstrings.py` walks `src/vsdxkit/*.py` with `ast`, as `tools/check_public_annotations.py` does, and fails on any definition without documentation:
   - a module, class, function, method or property without a docstring;
-  - a module-level assignment, a class-body assignment or annotation (including dataclass fields, Protocol members and enum members) without a `#:` comment on the line above or a string literal on the line after.
+  - a module-level assignment, a class-body assignment or annotation (including dataclass fields, Protocol members and enum members) without a string literal on the line after. A `#:` comment does not count: `sphinx-autoapi` reads only the string after, and a probe build rendered a `#:` comment's text nowhere.
 - **Exempt:**
   - property setters and deleters, which share the getter's docstring;
   - `@overload` stubs;
@@ -150,7 +151,7 @@ These rulings are mine, not the maintainer's. Each follows from decision 1 or fr
   - `autoapi_python_class_content = "class"`
   - `autoapi_options = ["members", "undoc-members", "show-inheritance", "show-module-summary", "inherited-members"]`
 
-  `inherited-members` brings `inherited` and `make_local` onto `GeometryRow` and `DataProperty`. The plan confirms that it does not flood the other classes. `sphinx-autoapi` joins the `docs` dependency group, pinned like the rest.
+  `inherited-members` brings `inherited` and `make_local` onto `GeometryRow` and `DataProperty`. It also repeats `Shape`'s 56 members on `Connector`, and adds `count`/`index` to `PageCollection`. That repetition is accepted: without it, those two members appear nowhere, because pyright exports them only under the private `InheritedRow`. `sphinx-autoapi` joins the `docs` dependency group, pinned like the rest.
 - **`docs/classes.rst` is deleted.**
   - Its prose moves into module docstrings. The Errors section and its hierarchy diagram go into `errors`' module docstring, and the "import each class from its module" note goes into the root's.
   - `docs/index.rst` drops it from the toctree.
@@ -168,8 +169,11 @@ These rulings are mine, not the maintainer's. Each follows from decision 1 or fr
   - `shapes.PageView` declares setters for `name` (`str`), `background` (`bool`), `width` and `height` (`float | str | None`), and `xml`. The `xml` setter is typed `PartTree`, not `PartTree | None`, because mypy then rejects `Page` against the class-level `xml: PartTree`.
   - `test_the_views_are_read_only` becomes "each view's setters are exactly its class's public setters".
   - `PageView`'s docstring and the guide's `PageView` entry change to match.
-- **F2: a page's `showif` is truthy exactly when a shape's is.** `templating` evaluates the page's `showif` expression with the environment's `compile_expression` and tests `bool(...)`, as `{% if %}` does. `None`, `0.0`, `0.00`, `"none"` and `set()` are now judged the same way for pages as for shapes.
-  - **This is a behaviour change:** a page that 0.x and 1.0-so-far kept for `flag=None` is now removed.
+- **F2: a page's `showif` is truthy exactly when a shape's is.** `templating` evaluates the page's `showif` expression with the environment's `compile_expression` and tests `bool(...)`, as `{% if %}` does. When a page name holds two showifs, both must be true, as a shape inside two `{% if %}` blocks needs.
+  - **This is a behaviour change, in both directions:**
+    - `None`, `0.0`, `0.00` and `set()` used to keep the page and now remove it;
+    - the non-empty strings `"0"` and `"False"`, as a context read from a CSV or the environment carries them, used to remove the page and now keep it, as they always kept a shape;
+    - `"none"` is kept, as before.
 - **F3: page names are templates.**
   - After its `showif` is judged, a kept page's name is rendered with the context and set through `Page.name`, so the name setter's rules apply.
   - The `showif` is found anywhere in the name (`re.search`).
@@ -185,7 +189,7 @@ These rulings are mine, not the maintainer's. Each follows from decision 1 or fr
 
 ## What must not change
 
-- Saved bytes: the save sweep stays at 28 of 28 `same` against `S/main-base/src` on every PR, and the render sweep at 7 of 7 against its PR's base. In 7d, every render-sweep difference must be one that F2 or F3 intends. The plan adds a case for each and names the expected output.
+- Saved bytes: the save sweep stays at 28 of 28 `same` against `S/main-base/src` on every PR. The render sweep grows to 10 cases in 7d, and is 10 of 10 `same` against its PR's base in 7e and 7f. In 7d, every render-sweep difference must be one that F2 or F3 intends. The plan adds a case for each and names the expected output.
 - Type completeness stays at 100.0% of what is exported. The exported count falls as names go private; the gate measures the percentage.
 - Coverage stays at or above `fail_under = 97`.
 - `from vsdxkit.<public module> import <public name>` works for every public name that remains. Nothing public moves module.
