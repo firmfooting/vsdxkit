@@ -69,3 +69,62 @@ def test_every_formula_in_the_table_is_callable():
 
     assert func_map, "the formula table is empty"
     assert all(callable(f) for f in func_map.values())
+
+
+class _Metrics:
+    """A shape whose every metric is known, bar the ones named `None`."""
+
+    def __init__(self, **missing: None) -> None:
+        self.width: float | None = 2.0
+        self.height: float | None = 1.0
+        self.begin_x: float | None = 0.0
+        self.begin_y: float | None = 0.0
+        self.end_x: float | None = 3.0
+        self.end_y: float | None = 4.0
+        for name in missing:
+            setattr(self, name, None)
+
+
+_ENDS = ("begin_x", "begin_y", "end_x", "end_y")
+
+# Each formula, and every metric it reads. `Width*0` reads nothing.
+_READS = {
+    "Width*1": ("width",),
+    "Width*0.5": ("width",),
+    "GUARD(Width*0.5)": ("width",),
+    "Height*0.5": ("height",),
+    "GUARD(Height*0.5)": ("height",),
+    "(BeginX+EndX)/2": ("begin_x", "end_x"),
+    "GUARD((BeginX+EndX)/2)": ("begin_x", "end_x"),
+    "(BeginY+EndY)/2": ("begin_y", "end_y"),
+    "GUARD((BeginY+EndY)/2)": ("begin_y", "end_y"),
+    "SQRT((EndX-BeginX)^2+(EndY-BeginY)^2)": _ENDS,
+    ATAN2: _ENDS,
+    "GUARD(EndX-BeginX)": ("begin_x", "end_x"),
+    "GUARD(EndY-BeginY)": ("begin_y", "end_y"),
+}
+
+
+def test_the_reads_table_covers_every_formula():
+    """A formula added to `func_map` is added here too, or the test below skips it."""
+    from vsdxkit._formulae import func_map
+
+    assert set(_READS) | {"Width*0"} == set(func_map)
+
+
+@pytest.mark.parametrize(
+    ("formula", "metric"),
+    [(formula, metric) for formula, reads in _READS.items() for metric in reads],
+)
+def test_a_formula_with_an_unknown_input_has_no_value(formula, metric):
+    """A metric the shape does not have makes the formula unevaluable, not zero.
+
+    `None` tells `Shape._refresh_formula_values` to keep the value the cell
+    had. A 0.0 would overwrite it with a number no shape reported: text pinned
+    at the corner, or a connector of no length.
+    """
+    known = calc_value(_Metrics(), formula)
+    unknown = calc_value(_Metrics(**{metric: None}), formula)
+
+    assert known is not None, "the fully known shape must evaluate, or this proves nothing"
+    assert unknown is None, f"{formula} gave {unknown!r} without {metric}"
