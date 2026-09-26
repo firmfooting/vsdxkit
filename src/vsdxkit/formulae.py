@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
+from logging import Logger
 from typing import Protocol
 
 from vsdxkit.logging_support import get_logger
 
-logger = get_logger(__name__)
+logger: Logger = get_logger(__name__)
 
 
 class ShapeMetrics(Protocol):
@@ -35,7 +37,7 @@ def _f(value: float | str | None) -> float:
     return float(value) if value is not None else 0.0
 
 
-def width_x_1(shape: ShapeMetrics) -> float | str | None:
+def width_x_1(shape: ShapeMetrics) -> float | None:
     return shape.width
 
 
@@ -87,7 +89,7 @@ def height(shape: ShapeMetrics) -> float:
 
 
 # map func text to functions
-func_map = {
+func_map: dict[str, Callable[[ShapeMetrics], float | None]] = {
     "Width*1": width_x_1,
     "Width*0": width_x_0,
     "(BeginX+EndX)/2": middle_x,
@@ -110,4 +112,4 @@ def calc_value(shape: ShapeMetrics, func_text: str) -> float | str | None:
     if f is None:
         logger.debug("calc_value(func_text='%s') no method found", func_text)
         return None
-    return f(shape=shape)
+    return f(shape)

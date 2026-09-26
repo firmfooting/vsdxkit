@@ -5,6 +5,7 @@ import html
 import sys
 import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterable, Iterator, Mapping
+from logging import Logger
 from typing import Protocol
 from xml.etree.ElementTree import Element
 
@@ -27,7 +28,7 @@ from vsdxkit.shape_part import AttachedShape, ShapePart
 from vsdxkit.shape_tree import find_or_create_shapes_tag, is_connector_element, iter_children, iter_edges, parent_of
 from vsdxkit.xmlio import PartTree, make_cell_element, to_float, xml_value
 
-logger = get_logger(__name__)
+logger: Logger = get_logger(__name__)
 
 
 class PageView(Protocol):
@@ -307,6 +308,9 @@ def _write_text(
 class Cell(ShapePart):
     """Represents a Cell element in a vsdx xml file"""
 
+    xml: Element
+    shape: Shape
+
     def __init__(self, xml: Element, shape: Shape):
         self.xml = xml
         self.shape = shape
@@ -340,7 +344,7 @@ class Cell(ShapePart):
     def name(self) -> str | None:
         return self.xml.attrib.get("N")
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"Cell: name={self.name} val={self.value} func={self.formula}"
 
 

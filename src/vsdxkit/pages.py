@@ -246,7 +246,7 @@ class Page:
         self._document = vis
         self._max_id = 0  # ID high-water mark, maintained by _increment_shape_ids
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<Page name={self.name} file={self._filename} >"
 
     @property

@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import sys
 import xml.etree.ElementTree as ET
+from logging import Logger
 from typing import Protocol
 from xml.etree.ElementTree import Element
 
@@ -17,7 +18,7 @@ from vsdxkit.logging_support import get_logger
 from vsdxkit.shape_part import AttachedShape, ShapePart
 from vsdxkit.xmlio import make_cell_element, pretty_print_element, to_float, xml_value
 
-logger = get_logger(__name__)
+logger: Logger = get_logger(__name__)
 
 
 class GeometryOwner(Protocol):
@@ -70,6 +71,11 @@ class Geometry(ShapePart):
     master's until a setter replaces it, so writing a cell's value without
     going through the row still edits the master.
     """
+
+    xml: Element
+    cells: list[GeometryCell]
+    rows: dict[str, GeometryRow]
+    shape: GeometryOwner
 
     def __init__(self, xml: Element, shape: GeometryOwner):
         # get shape master geometry, and append/overwrite with actual shape instance data
@@ -182,7 +188,7 @@ class Geometry(ShapePart):
             line_to.x = x
             line_to.y = y
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         s = f"Geometry: {self.cells} {[(r.row_type, r.index, r.x, r.y) for r in self.rows.values()]}"
         s += f"\nGeometry: {pretty_print_element(self.xml)}"
         return s
@@ -192,6 +198,10 @@ class GeometryRow(InheritedRow, ShapePart):
     """A row with type(T) and index(IX), each containing a list of Cells"""
 
     """See: https://docs.microsoft.com/en-us/office/client-developer/visio/row-element-geometry-sectionvisio-xml """
+
+    geometry: Geometry
+    xml: Element
+    cells: dict[str, GeometryCell]
 
     def __init__(
         self,
@@ -363,13 +373,17 @@ class GeometryRow(InheritedRow, ShapePart):
         else:
             del self.xml.attrib["Del"]  # remove attribute if falsy
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         s = f"Row[{self.index}] del:{self.del_bool}: {self.row_type}={self.cells}"
         return s
 
 
 class GeometryCell(ShapePart):
     """class to represent a Cell element, a name value pair. This may be a child of Geometry or of GeometryRow"""
+
+    parent: GeometryRow | Geometry
+    parent_xml: Element
+    xml: Element
 
     def __init__(
         self,
@@ -430,7 +444,7 @@ class GeometryCell(ShapePart):
         self._require_attached("writing a geometry cell's name")
         self.xml.attrib["N"] = xml_value(value)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         s = f"{self.name}={self.value}"
         if self.formula:
             s += f" func={self.formula}"

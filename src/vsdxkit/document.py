@@ -5,6 +5,7 @@ import logging
 import os
 import xml.etree.ElementTree as ET
 from collections.abc import Mapping
+from logging import Logger
 from pathlib import Path
 from typing import NamedTuple
 from xml.etree.ElementTree import Element
@@ -45,7 +46,7 @@ from vsdxkit.xmlio import (
     require_tree,
 )
 
-logger = get_logger(__name__)
+logger: Logger = get_logger(__name__)
 
 register_namespaces()
 

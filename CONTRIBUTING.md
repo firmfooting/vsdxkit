@@ -47,11 +47,22 @@ add, remove or re-fence a `python` block in the README, update that test too.
 CI runs the tests across Python 3.10–3.14 on Linux and Windows, and on 3.10 and
 3.14 on macOS. The ruff, pyrefly and Sphinx gates run once, on Linux under
 Python 3.12. There is more besides: a lowest-direct dependency-floor job, a
-distribution build-and-smoke-test, a LibreOffice import test, a coverage
-threshold, a mypy consumer fixture, and `tools/check_action_pins.py` and
-`tools/check_public_annotations.py`. zizmor runs as its own workflow rather than
-inside CI. You do not need to run those locally; the list above is what to run
-before submitting.
+distribution build-and-smoke-test, a type-completeness threshold on the built
+wheel (`tools/check_type_completeness.py`, pyright `--verifytypes`, at 100.0%),
+a LibreOffice import test, a coverage threshold, a mypy consumer fixture, and
+`tools/check_action_pins.py` and `tools/check_public_annotations.py`. zizmor
+runs as its own workflow rather than inside CI. You do not need to run those
+locally; the list above is what to run before submitting.
+
+To run the type-completeness gate locally, build the wheel from a fresh
+`build/`: setuptools never deletes from `build/lib`, so a stale one ships
+modules `src/` no longer has.
+
+```
+rm -rf build dist
+uv build --wheel
+uv run python tools/check_type_completeness.py 'dist/*.whl' --fail-under 100.0
+```
 
 Commit messages follow Conventional Commits (`feat:`, `fix:`, `docs:`, `ci:`,
 `chore:`), matching the existing history.
