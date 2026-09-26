@@ -53,10 +53,10 @@ _SELF_REFERENCE = re.compile(r"self\.([A-Za-z_]\w*)")
 # may reference any attribute of the shape.
 _SETTABLE = ("x", "y")
 
-# A `{% showif <expression> %}` in a page name, anywhere in it: the whole
-# statement, and the expression alone. The statement is not Jinja, so it is
-# taken out of the name before the name is rendered.
-_PAGE_SHOWIF_STATEMENT = re.compile(r"{% showif\s.*?\s%}")
+# A `{% showif <expression> %}` in a page name, anywhere in it. `findall`
+# gives the expressions; `sub` removes whole statements, since it replaces the
+# match and not the group. The statement is not Jinja, so it is taken out of
+# the name before the name is rendered.
 _PAGE_SHOWIF = re.compile(r"{% showif\s(.*?)\s%}")
 
 
@@ -293,6 +293,6 @@ def _render_page_name(page: Page, context: Mapping[str, object]) -> None:
     otherwise lose its universal name to a render that changed nothing.
     """
     name = page.name
-    rendered = _template(_PAGE_SHOWIF_STATEMENT.sub("", name)).render(context)
+    rendered = _template(_PAGE_SHOWIF.sub("", name)).render(context)
     if rendered != name:
         page.name = rendered
