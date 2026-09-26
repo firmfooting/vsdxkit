@@ -1309,60 +1309,78 @@ class Shape:
                 return master.cell_formula(name)
         return None
 
-    def _write_cell(self, name: str, *, v: str | None = None, f: str | None = None) -> None:
-        """Set a named cell's value or formula, creating the cell if absent.
+    def _write_cell(self, name: str, *, v: str | None = None, f: str | None = None, keep_formula: bool = False) -> None:
+        """Set cell `name`'s value or formula: the one function that creates or updates a shape's named cell.
 
-        The single primitive behind :meth:`set_cell_value` and
-        :meth:`set_cell_formula`. Those were copies of each other differing on
-        five lines, and one of those lines built the new element with
-        ``xmlns:ns0=`` instead of ``xmlns=`` -- declaring a prefix the element
-        did not use, so the cell landed outside the Visio namespace and the
-        shape could not find it again. Two implementations, one of them wrong,
-        is the thing this exists to prevent.
+        A value written without a formula replaces the cell's formula, as
+        typing a number into the ShapeSheet does in Visio, unless
+        `keep_formula` says the value is the one the formula gives: the glue
+        engine's writes, the formula cache, and a 1-D shape's cells derived
+        from its ends. A formula given is written, and a value beside it keeps
+        it.
 
-        A cell the master defines is copied down first, so the attribute that
-        is not being set keeps what it inherits.
+        A top-level cell the shape lacks is created, as a copy of the master's
+        where the master has one, so its unit and other attributes carry over.
+        A name holding ``/`` is a cell of a section row, such as
+        ``Control/TextPosition/X``; it is written only where the shape has that
+        cell of its own.
 
-        A named-cell write here keeps the formula until the one-writer change
-        (#319); it does not yet follow the value-wins rule.
+        :raises InvalidOperationError: if the shape is detached, or `name` is a
+            section cell the shape does not have
         """
         # nearly every coordinate, size and colour setter arrives here, so one
         # guard covers them all; the message describes the write because which
         # setter the caller used is not knowable from here (issue #329)
         self._require_attached(f"writing shape cell {name!r}")
         cell = self._cell(name)
-        if cell is not None:  # update in place
-            if f is not None:
-                cell.formula = f
-            if v is not None:
-                cell._set_value(v, keep_formula=True)
-            return
-
-        cell_xml = None
-        master = self.master_shape
-        if master is not None:
-            master_cell_xml = master.xml.find(f'{namespace}Cell[@N="{name}"]')
-            if master_cell_xml is not None:
-                _logger.debug("creating cell from: %s", ET.tostring(master_cell_xml))
-                cell_xml = ET.fromstring(ET.tostring(master_cell_xml))
-        if cell_xml is None:
-            cell_xml = make_cell_element(name)
-
-        cell = Cell(xml=cell_xml, shape=self)
+        if cell is None:
+            if "/" in name:
+                section, _, rest = name.partition("/")
+                raise InvalidOperationError(
+                    f"shape ID {self.ID} has no {section} cell {rest!r} of its own to write; "
+                    "a cell in a section row is written only where the shape has that row and cell"
+                )
+            cell = Cell(xml=self._new_cell_element(name), shape=self)
         if f is not None:
             cell.formula = f
         if v is not None:
-            cell._set_value(v, keep_formula=True)
+            cell._set_value(v, keep_formula=keep_formula or f is not None)
+
+    def _new_cell_element(self, name: str) -> Element:
+        """A new top-level cell `name` among the shape's cells: a copy of its master's, formula and all, where the master has one."""
+        master = self.master_shape
+        master_cell = None if master is None else master.xml.find(f'{namespace}Cell[@N="{name}"]')
+        if master_cell is not None:
+            _logger.debug("creating cell from: %s", ET.tostring(master_cell))
+        element = make_cell_element(name) if master_cell is None else ET.fromstring(ET.tostring(master_cell))
         # schema order: a shape's cells come before its Text and Sections
         cells = self.xml.findall(f"{namespace}Cell")
-        self.xml.insert(list(self.xml).index(cells[-1]) + 1 if cells else 0, cell_xml)
+        self.xml.insert(list(self.xml).index(cells[-1]) + 1 if cells else 0, element)
+        return element
 
     def set_cell_value(self, name: str, value: float | str) -> None:
-        """Set a named cell's value, creating the cell if absent."""
+        """Set a named cell's value, creating the cell if absent.
+
+        A value without a formula replaces the cell's formula, as typing a
+        number into the ShapeSheet does in Visio. A name holding ``/`` is a
+        cell of a section row, such as ``Control/TextPosition/X``; it is
+        refused where the shape does not have that row and cell of its own,
+        rather than created at the shape's top level.
+
+        :raises InvalidOperationError: if the shape is detached, or `name` is a
+            section cell the shape does not have
+        """
         self._write_cell(name, v=xml_value(value))
 
     def set_cell_formula(self, name: str, value: str) -> None:
-        """Set a named cell's formula, creating the cell if absent."""
+        """Set a named cell's formula, creating the cell if absent.
+
+        A name holding ``/`` is refused where the shape does not have that
+        section cell of its own, as :meth:`set_cell_value` refuses it.
+
+        :raises InvalidOperationError: if the shape is detached, or `name` is a
+            section cell the shape does not have
+        """
         self._write_cell(name, f=value)
 
     def _write_style_attribute(self, attribute: str, value: str | int) -> None:
@@ -1713,48 +1731,36 @@ class Shape:
         """
         if self.geometry:
             self.geometry._move(x_delta, y_delta, keep_formula=True)
-        if self.begin_x is not None:
-            self.begin_x = self.begin_x + x_delta
-        self.x = (self.x or 0.0) + x_delta
-        if self.begin_y is not None:
-            self.begin_y = self.begin_y + y_delta
-        self.y = (self.y or 0.0) + y_delta
+        begin_x = self.begin_x
+        if begin_x is not None:
+            self._write_cell("BeginX", v=xml_value(begin_x + x_delta), keep_formula=True)
+        pin_x = self.x
+        self._write_cell("PinX", v=xml_value((pin_x or 0.0) + x_delta), keep_formula=True)
+        begin_y = self.begin_y
+        if begin_y is not None:
+            self._write_cell("BeginY", v=xml_value(begin_y + y_delta), keep_formula=True)
+        pin_y = self.y
+        self._write_cell("PinY", v=xml_value((pin_y or 0.0) + y_delta), keep_formula=True)
 
     def get_or_create_cell(self, name: str, v: str | None = None, f: str | None = None) -> Cell:
-        """Set or create a named cell on this shape.
+        """Set or create a named cell on this shape, through :meth:`_write_cell`.
 
         Existing cells have their V/F attributes updated in place. New cells
         are inserted after the last direct Cell child so the shape keeps the
-        schema ordering (cells ahead of Text/Sections).
-
-        A named-cell write here keeps the formula until the one-writer change
-        (#319); it does not yet follow the value-wins rule.
+        schema ordering (cells ahead of Text/Sections). A value without a
+        formula replaces the cell's formula, as typing a number into the
+        ShapeSheet does in Visio.
 
         :param name: cell name (N attribute), e.g. 'PinX'
         :param v: value to set on the V attribute (optional)
         :param f: formula to set on the F attribute (optional)
         :return: the Cell object
         """
-        # second entry point for writing a named cell; #319 folds it into
-        # _write_cell, and the guard has to be on both until it does
-        self._require_attached(f"writing shape cell {name!r}")
+        self._write_cell(name, v=v, f=f)
         cell = self._cell(name)
-        if cell is not None:
-            if f is not None:
-                cell.formula = f
-            if v is not None:
-                cell._set_value(v, keep_formula=True)
-            return cell
-        # built as an element, not formatted as a string: a value carrying a
-        # quote, an ampersand or an angle bracket is data, and string
-        # formatting turned it into a ParseError
-        cell_el = make_cell_element(name, v=v, f=f)
-        insert_at = 0
-        for i, child in enumerate(list(self.xml)):
-            if child.tag == f"{namespace}Cell":
-                insert_at = i + 1
-        self.xml.insert(insert_at, cell_el)
-        return Cell(xml=cell_el, shape=self)
+        if cell is None:  # _write_cell wrote it or raised; this satisfies the type checker
+            raise InvalidOperationError(f"shape ID {self.ID} has no cell {name!r} after writing it")
+        return cell
 
     @property
     def height(self) -> float | None:
@@ -1870,18 +1876,22 @@ class Shape:
             finish_x, finish_y = finish
             if start_x is None or start_y is None or finish_x is None or finish_y is None:
                 raise InvalidOperationError("connector start and finish coordinates cannot be None")
-            self.x, self.y = start_x, start_y
+            self._write_cell("PinX", v=xml_value(start_x), keep_formula=True)
+            self._write_cell("PinY", v=xml_value(start_y), keep_formula=True)
             # lines/connectors are defined in different ways
             # Check whether shape is a connector based on name in known languages
             is_connector = self.universal_name == "Dynamic connector"
 
-            self.begin_x, self.begin_y = start_x, start_y
-            self.end_x, self.end_y = finish_x, finish_y
+            self._write_cell("BeginX", v=xml_value(start_x), keep_formula=True)
+            self._write_cell("BeginY", v=xml_value(start_y), keep_formula=True)
+            self._write_cell("EndX", v=xml_value(finish_x), keep_formula=True)
+            self._write_cell("EndY", v=xml_value(finish_y), keep_formula=True)
             width = finish_x - start_x
             height = finish_y - start_y if is_connector else 0.0
-            self.width = width
-            self.height = height
-            self.x, self.y = start_x, start_y
+            self._write_cell("Width", v=xml_value(width), keep_formula=True)
+            self._write_cell("Height", v=xml_value(height), keep_formula=True)
+            self._write_cell("PinX", v=xml_value(start_x), keep_formula=True)
+            self._write_cell("PinY", v=xml_value(start_y), keep_formula=True)
             if self.geometry is not None:
                 self.geometry._set_point("moveto", "Shape.set_start_and_finish()", 0.0, 0.0, 0, keep_formula=True)
                 self.geometry._set_point("lineto", "Shape.set_start_and_finish()", width, height, 0, keep_formula=True)
@@ -1897,10 +1907,9 @@ class Shape:
                         raise InvalidOperationError("shape text coordinates cannot be None")
                 txt_pin_x._set_value(text_x, keep_formula=True)
                 txt_pin_y._set_value(text_y, keep_formula=True)
-                self.set_cell_value(name="Control/TextPosition/X", value=text_x)
-                self.set_cell_value(name="Control/TextPosition/Y", value=text_y)
-                self.set_cell_value(name="Control/TextPosition/XDyn", value=text_x)
-                self.set_cell_value(name="Control/TextPosition/YDyn", value=text_y)
+                for cell_name, value in (("X", text_x), ("Y", text_y), ("DynX", text_x), ("DynY", text_y)):
+                    if self._cell(f"Control/TextPosition/{cell_name}") is not None:
+                        self._write_cell(f"Control/TextPosition/{cell_name}", v=xml_value(value), keep_formula=True)
             self._refresh_formula_values()
 
     def _refresh_formula_values(self) -> None:

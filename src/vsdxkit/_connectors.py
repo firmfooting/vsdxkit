@@ -137,8 +137,8 @@ class _ConnectorShape(_EndShape, Protocol):
         """Move the connector's endpoints to `start` and `finish`, so the file renders sensibly before Visio recalculates."""
         ...
 
-    def get_or_create_cell(self, name: str, v: str | None = None, f: str | None = None) -> object:
-        """Set or create the named cell, for the engine to write a glue cell without knowing it already exists."""
+    def _write_cell(self, name: str, *, v: str | None = None, f: str | None = None, keep_formula: bool = False) -> None:
+        """Set or create the named cell; the engine passes `keep_formula`, so a half of the cell it does not name stays as it is."""
         ...
 
     def _cell(self, name: str) -> _CellXml | None:
@@ -372,7 +372,7 @@ def _write(connector: _ConnectorShape, begin: _End, end: _End, routing: tuple[Ce
 def _change_cell(connector: _ConnectorShape, change: CellChange) -> None:
     """Apply one `CellChange`: write a cell, drop its formula, or drop the cell so it inherits the master's again."""
     if isinstance(change, CellWrite):
-        connector.get_or_create_cell(change.name, v=change.value, f=change.formula)
+        connector._write_cell(change.name, v=change.value, f=change.formula, keep_formula=True)
         return
     # the two below edit the element: a Cell cannot drop a formula, and
     # nothing removes one of a shape's cells

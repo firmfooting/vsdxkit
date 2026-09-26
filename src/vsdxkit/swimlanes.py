@@ -258,15 +258,15 @@ class SwimlaneDiagram:
         if label is not None:
             self._check_label(top_lane, label, subject=subject)
         new_lane = top_lane.copy(self._page)
-        new_lane.get_or_create_cell("PinY", v=str((top_lane.y or 0.0) + LANE_PITCH_INCHES))
+        new_lane._write_cell("PinY", v=str((top_lane.y or 0.0) + LANE_PITCH_INCHES), keep_formula=True)
         if label is not None:
             self._write_label(new_lane, label, subject=subject)
         # the list and the container grow upwards so the new lane sits inside them
         for grown in (self._swimlane_list(), self._container):
             if grown is None:
                 continue
-            grown.get_or_create_cell("PinY", v=str((grown.y or 0.0) + LANE_PITCH_INCHES / 2))
-            grown.get_or_create_cell("Height", v=str((grown.height or 0) + LANE_PITCH_INCHES))
+            grown._write_cell("PinY", v=str((grown.y or 0.0) + LANE_PITCH_INCHES / 2), keep_formula=True)
+            grown._write_cell("Height", v=str((grown.height or 0) + LANE_PITCH_INCHES), keep_formula=True)
         return new_lane
 
     def set_lane_label(self, lane: Shape, label: str) -> None:
@@ -299,7 +299,7 @@ class SwimlaneDiagram:
             )
         if _holds(_bands(self.lanes)[lane], shape):
             return
-        shape.get_or_create_cell("PinY", v=str(lane.y or 0.0))
+        shape._write_cell("PinY", v=str(lane.y or 0.0), keep_formula=True)
 
     def _swimlane_list(self) -> Shape | None:
         """The page's first top-level Swimlane List shape, which `add_lane` grows, or None for a page without one."""
