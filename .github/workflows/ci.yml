@@ -165,6 +165,8 @@ jobs:
         run: uv run --no-sync python tools/check_action_pins.py
       - name: Public type-completeness gate
         run: uv run --no-sync python tools/check_public_annotations.py
+      - name: Every definition has a docstring
+        run: uv run --no-sync python tools/check_docstrings.py
       - name: Migration guide names every removed 0.8.0 name
         run: uv run --no-sync python tools/check_migration_guide.py
       - name: Mypy consumer fixture

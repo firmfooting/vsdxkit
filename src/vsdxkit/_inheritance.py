@@ -21,6 +21,7 @@ class InheritedRow:
     """Mixin for a row that may still belong to a shape's master."""
 
     inherited: bool = False
+    """Whether this row still belongs to a master, and so is shared with every other instance of it."""
 
     def make_local(self) -> None:
         """Give this row to the instance if it still belongs to a master.

@@ -53,9 +53,17 @@ a check that every name the wheel exports is in the generated API reference
 (`tools/check_api_documented.py`, against that report and the docs build's
 `objects.inv`),
 a LibreOffice import test, a coverage threshold, a mypy consumer fixture, and
-`tools/check_action_pins.py` and `tools/check_public_annotations.py`. zizmor
-runs as its own workflow rather than inside CI. You do not need to run those
-locally; the list above is what to run before submitting.
+`tools/check_action_pins.py`, `tools/check_public_annotations.py`, and
+`tools/check_docstrings.py`, which fails on any definition in `src/vsdxkit`
+without a docstring (a constant or field is documented by a string on the line
+after it). zizmor runs as its own workflow rather than inside CI. You do not
+need to run those locally; the list above is what to run before submitting.
+
+Every definition in `src/vsdxkit` has a docstring, private ones included, and
+the API reference is generated from them by sphinx-autoapi: there is no list
+of members to keep by hand. A new public name therefore needs a docstring
+that says what it is for; `tools/check_docstrings.py` finds a missing one, and
+`tools/check_api_documented.py` finds an exported name the reference lacks.
 
 To run the type-completeness gate locally, build the wheel from a fresh
 `build/`: setuptools never deletes from `build/lib`, so a stale one ships

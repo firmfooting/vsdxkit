@@ -31,10 +31,14 @@ from vsdxkit.shape_kind import ShapeKind
 from vsdxkit.shapes import Shape
 
 MEDIA = "media.vsdx"
+"""The bundled document holding the basic shapes and the two connectors."""
 PALETTE = "palette_extended.vsdx"
+"""The bundled document holding the flowchart palette's shapes."""
 
 STRAIGHT_CONNECTOR = "STRAIGHT_CONNECTOR"
+"""The sentinel text of `MEDIA`'s dynamic connector, drawn as a straight line: what every new connector copies."""
 CURVED_CONNECTOR = "CURVED_CONNECTOR"
+"""The sentinel text of `MEDIA`'s dynamic connector drawn curved; not yet reached by any caller passing `curved=True`."""
 
 # each built-in kind: the bundled document it is copied from, and its sentinel text there
 _KINDS: dict[ShapeKind, tuple[str, str]] = {
@@ -47,21 +51,28 @@ _KINDS: dict[ShapeKind, tuple[str, str]] = {
     ShapeKind.CIRCLE: (MEDIA, "CIRCLE"),
     ShapeKind.LINE: (MEDIA, "LINE"),
 }
+"""Every built-in `ShapeKind`, to the bundled document and sentinel text `_kind_shape` copies it from."""
 
 
 class _Donor(Protocol):
     """What this module reads off a bundled document."""
 
     @property
-    def pages(self) -> PageCollection: ...
+    def pages(self) -> PageCollection:
+        """The donor's pages, the first of which holds every sentinel shape `_sentinel` looks up."""
+        ...
 
-    def _get_style_by_id(self, ID: str) -> Element | None: ...
+    def _get_style_by_id(self, ID: str) -> Element | None:
+        """The `StyleSheet` with this ID, for `_style_copy` to copy."""
+        ...
 
 
 # the donors loaded so far, by filename; the lock makes the first load of
 # each happen once even when several threads create shapes at the same time
 _donors: dict[str, _Donor] = {}
+"""The bundled documents opened so far, by filename, so each is opened once per process."""
 _loading = threading.Lock()
+"""Serialises `_donor`'s check-then-open, so two threads creating shapes at once do not each open a donor."""
 
 
 def media_path(filename: str) -> str:
@@ -88,6 +99,7 @@ def _donor(filename: str, open_document: Callable[[str], _Donor]) -> _Donor:
 
 
 def _sentinel(filename: str, text: str, open_document: Callable[[str], _Donor]) -> Shape:
+    """The shape on `filename`'s first page whose text is exactly `text`, or a NotFoundError naming what is there instead."""
     shapes = _donor(filename, open_document).pages[0].shapes
     shape = shapes.by_text(text)
     if shape is None:

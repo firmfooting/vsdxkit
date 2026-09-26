@@ -71,7 +71,9 @@ def _check_member_names(names: list[str]) -> None:
 class _MemberReader(Protocol):
     """Minimal structural type for a readable archive member stream."""
 
-    def read(self, size: int = -1, /) -> bytes: ...
+    def read(self, size: int = -1, /) -> bytes:
+        """Read up to `size` bytes, or the rest of the stream when `size` is negative, as `io.RawIOBase.read` does."""
+        ...
 
 
 def _read_bounded(reader: _MemberReader, declared_size: int, name: str, limits: PackageLimits) -> bytes:
@@ -320,6 +322,7 @@ def _member_bytes(archive: zipfile.ZipFile, info: zipfile.ZipInfo, limits: Packa
 # dotfile with no extension, and any rule built on that reads the relationship
 # part every package has as malformed.
 _REJECTED_SEGMENTS = frozenset({"", ".", ".."})
+"""Part-name segments ECMA-376 forbids outright: empty, and the relative-path forms `.` and `..`."""
 
 
 def _checked(name: str) -> str:
@@ -417,8 +420,10 @@ class BytesPart:
     """A part nothing has asked the XML of: the bytes it arrived as."""
 
     data: bytes
+    """The part's bytes, exactly as the archive held them."""
 
     def current_bytes(self) -> bytes:
+        """`data`: a part never parsed cannot have changed."""
         return self.data
 
 
@@ -433,10 +438,14 @@ class XmlPart:
     """
 
     tree: PartTree
+    """The part's parsed tree, authoritative from here on: reads and writes go through it, not `original_bytes`."""
     original_bytes: bytes | None
+    """The bytes the part arrived as, kept to hand back if nothing changed; ``None`` for a part written as a tree."""
     original_canonical_hash: str | None
+    """`canonical_hash` of `tree` the moment it was parsed, `current_bytes`'s baseline for "did anything change"."""
 
     def current_bytes(self) -> bytes:
+        """`original_bytes` if `tree` still canonicalises to `original_canonical_hash`, else a fresh serialisation."""
         data = serialise_part(self.tree)
         if self.original_bytes is not None and _canonical_hash_of(data) == self.original_canonical_hash:
             return self.original_bytes
@@ -444,9 +453,11 @@ class XmlPart:
 
 
 PartValue = BytesPart | XmlPart
+"""What a `PackageStore` holds for one part: unparsed bytes, or a parsed tree with its promotion baseline."""
 
 
 def _promoted(name: str, part: BytesPart) -> XmlPart:
+    """`part` parsed into an `XmlPart`, its baseline taken from the tree the parse just produced."""
     tree = parse_part(part.data, name)
     return XmlPart(tree=tree, original_bytes=part.data, original_canonical_hash=canonical_hash(tree))
 
@@ -460,6 +471,7 @@ class PackageStore:
     """The parts of one package, in archive order, addressed by part name."""
 
     def __init__(self, source: Path, limits: PackageLimits | None = None) -> None:
+        """Build an empty store naming `source`; use `PackageStore.open` to read one off disk."""
         # The one copy of where this package came from. It is only knowable at
         # open, and #89's `save(target=None)` writes back over it. Kept as
         # given: `open()` is what makes it absolute, so a store built there is

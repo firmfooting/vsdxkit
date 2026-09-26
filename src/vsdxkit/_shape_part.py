@@ -14,10 +14,14 @@ from typing import Protocol
 class AttachedShape(Protocol):
     """What a part needs from the shape it belongs to: a refusal once the shape is detached."""
 
-    def _require_attached(self, operation: str) -> None: ...
+    def _require_attached(self, operation: str) -> None:
+        """Refuse `operation`, naming it, once the shape is no longer in its document."""
+        ...
 
 
 class ShapePart:
+    """Mixin for any part of a shape - a cell, a row, a property - that guards its writes through `_shape`."""
+
     @property
     def _shape(self) -> AttachedShape:
         """The shape whose XML this part would change."""

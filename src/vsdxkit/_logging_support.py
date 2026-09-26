@@ -20,8 +20,10 @@ Usage in a vsdxkit module::
 import logging
 
 _PACKAGE_ROOT = "vsdxkit"
+"""The name of the logger every module's own logger sits under."""
 
 _root = logging.getLogger(_PACKAGE_ROOT)
+"""The package root logger, given a `NullHandler` once so importing this module never emits to stderr."""
 if not _root.handlers:
     _root.addHandler(logging.NullHandler())
 
