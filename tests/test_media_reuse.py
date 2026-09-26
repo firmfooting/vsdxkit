@@ -79,11 +79,11 @@ def _donor_xml() -> dict[str, bytes]:
     """Every part of both donors as its store holds it, parsed parts serialised."""
     parts = {}
     for filename in DONORS:
-        store = media._donor(filename)._package
+        store = media._donor(filename, Document.open)._package
         for name in store.names():
             parts[f"{filename}{name}"] = store.read_bytes(name)
     for filename in DONORS:
-        for page in media._donor(filename).pages:
+        for page in media._donor(filename, Document.open).pages:
             parts[f"{filename}:{page.name}"] = ET.tostring(page.xml.getroot())
     return parts
 
@@ -107,7 +107,7 @@ def test_provisioning_masters_reads_only_the_donors_master_parts(vsdx_copy, monk
     """
     vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
-    donor = media._donor(media.MEDIA)
+    donor = media._donor(media.MEDIA, Document.open)
     read: list[str] = []
     original = PackageStore.read_bytes
 
@@ -128,7 +128,7 @@ def test_provisioning_masters_copies_the_donors_master_parts_byte_for_byte(vsdx_
     vis = Document.open(vsdx_copy("test1.vsdx"))
     assert not [n for n in vis._package.names() if n.startswith("/visio/masters/")]
     page = vis.pages[0]
-    donor = media._donor(media.MEDIA)
+    donor = media._donor(media.MEDIA, Document.open)
     shapes = list(page.children)
     page.connect(shapes[0], shapes[1])
     donor_masters = {n: donor._package.read_bytes(n) for n in donor._package.names() if n.startswith("/visio/masters/")}
@@ -153,7 +153,7 @@ def test_provisioning_masters_leaves_a_sibling_of_the_masters_folder_behind(vsdx
     """
     vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
-    media._donor(media.MEDIA)._package.write_bytes("/visio/masters-old/x.xml", b"<x/>")
+    media._donor(media.MEDIA, Document.open)._package.write_bytes("/visio/masters-old/x.xml", b"<x/>")
     shapes = list(page.children)
     page.connect(shapes[0], shapes[1])
     assert vis._package.part("/visio/masters-old/x.xml") is None

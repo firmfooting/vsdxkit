@@ -709,7 +709,7 @@ def test_a_bundled_shape_that_is_missing_raises_not_found_error():
     finds nothing is what `NotFoundError` is for. It is still a `ValueError`.
     """
     with pytest.raises(NotFoundError, match=r"has no shape named 'PALETTE_NOT_A_SHAPE'"):
-        media._sentinel(media.PALETTE, "PALETTE_NOT_A_SHAPE")
+        media._sentinel(media.PALETTE, "PALETTE_NOT_A_SHAPE", Document.open)
 
 
 def test_deleting_a_detached_shape_raises_invalid_operation_error(vsdx_copy):

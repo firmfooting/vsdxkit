@@ -14,7 +14,6 @@ else:
     from typing_extensions import override
 
 
-import vsdxkit
 from vsdxkit import namespace
 from vsdxkit.connectors import _glued_ends, _retarget_connector
 from vsdxkit.errors import InvalidOperationError, NotFoundError, PackageError
@@ -1345,7 +1344,7 @@ class Shape:
         cell_el = make_cell_element(name, v=v, f=f)
         insert_at = 0
         for i, child in enumerate(list(self.xml)):
-            if child.tag == f"{vsdxkit.namespace}Cell":
+            if child.tag == f"{namespace}Cell":
                 insert_at = i + 1
         self.xml.insert(insert_at, cell_el)
         return Cell(xml=cell_el, shape=self)

@@ -17,13 +17,12 @@ from vsdxkit import (
     ext_prop_namespace,
     namespace,
     r_namespace,
-    relationships,
     vt_namespace,
-    xmlio,
 )
-from vsdxkit.errors import InvalidOperationError, MissingPartError
+from vsdxkit.errors import InvalidOperationError, MalformedPackageError, MissingPartError
 from vsdxkit.logging_support import get_logger
 from vsdxkit.masters import MasterCatalog
+from vsdxkit.media import MEDIA, _connector_shape, _kind_shape, _style_copy
 from vsdxkit.package import PackageLimits, PackageStore, XmlPart, check_relationship_target
 from vsdxkit.pages import Page, PageCollection, _PagePosition
 from vsdxkit.partnames import (
@@ -35,9 +34,19 @@ from vsdxkit.partnames import (
     relationships_part_name,
     target_part_name,
 )
-from vsdxkit.shapes import Shape, _text_runs_of, _write_text, find_or_create_shapes_tag, substitute
+from vsdxkit.relationships import append_if_absent, ensure_override, remove, remove_override
+from vsdxkit.shape_kind import ShapeKind
+from vsdxkit.shapes import Connector, Shape, _text_runs_of, _write_text, find_or_create_shapes_tag, substitute
 from vsdxkit.templating import render_document
-from vsdxkit.xmlio import PartTree, adopt_prefixes, register_namespaces, require_attribute, require_element, require_tree
+from vsdxkit.xmlio import (
+    PartTree,
+    adopt_prefixes,
+    pretty_print_element,
+    register_namespaces,
+    require_attribute,
+    require_element,
+    require_tree,
+)
 
 logger = get_logger(__name__)
 
@@ -119,7 +128,7 @@ class Document:
         self._masters.load()
         if logger.isEnabledFor(logging.DEBUG):
             for master in self._masters.pages:
-                logger.debug("Master(%s, id=%s)\n%s", master.filename, master.page_id, xmlio.pretty_print_element(master.xml))
+                logger.debug("Master(%s, id=%s)\n%s", master.filename, master.page_id, pretty_print_element(master.xml))
 
     @classmethod
     def open(
@@ -161,7 +170,7 @@ class Document:
 
     @staticmethod
     def pretty_print_element(xml: Element | PartTree) -> str:
-        return xmlio.pretty_print_element(xml)
+        return pretty_print_element(xml)
 
     def _require_part_xml(self, name: str, description: str) -> PartTree:
         """The store's own tree for a required part, or a MissingPartError naming it."""
@@ -419,8 +428,8 @@ class Document:
 
                 # issue #7: a dangling rId pointing at a deleted part corrupts
                 # the OPC graph, and so does an Override naming one
-                relationships.remove(self._part_root(self.pages_xml_rels, "pages.xml.rels"), page.rel_id or "")
-                relationships.remove_override(
+                remove(self._part_root(self.pages_xml_rels, "pages.xml.rels"), page.rel_id or "")
+                remove_override(
                     self._part_root(self.content_types_xml, "[Content_Types].xml"),
                     page.filename,
                 )
@@ -437,7 +446,7 @@ class Document:
         """Updates the pages.xml.rels file with a reference to the new page and returns the new relid"""
 
         rels_root = self._part_root(self.pages_xml_rels, "pages.xml.rels")
-        relationship = relationships.append_if_absent(
+        relationship = append_if_absent(
             rels_root,
             rel_type="http://schemas.microsoft.com/visio/2010/relationships/page",
             target=new_page_filename,
@@ -504,9 +513,7 @@ class Document:
         return index
 
     def _add_content_types_override(self, part_name_path: str, content_type: str) -> None:
-        relationships.ensure_override(
-            self._part_root(self.content_types_xml, "[Content_Types].xml"), part_name_path, content_type
-        )
+        ensure_override(self._part_root(self.content_types_xml, "[Content_Types].xml"), part_name_path, content_type)
 
     def document_rels(self) -> list[Element]:
         rels_root = self._part_root(self.document_xml_rels, "visio/_rels/document.xml.rels")
@@ -526,6 +533,31 @@ class Document:
 
     def _get_style_by_id(self, ID: str) -> Element | None:
         return self._style_sheets().find(f"{namespace}StyleSheet[@ID = '{ID}']")
+
+    def _kind_source(self, kind: ShapeKind) -> Shape:
+        """The bundled shape `kind` is copied from; see :mod:`vsdxkit.media`."""
+        return _kind_shape(kind, Document.open)
+
+    def _copy_connector(self, page: Page) -> Connector:
+        """A copy of the bundled dynamic connector on `page`, one of this document's pages.
+
+        The copy imports the connector's master, whether or not this document
+        has masters yet, and relates the page to it (#375). Its sentinel text
+        is cleared, and the line style its master names is imported unless
+        this document already has a style with that ID.
+        """
+        connector = _connector_shape(Document.open).copy(page)
+        if not isinstance(connector, Connector):
+            raise MalformedPackageError(f"the bundled connector in {MEDIA} is not a 1-D shape")
+        connector.text = ""  # the sentinel text it was found by
+        master_shape = connector.master_shape
+        line_style_id = master_shape.line_style_id if master_shape is not None else None
+        # a style with the same ID is taken to be the same style
+        if line_style_id is not None and self._get_style_by_id(line_style_id) is None:
+            style = _style_copy(line_style_id, Document.open)
+            if style is not None:
+                self._style_sheets().append(style)
+        return connector
 
     def _heading_pairs(self) -> Element:
         # return HeadingPairs element from app.xml

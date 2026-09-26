@@ -17,12 +17,13 @@ else:
     from typing_extensions import override
 
 
-from vsdxkit import namespace, r_namespace, relationships
-from vsdxkit.connectors import _Connect, _create_connector, _float_ends
+from vsdxkit import namespace, r_namespace
+from vsdxkit.connectors import _Connect, _float_ends, _glue_connector, _plan_connector
 from vsdxkit.errors import InvalidOperationError, MissingPartError, NotFoundError, PackageError
 from vsdxkit.glue import ConnectorOptions, Glue, Routing
 from vsdxkit.package import XmlPart
 from vsdxkit.partnames import relationship_target, relationships_part_name, target_part_name
+from vsdxkit.relationships import all_of, append_if_absent
 from vsdxkit.shape_kind import ShapeKind
 from vsdxkit.shape_tree import iter_descendants
 from vsdxkit.shapes import Connector, Shape, ShapeCollection, _wrap_children, _wrap_descendants, is_connector, parent_of
@@ -405,7 +406,7 @@ class Page:
         different id space, and an id free there says nothing here (#357). The
         rels part is created on demand; assigning it writes it into the package.
         """
-        relationships.append_if_absent(
+        append_if_absent(
             self._rels_root(),
             rel_type="http://schemas.microsoft.com/visio/2010/relationships/master",
             target=relationship_target(self.filename, master_part_name),
@@ -433,7 +434,7 @@ class Page:
         source_rels = source.rels_xml
         if source_rels is None:
             return
-        by_id = {rel.attrib.get("Id"): rel for rel in relationships.all_of(source_rels.getroot())}
+        by_id = {rel.attrib.get("Id"): rel for rel in all_of(source_rels.getroot())}
         for node in copied.iter():
             relationship = by_id.get(node.attrib.get(_RELATIONSHIP_ID))
             if relationship is None:
@@ -442,7 +443,7 @@ class Page:
             target = relationship.attrib.get("Target", "")
             if mode != "External":
                 target = relationship_target(self.filename, target_part_name(source.filename, target))
-            carried = relationships.append_if_absent(
+            carried = append_if_absent(
                 self._rels_root(), rel_type=relationship.attrib.get("Type", ""), target=target, mode=mode
             )
             node.attrib[_RELATIONSHIP_ID] = carried.attrib["Id"]
@@ -476,7 +477,10 @@ class Page:
         :returns: the new connector
         """
         options = ConnectorOptions(glue=glue, routing=routing, from_point=from_point, to_point=to_point)
-        return _create_connector(self, source, target, options)
+        begin, end = _plan_connector(self, source, target, options)
+        connector = self.vis._copy_connector(self)
+        _glue_connector(connector, begin, end, options)
+        return connector
 
     @property
     def connectors(self) -> tuple[Connector, ...]:
@@ -528,14 +532,10 @@ class Page:
         :raises InvalidOperationError: if a prototype belongs to another document
         :returns: the new shape
         """
-        # vsdxkit.media opens its donors as Documents, which import this
-        # module, so importing it at module level would be a cycle
-        from vsdxkit import media
-
         if not self._attached():
             raise InvalidOperationError(f"page {self.name!r} is no longer in its document, so nothing can be created on it")
         if isinstance(kind_or_prototype, ShapeKind):
-            source = media._kind_shape(kind_or_prototype)
+            source = self.vis._kind_source(kind_or_prototype)
         elif isinstance(kind_or_prototype, Shape):
             kind_or_prototype._require_attached("Page.create_shape()")
             if kind_or_prototype.page.vis is not self.vis:
@@ -553,12 +553,8 @@ class Page:
         # what the copy's formulas may no longer name: the groups the prototype
         # sat in, and on another page, every shape of the page it left
         left_behind = _left_behind(source, self)
-        if isinstance(kind_or_prototype, ShapeKind):
-            shape = media.copy_kind(kind_or_prototype, self)
-            label = "" if text is None else text
-        else:
-            shape = kind_or_prototype.copy(self)
-            label = text
+        shape = source.copy(self)
+        label = ("" if text is None else text) if isinstance(kind_or_prototype, ShapeKind) else text
         if one_d:
             _place_one_d(shape, x, y, width)
         else:
