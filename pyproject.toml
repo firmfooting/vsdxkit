@@ -135,7 +135,7 @@ precision = 2
 # Ratchet: this number only goes up. It is the coverage the whole suite already
 # has, so a full run below it means a change arrived untested. Raise it when
 # coverage improves; never edit it down to make a red build green. Measured
-# 2026-09-13 on CPython 3.12: 2884 statements, 283 missed (90.19%), floored to
-# a whole percent. It applies to every local `--cov` run as well, so a
-# single-file run trips it; pass `--cov-fail-under=0` there.
-fail_under = 90
+# 2026-09-26 on CPython 3.12, after Phase 7's 7b: 3651 statements, 97 missed
+# (97.34%), floored to a whole percent. It applies to every local `--cov` run
+# as well, so a single-file run trips it; pass `--cov-fail-under=0` there.
+fail_under = 97
