@@ -455,13 +455,14 @@ Reading or writing a deleted shape
    ``group.append_shape(shape)``.
 
 ``shape.page.swimlanes``, ``shape.page.vis``, ``page.vis``
-   Typed code sees ``shape.page`` as :class:`vsdxkit.shapes.PageView`, a
-   read-only view. The same type is the page half of ``shape.parent``
-   (``PageView | Shape``) and of ``shape.master_page`` (``PageView | None``).
-   ``PageView`` lists the page's API apart from ``swimlanes``,
-   ``require_swimlanes`` and ``vis``, whose types are declared above
-   ``shapes``. At runtime it is the same ``Page``. For those three, use the
-   ``Page`` you hold, such as ``document.pages[0]``.
+   Typed code sees ``shape.page`` as :class:`vsdxkit.shapes.PageView`. The
+   same type is the page half of ``shape.parent`` (``PageView | Shape``) and
+   of ``shape.master_page`` (``PageView | None``). ``PageView`` lists the
+   page's API apart from ``swimlanes``, ``require_swimlanes`` and ``vis``,
+   whose types are declared above ``shapes``. It has the page's setters, so
+   ``shape.page.name = "Summary"`` type-checks. At runtime it is the same
+   ``Page``. For those three, use the ``Page`` you hold, such as
+   ``document.pages[0]``.
 
    The same holds one level up. Typed code sees ``page.vis`` as
    :class:`vsdxkit.pages.DocumentView`, which lists the document's

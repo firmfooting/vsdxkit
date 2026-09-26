@@ -6,12 +6,13 @@ this fixture fails with ``no-untyped-call`` — reproducing issue #15's evidence
 against the installed distribution.
 """
 
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from vsdxkit.document import Document
 from vsdxkit.package import PackageLimits
 from vsdxkit.pages import Page
-from vsdxkit.shapes import Connector, Shape
+from vsdxkit.shapes import Connector, PageView, Shape
 
 
 def open_document(path: str) -> Document:
@@ -87,3 +88,23 @@ def page_state_through_back_reference(shape: Shape) -> tuple[bool, int | None]:
 def save_through_back_reference(page: Page, destination: Path) -> Path:
     # `page.vis` is a DocumentView, which lists `pages`, `save` and `render`
     return page.vis.save(destination)
+
+
+def rename_through_back_reference(shape: Shape) -> None:
+    # PageView declares Page's five setters, so typed code writes through `shape.page`
+    shape.page.name = "Renamed"
+
+
+def resize_through_back_reference(shape: Shape) -> float:
+    shape.page.width = 11.0
+    shape.page.height = "8.5"  # the setter takes float | str | None; the getter gives a float
+    shape.page.background = True
+    return shape.page.height
+
+
+def replace_page_tree_through_back_reference(shape: Shape, tree: ET.ElementTree[ET.Element]) -> None:
+    shape.page.xml = tree
+
+
+def a_page_is_a_view(page: Page) -> PageView:
+    return page
