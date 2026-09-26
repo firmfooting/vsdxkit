@@ -245,12 +245,10 @@ class Page:
         self.page_id = page_id
         self.rel_id = rel_id
         self.master_unique_id: str | None = None
-        self.master_base_id: str | None = None
         self.rels_xml_filename: str | None = None
         self._rels_xml: PartTree | None = None
         self._document = vis
         self._max_id = 0  # ID high-water mark, maintained by Document's ID allocator
-        # todo: add page id - from pages_xml - PageSheet[ID]
 
     def __repr__(self):
         return f"<Page name={self.name} file={self.filename} >"

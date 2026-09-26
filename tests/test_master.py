@@ -17,7 +17,7 @@ def test_load_master_file(filename: str, expected_length: int, basedir):
     assert len(vis.master_pages) == expected_length
 
 
-@pytest.mark.parametrize("attribute", ["master_unique_id", "master_base_id"])
+@pytest.mark.parametrize("attribute", ["master_unique_id"])
 @pytest.mark.parametrize(
     "filename",
     [
@@ -26,7 +26,7 @@ def test_load_master_file(filename: str, expected_length: int, basedir):
     ],
 )
 def test_master_identifiers_are_populated(filename: str, attribute: str, basedir):
-    """Every loaded master page carries both of its Visio identifiers.
+    """Every loaded master page carries its Visio unique id.
 
     test5_master.vsdx is not covered: LucidChart writes no base id.
     """
@@ -34,6 +34,13 @@ def test_master_identifiers_are_populated(filename: str, attribute: str, basedir
     assert vis.master_pages, "no master pages loaded; the loop below would assert nothing"
     for m in vis.master_pages:
         assert getattr(m, attribute) is not None
+
+
+def test_a_master_page_has_no_base_id_attribute(basedir):
+    """Fails if `master_base_id` comes back: it was written at load and never read (#116)."""
+    vis = Document.open(os.path.join(basedir, "test3_house.vsdx"))
+    assert vis.master_pages
+    assert not hasattr(vis.master_pages[0], "master_base_id")
 
 
 @pytest.mark.parametrize(("filename", "shape_text"), [("test5_master.vsdx", "Shape B")])

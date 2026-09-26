@@ -331,9 +331,8 @@ class _SelfRefShape:
     """The smallest thing `_apply_set_self` needs: attributes, and text.
 
     Stands in for a `Shape` only where the real one cannot express the case.
-    `Shape` today has no pair of *numeric* attributes where one name is a prefix
-    of the other, so the substitution hazard below is unreachable through it --
-    `loc_x`/`loc_x_f` are the closest pair and the second is a formula string.
+    `Shape` has no pair of *numeric* attributes where one name is a prefix of
+    the other, so the substitution hazard below is unreachable through it.
     The parser is what is under test, and it reaches the parser exactly.
     """
 

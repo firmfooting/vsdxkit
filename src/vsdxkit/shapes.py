@@ -24,7 +24,7 @@ from vsdxkit.inheritance import InheritedRow
 from vsdxkit.logging_support import get_logger
 from vsdxkit.shape_kind import ShapeKind
 from vsdxkit.shape_part import AttachedShape, ShapePart
-from vsdxkit.shape_tree import is_connector_element, iter_children, iter_descendants, iter_edges
+from vsdxkit.shape_tree import is_connector_element, iter_children, iter_edges
 from vsdxkit.xmlio import PartTree, make_cell_element, to_float, xml_value
 
 logger = get_logger(__name__)
@@ -217,12 +217,6 @@ def find_or_create_shapes_tag(parent: Element) -> Element:
     return shapes_tag
 
 
-shape_type_names = {  # a map from English language shape to a list of know names for that Shape type
-    # note that Shape names may be appended with a number e.g. 'Dynamischer Verbinder.2'
-    "Dynamic Connector": ["dynamic connector", "dynamischer verbinder"]
-}
-
-
 def _coordinate_value(value: float | str | None) -> str:
     """Return a ShapeSheet coordinate value without serialising nulls."""
     if value is None:
@@ -371,12 +365,8 @@ class Cell(ShapePart):
     def name(self) -> str | None:
         return self.xml.attrib.get("N")
 
-    @property
-    def func(self) -> str | None:  # assume F stands for function, i.e. F="Width*0.5"
-        return self.xml.attrib.get("F")
-
     def __repr__(self):
-        return f"Cell: name={self.name} val={self.value} func={self.func}"
+        return f"Cell: name={self.name} val={self.value} func={self.formula}"
 
 
 class DataProperty(InheritedRow, ShapePart):
@@ -415,9 +405,6 @@ class DataProperty(InheritedRow, ShapePart):
         self.label = None
         self.prompt = None
         self.sort_key = None
-
-        self.shape = shape  # reference back to Shape object
-        self.xml = xml  # reference to xml used to create DataProperty
 
         if isinstance(label_cell, Element):
             value_type_cell = cells.get("Type")
@@ -553,15 +540,6 @@ class DataProperty(InheritedRow, ShapePart):
         element = self._get_element(name)
         if isinstance(element, Element):
             element.attrib[attrib] = value
-            return True
-        return False
-
-    def remove_attribute(self, name: str, attrib: str) -> bool:
-        """Remove the attribute from the cell element"""
-        self._require_attached("DataProperty.remove_attribute()")
-        element = self._get_element(name)
-        if isinstance(element, Element) and attrib in element.attrib:
-            del element.attrib[attrib]
             return True
         return False
 
@@ -998,9 +976,8 @@ class Shape:
         Setting :attr:`DataProperty.value` on an inherited property is safe:
         the property is marked inherited, so writing to it creates an override
         row on this shape and leaves the master alone.
-        :meth:`DataProperty.set_attribute` and
-        :meth:`DataProperty.remove_attribute` do not yet do this, and still
-        write an inherited property's cells in the master.
+        :meth:`DataProperty.set_attribute` does not yet do this, and still
+        writes an inherited property's cell in the master.
 
         :return: Dict[str, DataProperty]
         """
@@ -1075,9 +1052,6 @@ class Shape:
                 if element.get("N") == name:
                     found = element
         return None if found is None else Cell(xml=found, shape=self)
-
-    def shape_value(self, name: str) -> str | None:
-        return self.xml.attrib.get(name, None)
 
     def cell_value(self, name: str) -> str | None:
         self._require_attached(f"reading cell {name}")
@@ -1374,20 +1348,12 @@ class Shape:
         self.set_cell_value("LocPinX", _coordinate_value(value))
 
     @property
-    def loc_x_f(self) -> str | None:
-        return self.cell_formula("LocPinX")
-
-    @property
     def loc_y(self) -> float | None:
         return to_float(self.cell_value("LocPinY"), cell="LocPinY")
 
     @loc_y.setter
     def loc_y(self, value: float | str) -> None:
         self.set_cell_value("LocPinY", _coordinate_value(value))
-
-    @property
-    def loc_y_f(self) -> str | None:
-        return self.cell_formula("LocPinY")
 
     @property
     def line_to_x(self) -> float | None:
@@ -1609,19 +1575,6 @@ class Shape:
                 if v is not None:
                     c.value = v
 
-    @property
-    def text_raw(self) -> str:
-        # return contents of Text element, or Master shape (if referenced), or empty string
-        text_element = self.xml.find(f"{namespace}Text")
-
-        if isinstance(text_element, Element):
-            return (text_element.text or "") + "".join(html.unescape(ET.tostring(e, encoding="unicode")) for e in text_element)
-        elif self.master_page_ID:
-            master = self.master_shape
-            if master is not None and master.text:
-                return master.text  # get text from master shape
-        return ""
-
     def _text_runs(self) -> tuple[list[Element], str, list[Element], str]:
         """This shape's text, split by `text_runs`, with master inheritance applied.
 
@@ -1673,11 +1626,6 @@ class Shape:
         """
         self._require_attached("reading a shape's descendants")
         return _wrap_descendants(self.xml, self, self._page)
-
-    def get_max_id(self) -> int:
-        """The highest ID on this shape and every shape inside it, or 0 where none carries one."""
-        elements = (self.xml, *iter_descendants(self.xml))
-        return max((int(shape_id) for element in elements if (shape_id := element.attrib.get("ID")) is not None), default=0)
 
     def apply_text_filter(self, context: dict[str, object]) -> None:
         """Substitute `context` into the text of this shape and every shape inside it."""
