@@ -1,21 +1,33 @@
+"""Compare two packages member by member: a test oracle, independent of the library.
+
+This was the library's public `VisioFileDiff`. Only this project's tests used
+it, and it read packages under limits of its own rather than the library's
+`PackageLimits`, so it left the public surface in 1.0 (#116, #376). It imports
+nothing from the package it is used to check.
+"""
+
 import codecs
 import difflib
 import hashlib
+import logging
 import zipfile
 
-from vsdxkit.errors import PackageLimitError
-from vsdxkit.logging_support import get_logger
-
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
-class VisioFileDiff:
-    """Compares two vsdx files
+class PackageDiffLimitError(Exception):
+    """A package declares more than the diff's own caps allow."""
 
-    :param filepath_a: file path of the first :class:`Document` was created from
-    :type filepath_a: str
-    :param filepath_b: file path of the second :class:`Document` was created from
-    :type filepath_b: str
+    def __init__(self, reason: str, message: str) -> None:
+        super().__init__(message)
+        self.reason: str = reason
+
+
+class PackageDiff:
+    """Compares two vsdx files, member by member.
+
+    :param filepath_a: the first package's path
+    :param filepath_b: the second package's path
     """
 
     def __init__(self, filepath_a: str, filepath_b: str):
@@ -33,8 +45,8 @@ class VisioFileDiff:
         # check if each file has same contents
         self.diffs = self.get_file_diffs()
 
-    def __str__(self):
-        return f"VisioFileDiff(a={self.filepath_a}, b={self.filepath_b})"
+    def __str__(self) -> str:
+        return f"PackageDiff(a={self.filepath_a}, b={self.filepath_b})"
 
     def get_file_diffs(self) -> dict[str, list[str]]:
         common_members = self.common_members()
@@ -42,10 +54,9 @@ class VisioFileDiff:
         d = difflib.Differ()
         for member_name in common_members:
             data_a = self.contents_a.get(member_name)
-            data_a = VisioFileDiff.break_all_xml_into_lines(data_a or [])
-            # print(data_a)
+            data_a = PackageDiff.break_all_xml_into_lines(data_a or [])
             data_b = self.contents_b.get(member_name)
-            data_b = VisioFileDiff.break_all_xml_into_lines(data_b or [])
+            data_b = PackageDiff.break_all_xml_into_lines(data_b or [])
             if data_a and data_b and data_a != data_b:  # only add diff if contents are not the same
                 diffs[member_name] = list(d.compare(data_a, data_b))
         return diffs
@@ -55,7 +66,7 @@ class VisioFileDiff:
         data_out: list[str] = []
         if data:
             for line in data:  # type: str
-                lines = VisioFileDiff.break_xml_into_lines(line)
+                lines = PackageDiff.break_xml_into_lines(line)
                 for line_part in lines:
                     data_out.append(line_part)
         return data_out
@@ -115,17 +126,17 @@ class VisioFileDiff:
             for member in zip_ref.infolist():
                 if member.filename.endswith("/"):
                     continue
-                if member.file_size > VisioFileDiff.MAX_MEMBER_BYTES:
-                    raise PackageLimitError(
+                if member.file_size > PackageDiff.MAX_MEMBER_BYTES:
+                    raise PackageDiffLimitError(
                         "member_size",
                         f"package member '{member.filename}' declares {member.file_size} bytes;"
-                        f" max_member_size={VisioFileDiff.MAX_MEMBER_BYTES}",
+                        f" max_member_size={PackageDiff.MAX_MEMBER_BYTES}",
                     )
                 total_read += member.file_size
-                if total_read > VisioFileDiff.MAX_TOTAL_BYTES:
-                    raise PackageLimitError(
+                if total_read > PackageDiff.MAX_TOTAL_BYTES:
+                    raise PackageDiffLimitError(
                         "total_size",
-                        f"package declares more than {VisioFileDiff.MAX_TOTAL_BYTES} uncompressed bytes across members",
+                        f"package declares more than {PackageDiff.MAX_TOTAL_BYTES} uncompressed bytes across members",
                     )
                 decoder = codecs.getincrementaldecoder("utf-8")()
                 digest = hashlib.sha256()
@@ -134,7 +145,7 @@ class VisioFileDiff:
                 pending_cr = False  # a '\r' at chunk end may pair with '\n' next chunk
                 is_text = True
                 with zip_ref.open(member, "r") as stream:
-                    while chunk := stream.read(VisioFileDiff._CHUNK):
+                    while chunk := stream.read(PackageDiff._CHUNK):
                         digest.update(chunk)
                         if not is_text:
                             continue

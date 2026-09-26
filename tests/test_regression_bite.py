@@ -3,9 +3,9 @@
 import os
 
 from helpers.connect_records import page_records
+from helpers.package_diff import PackageDiff
 
 from vsdxkit.document import Document
-from vsdxkit.vsdxdiff import VisioFileDiff
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
@@ -37,7 +37,7 @@ def test_connect_create_writes_connection_records(vsdx_copy, tmp_path):
 
 
 def test_visiodiff_reports_changed_members(vsdx_copy, tmp_path):
-    """A text change must appear in VisioFileDiff.diffs for the shape's part."""
+    """A text change must appear in PackageDiff.diffs for the shape's part."""
     path = vsdx_copy("test1.vsdx")
     changed = os.path.join(str(tmp_path), "changed.vsdx")
     vis = Document.open(path)
@@ -46,7 +46,7 @@ def test_visiodiff_reports_changed_members(vsdx_copy, tmp_path):
     shape.text = f"{original_text} CHANGED"
     vis.save(changed)
 
-    file_diff = VisioFileDiff(path, changed)
+    file_diff = PackageDiff(path, changed)
     changed_members = [member for member, diff in file_diff.diffs.items() if "CHANGED" in "".join(diff)]
     assert changed_members, "expected at least one member diff mentioning the changed text"
     assert all(member.endswith(".xml") for member in changed_members)
@@ -63,7 +63,7 @@ def test_visiodiff_round_trip_preserves_members(vsdx_copy, tmp_path):
     vis = Document.open(path)
     vis.save(same)
 
-    file_diff = VisioFileDiff(path, same)
+    file_diff = PackageDiff(path, same)
     assert file_diff.added_members() == set()
     assert file_diff.removed_members() == set()
     assert set(file_diff.common_members()) == set(file_diff.contents_a)

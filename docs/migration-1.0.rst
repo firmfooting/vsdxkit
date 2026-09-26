@@ -854,3 +854,23 @@ Two 0.x holdovers go
    Read-only. The assignment wrote nothing to the shape's XML, so the shape
    and its file disagreed. Change the geometry through the rows and cells
    of ``shape.geometry``.
+
+The package differ is gone
+--------------------------
+
+``vsdxdiff.VisioFileDiff``, ``from vsdxkit.vsdxdiff import VisioFileDiff``
+   Gone, with no replacement. It compared two packages member by member,
+   under limits of its own rather than
+   :class:`~vsdxkit.package.PackageLimits`, and only this project's tests
+   used it; they keep a private copy. To compare two saved files, read both
+   with :mod:`zipfile` and compare the members with :mod:`difflib`.
+
+   Its members went with it: ``VisioFileDiff.MAX_MEMBER_BYTES``,
+   ``VisioFileDiff.MAX_TOTAL_BYTES``, ``VisioFileDiff.added_members``,
+   ``VisioFileDiff.break_all_xml_into_lines``,
+   ``VisioFileDiff.break_xml_into_lines``, ``VisioFileDiff.common_members``,
+   ``VisioFileDiff.compare_members``, ``VisioFileDiff.contents_a``,
+   ``VisioFileDiff.contents_b``, ``VisioFileDiff.diffs``,
+   ``VisioFileDiff.extract_file_data``, ``VisioFileDiff.filepath_a``,
+   ``VisioFileDiff.filepath_b``, ``VisioFileDiff.get_file_diffs`` and
+   ``VisioFileDiff.removed_members``.

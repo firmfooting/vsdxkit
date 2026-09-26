@@ -16,7 +16,12 @@ _LOG_METHODS = frozenset({"debug", "info", "warning", "warn", "error", "exceptio
 # nothing would pass with an empty offender list and report a contract it had
 # not checked - which is the failure this whole commit is about. Raise it when
 # you add logging; if it has gone down, say why in the commit.
-_LOG_CALLS_IN_THE_PACKAGE = 18
+#
+# Dropped from 18 to 17 when `vsdxdiff.py` left the package for
+# `tests/helpers/package_diff.py` (#116, #376): that module's one
+# `logger.debug` call went with it, and the helper's own copy is outside
+# `vsdxkit`, so this walk no longer sees it.
+_LOG_CALLS_IN_THE_PACKAGE = 17
 
 
 def _is_logger(node: ast.expr) -> bool:
