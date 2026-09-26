@@ -16,7 +16,6 @@ from vsdxkit.document import Document
 from vsdxkit.errors import MissingPartError
 from vsdxkit.masters import MasterCatalog
 from vsdxkit.partnames import relationship_target, relationships_part_name
-from vsdxkit.templating import JinjaTemplatingMixin
 
 RELS_NS = "{http://schemas.openxmlformats.org/package/2006/relationships}"
 MASTER_RELATIONSHIP = "http://schemas.microsoft.com/visio/2010/relationships/master"
@@ -318,11 +317,6 @@ def test_the_masters_module_does_not_load_the_document_class():
     script = "import sys, vsdxkit.masters; print('vsdxkit.document' in sys.modules)"
     result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, check=True)
     assert result.stdout.strip() == "False"
-
-
-def test_the_document_has_no_masters_mixin():
-    """Fails if `Document` still takes master behaviour from a mixin (#94)."""
-    assert Document.__bases__ == (JinjaTemplatingMixin,)
 
 
 def test_the_catalog_answers_by_id_and_by_name(vsdx_copy):

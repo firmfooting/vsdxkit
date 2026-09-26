@@ -5,6 +5,7 @@ import pytest
 
 from vsdxkit.document import Document
 from vsdxkit.shapes import Shape
+from vsdxkit.templating import _apply_set_self
 
 
 def _first_shape_containing(shapes, text: str):
@@ -279,7 +280,7 @@ def _render_one_self_statement(path: str, shape_id: str, statement: str, context
     vis = Document.open(path)
     shape = vis.pages[0].shapes.require_id(shape_id)
     shape.text = statement
-    Document.jinja_set_selfs(shape, context)
+    _apply_set_self(shape, context)
     return shape
 
 
@@ -327,7 +328,7 @@ def test_a_self_reference_to_an_unknown_attribute_names_the_statement(basedir):
 
 
 class _SelfRefShape:
-    """The smallest thing `jinja_set_selfs` needs: attributes, and text.
+    """The smallest thing `_apply_set_self` needs: attributes, and text.
 
     Stands in for a `Shape` only where the real one cannot express the case.
     `Shape` today has no pair of *numeric* attributes where one name is a prefix
@@ -362,7 +363,7 @@ def test_one_reference_is_not_substituted_into_a_longer_one():
     `str.replace` calls instead of a single pass.
     """
     shape = _SelfRefShape("{% set self.x=self.ab+self.abc %}", ab=1.0, abc=20.0, x=0.0)
-    Document.jinja_set_selfs(shape, {})
+    _apply_set_self(shape, {})
     assert shape.x == pytest.approx(21.0)
 
 
@@ -375,6 +376,6 @@ def test_spaces_around_the_equals_sign_do_not_drop_the_statement():
     a template that silently did nothing.
     """
     shape = _SelfRefShape("keep me {% set self.x  =  2.0 %}", x=0.0)
-    Document.jinja_set_selfs(shape, {})
+    _apply_set_self(shape, {})
     assert shape.x == pytest.approx(2.0)
     assert shape.text == "keep me "

@@ -5,16 +5,11 @@ import logging
 import os
 import posixpath
 import re
-import sys
 import xml.etree.ElementTree as ET
+from collections.abc import Mapping
 from pathlib import Path
 from typing import NamedTuple
 from xml.etree.ElementTree import Element
-
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
 
 from vsdxkit import (
     cont_types_namespace,
@@ -41,7 +36,7 @@ from vsdxkit.partnames import (
     target_part_name,
 )
 from vsdxkit.shapes import Shape, _text_runs_of, _write_text, find_or_create_shapes_tag, substitute
-from vsdxkit.templating import JinjaTemplatingMixin
+from vsdxkit.templating import render_document
 from vsdxkit.xmlio import PartTree, adopt_prefixes, register_namespaces, require_attribute, require_element, require_tree
 
 logger = get_logger(__name__)
@@ -100,7 +95,7 @@ def _remap_sheet_references(formula: str, id_map: dict[str, int]) -> str:
     return _SHEET_REFERENCE_RE.sub(replace, formula)
 
 
-class Document(JinjaTemplatingMixin):
+class Document:
     """A Visio drawing, ``.vsdx`` or ``.vsdm``, read whole into memory.
 
     Open one with :meth:`open`. The package is read before ``open`` returns and
@@ -398,7 +393,6 @@ class Document(JinjaTemplatingMixin):
         #       to get page_dir and other paths...
 
     @property
-    @override
     def pages(self) -> PageCollection:
         """The document's pages, in order: see :class:`PageCollection`."""
         return PageCollection(self._pages, self)
@@ -1044,7 +1038,6 @@ class Document(JinjaTemplatingMixin):
     def get_shape_id(shape: Element) -> str:
         return shape.attrib["ID"]
 
-    @override
     def increment_sub_shape_ids(self, shape: Shape, page: Page, id_map: dict[str, int] | None = None) -> dict[str, int]:
         """Renumber a shape and everything under it, then remap its formulas.
 
@@ -1299,3 +1292,14 @@ class Document(JinjaTemplatingMixin):
         # explicit target, which leaves the store's source where it was.
         redirected = new_filename is None and self.filename != self._opened_filename
         return self._package.save(destination if new_filename is not None or redirected else None)
+
+    def render(self, context: Mapping[str, object]) -> None:
+        """Render the document as a Jinja template, in place.
+
+        Shape text, and page names, are Jinja templates. vsdx-specific
+        extensions are available, such as `{% for item in list %}` statements
+        with no `{% endfor %}`. See :func:`vsdxkit.templating.render_document`.
+
+        :param context: the values the templates can refer to
+        """
+        render_document(self, context)

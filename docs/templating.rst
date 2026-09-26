@@ -66,3 +66,16 @@ The sandbox is a bound on what a malicious document can do, not a licence to
 render anything. A template can still consume memory and time, and it sees
 whatever you put in the context — so do not pass secrets to
 ``render()`` alongside a document you do not trust.
+
+Rendering as a function
+-----------------------
+
+:meth:`~vsdxkit.document.Document.render` calls
+:func:`vsdxkit.templating.render_document`. The function takes a
+:class:`~vsdxkit.templating.RenderTarget`, and a context that is any mapping,
+not only a ``dict``.
+
+.. autofunction:: vsdxkit.templating.render_document
+
+.. autoclass:: vsdxkit.templating.RenderTarget
+   :members:

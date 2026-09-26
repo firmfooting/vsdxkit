@@ -100,6 +100,18 @@ The class is :class:`vsdxkit.document.Document`, in the module
 ``VisioFile.jinja_render_vsdx(context)``
    ``Document.render(context)``.
 
+``vsdx.templating.JinjaTemplatingMixin``
+   Gone. ``Document`` has no base class. ``Document.render(context)`` calls
+   ``vsdxkit.templating.render_document(document, context)``, which takes a
+   :class:`~vsdxkit.templating.RenderTarget`. The context may be any mapping,
+   not only a ``dict``. The mixin's
+   ``JinjaTemplatingMixin.increment_sub_shape_ids`` was a placeholder for the
+   document's own method, which stays.
+
+``vis.jinja_render_shape``, ``vis.jinja_set_selfs``, ``vis.unescape_jinja_statements``, ``vis.jinja_create_for_loop_if``, ``vis.jinja_page_showif``
+   Gone. They were the steps of one render, not something to call on their
+   own. Render the whole document with ``Document.render(context)``.
+
 ``JinjaTemplatingMixin.remove_page_by_index``
    Gone with ``vis.remove_page_by_index``; see "Pages change through the
    collection" below.
