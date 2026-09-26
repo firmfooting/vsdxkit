@@ -5,20 +5,20 @@ from collections.abc import Iterable
 from typing import Protocol, TypeAlias
 from xml.etree.ElementTree import Element
 
-from vsdxkit.errors import InvalidOperationError, MalformedPackageError
-from vsdxkit.glue import (
+from vsdxkit import namespace
+from vsdxkit._glue import (
     CellChange,
     CellFreeze,
     CellInherit,
     CellWrite,
-    ConnectorOptions,
     EndGlue,
-    Glue,
     connection_records,
     glue_cells,
     record_element,
     routing_cells,
 )
+from vsdxkit.errors import InvalidOperationError, MalformedPackageError
+from vsdxkit.glue import ConnectorOptions, Glue
 
 
 class _CellXml(Protocol):
@@ -103,8 +103,6 @@ class _ConnectorShape(_EndShape, Protocol):
 # its connection point, `None` for dynamic glue. A floating end is `None`.
 _Glued: TypeAlias = tuple[_EndShape, int | None]
 _End: TypeAlias = _Glued | None
-
-namespace = "{http://schemas.microsoft.com/office/visio/2012/main}"
 
 # a Connect record's ToPart for connection point row n is 100 + n, and its ToCell Connections.X{n + 1}
 _FIRST_CONNECTION_POINT_PART = 100

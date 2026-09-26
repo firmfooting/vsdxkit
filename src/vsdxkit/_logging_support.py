@@ -1,18 +1,19 @@
-"""Central logging support for the vsdx package.
+"""Central logging support for the vsdxkit package.
 
 Standards (Python logging HOWTO, library authorship):
 - one module logger per module via ``logging.getLogger(__name__)``; the
-  hierarchy sits under the package root so applications configure ``vsdx``
+  hierarchy sits under the package root so applications configure ``vsdxkit``
   (or any submodule) in one place
 - the package root logger carries only a ``NullHandler``: a library never
   configures handlers or ``basicConfig()``, and never emits to a bare stdout
 - lazy %-style message formatting (args passed to the logger, interpolated
   only when the level is enabled)
 
-Usage in a vsdx module:
+Usage in a vsdxkit module:
 
-    from .logging_support import get_logger
-    logger = get_logger(__name__)
+    from vsdxkit._logging_support import get_logger
+
+    _logger = get_logger(__name__)
 """
 
 import logging
@@ -25,5 +26,5 @@ if not _root.handlers:
 
 
 def get_logger(name: str) -> logging.Logger:
-    """Return a logger in the vsdx hierarchy (pass ``__name__``)."""
+    """Return a logger in the vsdxkit hierarchy (pass ``__name__``)."""
     return logging.getLogger(name)

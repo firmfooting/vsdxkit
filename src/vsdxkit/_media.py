@@ -65,8 +65,8 @@ _loading = threading.Lock()
 
 
 def media_path(filename: str) -> str:
-    """Path to a bundled donor in the module-adjacent 'media' folder."""
-    return str(Path(__file__).resolve().parent / "media" / filename)
+    """Path to a bundled donor in the module-adjacent '_bundled' folder."""
+    return str(Path(__file__).resolve().parent / "_bundled" / filename)
 
 
 def _donor(filename: str, open_document: Callable[[str], _Donor]) -> _Donor:
@@ -76,7 +76,7 @@ def _donor(filename: str, open_document: Callable[[str], _Donor]) -> _Donor:
     on the first load of each file, and every later caller gets that donor,
     whatever opener it passes. A test that passes any opener but
     ``Document.open`` must give ``_donors`` a table of its own
-    (``monkeypatch.setattr(media, "_donors", {})``), or the donor it loads is
+    (``monkeypatch.setattr(_media, "_donors", {})``), or the donor it loads is
     the one every later test in the session gets.
     """
     with _loading:

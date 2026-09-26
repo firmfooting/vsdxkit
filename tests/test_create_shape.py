@@ -6,10 +6,10 @@ import zipfile
 import pytest
 from helpers.connect_records import page_records
 
-from vsdxkit import media
+from vsdxkit import _media
+from vsdxkit._partnames import target_part_name
 from vsdxkit.document import Document
 from vsdxkit.errors import InvalidOperationError
-from vsdxkit.partnames import target_part_name
 from vsdxkit.shape_kind import ShapeKind
 
 BASE = "test8_simple_connector.vsdx"
@@ -37,7 +37,7 @@ def _geometry(shape):
 @pytest.mark.parametrize("kind", list(ShapeKind))
 def test_each_kind_is_a_copy_of_its_bundled_shape(vsdx_copy, kind):
     page = Document.open(vsdx_copy(BASE)).pages[0]
-    donor = media._kind_shape(kind, Document.open)
+    donor = _media._kind_shape(kind, Document.open)
 
     shape = page.create_shape(kind, x=4.0, y=6.0)
 
@@ -77,7 +77,7 @@ def test_a_line_is_placed_by_its_endpoints(vsdx_copy):
 
 def test_a_line_keeps_its_length_without_a_width(vsdx_copy):
     page = Document.open(vsdx_copy(BASE)).pages[0]
-    length = media._kind_shape(ShapeKind.LINE, Document.open).width
+    length = _media._kind_shape(ShapeKind.LINE, Document.open).width
 
     line = page.create_shape(ShapeKind.LINE, x=4.0, y=6.0)
 

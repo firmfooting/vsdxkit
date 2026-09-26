@@ -2,7 +2,7 @@
 
 Each kind is a shape in one of the documents bundled with the library, and a
 new one is a copy of it. Which document and which shape is private to
-:mod:`vsdxkit.media`.
+the library.
 """
 
 from __future__ import annotations

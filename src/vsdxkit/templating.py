@@ -18,13 +18,13 @@ from typing import Protocol
 
 from jinja2.sandbox import SandboxedEnvironment
 
+from vsdxkit._logging_support import get_logger
+from vsdxkit._xmlio import adopt_prefixes
 from vsdxkit.errors import NotFoundError
-from vsdxkit.logging_support import get_logger
 from vsdxkit.pages import Page, PageCollection
 from vsdxkit.shapes import Shape
-from vsdxkit.xmlio import adopt_prefixes
 
-logger: Logger = get_logger(__name__)
+_logger: Logger = get_logger(__name__)
 
 # Every template rendered here comes out of the .vsdx being processed: shape
 # text, shape names, cell formulas. On Jinja's default environment that text is
@@ -130,7 +130,7 @@ def render_document(document: RenderTarget, context: Mapping[str, object]) -> No
             pages_to_remove.append(page)
     # remove pages after processing
     for p in pages_to_remove:
-        logger.debug("Removing page:'%s' index:%s", p.name, p.index_num)
+        _logger.debug("Removing page:'%s' index:%s", p.name, p.index_num)
         if p.index_num is not None:
             document.pages.delete(p)
 
@@ -278,7 +278,7 @@ def _page_is_shown(page: Page, context: Mapping[str, object]) -> bool:
     """
     for expression in _PAGE_SHOWIF.findall(page.name):
         shown = bool(_ENVIRONMENT.compile_expression(expression)(context))
-        logger.debug("page %r: showif %s is %s", page.name, expression, shown)
+        _logger.debug("page %r: showif %s is %s", page.name, expression, shown)
         if not shown:
             return False
     return True

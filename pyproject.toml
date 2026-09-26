@@ -83,7 +83,7 @@ packages = ["vsdxkit"]
 include-package-data = false
 
 [tool.setuptools.package-data]
-vsdxkit = ["media/*.vsdx", "py.typed"]
+vsdxkit = ["_bundled/*.vsdx", "py.typed"]
 
 [tool.setuptools.dynamic]
 version = { attr = "vsdxkit.__version__" }

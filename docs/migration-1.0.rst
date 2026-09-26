@@ -38,17 +38,30 @@ defines it:
    the library raises.
 
 ``from vsdx import calc_value``
-   ``from vsdxkit.formulae import calc_value``
+   Internal in 1.0; no public replacement. See "Internal modules are
+   private" below.
 
 ``from vsdx import get_logger``
-   ``from vsdxkit.logging_support import get_logger``
+   ``logging.getLogger("vsdxkit")``, as shown under
+   ``VisioFile(path, debug=True)`` below.
 
 ``from vsdx import attach_debug_stream_handler``, ``vsdx.logging_support.attach_debug_stream_handler()``
    Gone. Configure logging for the ``vsdxkit`` logger instead, as shown under
    ``VisioFile(path, debug=True)`` below.
 
 ``from vsdx import pretty_print_element``
-   ``from vsdxkit.xmlio import pretty_print_element``
+   The standard library's ``ET.tostring``, after ``ET.indent`` on a copy,
+   because ``ET.indent`` changes the whitespace of the element it is given
+   and a save would write that whitespace:
+
+   .. code-block:: python
+
+      import copy
+      import xml.etree.ElementTree as ET
+
+      readable = copy.deepcopy(shape.xml)
+      ET.indent(readable)
+      print(ET.tostring(readable, encoding="unicode"))
 
 ``from vsdx import namespace``, and the other namespace constants
    ``from vsdxkit import namespace``: the root keeps the XML namespace
@@ -239,24 +252,24 @@ OPC name, and the file-system view of 0.x is gone.
    the saved file with :mod:`zipfile`.
 
 ``vsdx.xmlio.file_to_xml``, ``xmlio.xml_to_file``
-   Gone with the file-system view. ``vsdxkit.xmlio.parse_part(bytes)`` and
-   ``serialise_part(tree)`` parse and serialise a part's bytes.
+   Gone with the file-system view, with no public replacement: the document
+   parses and serialises its own parts. Work on ``page.xml`` and
+   ``shape.xml``, and read a saved part's bytes with :mod:`zipfile`.
 
 ``xmlio.require_xml_tree``, ``xmlio.require_root``
    Gone. They read a named part from the zip, refused one that was absent
    with the description given, and ``require_root`` returned the root. The
    parts are already parsed: take the tree from the object model, such as
-   ``page.xml``, and compose the two checks 1.0 keeps.
-   ``vsdxkit.xmlio.require_tree(tree, description)`` refuses ``None`` with
-   :class:`vsdxkit.errors.MissingPartError`, and
-   ``require_element(tree.getroot(), description)`` gives the root.
+   ``page.xml``, and its root with ``page.xml.getroot()``.
 
 ``vsdx.shapes.to_float``
-   ``vsdxkit.xmlio.to_float``.
+   Internal in 1.0. ``float(value)`` reads a number from a cell's
+   ``V`` attribute; ``shape.x``, ``shape.width`` and the other properties
+   already return one.
 
 ``vsdx.vsdxfile.DRAWING_CONTENT_TYPE``, ``vsdxfile.MACRO_ENABLED_CONTENT_TYPE``
-   ``vsdxkit.document.DRAWING_CONTENT_TYPE`` and
-   ``vsdxkit.document.MACRO_ENABLED_CONTENT_TYPE``.
+   Internal in 1.0. ``document.is_macro_enabled`` answers the question they
+   served: whether the document is a macro-enabled ``.vsdm``.
 
 ``vsdx.vsdxfile.PackageLimits``
    ``vsdxkit.package.PackageLimits``.
@@ -749,8 +762,8 @@ which is gone along with its module. Membership is still geometric.
    As in 0.x, a row that is absent is not created.
 
 ``vsdx.containers.LANE_PITCH_INCHES``, ``containers.ROW_HEADING_TEXT``, ``containers.ROW_SWIMLANE_GUID``
-   ``vsdxkit.swimlanes.LANE_PITCH_INCHES``, ``ROW_HEADING_TEXT`` and
-   ``ROW_SWIMLANE_GUID``.
+   ``vsdxkit.swimlanes.LANE_PITCH_INCHES`` and ``ROW_HEADING_TEXT``.
+   ``ROW_SWIMLANE_GUID`` is gone, with no replacement: nothing read it.
 
 A shape on the edge two lanes share is now in the upper lane only. It used to
 count as a member of both.
@@ -771,7 +784,8 @@ These had no caller in the library, repeated a 1.0 name, or did nothing.
    shape shows from its master.
 
 ``vis.pretty_print_element(xml)``
-   ``vsdxkit.xmlio.pretty_print_element(xml)``.
+   ``ET.tostring``, as under ``from vsdx import pretty_print_element``
+   above.
 
 ``vis.document_rels()``
    Internal in 1.0; no public replacement. The document keeps its
@@ -807,6 +821,14 @@ These had no caller in the library, repeated a 1.0 name, or did nothing.
 ``page.master_base_id``
    Gone, with no replacement: nothing read it.
 
+``shape.line_to_x``, ``shape.line_to_y``
+   Gone. They read the last ``LineTo`` row of the shape's geometry, and
+   wrote a cell outside the geometry when the shape had no such row. Read
+   and write the rows through ``shape.geometry.rows``, or move one row's end
+   with ``shape.geometry.set_line_to(x, y, line_to_index)``, whose index
+   counts ``LineTo`` rows from the first, where these read the last.
+   ``shape.geometry`` is ``None`` for a shape with no geometry.
+
 The page allocates shape IDs
 ----------------------------
 
@@ -817,10 +839,9 @@ shape is created, copied or repeated by a ``{% for %}`` loop, so there is
 nothing left for a caller to renumber.
 
 ``shapes.parent_of(root, element)``, ``shapes.find_or_create_shapes_tag(parent)``
-   ``vsdxkit.shape_tree.parent_of`` and
-   ``vsdxkit.shape_tree.find_or_create_shapes_tag``, unchanged, beside the
-   other element-level walks. For a shape, ``shape.parent`` is its page or
-   group.
+   Internal in 1.0. For a shape, ``shape.parent`` is its page or group,
+   and ``group.append_shape(shape)`` moves a shape into a group, giving the
+   group the ``<Shapes>`` element it holds its members in when it has none.
 
 ``vis.copy_shape(element, page)``, ``vis.insert_shape(element, shapes, page, page_path)``
    ``shape.copy(page)``: a copy of the shape at the page's top level, with
@@ -833,19 +854,17 @@ nothing left for a caller to renumber.
    to, as above.
 
 ``vis.update_ids(element, id_map)``
-   ``vsdxkit.shape_tree.remap_sheet_references(element, id_map)`` rewrites
-   the ``Sheet.N!`` and ``SheetN!`` references in every formula under
-   ``element``, keeping each one's form. It returns ``None``, where
-   ``update_ids`` returned the element.
+   Internal in 1.0; no public replacement. The page rewrites the
+   ``Sheet.N!`` and ``SheetN!`` references in every formula that names a
+   shape it renumbers, as above.
 
 Package internals are private
 -----------------------------
 
 The document keeps its package parts in step itself, and a page's
-part-level bookkeeping is the document's, so 1.0 makes both private. The
-part names are in :mod:`vsdxkit.partnames`. To read a part's bytes, save the
-document and open the file with :mod:`zipfile`. If you need one of these,
-open an issue asking for an API.
+part-level bookkeeping is the document's, so 1.0 makes both private. To
+read a part's bytes, save the document and open the file with
+:mod:`zipfile`. If you need one of these, open an issue asking for an API.
 
 ``vis.pages_xml``, ``vis.pages_xml_rels``, ``vis.content_types_xml``, ``vis.app_xml``, ``vis.document_xml``, ``vis.document_xml_rels``, ``vis.masters_xml``
    Internal in 1.0; no public replacement. Assigning a tree to one replaced
@@ -901,3 +920,62 @@ The package differ is gone
    ``VisioFileDiff.extract_file_data``, ``VisioFileDiff.filepath_a``,
    ``VisioFileDiff.filepath_b``, ``VisioFileDiff.get_file_diffs`` and
    ``VisioFileDiff.removed_members``.
+
+Internal modules are private
+----------------------------
+
+Every name 1.0 exports is user API on purpose. The rest start with an
+underscore, in their own name or their module's, and may change in any
+release. The modules below hold only the library's plumbing, so each is
+renamed with a leading underscore; nothing in them is supported.
+
+``vsdx.formulae.calc_value``, ``formulae.func_map``, ``formulae.width_x_1``, ``formulae.width_x_0``, ``formulae.middle_x``, ``formulae.middle_y``, ``formulae.center_x``, ``formulae.center_y``, ``formulae.diag_width``, ``formulae.angle``, ``formulae.width``, ``formulae.height``
+   Internal in 1.0; no public replacement. They compute the values
+   ``shape.set_start_and_finish(...)`` writes beside a line's formulas,
+   which it still does.
+
+``vsdx.inheritance.InheritedRow``, ``InheritedRow.inherited``, ``InheritedRow.make_local``
+   ``InheritedRow`` is internal in 1.0. Its two members are public on the
+   rows a shape inherits from its master,
+   :class:`vsdxkit.geometry.GeometryRow` and
+   :class:`vsdxkit.shapes.DataProperty`: ``row.inherited`` says whether the
+   row is still the master's, and ``row.make_local()`` gives the shape a
+   row of its own.
+
+``vsdx.logging_support.get_logger``
+   ``logging.getLogger("vsdxkit")``. The library logs under ``vsdxkit`` and
+   never configures a handler itself.
+
+``vsdx.relationships.all_of``, ``relationships.find``, ``relationships.allocate_id``, ``relationships.append_if_absent``, ``relationships.remove``, ``relationships.ensure_override``, ``relationships.remove_override``
+   Internal in 1.0; no public replacement. The document keeps its
+   relationships and content types in step with every page, master and
+   shape it adds, copies or removes.
+
+``vsdx.xmlio.NAMESPACE_PREFIXES``, ``xmlio.register_namespaces``, ``xmlio.adopt_prefixes``, ``xmlio.make_cell_element``, ``xmlio.xml_value``, ``xmlio.require_tree``, ``xmlio.require_element``, ``xmlio.pretty_print_element``
+   Internal in 1.0; no public replacement. A save spells each part's
+   namespaces as the part declared them, and new ones as Visio does. A
+   shape's cells are ``shape.cells``, and ``shape.get_or_create_cell(name)``
+   adds one. The XML namespaces are ``vsdxkit.namespace`` and the other
+   constants the root keeps, and ``from vsdx import pretty_print_element``
+   above shows the standard library's printer.
+
+``vsdx.connectors.namespace``, ``geometry.namespace``
+   ``from vsdxkit import namespace``, the constant both were copies of. The
+   ``connectors`` module is internal in 1.0: with its copy gone it has no
+   public name left, and a connector is a :class:`vsdxkit.shapes.Connector`.
+
+``GeometryRow.create_row_xml``, ``GeometryCell.create_cell_xml``, ``GeometryCell.parent_xml``
+   Internal in 1.0. A row or a cell creates its element when it is made,
+   and calling either method again added a second one. ``cell.parent.xml``
+   is the element ``parent_xml`` held.
+
+``GeometryRow.inherited_by``, ``DataProperty.inherited_by``
+   Internal in 1.0. They were the step that hands a master's row to an
+   instance, which ``shape.geometry`` and ``shape.data_properties`` take
+   themselves. ``row.make_local()`` gives the shape a row of its own.
+
+``vsdx.shapes.substitute``
+   Internal in 1.0. ``page.apply_text_context(context)`` substitutes a
+   context into the text of every shape on a page, and
+   ``shape.apply_text_filter(context)`` into one shape and the shapes inside
+   it.

@@ -66,11 +66,11 @@ def main() -> int:
     # 1. wheel contents include package data: inspected from the archive itself
     with zipfile.ZipFile(wheel_path) as wheel:
         names = wheel.namelist()
-    media_members = sorted(name for name in names if name.startswith("vsdxkit/media/") and name.endswith(".vsdx"))
+    media_members = sorted(name for name in names if name.startswith("vsdxkit/_bundled/") and name.endswith(".vsdx"))
     if len(media_members) < 2:
-        fail(f"wheel carries {len(media_members)} media .vsdx members, expected at least 2: {media_members}")
+        fail(f"wheel carries {len(media_members)} bundled .vsdx members, expected at least 2: {media_members}")
     else:
-        ok(f"wheel media members: {', '.join(media_members)}")
+        ok(f"wheel bundled .vsdx members: {', '.join(media_members)}")
     if "vsdxkit/py.typed" not in names:
         fail("py.typed missing from wheel")
     else:
@@ -96,14 +96,14 @@ def main() -> int:
 
     # 3. both bundled media files exist in the installed distribution
     for member_name in ("media.vsdx", "palette_extended.vsdx"):
-        installed = os.path.join(package_dir, "media", member_name)
+        installed = os.path.join(package_dir, "_bundled", member_name)
         if not os.path.exists(installed):
-            fail(f"installed distribution is missing media/{member_name}")
+            fail(f"installed distribution is missing _bundled/{member_name}")
         else:
-            ok(f"installed media/{member_name} present")
+            ok(f"installed _bundled/{member_name} present")
 
     import vsdxkit
-    from vsdxkit import media
+    from vsdxkit import _media
     from vsdxkit.document import Document
     from vsdxkit.shape_kind import ShapeKind
 
@@ -111,14 +111,14 @@ def main() -> int:
 
     # 4. load the bundled donors, then exercise the creation APIs against a sample document
     try:
-        media._sentinel(media.PALETTE, "PALETTE_PROCESS", Document.open)
-        media._sentinel(media.MEDIA, media.STRAIGHT_CONNECTOR, Document.open)
+        _media._sentinel(_media.PALETTE, "PALETTE_PROCESS", Document.open)
+        _media._sentinel(_media.MEDIA, _media.STRAIGHT_CONNECTOR, Document.open)
     except Exception as error:  # smoke harness reports every failure mode
         fail(f"loading the bundled donors failed from the installed wheel: {error}")
         return 1
     ok("the bundled donors load from the installed wheel")
 
-    source = glob.glob(os.path.join(package_dir, "media", "*.vsdx"))[0]
+    source = glob.glob(os.path.join(package_dir, "_bundled", "*.vsdx"))[0]
     with tempfile.TemporaryDirectory() as workdir:
         document = os.path.join(workdir, "smoke.vsdx")
         with open(source, "rb") as handle:

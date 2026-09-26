@@ -15,10 +15,10 @@ import zipfile
 
 import pytest
 
-from vsdxkit import media
+from vsdxkit import _media
+from vsdxkit._partnames import relationships_part_name
 from vsdxkit.document import Document
 from vsdxkit.errors import MalformedPackageError
-from vsdxkit.partnames import relationships_part_name
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
@@ -106,8 +106,8 @@ def test_the_connector_master_is_imported_from_the_donor_not_the_target(vsdx_cop
     page = vis.pages[0]
     shapes = list(page.children)
     page.connect(shapes[0], shapes[1])
-    donor = media._donor(media.MEDIA, Document.open)
-    master_page_id = media._sentinel(media.MEDIA, media.STRAIGHT_CONNECTOR, Document.open).master_page_ID
+    donor = _media._donor(_media.MEDIA, Document.open)
+    master_page_id = _media._sentinel(_media.MEDIA, _media.STRAIGHT_CONNECTOR, Document.open).master_page_ID
     assert master_page_id is not None
     connector_master = donor._master_page_by_id(master_page_id)
     assert connector_master is not None
@@ -170,9 +170,9 @@ def test_a_document_has_no_zip_file_contents_or_directory(vsdx_copy):
 @pytest.mark.parametrize("name", ["file_to_xml", "xml_to_file", "require_xml_tree", "require_root"])
 def test_xmlio_has_no_helpers_over_the_old_mapping(name):
     """Fails if a helper that took the pre-store `{path: BytesIO}` mapping is still in `xmlio` (#91)."""
-    import vsdxkit.xmlio
+    import vsdxkit._xmlio
 
-    assert not hasattr(vsdxkit.xmlio, name)
+    assert not hasattr(vsdxkit._xmlio, name)
     assert not hasattr(vsdxkit.document, name)
 
 

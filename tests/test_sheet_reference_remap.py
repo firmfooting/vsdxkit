@@ -15,10 +15,10 @@ import xml.etree.ElementTree as ET
 from helpers.connect_records import page_records
 
 from vsdxkit import namespace
+from vsdxkit._shape_tree import remap_sheet_references
 from vsdxkit.document import Document
 from vsdxkit.glue import Glue
 from vsdxkit.shape_kind import ShapeKind
-from vsdxkit.shape_tree import remap_sheet_references
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 

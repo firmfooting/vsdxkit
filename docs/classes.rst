@@ -59,14 +59,6 @@ Shape, Connector, ShapeCollection, Cell and DataProperty
    :members:
    :undoc-members:
 
-Shape tree
-----------
-
-The functions for working on a shape's raw ``Element`` tree.
-
-.. automodule:: vsdxkit.shape_tree
-   :members:
-
 Glue, routing and SwimlaneDiagram
 ---------------------------------
 

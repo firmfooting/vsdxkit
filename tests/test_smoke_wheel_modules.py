@@ -26,7 +26,7 @@ smoke_wheel = _load("smoke_wheel")
 
 def _wheel_names(*extra: str, without: str | None = None) -> list[str]:
     modules = [f"vsdxkit/{path.name}" for path in SOURCE.glob("*.py") if path.name != without]
-    return [*modules, "vsdxkit/py.typed", "vsdxkit/media/media.vsdx", "vsdxkit-1.0.0.dist-info/METADATA", *extra]
+    return [*modules, "vsdxkit/py.typed", "vsdxkit/_bundled/media.vsdx", "vsdxkit-1.0.0.dist-info/METADATA", *extra]
 
 
 def test_the_script_finds_the_checkout_it_sits_in():

@@ -12,10 +12,10 @@ import zipfile
 
 import pytest
 
+from vsdxkit._masters import MasterCatalog
+from vsdxkit._partnames import relationship_target, relationships_part_name
 from vsdxkit.document import Document
 from vsdxkit.errors import MissingPartError
-from vsdxkit.masters import MasterCatalog
-from vsdxkit.partnames import relationship_target, relationships_part_name
 
 RELS_NS = "{http://schemas.openxmlformats.org/package/2006/relationships}"
 MASTER_RELATIONSHIP = "http://schemas.microsoft.com/visio/2010/relationships/master"
@@ -309,12 +309,12 @@ def test_a_sub_shape_copied_within_one_document_keeps_its_group_s_dangling_maste
 
 
 def test_the_masters_module_does_not_load_the_document_class():
-    """Guards the seam: `vsdxkit.masters` must not import `vsdxkit.document`, directly or through what it imports.
+    """Guards the seam: `vsdxkit._masters` must not import `vsdxkit.document`, directly or through what it imports.
 
     The catalog is a lower layer: the document hands it a factory for master
     pages rather than the catalog reaching up for the class.
     """
-    script = "import sys, vsdxkit.masters; print('vsdxkit.document' in sys.modules)"
+    script = "import sys, vsdxkit._masters; print('vsdxkit.document' in sys.modules)"
     result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, check=True)
     assert result.stdout.strip() == "False"
 

@@ -8,12 +8,12 @@ from xml.etree.ElementTree import Element
 
 import pytest
 
-from vsdxkit import ext_prop_namespace, media, namespace, vt_namespace
+from vsdxkit import _media, ext_prop_namespace, namespace, vt_namespace
 from vsdxkit.document import Document
 
 
 def _media_filename() -> str:
-    return media.media_path(media.MEDIA)
+    return _media.media_path(_media.MEDIA)
 
 
 # file structure
@@ -580,7 +580,7 @@ def test_the_dead_document_members_are_gone():
     """Fails if a member Phase 7 deleted as dead comes back (#116)."""
     import dataclasses
 
-    from vsdxkit.package import XmlPart
+    from vsdxkit._package import XmlPart
     from vsdxkit.pages import _PagePosition
 
     for name in (

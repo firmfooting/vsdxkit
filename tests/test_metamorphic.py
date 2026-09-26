@@ -50,8 +50,8 @@ from helpers.visio_observation import (
     observation_from_package,
 )
 
+from vsdxkit._xmlio import parse_part, serialise_part
 from vsdxkit.document import Document
-from vsdxkit.xmlio import parse_part, serialise_part
 
 BASEDIR = os.path.dirname(os.path.realpath(__file__))
 PACKAGE_SUFFIXES = (".vsdx", ".vsdm")

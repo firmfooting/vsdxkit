@@ -16,11 +16,12 @@ import zipfile
 import pytest
 
 import vsdxkit
+import vsdxkit._package
+import vsdxkit._xmlio
 import vsdxkit.document
 import vsdxkit.errors
 import vsdxkit.package
-import vsdxkit.xmlio
-from vsdxkit import media
+from vsdxkit import _media
 from vsdxkit.document import Document
 from vsdxkit.errors import (
     InvalidOperationError,
@@ -192,7 +193,7 @@ def test_require_element_raises_missing_part_error():
     means an incomplete package, not a bad argument.
     """
     with pytest.raises(MissingPartError, match="Pages root"):
-        vsdxkit.xmlio.require_element(None, "Pages root")
+        vsdxkit._xmlio.require_element(None, "Pages root")
 
 
 def test_require_tree_raises_missing_part_error():
@@ -202,7 +203,7 @@ def test_require_tree_raises_missing_part_error():
     part that is not there.
     """
     with pytest.raises(MissingPartError, match=r"pages\.xml"):
-        vsdxkit.xmlio.require_tree(None, "pages.xml")
+        vsdxkit._xmlio.require_tree(None, "pages.xml")
 
 
 def test_store_require_xml_raises_missing_part_error(tmp_path):
@@ -213,7 +214,7 @@ def test_store_require_xml_raises_missing_part_error(tmp_path):
     opened -- one with no parts at all -- as it does for one absent from a
     real archive.
     """
-    store = vsdxkit.package.PackageStore(tmp_path / "nothing.vsdx")
+    store = vsdxkit._package.PackageStore(tmp_path / "nothing.vsdx")
     with pytest.raises(MissingPartError, match=r"/visio/document\.xml"):
         store.require_xml("/visio/document.xml")
 
@@ -234,7 +235,7 @@ def test_a_document_with_no_pages_part_raises_missing_part_error(vsdx_copy):
 
 def test_a_required_part_the_store_lacks_is_a_missing_part():
     """Fails if PackageStore.require_xml reports an absent part with a plain ValueError."""
-    from vsdxkit.package import PackageStore
+    from vsdxkit._package import PackageStore
 
     store = PackageStore.open(os.path.join(BASEDIR, "test1.vsdx"))
     with pytest.raises(MissingPartError):
@@ -262,7 +263,7 @@ def test_promoting_a_part_that_is_not_xml_raises_malformed_package_error(tmp_pat
     Promoting a part parses bytes the package supplied, so bytes that are not
     well-formed XML are a malformed package, however the parser reports them.
     """
-    store = vsdxkit.package.PackageStore(tmp_path / "nothing.vsdx")
+    store = vsdxkit._package.PackageStore(tmp_path / "nothing.vsdx")
     store.write_bytes("/visio/document.xml", b"<not-xml")
     with pytest.raises(MalformedPackageError, match="not well-formed XML"):
         store.read_xml("/visio/document.xml")
@@ -633,7 +634,7 @@ def test_a_package_limit_is_not_reported_as_a_malformed_member(tmp_path):
         archive.writestr("visio/document.xml", b"x" * 4096)
 
     with pytest.raises(PackageLimitError) as caught:
-        vsdxkit.package.read_archive_members(str(package), PackageLimits(max_member_size=16))
+        vsdxkit._package.read_archive_members(str(package), PackageLimits(max_member_size=16))
     assert caught.value.reason == "member_size"
 
 
@@ -645,7 +646,7 @@ def test_require_attribute_returns_the_value_when_it_is_there():
     open rather than only the malformed ones.
     """
     element = ET.fromstring('<Relationship Id="rId1"/>')
-    assert vsdxkit.xmlio.require_attribute(element, "Id", "Relationship") == "rId1"
+    assert vsdxkit._xmlio.require_attribute(element, "Id", "Relationship") == "rId1"
 
 
 def test_a_part_declaring_an_unknown_encoding_raises_malformed_package_error(bad_encoding_package):
@@ -660,10 +661,10 @@ def test_a_part_declaring_an_unknown_encoding_raises_malformed_package_error(bad
 
 def test_a_part_in_a_multibyte_encoding_the_parser_refuses_is_malformed():
     """Fails if parse_part lets expat's "multi-byte encodings are not supported" ValueError escape untranslated."""
-    from vsdxkit import xmlio
+    from vsdxkit import _xmlio
 
     with pytest.raises(MalformedPackageError, match="encoding"):
-        xmlio.parse_part(REFUSED_MULTIBYTE_PART, "/visio/pages/page1.xml")
+        _xmlio.parse_part(REFUSED_MULTIBYTE_PART, "/visio/pages/page1.xml")
 
 
 @pytest.mark.allow_invalid_package("unreadable-part")
@@ -675,14 +676,14 @@ def test_opening_a_package_with_a_refused_multibyte_page_encoding_raises_malform
 
 def test_memory_exhausted_while_reading_a_member_is_not_blamed_on_the_package(monkeypatch, tmp_path):
     """Fails if _member_bytes' broad handler turns MemoryError into MalformedPackageError."""
-    from vsdxkit import package
+    from vsdxkit import _package
 
     def exhausted(*args, **kwargs):
         raise MemoryError
 
-    monkeypatch.setattr(package, "_read_bounded", exhausted)
+    monkeypatch.setattr(_package, "_read_bounded", exhausted)
     with pytest.raises(MemoryError):
-        package.PackageStore.open(os.path.join(BASEDIR, "test1.vsdx"))
+        _package.PackageStore.open(os.path.join(BASEDIR, "test1.vsdx"))
 
 
 def test_malformed_shapesheet_number_raises_malformed_package_error(vsdx_copy):
@@ -710,7 +711,7 @@ def test_a_bundled_shape_that_is_missing_raises_not_found_error():
     finds nothing is what `NotFoundError` is for. It is still a `ValueError`.
     """
     with pytest.raises(NotFoundError, match=r"has no shape named 'PALETTE_NOT_A_SHAPE'"):
-        media._sentinel(media.PALETTE, "PALETTE_NOT_A_SHAPE", Document.open)
+        _media._sentinel(_media.PALETTE, "PALETTE_NOT_A_SHAPE", Document.open)
 
 
 def test_deleting_a_detached_shape_raises_invalid_operation_error(vsdx_copy):
@@ -812,7 +813,7 @@ def test_a_duplicate_geometry_row_index_raises_invalid_operation(vsdx_copy):
     assert geometry is not None
     existing = geometry.rows[sorted(geometry.rows)[0]]
     with pytest.raises(InvalidOperationError, match="already exists"):
-        existing.create_row_xml(existing.row_type, str(existing.index))
+        existing._create_row_xml(existing.row_type, str(existing.index))
 
 
 def test_saving_an_empty_package_raises_invalid_operation(vsdx_copy, tmp_path):
@@ -850,7 +851,7 @@ def test_refusing_none_for_a_page_part_is_an_invalid_operation(vsdx_copy):
 def test_argument_checks_are_still_plain_builtin_errors():
     """Type and value checks on what a caller passed are not library conditions."""
     with pytest.raises(TypeError) as type_error:
-        vsdxkit.xmlio.xml_value(None)
+        vsdxkit._xmlio.xml_value(None)
     assert not isinstance(type_error.value, VsdxError)
 
     with pytest.raises(ValueError) as value_error:
@@ -860,7 +861,7 @@ def test_argument_checks_are_still_plain_builtin_errors():
 
 def test_an_unusable_part_name_is_still_a_plain_value_error(tmp_path):
     """`_checked` feeds a caught ValueError into PackageLimitError; it must stay one."""
-    store = vsdxkit.package.PackageStore(tmp_path / "nothing.vsdx")
+    store = vsdxkit._package.PackageStore(tmp_path / "nothing.vsdx")
     with pytest.raises(ValueError) as caught:
         store.read_bytes("visio/document.xml")
     assert not isinstance(caught.value, VsdxError)

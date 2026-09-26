@@ -5,9 +5,9 @@ from collections.abc import Callable
 from logging import Logger
 from typing import Protocol
 
-from vsdxkit.logging_support import get_logger
+from vsdxkit._logging_support import get_logger
 
-logger: Logger = get_logger(__name__)
+_logger: Logger = get_logger(__name__)
 
 
 class ShapeMetrics(Protocol):
@@ -110,6 +110,6 @@ func_map: dict[str, Callable[[ShapeMetrics], float | None]] = {
 def calc_value(shape: ShapeMetrics, func_text: str) -> float | str | None:
     f = func_map.get(func_text)
     if f is None:
-        logger.debug("calc_value(func_text='%s') no method found", func_text)
+        _logger.debug("calc_value(func_text='%s') no method found", func_text)
         return None
     return f(shape)

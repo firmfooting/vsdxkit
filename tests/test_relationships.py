@@ -12,8 +12,7 @@ import zipfile
 import pytest
 from helpers.package_validator import describe_defects, validate_package
 
-from vsdxkit.document import Document
-from vsdxkit.relationships import (
+from vsdxkit._relationships import (
     allocate_id,
     append_if_absent,
     ensure_override,
@@ -21,6 +20,7 @@ from vsdxkit.relationships import (
     remove,
     remove_override,
 )
+from vsdxkit.document import Document
 
 RELS_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 CT_NS = "http://schemas.openxmlformats.org/package/2006/content-types"

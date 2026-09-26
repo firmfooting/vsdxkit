@@ -12,16 +12,17 @@ if sys.version_info >= (3, 12):
 else:
     from typing_extensions import override
 
+from vsdxkit import namespace
+from vsdxkit._inheritance import InheritedRow
+from vsdxkit._logging_support import get_logger
+from vsdxkit._shape_part import AttachedShape, ShapePart
+from vsdxkit._xmlio import make_cell_element, pretty_print_element, to_float, xml_value
 from vsdxkit.errors import InvalidOperationError
-from vsdxkit.inheritance import InheritedRow
-from vsdxkit.logging_support import get_logger
-from vsdxkit.shape_part import AttachedShape, ShapePart
-from vsdxkit.xmlio import make_cell_element, pretty_print_element, to_float, xml_value
 
-logger: Logger = get_logger(__name__)
+_logger: Logger = get_logger(__name__)
 
 
-class GeometryOwner(Protocol):
+class _GeometryOwner(Protocol):
     """What a Geometry reads from the shape it belongs to."""
 
     @property
@@ -34,12 +35,9 @@ class GeometryOwner(Protocol):
     def geometry(self) -> Geometry | None: ...
 
     @property
-    def master_shape(self) -> GeometryOwner | None: ...
+    def master_shape(self) -> _GeometryOwner | None: ...
 
     def _require_attached(self, operation: str) -> None: ...
-
-
-namespace = "{http://schemas.microsoft.com/office/visio/2012/main}"  # visio file name space
 
 
 def _row_index_sort_key(index: str) -> tuple[int, int, str]:
@@ -58,7 +56,7 @@ class Geometry(ShapePart):
     of the same name rather than replacing it.
 
     An inherited row reads the master's cells but is marked
-    :attr:`~vsdxkit.inheritance.InheritedRow.inherited`. The first write to it,
+    :attr:`GeometryRow.inherited`. The first write to it,
     through :attr:`GeometryRow.x`, :meth:`move`, :meth:`set_move_to` or
     :meth:`set_line_to`, materialises an override row on this shape and leaves
     the master alone.
@@ -75,9 +73,9 @@ class Geometry(ShapePart):
     xml: Element
     cells: list[GeometryCell]
     rows: dict[str, GeometryRow]
-    shape: GeometryOwner
+    shape: _GeometryOwner
 
-    def __init__(self, xml: Element, shape: GeometryOwner):
+    def __init__(self, xml: Element, shape: _GeometryOwner):
         # get shape master geometry, and append/overwrite with actual shape instance data
 
         self.xml = xml  # expect an Element of Section with attr N='Geometry'
@@ -100,7 +98,7 @@ class Geometry(ShapePart):
             self.cells.append(GeometryCell(parent=self, xml=cell))
 
         if master_geometry is not None:
-            self.rows = {index: row.inherited_by(self) for index, row in master_geometry.rows.items()}
+            self.rows = {index: row._inherited_by(self) for index, row in master_geometry.rows.items()}
         for row in self.xml.findall(f"{namespace}Row"):
             index = row.attrib.get("IX")
             if index is None:
@@ -148,7 +146,7 @@ class Geometry(ShapePart):
         # row setters would make the refusal depend on the shape
         self._require_attached("Geometry.move()")
         for r in self.rows.values():  # type: GeometryRow
-            logger.debug("r=%s %s", type(r), r)
+            _logger.debug("r=%s %s", type(r), r)
             if str(r.row_type).lower() in ["moveto", "lineto"]:  # todo: include other absolute row types
                 x = r.x
                 y = r.y
@@ -156,7 +154,7 @@ class Geometry(ShapePart):
                     r.x = x + x_delta
                 if y is not None:
                     r.y = y + y_delta
-                logger.debug("r=%s %s after move %s, %s", type(r), r, x_delta, y_delta)
+                _logger.debug("r=%s %s after move %s, %s", type(r), r, x_delta, y_delta)
 
     def set_move_to(self, x: float, y: float, move_to_index: int = 0) -> None:
         """Set the coordinates of one MoveTo row.
@@ -212,7 +210,7 @@ class GeometryRow(InheritedRow, ShapePart):
         IX: str | int | None = None,
     ):
         self.geometry = geometry  # parent of this row
-        self.xml = xml if type(xml) is Element else self.create_row_xml(T or "", str(IX))
+        self.xml = xml if type(xml) is Element else self._create_row_xml(T or "", str(IX))
         # Create a dictionary of each Cell element, indexed by name
         # a row's cells are keyed by name (unlike Geometry.cells, a list)
         self.cells: dict[str, GeometryCell] = dict(master_geometry_row.cells) if master_geometry_row else {}
@@ -227,7 +225,7 @@ class GeometryRow(InheritedRow, ShapePart):
     def _shape(self) -> AttachedShape:
         return self.geometry._shape
 
-    def inherited_by(self, geometry: Geometry) -> GeometryRow:
+    def _inherited_by(self, geometry: Geometry) -> GeometryRow:
         """This row as an instance's Geometry sees it, marked inherited.
 
         The copy reads the master's Row element and the master's cells; the
@@ -254,10 +252,10 @@ class GeometryRow(InheritedRow, ShapePart):
         # the guarded x/y setters, and this is the only materialisation path
         self._require_attached("materialising an inherited geometry row")
         row_type, index = self.row_type, self.index
-        self.xml = self.create_row_xml(row_type or "", str(index))
-        logger.debug("materialised inherited row on the instance: %s", self)
+        self.xml = self._create_row_xml(row_type or "", str(index))
+        _logger.debug("materialised inherited row on the instance: %s", self)
 
-    def create_row_xml(self, T: str, IX: str) -> Element:
+    def _create_row_xml(self, T: str, IX: str) -> Element:
         """Add a Row element for this row to the parent Geometry section.
 
         The row is placed in index order among the section's existing rows,
@@ -270,7 +268,7 @@ class GeometryRow(InheritedRow, ShapePart):
         ``IX=None`` arrives as the literal ``"None"`` and passes the
         emptiness check.
         """
-        self._require_attached("GeometryRow.create_row_xml()")
+        self._require_attached("creating a geometry row")
         if not T or not IX:
             raise ValueError(f"cannot create a geometry row without T and IX (got T={T!r}, IX={IX!r})")
         # Create new row xml
@@ -335,7 +333,7 @@ class GeometryRow(InheritedRow, ShapePart):
         if x_cell is None or x_cell.parent is not self:
             # create new cell if none exists, or if the existing one is the master's
             x_cell = GeometryCell(parent=self, xml=None, name="X", value=cell_value)
-            logger.debug("x_cell=%s", x_cell)
+            _logger.debug("x_cell=%s", x_cell)
         x_cell.value = cell_value
 
     @property
@@ -353,7 +351,7 @@ class GeometryRow(InheritedRow, ShapePart):
         if y_cell is None or y_cell.parent is not self:
             # create new cell if none exists, or if the existing one is the master's
             y_cell = GeometryCell(parent=self, xml=None, name="Y", value=cell_value)
-            logger.debug("y_cell=%s", y_cell)
+            _logger.debug("y_cell=%s", y_cell)
         y_cell.value = cell_value
 
     @property
@@ -382,7 +380,7 @@ class GeometryCell(ShapePart):
     """class to represent a Cell element, a name value pair. This may be a child of Geometry or of GeometryRow"""
 
     parent: GeometryRow | Geometry
-    parent_xml: Element
+    _parent_xml: Element
     xml: Element
 
     def __init__(
@@ -393,8 +391,8 @@ class GeometryCell(ShapePart):
         value: float | str | None = None,
     ):
         self.parent = parent
-        self.parent_xml = parent.xml
-        self.xml = xml if type(xml) is Element else self.create_cell_xml(name or "")
+        self._parent_xml = parent.xml
+        self.xml = xml if type(xml) is Element else self._create_cell_xml(name or "")
         if name:
             self.name = name
         if value is not None:
@@ -405,12 +403,12 @@ class GeometryCell(ShapePart):
     def _shape(self) -> AttachedShape:
         return self.parent._shape
 
-    def create_cell_xml(self, name: str) -> Element:
+    def _create_cell_xml(self, name: str) -> Element:
         # also the first write of GeometryCell.__init__, so constructing a cell
         # on a detached shape refuses before it appends anything
-        self._require_attached("GeometryCell.create_cell_xml()")
+        self._require_attached("creating a geometry cell")
         cell = make_cell_element(name)
-        self.parent_xml.append(cell)
+        self._parent_xml.append(cell)
         if isinstance(self.parent, GeometryRow):
             self.parent.cells[name] = self
         else:
