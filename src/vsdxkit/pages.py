@@ -857,7 +857,9 @@ class Page:
         :param width, height: the new size; the kind's or prototype's when omitted
         :param text: the label. A kind starts blank; a prototype keeps its text when omitted.
         :raises TypeError: if ``kind_or_prototype`` is neither a kind nor a shape
-        :raises InvalidOperationError: if a prototype belongs to another document
+        :raises InvalidOperationError: if the page is no longer in its document; if a prototype is no
+            longer in its document, or belongs to another document; if ``height`` is given for a 1-D
+            shape; or if a 1-D shape lacks the begin and end points it is placed by
         :returns: the new shape
         """
         if not self._attached():

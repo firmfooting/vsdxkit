@@ -70,8 +70,9 @@ class Geometry(ShapePart):
 
     A shape that has a master starts from the master's section and layers its
     own on top. Rows merge by index and then by cell name, so a row that
-    overrides only X keeps the master's Y; a row carrying ``Del="1"`` removes
-    the inherited row entirely. Section cells merge less carefully: they are a
+    overrides only X keeps the master's Y; a row carrying a ``Del`` attribute
+    of any value removes the inherited row entirely, ``Del="0"`` included,
+    though Visio reads that as keeping the row. Section cells merge less carefully: they are a
     list, not a dict, so an instance cell is *appended* after the inherited one
     of the same name rather than replacing it.
 

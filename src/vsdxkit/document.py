@@ -1078,7 +1078,13 @@ class Document:
             match the package's own kind; any other name gets the matching
             extension appended. Omit it to save over the file the document
             was opened from; that name is checked the same way but never renamed.
-        :raises InvalidOperationError: if the extension contradicts the package kind
+        :raises InvalidOperationError: if the extension contradicts the package kind, or the package
+            holds no parts
+        :raises PackageLimitError: if the package has more members, a larger member, or more bytes in
+            all than the limits it was opened with allow; nothing is written
+        :raises ValueError: if ``zipfile`` would store a part under a different name; nothing is written
+        :raises OSError: if the file cannot be written, or the temporary file it is built in is replaced
+            before it is moved over the target
         """
         if not self._package.names():
             raise InvalidOperationError("cannot save an empty package")
