@@ -350,11 +350,13 @@ def test_set_line_to_materialises_an_inherited_row_on_the_instance():
     assert cell_values(row_element(connector.master_shape, "2")) == {"X": "0", "Y": "-1.181102362204724"}
 
 
-def test_set_move_to_leaves_a_formula_that_overrides_the_value_it_writes():
-    """The value is written but the cell's F formula is left in place.
+def test_set_move_to_drops_a_formula_that_would_override_the_value_it_writes():
+    """The value is written and the cell's F formula is removed (#300, #319).
 
     `Line A`'s MoveTo X carries `F="Width*0"`. Visio recomputes V from F, so
-    the coordinate written here is discarded when the file is opened.
+    a write that left the formula in place would be discarded when the file
+    is opened; set_move_to() writes the value Visio shows, as typing a
+    number into the ShapeSheet does.
     """
     vis = Document.open(TEST9)
     line = vis.pages[0].shapes.by_text("Line A")
@@ -363,7 +365,7 @@ def test_set_move_to_leaves_a_formula_that_overrides_the_value_it_writes():
 
     x_cell = line.geometry.rows["1"].cells["X"]
     assert x_cell.value == "7.0"
-    assert x_cell.formula == "Width*0"
+    assert x_cell.formula is None
 
 
 def test_copying_an_inherited_row_down_drops_the_masters_formula():

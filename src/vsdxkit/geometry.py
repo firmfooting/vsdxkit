@@ -172,8 +172,14 @@ class Geometry(ShapePart):
         does not define is left undefined rather than treated as zero.
 
         An inherited row is read from the master and written to a copy on this
-        shape, so no other shape drawn from that master moves with it.
+        shape, so no other shape drawn from that master moves with it. A cell
+        this shape already owns loses its formula, as typing a number into
+        the ShapeSheet does in Visio, so the value is the one Visio shows.
         """
+        self._move(x_delta, y_delta, keep_formula=False)
+
+    def _move(self, x_delta: float, y_delta: float, *, keep_formula: bool) -> None:
+        """As :meth:`move`, with `keep_formula` passed to each coordinate write."""
         # a shape with no absolute rows writes nothing, so leaving this to the
         # row setters would make the refusal depend on the shape
         self._require_attached("Geometry.move()")
@@ -183,9 +189,9 @@ class Geometry(ShapePart):
                 x = r.x
                 y = r.y
                 if x is not None:
-                    r.x = x + x_delta
+                    r._write_coordinate("X", x + x_delta, keep_formula=keep_formula)
                 if y is not None:
-                    r.y = y + y_delta
+                    r._write_coordinate("Y", y + y_delta, keep_formula=keep_formula)
                 _logger.debug("r=%s %s after move %s, %s", type(r), r, x_delta, y_delta)
 
     def set_move_to(self, x: float, y: float, move_to_index: int = 0) -> None:
@@ -196,27 +202,26 @@ class Geometry(ShapePart):
 
         An inherited row is copied down onto this shape first, so the master is
         left alone; the copy carries the value but not the master cell's ``F``
-        formula. A cell this shape already owns keeps its formula, and Visio
-        re-evaluates that formula over the value written here.
+        formula. A cell this shape already owns loses its formula, as typing
+        a number into the ShapeSheet does in Visio, so the value is the one
+        Visio shows.
         """
-        self._require_attached("Geometry.set_move_to()")
-        move_tos = [r for r in self.rows.values() if str(r.row_type).lower() == "moveto"]
-        if len(move_tos) > move_to_index:
-            move_to = move_tos[move_to_index]  # type: GeometryRow
-            move_to.x = x
-            move_to.y = y
+        self._set_point("moveto", "Geometry.set_move_to()", x, y, move_to_index, keep_formula=False)
 
     def set_line_to(self, x: float, y: float, line_to_index: int = 0) -> None:
         """Set the coordinates of one LineTo row.
 
         Behaves as :meth:`set_move_to` does, over LineTo rows.
         """
-        self._require_attached("Geometry.set_line_to()")
-        line_tos = [r for r in self.rows.values() if str(r.row_type).lower() == "lineto"]
-        if len(line_tos) > line_to_index:
-            line_to = line_tos[line_to_index]  # type: GeometryRow
-            line_to.x = x
-            line_to.y = y
+        self._set_point("lineto", "Geometry.set_line_to()", x, y, line_to_index, keep_formula=False)
+
+    def _set_point(self, row_type: str, operation: str, x: float, y: float, position: int, *, keep_formula: bool) -> None:
+        """Write `x` and `y` to the `position`-th row of `row_type` (lower case), if the shape has one; `operation` names the call for a refusal."""
+        self._require_attached(operation)
+        rows = [row for row in self.rows.values() if str(row.row_type).lower() == row_type]
+        if len(rows) > position:
+            rows[position]._write_coordinate("X", x, keep_formula=keep_formula)
+            rows[position]._write_coordinate("Y", y, keep_formula=keep_formula)
 
     def __repr__(self) -> str:
         """Shows the section's cells, each row's type, index and coordinates, and then the section's XML, pretty-printed."""
@@ -376,17 +381,7 @@ class GeometryRow(InheritedRow, ShapePart):
 
     @x.setter
     def x(self, value: float | str) -> None:
-        # ahead of make_local(): a refused write must not leave an empty
-        # override row behind on the shape
-        self._require_attached("writing a geometry row's X coordinate")
-        self.make_local()  # an inherited row gets one of its own before it is written
-        cell_value = xml_value(value)
-        x_cell = self.cells.get("X")  # type: GeometryCell
-        if x_cell is None or x_cell.parent is not self:
-            # create new cell if none exists, or if the existing one is the master's
-            x_cell = GeometryCell(parent=self, xml=None, name="X", value=cell_value)
-            _logger.debug("x_cell=%s", x_cell)
-        x_cell.value = cell_value
+        self._write_coordinate("X", value, keep_formula=False)
 
     @property
     def y(self) -> float | None:
@@ -396,15 +391,20 @@ class GeometryRow(InheritedRow, ShapePart):
 
     @y.setter
     def y(self, value: float | str) -> None:
-        self._require_attached("writing a geometry row's Y coordinate")
-        self.make_local()
+        self._write_coordinate("Y", value, keep_formula=False)
+
+    def _write_coordinate(self, name: str, value: float | str, *, keep_formula: bool) -> None:
+        """Write coordinate cell `name` (``X`` or ``Y``), copying an inherited row down first; `keep_formula` as :meth:`GeometryCell._set_value` takes it."""
+        # ahead of make_local(): a refused write must not leave an empty
+        # override row behind on the shape
+        self._require_attached(f"writing a geometry row's {name} coordinate")
+        self.make_local()  # an inherited row gets one of its own before it is written
         cell_value = xml_value(value)
-        y_cell = self.cells.get("Y")
-        if y_cell is None or y_cell.parent is not self:
+        cell = self.cells.get(name)
+        if cell is None or cell.parent is not self:
             # create new cell if none exists, or if the existing one is the master's
-            y_cell = GeometryCell(parent=self, xml=None, name="Y", value=cell_value)
-            _logger.debug("y_cell=%s", y_cell)
-        y_cell.value = cell_value
+            cell = GeometryCell(parent=self, xml=None, name=name, value=cell_value)
+        cell._set_value(cell_value, keep_formula=keep_formula)
 
     @property
     def del_bool(self) -> str | None:
@@ -485,17 +485,26 @@ class GeometryCell(ShapePart):
     def value(self) -> str | None:
         """The cell's value, its ``V`` attribute, as the text the file holds; ``None`` when it has none.
 
-        Setting it writes ``str(value)`` to ``V`` and leaves the formula as it
-        was; on a cell inherited from a master, that is the master's cell.
-        ``None`` raises :class:`TypeError`, and a write to a detached shape's
-        cell raises :class:`~vsdxkit.errors.InvalidOperationError`.
+        Setting it writes ``str(value)`` to ``V`` and removes the formula, as
+        typing a number into the ShapeSheet cell does in Visio, so the value
+        is the one Visio shows; on a cell inherited from a master, the write
+        goes to the master's cell. ``None`` raises :class:`TypeError`, and a
+        write to a detached shape's cell raises
+        :class:`~vsdxkit.errors.InvalidOperationError`.
         """
         return self.xml.attrib.get("V")
 
     @value.setter
     def value(self, value: float | str) -> None:
+        self._set_value(value, keep_formula=False)
+
+    def _set_value(self, value: float | str, *, keep_formula: bool) -> None:
+        """Write `value` to ``V``, and without `keep_formula` remove ``F``, as :meth:`vsdxkit.shapes.Cell._set_value` does."""
         self._require_attached(f"writing the value of geometry cell {self.name!r}")
-        self.xml.attrib["V"] = xml_value(value)
+        text = xml_value(value)
+        self.xml.attrib["V"] = text
+        if not keep_formula:
+            self.xml.attrib.pop("F", None)
 
     @property
     def formula(self) -> str | None:

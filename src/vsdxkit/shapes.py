@@ -470,16 +470,30 @@ class Cell(ShapePart):
     def value(self) -> str | None:
         """The cell's value, its ``V`` attribute, as the text the file holds; ``None`` when it has none.
 
-        Setting it writes ``str(value)`` to ``V`` and leaves the formula as it
-        was. ``None`` raises :class:`TypeError`, and a write to a detached
-        shape's cell raises :class:`~vsdxkit.errors.InvalidOperationError`.
+        Setting it writes ``str(value)`` to ``V`` and removes the formula, as
+        typing a number into the ShapeSheet cell does in Visio, so the value
+        is the one Visio shows. ``None`` raises :class:`TypeError`, and a
+        write to a detached shape's cell raises
+        :class:`~vsdxkit.errors.InvalidOperationError`.
         """
         return self.xml.attrib.get("V")
 
     @value.setter
     def value(self, value: float | str) -> None:
+        self._set_value(value, keep_formula=False)
+
+    def _set_value(self, value: float | str, *, keep_formula: bool) -> None:
+        """Write `value` to ``V``, and without `keep_formula` remove ``F``, as typing a number into the ShapeSheet cell does in Visio.
+
+        The library keeps the formula where the value it writes is the one the
+        formula gives: the formula cache, the glue engine, and a 1-D shape's
+        cells derived from its ends.
+        """
         self._require_attached(f"writing the value of cell {self.name!r}")
-        self.xml.attrib["V"] = xml_value(value)
+        text = xml_value(value)
+        self.xml.attrib["V"] = text
+        if not keep_formula:
+            self.xml.attrib.pop("F", None)
 
     @property
     def formula(self) -> str | None:
@@ -1308,6 +1322,9 @@ class Shape:
 
         A cell the master defines is copied down first, so the attribute that
         is not being set keeps what it inherits.
+
+        A named-cell write here keeps the formula until the one-writer change
+        (#319); it does not yet follow the value-wins rule.
         """
         # nearly every coordinate, size and colour setter arrives here, so one
         # guard covers them all; the message describes the write because which
@@ -1318,7 +1335,7 @@ class Shape:
             if f is not None:
                 cell.formula = f
             if v is not None:
-                cell.value = v
+                cell._set_value(v, keep_formula=True)
             return
 
         cell_xml = None
@@ -1335,7 +1352,7 @@ class Shape:
         if f is not None:
             cell.formula = f
         if v is not None:
-            cell.value = v
+            cell._set_value(v, keep_formula=True)
         # schema order: a shape's cells come before its Text and Sections
         cells = self.xml.findall(f"{namespace}Cell")
         self.xml.insert(list(self.xml).index(cells[-1]) + 1 if cells else 0, cell_xml)
@@ -1695,7 +1712,7 @@ class Shape:
         :raises InvalidOperationError: if the shape is detached
         """
         if self.geometry:
-            self.geometry.move(x_delta, y_delta)
+            self.geometry._move(x_delta, y_delta, keep_formula=True)
         if self.begin_x is not None:
             self.begin_x = self.begin_x + x_delta
         self.x = (self.x or 0.0) + x_delta
@@ -1710,6 +1727,9 @@ class Shape:
         are inserted after the last direct Cell child so the shape keeps the
         schema ordering (cells ahead of Text/Sections).
 
+        A named-cell write here keeps the formula until the one-writer change
+        (#319); it does not yet follow the value-wins rule.
+
         :param name: cell name (N attribute), e.g. 'PinX'
         :param v: value to set on the V attribute (optional)
         :param f: formula to set on the F attribute (optional)
@@ -1723,7 +1743,7 @@ class Shape:
             if f is not None:
                 cell.formula = f
             if v is not None:
-                cell.value = v
+                cell._set_value(v, keep_formula=True)
             return cell
         # built as an element, not formatted as a string: a value carrying a
         # quote, an ampersand or an angle bracket is data, and string
@@ -1863,8 +1883,8 @@ class Shape:
             self.height = height
             self.x, self.y = start_x, start_y
             if self.geometry is not None:
-                self.geometry.set_move_to(0.0, 0.0)
-                self.geometry.set_line_to(width, height)
+                self.geometry._set_point("moveto", "Shape.set_start_and_finish()", 0.0, 0.0, 0, keep_formula=True)
+                self.geometry._set_point("lineto", "Shape.set_start_and_finish()", width, height, 0, keep_formula=True)
             txt_pin_x = self._cell("TxtPinX")
             txt_pin_y = self._cell("TxtPinY")
             if txt_pin_x and txt_pin_y:
@@ -1875,8 +1895,8 @@ class Shape:
                     text_x, text_y = self.center_x_y
                     if text_x is None or text_y is None:
                         raise InvalidOperationError("shape text coordinates cannot be None")
-                txt_pin_x.value = text_x
-                txt_pin_y.value = text_y
+                txt_pin_x._set_value(text_x, keep_formula=True)
+                txt_pin_y._set_value(text_y, keep_formula=True)
                 self.set_cell_value(name="Control/TextPosition/X", value=text_x)
                 self.set_cell_value(name="Control/TextPosition/Y", value=text_y)
                 self.set_cell_value(name="Control/TextPosition/XDyn", value=text_x)
@@ -1904,7 +1924,7 @@ class Shape:
                     continue
                 v = calc_value(self, formula)
                 if v is not None:
-                    c.value = v
+                    c._set_value(v, keep_formula=True)
 
     def _text_runs(self) -> tuple[list[Element], str, list[Element], str]:
         """This shape's text, split by `_text_runs_of`, with master inheritance applied.
