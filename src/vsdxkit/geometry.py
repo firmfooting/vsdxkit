@@ -25,7 +25,7 @@ from vsdxkit import namespace
 from vsdxkit._inheritance import InheritedRow
 from vsdxkit._logging_support import get_logger
 from vsdxkit._shape_part import AttachedShape, ShapePart
-from vsdxkit._xmlio import make_cell_element, pretty_print_element, to_float, xml_value
+from vsdxkit._xmlio import insert_row_in_index_order, make_cell_element, pretty_print_element, to_float, xml_value
 from vsdxkit.errors import InvalidOperationError
 
 _logger: Logger = get_logger(__name__)
@@ -58,11 +58,6 @@ class _GeometryOwner(Protocol):
     def _require_attached(self, operation: str) -> None:
         """Raise `InvalidOperationError`, naming `operation`, once the shape is detached: every write to its geometry asks first."""
         ...
-
-
-def _row_index_sort_key(index: str) -> tuple[int, int, str]:
-    """Order row indexes as numbers, with anything unparseable left at the end."""
-    return (0, int(index), "") if index.isdigit() else (1, 0, index)
 
 
 class Geometry(ShapePart):
@@ -312,11 +307,9 @@ class GeometryRow(InheritedRow, ShapePart):
     def _create_row_xml(self, T: str, IX: str) -> Element:
         """Add a Row element for this row to the parent Geometry section.
 
-        The row is placed in index order among the section's existing rows,
-        after the Cell and Trigger children the Visio schema requires them all
-        to follow. Row order is the order the path is drawn in, so indexes are
-        compared as numbers. Sorted as text, IX 10 would land ahead of IX 2 and
-        redraw the path in a different order.
+        `insert_row_in_index_order` places the row: after the Cell and Trigger
+        children the Visio schema requires them all to follow, and in index
+        order among the section's existing rows.
 
         Both arguments have already been stringified by the caller, so
         ``IX=None`` arrives as the literal ``"None"`` and passes the
@@ -327,17 +320,13 @@ class GeometryRow(InheritedRow, ShapePart):
             raise ValueError(f"cannot create a geometry row without T and IX (got T={T!r}, IX={IX!r})")
         # Create new row xml
         row = ET.fromstring(f'<Row xmlns="{namespace[1:-1]}" T="{T}" IX="{IX}" />')
-        children = list(self.geometry.xml)
-        indexes = [x.attrib["IX"] for x in children if x.tag == f"{namespace}Row" and x.attrib.get("IX")]
+        indexes = [
+            child.attrib["IX"] for child in self.geometry.xml if child.tag == f"{namespace}Row" and child.attrib.get("IX")
+        ]
         if IX in indexes:
             # todo: replace existing row with new one
             raise InvalidOperationError(f"geometry row IX={IX} already exists")
-        indexes.append(IX)
-        indexes.sort(key=_row_index_sort_key)
-        # count positions from the section's first Row, so the Cells ahead of
-        # it are not counted as places a Row could go
-        first_row = next((i for i, child in enumerate(children) if child.tag == f"{namespace}Row"), len(children))
-        self.geometry.xml.insert(first_row + indexes.index(IX), row)
+        insert_row_in_index_order(self.geometry.xml, row)
 
         self.geometry.rows[IX] = self
         return row

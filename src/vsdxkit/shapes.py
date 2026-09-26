@@ -37,7 +37,7 @@ from vsdxkit._inheritance import InheritedRow
 from vsdxkit._logging_support import get_logger
 from vsdxkit._shape_part import AttachedShape, ShapePart
 from vsdxkit._shape_tree import find_or_create_shapes_tag, is_connector_element, iter_children, iter_edges, parent_of
-from vsdxkit._xmlio import PartTree, make_cell_element, to_float, xml_value
+from vsdxkit._xmlio import PartTree, insert_row_in_index_order, make_cell_element, to_float, xml_value
 from vsdxkit.errors import InvalidOperationError, NotFoundError, PackageError
 from vsdxkit.geometry import Geometry, GeometryCell
 from vsdxkit.glue import ConnectorOptions, Glue, Routing
@@ -1487,21 +1487,11 @@ class Shape:
         row = self._character_row(section)
         if row is None:
             row = Element(f"{namespace}Row", {"IX": self._character_row_index()})
-            self._insert_character_row(section, row)
+            insert_row_in_index_order(section, row)
         cell = make_cell_element("Color")
         row.append(cell)
         self._name_character_row_in_text(row.attrib.get("IX", "0"))
         return cell
-
-    @staticmethod
-    def _insert_character_row(section: Element, row: Element) -> None:
-        """Keep the section's rows in IX order, as Visio writes them."""
-        index = int(row.attrib["IX"])
-        for position, existing in enumerate(section):
-            if int(existing.attrib.get("IX", "0")) > index:
-                section.insert(position, row)
-                return
-        section.append(row)
 
     def _insert_section(self, section: Element) -> None:
         """Put a new section where Visio writes one.
