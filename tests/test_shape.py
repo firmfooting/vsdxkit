@@ -8,6 +8,7 @@ from helpers.connect_records import records_naming
 
 from vsdxkit import namespace
 from vsdxkit.document import Document
+from vsdxkit.errors import InvalidOperationError
 from vsdxkit.shapes import DataProperty, Shape
 
 
@@ -947,3 +948,49 @@ def test_a_group_member_copied_onto_its_own_page_names_its_master(vsdx_copy):
     rewalked = page.children.require_id(copy.ID)
     assert rewalked.master_shape is not None
     assert rewalked.master_shape.ID == member.master_shape.ID
+
+
+def test_copy_onto_something_that_is_not_a_page_is_refused(vsdx_copy):
+    """Fails if a look-alike page gets past `copy` and breaks somewhere inside it."""
+
+    class LooksLikeAPage:
+        name = "Fake"
+
+    shape = next(iter(Document.open(vsdx_copy("test1.vsdx")).pages[0].children))
+    with pytest.raises(TypeError, match="LooksLikeAPage"):
+        shape.copy(LooksLikeAPage())
+
+
+@pytest.mark.parametrize("other_document", [False, True], ids=["same document", "other document"])
+def test_copy_onto_a_removed_page_writes_nothing(vsdx_copy, other_document):
+    """Fails if a page no longer in its document takes a copy, or imports the copy's masters, before refusing.
+
+    From another document, the copy's master is imported into the removed
+    page's document before the shape is copied.
+    """
+    vis = Document.open(vsdx_copy("test1.vsdx"))
+    removed = vis.pages[2]
+    source = Document.open(vsdx_copy("test5_master.vsdx")) if other_document else vis
+    shape = next(iter(source.pages[0].children))
+    vis.pages.delete(removed)
+    parts = {name: vis._package.read_bytes(name) for name in vis._package.names()}
+    page_xml = ET.tostring(removed.xml.getroot())
+
+    with pytest.raises(InvalidOperationError, match="no longer in its document, so nothing can be copied onto it"):
+        shape.copy(removed)
+
+    assert {name: vis._package.read_bytes(name) for name in vis._package.names()} == parts
+    assert ET.tostring(removed.xml.getroot()) == page_xml
+
+
+@pytest.mark.parametrize("end", ["source", "target"])
+def test_an_end_that_is_not_a_shape_is_refused(vsdx_copy, monkeypatch, end):
+    """Fails if `Connector.source` or `target` hands out a look-alike end rather than refusing it and naming its type.
+
+    The engine finds ends in ``page.shapes``, so only a stand-in engine can
+    hand one out.
+    """
+    connector = Document.open(vsdx_copy("test4_connectors.vsdx")).pages[0].connectors[0]
+    monkeypatch.setattr("vsdxkit.shapes._glued_ends", lambda _: ((object(), None), (object(), None)))
+    with pytest.raises(TypeError, match=r"^expected a vsdxkit Shape, got object$"):
+        getattr(connector, end)

@@ -4,8 +4,8 @@ import copy
 import html
 import sys
 import xml.etree.ElementTree as ET
-from collections.abc import Callable, Iterator
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from typing import Protocol
 from xml.etree.ElementTree import Element
 
 if sys.version_info >= (3, 12):
@@ -15,21 +15,130 @@ else:
 
 
 from vsdxkit import namespace
-from vsdxkit.connectors import _glued_ends, _retarget_connector
+from vsdxkit.connectors import _ConnectorPage, _glued_ends, _retarget_connector
 from vsdxkit.errors import InvalidOperationError, NotFoundError, PackageError
 from vsdxkit.formulae import calc_value
 from vsdxkit.geometry import Geometry, GeometryCell
-from vsdxkit.glue import ConnectorOptions
+from vsdxkit.glue import ConnectorOptions, Glue, Routing
 from vsdxkit.inheritance import InheritedRow
 from vsdxkit.logging_support import get_logger
+from vsdxkit.shape_kind import ShapeKind
 from vsdxkit.shape_part import AttachedShape, ShapePart
 from vsdxkit.shape_tree import is_connector_element, iter_children, iter_descendants, iter_edges
-from vsdxkit.xmlio import make_cell_element, to_float, xml_value
-
-if TYPE_CHECKING:
-    from vsdxkit.pages import Page
+from vsdxkit.xmlio import PartTree, make_cell_element, to_float, xml_value
 
 logger = get_logger(__name__)
+
+
+class PageView(Protocol):
+    """A page, as :attr:`Shape.page` gives it.
+
+    The type of a shape's back-reference to its page. It is read-only: it
+    lists the page's public API apart from ``swimlanes``,
+    ``require_swimlanes`` and ``vis``, whose types are declared above this
+    module, and apart from the page's part-level attributes, such as
+    ``filename``, ``page_id`` and ``rel_id``. To change a page (set
+    ``name``, ``width``, ``height``, ``background`` and so on), or to reach
+    those part-level attributes, use the :class:`vsdxkit.pages.Page` you
+    hold, such as ``document.pages[0]``. At runtime the object is that
+    ``Page`` itself.
+    """
+
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def background(self) -> bool: ...
+
+    @property
+    def index_num(self) -> int | None: ...
+
+    @property
+    def xml(self) -> PartTree: ...
+
+    @property
+    def width(self) -> float: ...
+
+    @property
+    def height(self) -> float: ...
+
+    @property
+    def is_master_page(self) -> bool: ...
+
+    @property
+    def children(self) -> ShapeCollection: ...
+
+    @property
+    def shapes(self) -> ShapeCollection: ...
+
+    @property
+    def connectors(self) -> tuple[Connector, ...]: ...
+
+    def connect(
+        self,
+        source: Shape,
+        target: Shape,
+        *,
+        glue: Glue = Glue.DYNAMIC,
+        routing: Routing = Routing.DEFAULT,
+        from_point: int = 0,
+        to_point: int = 0,
+    ) -> Connector: ...
+
+    def create_shape(
+        self,
+        kind_or_prototype: ShapeKind | Shape,
+        *,
+        x: float,
+        y: float,
+        width: float | None = None,
+        height: float | None = None,
+        text: str | None = None,
+    ) -> Shape: ...
+
+    def apply_text_context(self, context: dict[str, object]) -> None: ...
+
+    def find_replace(self, old: str, new: str) -> None: ...
+
+
+class _PageSeam(PageView, _ConnectorPage, Protocol):
+    """What a shape needs from its page beyond the public view: the page's
+    own bookkeeping, and the document operations the page forwards."""
+
+    @property
+    def page_id(self) -> str: ...
+
+    @property
+    def filename(self) -> str: ...
+
+    @property
+    def _pagesheet_xml(self) -> Element: ...
+
+    def _children(self) -> list[Shape]: ...
+
+    def _attached(self) -> bool: ...
+
+    def _delete(self, shapes: Iterable[Shape], gone_ids: set[str]) -> None: ...
+
+    def _ensure_page_master_rel(self, master_part_name: str) -> None: ...
+
+    def _carry_relationships(self, copied: Element, source: _PageSeam) -> None: ...
+
+    def _peer(self, other: PageView) -> _PageSeam: ...
+
+    def _same_document(self, other: _PageSeam) -> bool: ...
+
+    def _master_by_id(self, master_id: str) -> _PageSeam | None: ...
+
+    def _master_is_one_d(self, master_id: str, master_shape_id: str | None) -> bool: ...
+
+    def _master_revision(self) -> int: ...
+
+    def _masters_for(self, master_ids: list[str], source: _PageSeam) -> Mapping[str, _PageSeam]: ...
+
+    def _copy_shape_xml(self, element: Element) -> Element: ...
+
+    def _renumber_shape_ids(self, element: Element) -> None: ...
 
 
 def parent_of(root: Element, element: Element) -> Element | None:
@@ -42,10 +151,10 @@ def parent_of(root: Element, element: Element) -> Element | None:
 
 def is_connector(shape: Shape) -> bool:
     """Whether `shape` is 1-D, reading the master it inherits from as well as its own cells."""
-    return _is_one_d(shape.xml, shape.parent, shape.page)
+    return _is_one_d(shape.xml, shape._parent, shape._page)
 
 
-def _is_one_d(xml: Element, parent: Page | Shape, page: Page) -> bool:
+def _is_one_d(xml: Element, parent: _PageSeam | Shape, page: _PageSeam) -> bool:
     """The one test of whether a shape element is 1-D, before or after it has a wrapper.
 
     A sub-shape with no ``Master`` of its own instances its group's, so the
@@ -58,10 +167,10 @@ def _is_one_d(xml: Element, parent: Page | Shape, page: Page) -> bool:
         master_id = parent.master_page_ID
     if master_id is None:
         return False
-    return page.vis._master_is_one_d(master_id, xml.attrib.get("MasterShape"))
+    return page._master_is_one_d(master_id, xml.attrib.get("MasterShape"))
 
 
-def _shape_ids(master: Page) -> frozenset[str]:
+def _shape_ids(master: _PageSeam) -> frozenset[str]:
     """The IDs of every shape a master holds."""
     return frozenset(shape_id for shape in master.xml.iter(f"{namespace}Shape") if (shape_id := shape.attrib.get("ID")))
 
@@ -462,7 +571,7 @@ class DataProperty(InheritedRow, ShapePart):
         return element
 
 
-def _wrap(xml: Element, parent: Page | Shape, page: Page) -> Shape:
+def _wrap(xml: Element, parent: _PageSeam | Shape, page: _PageSeam) -> Shape:
     """The wrapper for a shape element: a `Connector` for a 1-D shape, a `Shape` for any other.
 
     Every wrapper the library hands out is made here, so a connector is a
@@ -473,7 +582,7 @@ def _wrap(xml: Element, parent: Page | Shape, page: Page) -> Shape:
     return Shape(xml=xml, parent=parent, page=page)
 
 
-def _wrap_children(element: Element, parent: Page | Shape, page: Page) -> list[Shape]:
+def _wrap_children(element: Element, parent: _PageSeam | Shape, page: _PageSeam) -> list[Shape]:
     """A Shape for each shape directly inside `element`, a page's contents root or a group."""
     children = []
     for slot, child in enumerate(iter_children(element)):
@@ -483,13 +592,13 @@ def _wrap_children(element: Element, parent: Page | Shape, page: Page) -> list[S
     return children
 
 
-def _wrap_descendants(element: Element, parent: Page | Shape, page: Page) -> list[Shape]:
+def _wrap_descendants(element: Element, parent: _PageSeam | Shape, page: _PageSeam) -> list[Shape]:
     """A Shape for every shape inside `element`, at any depth, depth first and parents first.
 
     Each is given the wrapper of the shape it sits in as its parent, and
     `parent` for those directly inside `element`.
     """
-    wrappers: dict[Element, Page | Shape] = {element: parent}
+    wrappers: dict[Element, _PageSeam | Shape] = {element: parent}
     slots: dict[Element, int] = {}
     shapes: list[Shape] = []
     for holder, child in iter_edges(element):
@@ -501,12 +610,22 @@ def _wrap_descendants(element: Element, parent: Page | Shape, page: Page) -> lis
     return shapes
 
 
+def _as_shape(end: object) -> Shape:
+    """An end the connector engine found, which is always one of this module's shapes.
+
+    The engine looks ends up in ``page.shapes``, so the narrowing never fails.
+    """
+    if not isinstance(end, Shape):
+        raise TypeError(f"expected a vsdxkit Shape, got {type(end).__name__}")
+    return end
+
+
 class Shape:
     """Represents a single shape, or a group shape containing other shapes"""
 
     xml: Element
-    parent: Page | Shape
-    page: Page
+    _parent: _PageSeam | Shape
+    _page: _PageSeam
     _geometry: Geometry | None
     _geometry_xml: Element | None
     _master_shape: Shape | None
@@ -514,10 +633,10 @@ class Shape:
     _master_shape_key: tuple[str | None, str | None, int, tuple[Element, ...] | None] | None
     _slot: int | None
 
-    def __init__(self, xml: Element, parent: Page | Shape, page: Page):
+    def __init__(self, xml: Element, parent: _PageSeam | Shape, page: _PageSeam):
         self.xml = xml
-        self.parent = parent
-        self.page = page
+        self._parent = parent
+        self._page = page
 
         self._geometry = None
         self._master_shape = None
@@ -556,7 +675,7 @@ class Shape:
         is detached. Its ``ID``, ``xml``, ``repr`` and hash stay readable; any
         other read or write raises :class:`InvalidOperationError`.
         """
-        page = self.page
+        page = self._page
         if not page._attached():
             return False
         # the wrapper's own parent chain first: each link is checked against
@@ -573,7 +692,7 @@ class Shape:
             container = shape._container()
             if container is None or not shape._held_by(container):
                 return False
-            parent = shape.parent
+            parent = shape._parent
             if not isinstance(parent, Shape):
                 return True  # the page's own Shapes element, found from its current root
             shape = parent
@@ -584,8 +703,8 @@ class Shape:
         The page's, for a top-level shape; the group's, for a member. It is
         where the shape's element sits, or sat before it was deleted.
         """
-        parent = self.parent
-        holder = parent.xml if isinstance(parent, Shape) else self.page.xml.getroot()
+        parent = self._parent
+        holder = parent.xml if isinstance(parent, Shape) else self._page.xml.getroot()
         return None if holder is None else holder.find(f"{namespace}Shapes")
 
     def _held_by(self, container: Element) -> bool:
@@ -606,7 +725,7 @@ class Shape:
     def _require_attached(self, operation: str) -> None:
         if not self.is_attached:
             raise InvalidOperationError(
-                f"{operation} refused: shape {self.ID} on page {self.page.name!r} is no longer in the document"
+                f"{operation} refused: shape {self.ID} on page {self._page.name!r} is no longer in the document"
             )
 
     # A Shape is a view onto its element, not a snapshot of it. Everything below
@@ -634,6 +753,16 @@ class Shape:
         return self.xml.attrib.get("ID")
 
     @property
+    def page(self) -> PageView:
+        """The page this shape is on. Still answers once the shape is deleted."""
+        return self._page
+
+    @property
+    def parent(self) -> PageView | Shape:
+        """The page, or the group shape, this shape sits in."""
+        return self._parent
+
+    @property
     def master_page_ID(self) -> str | None:
         """The id of the master this shape instances, or its group's.
 
@@ -643,8 +772,8 @@ class Shape:
         :attr:`Document.master_pages`.
         """
         own = self.xml.attrib.get("Master")
-        if own is None and isinstance(self.parent, Shape):
-            return self.parent.master_page_ID
+        if own is None and isinstance(self._parent, Shape):
+            return self._parent.master_page_ID
         return own
 
     @master_page_ID.setter
@@ -720,31 +849,37 @@ class Shape:
     @property
     def is_master_shape(self) -> bool:
         """Returns True if the shape is a master or False if the shape inherits from a master shape or has no master"""
-        return self.page.is_master_page  # shape is a 'master' if it is contained by a master page
+        return self._page.is_master_page  # shape is a 'master' if it is contained by a master page
 
     @property
     def universal_name(self) -> str | None:
         name_univ = self.xml.attrib.get("NameU")  # default to shapes own unicode name
         if self.master_shape:
-            page_sheet = self.master_shape.page._pagesheet_xml
+            page_sheet = self.master_shape._page._pagesheet_xml
             layer = page_sheet.find(f'{namespace}Section[@N="Layer"]')
             name_univ_cell = layer.find(f'{namespace}Cell[@N="NameUniv"]') if layer is not None else None
             if name_univ_cell is not None:
                 name_univ = name_univ_cell.attrib.get("V") or name_univ
         return name_univ
 
-    def copy(self, page: Page | None = None) -> Shape:
+    def copy(self, page: PageView | None = None) -> Shape:
         """Copy this Shape to the specified destination Page, and return the copy.
 
         If the destination page is not specified, the Shape is copied to its containing Page.
 
         :param page: The page where the new Shape will be placed.
             If not specified, the copy will be placed in the original shape's page.
-        :type page: :class:`Page` (Optional)
+        :type page: :class:`PageView` (Optional), which must be a :class:`vsdxkit.pages.Page` at runtime
+        :raises TypeError: if ``page`` is not a :class:`vsdxkit.pages.Page`
+        :raises InvalidOperationError: if the destination page is no longer in its document; nothing is written
 
         :return: :class:`Shape` the new copy of shape
         """
-        dst_page = page or self.page
+        dst_page = self._page if page is None else self._page._peer(page)
+        if not dst_page._attached():
+            raise InvalidOperationError(
+                f"page {dst_page.name!r} is no longer in its document, so nothing can be copied onto it"
+            )
         master_ids = [node.attrib["Master"] for node in self.xml.iter(f"{namespace}Shape") if node.attrib.get("Master")]
         # A sub-shape of a master instance names no master itself: it inherits
         # its group's. Copied onto a page it leaves that group, so the copy has
@@ -754,9 +889,9 @@ class Shape:
             master_ids.insert(0, inherited)
         # resolved, and imported from another document, before the copy: the
         # source still holds the masters its shapes name (#331)
-        masters = dst_page.vis._masters_for(master_ids, self.page.vis)
-        new_shape_xml = self.page.vis.copy_shape(self.xml, dst_page)
-        cross_document = dst_page.vis is not self.page.vis
+        masters = dst_page._masters_for(master_ids, self._page)
+        new_shape_xml = dst_page._copy_shape_xml(self.xml)
+        cross_document = not dst_page._same_document(self._page)
         # within one document a dangling master is kept, as it is on any other
         # copy; only another document's copy drops it, below
         if inherited and (inherited in masters or not cross_document):
@@ -785,8 +920,8 @@ class Shape:
         # writes it; a copy onto another page of this document adds one too
         for master in masters.values():
             dst_page._ensure_page_master_rel(master.filename)
-        if not cross_document and dst_page is not self.page:
-            dst_page._carry_relationships(new_shape_xml, self.page)
+        if not cross_document and dst_page is not self._page:
+            dst_page._carry_relationships(new_shape_xml, self._page)
 
         # copy_shape put it at the page's top level, whatever the source sat in
         return _wrap(new_shape_xml, dst_page, dst_page)
@@ -828,12 +963,12 @@ class Shape:
         """
         master = self._master_shape
         children = None if master is None else tuple(master.xml)
-        return (self.master_page_ID, self.master_shape_ID, self.page.vis._master_revision(), children)
+        return (self.master_page_ID, self.master_shape_ID, self._page._master_revision(), children)
 
     def _resolve_master_shape(self) -> Shape | None:
         if self.master_page_ID is None:
             return None  # no master set for this Shape
-        master_page = self.page.vis.get_master_page_by_id(self.master_page_ID)
+        master_page = self._page._master_by_id(self.master_page_ID)
         if not master_page:
             return None  # None if no master page set for this Shape
         master_shape = master_page._children()[0]  # there's always a single master shape in a master page
@@ -844,15 +979,11 @@ class Shape:
         return master_shape
 
     @property
-    def master_page(self) -> Page | None:
-        """Get this pages master
-
-        Returns this Page's master as a Page object (or None)
-
-        """
+    def master_page(self) -> PageView | None:
+        """This shape's master page, typed as a :class:`PageView`, or None."""
         if self.master_page_ID is None:
             return None
-        return self.page.vis.get_master_page_by_id(self.master_page_ID)
+        return self._page._master_by_id(self.master_page_ID)
 
     @property
     def data_properties(self) -> dict[str, DataProperty]:
@@ -1390,8 +1521,8 @@ class Shape:
     def relative_bounds(self) -> tuple[float, float, float, float]:
         # get bounds of a shape relative to it's parent (if shape has a parent)
         bx, by, ex, ey = self.bounds
-        if isinstance(self.parent, Shape) and self.parent.shape_type == "Group":
-            pbx, pby, _pex, _pey = self.parent.bounds
+        if isinstance(self._parent, Shape) and self._parent.shape_type == "Group":
+            pbx, pby, _pex, _pey = self._parent.bounds
             bx += pbx
             by += pby
             ex += pbx
@@ -1527,12 +1658,12 @@ class Shape:
         return ShapeCollection(self._descendants, self._scope)
 
     def _scope(self) -> str:
-        return f"shape {self.ID} on page {self.page.name!r}"
+        return f"shape {self.ID} on page {self._page.name!r}"
 
     def _children(self) -> list[Shape]:
         """What :attr:`children` holds, as a list, for the library's own walks."""
         self._require_attached("reading a shape's children")
-        return _wrap_children(self.xml, self, self.page)
+        return _wrap_children(self.xml, self, self._page)
 
     def _descendants(self) -> list[Shape]:
         """What :attr:`descendants` holds, as a list, for the library's own walks.
@@ -1541,7 +1672,7 @@ class Shape:
         sub-shape with no ``Master`` of its own instances its group's.
         """
         self._require_attached("reading a shape's descendants")
-        return _wrap_descendants(self.xml, self, self.page)
+        return _wrap_descendants(self.xml, self, self._page)
 
     def get_max_id(self) -> int:
         """The highest ID on this shape and every shape inside it, or 0 where none carries one."""
@@ -1587,7 +1718,7 @@ class Shape:
         self._require_attached("deleting a shape")
         # every id about to disappear: the shape and, for a group, everything
         # it contains
-        self.page._delete([self], {str(self.ID)} | {str(shape.ID) for shape in self._descendants()})
+        self._page._delete([self], {str(self.ID)} | {str(shape.ID) for shape in self._descendants()})
 
     def append_shape(self, append_shape: Shape) -> None:
         """Place another shape inside this one, with IDs the page is not using.
@@ -1612,9 +1743,9 @@ class Shape:
                 f"shape ID={self.ID} has type {self.shape_type!r} and cannot contain shapes; "
                 "only a group shape holds sub-shapes"
             )
-        if append_shape.page is not self.page:
+        if append_shape._page is not self._page:
             raise InvalidOperationError(
-                f"shape ID={append_shape.ID} belongs to page {append_shape.page.name!r}, not {self.page.name!r}; "
+                f"shape ID={append_shape.ID} belongs to page {append_shape._page.name!r}, not {self._page.name!r}; "
                 "use Shape.copy(page) to place a shape on another page"
             )
         # A shape already on this page is moved, not placed. Rejecting it would
@@ -1633,11 +1764,11 @@ class Shape:
                 f"shape ID={append_shape.ID} cannot be placed inside shape ID={self.ID}, "
                 "which is the shape itself or one of the shapes inside it"
             )
-        current_parent = parent_of(self.page.xml.getroot(), append_shape.xml)
+        current_parent = parent_of(self._page.xml.getroot(), append_shape.xml)
         if current_parent is None:
             # New to the page, so it needs ids; a move keeps the ones it has,
             # or every Connect record naming the shape would be left dangling.
-            self.page.vis.renumber_shape_ids(append_shape.xml, self.page)
+            self._page._renumber_shape_ids(append_shape.xml)
         else:
             current_parent.remove(append_shape.xml)
         # last, because it creates the <Shapes> element an empty group lacks:
@@ -1647,7 +1778,7 @@ class Shape:
         container.append(append_shape.xml)
         # The ID follows the element on its own; the parent is the Shape
         # object's own state and nothing else updates it.
-        append_shape.parent = self
+        append_shape._parent = self
 
     @property
     def connectors(self) -> tuple[Connector, ...]:
@@ -1677,13 +1808,13 @@ class Shape:
         """
         self._require_attached("reading the connectors glued to a shape")
         ends: dict[str, dict[str, str]] = {}
-        for record in self.page._connects():
+        for record in self._page._connects():
             if record.from_rel in ("BeginX", "EndX"):
                 ends.setdefault(record.from_id, {})[record.from_rel] = record.to_id
         glued = {connector_id for connector_id, named in ends.items() if self.ID in named.values()}
         if not glued:
             return []
-        shapes = list(self.page.shapes)
+        shapes = list(self._page.shapes)
         by_id: dict[str, list[Shape]] = {}
         for shape in shapes:
             if shape.ID is not None:
@@ -1698,7 +1829,7 @@ class Shape:
                 # as ShapeCollection.by_id reports it: a page with two shapes
                 # of one ID is invalid, and neither is the one a record names
                 raise PackageError(
-                    f"page {self.page.name!r} holds {len(found)} shapes with ID {shape_id}; "
+                    f"page {self._page.name!r} holds {len(found)} shapes with ID {shape_id}; "
                     "shape IDs are unique on a page, so the page is not valid"
                 )
             return found[0] if found else None
@@ -1730,14 +1861,14 @@ class Connector(Shape):
         """The shape the connector's begin end is glued to, or None when that end is floating."""
         self._require_attached("Connector.source")
         begin, _ = _glued_ends(self)
-        return None if begin is None else begin[0]
+        return None if begin is None else _as_shape(begin[0])
 
     @property
     def target(self) -> Shape | None:
         """The shape the connector's end is glued to, or None when that end is floating."""
         self._require_attached("Connector.target")
         _, end = _glued_ends(self)
-        return None if end is None else end[0]
+        return None if end is None else _as_shape(end[0])
 
     def retarget(
         self,

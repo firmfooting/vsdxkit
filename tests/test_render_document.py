@@ -3,6 +3,8 @@
 import xml.etree.ElementTree as ET
 from types import MappingProxyType
 
+import pytest
+
 from vsdxkit.document import Document
 from vsdxkit.templating import render_document
 
@@ -12,13 +14,19 @@ def _page_xml(document: Document) -> list[bytes]:
 
 
 def test_render_document_renders_as_document_render_does(vsdx_copy):
-    """Fails if the method and the function stop being the same rendering."""
+    """Fails if the method and the function stop being the same rendering, or the function renders nothing."""
     context = {"n": 2}
+    unrendered = Document.open(vsdx_copy("test_jinja_self_refs.vsdx"))
     by_method = Document.open(vsdx_copy("test_jinja_self_refs.vsdx"))
     by_function = Document.open(vsdx_copy("test_jinja_self_refs.vsdx"))
     by_method.render(context)
     render_document(by_function, context)
     assert _page_xml(by_function) == _page_xml(by_method)
+    assert _page_xml(by_function) != _page_xml(unrendered)
+    # shape 2 is `{% set self.x=n*2 %}`: the statement is gone, and x is n * 2
+    shape = by_function.pages[0].shapes.require_id("2")
+    assert shape.text == "This shape sets x to n * 2"
+    assert shape.x == pytest.approx(4.0)
 
 
 def test_a_read_only_mapping_renders(vsdx_copy):

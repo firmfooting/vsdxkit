@@ -1,14 +1,9 @@
-"""Every public signature's annotations resolve at runtime, apart from a shrinking list.
+"""Every public signature's annotations resolve at runtime.
 
 The 1.0 design (amended 2026-09-23) turns each upward dependency into a
-`Protocol` declared by the lower module, so `typing.get_type_hints` can resolve
-every public signature: introspection, documentation and runtime validators
-all go through it. The entries in `UNRESOLVED` still name an owner the lower
-module cannot import without a cycle. Each comment names the phase that
-retires the owner reference.
-
-The check fails both ways. A new unresolved annotation fails it, and so does a
-listed one that has started resolving, so the list only shrinks.
+`Protocol` declared by the lower module, so every public signature names only
+types its own module can import, and `typing.get_type_hints` resolves them all:
+introspection, documentation and runtime validators all go through it.
 """
 
 import importlib
@@ -18,16 +13,6 @@ import typing
 from collections.abc import Callable, Iterator
 
 import vsdxkit
-
-UNRESOLVED = {
-    # Phase 3: a page holds a document token rather than its `Document`.
-    "vsdxkit.pages.Page.__init__",
-    # Phase 2 moves master lookup to `MasterCatalog`; Phase 3 replaces the
-    # page back-reference with a document token.
-    "vsdxkit.shapes.Shape.__init__",
-    "vsdxkit.shapes.Shape.copy",
-    "vsdxkit.shapes.Shape.master_page",
-}
 
 
 def _public_signatures() -> Iterator[tuple[str, Callable[..., object]]]:
@@ -52,12 +37,29 @@ def _public_signatures() -> Iterator[tuple[str, Callable[..., object]]]:
                     yield f"{module.__name__}.{name}.{attribute}", member
 
 
+# signatures the walk must reach, so a walk that finds nothing cannot pass:
+# the ones that named an upward type before the seams, and the public entries
+# the seams were built for
+FLOOR = {
+    "vsdxkit.pages.Page.__init__",
+    "vsdxkit.pages.Page.connect",
+    "vsdxkit.pages.Page.vis",
+    "vsdxkit.shapes.Shape.__init__",
+    "vsdxkit.shapes.Shape.copy",
+    "vsdxkit.shapes.Shape.master_page",
+    "vsdxkit.shapes.Shape.page",
+    "vsdxkit.templating.render_document",
+}
+
+
 def test_public_annotations_resolve_at_runtime():
+    """Fails if a public annotation names a type its module cannot import, or the walk misses a signature it must see."""
+    signatures = dict(_public_signatures())
+    assert set(signatures) >= FLOOR, "the walk no longer reaches every public signature"
     unresolved = set()
-    for qualified_name, function in _public_signatures():
+    for qualified_name, function in signatures.items():
         try:
             typing.get_type_hints(function)
         except (NameError, TypeError, AttributeError):
             unresolved.add(qualified_name)
-    assert unresolved - UNRESOLVED == set(), "new annotations that do not resolve at runtime"
-    assert UNRESOLVED - unresolved == set(), "these resolve now: remove them from UNRESOLVED"
+    assert unresolved == set(), "public annotations that do not resolve at runtime"

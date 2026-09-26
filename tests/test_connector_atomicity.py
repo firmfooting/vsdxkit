@@ -7,14 +7,21 @@ and prove rejected inputs change nothing.
 """
 
 import os
+import xml.etree.ElementTree as ET
 
 import pytest
 from helpers.connect_records import page_records
 
 from vsdxkit.document import Document
+from vsdxkit.errors import InvalidOperationError
 from vsdxkit.glue import ConnectorOptions, Glue
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
+
+
+def _parts(document):
+    """Every part in the document's package, by name, as the save would write it."""
+    return {name: document._package.read_bytes(name) for name in document._package.names()}
 
 
 def _snapshot(page):
@@ -84,3 +91,19 @@ def test_create_with_valid_point_glue_still_works(vsdx_copy):
     connector = page.connect(a, b, glue=Glue.POINT)
     assert connector is not None
     assert len(page_records(page)) == records_before + 2
+
+
+def test_connect_on_a_removed_page_writes_nothing(vsdx_copy):
+    """Fails if a page no longer in its document imports the connector's master, or takes a connector, before refusing."""
+    vis = Document.open(vsdx_copy("test2.vsdx"))
+    page = vis.pages[0]
+    a, b = page.children.require_id("6"), page.children.require_id("16")
+    vis.pages.delete(page)
+    parts = _parts(vis)
+    page_xml = ET.tostring(page.xml.getroot())
+
+    with pytest.raises(InvalidOperationError, match="no longer in its document, so nothing can be connected on it"):
+        page.connect(a, b)
+
+    assert _parts(vis) == parts
+    assert ET.tostring(page.xml.getroot()) == page_xml

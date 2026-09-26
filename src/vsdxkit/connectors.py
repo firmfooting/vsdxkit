@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, TypeAlias
+from collections.abc import Iterable
+from typing import Protocol, TypeAlias
 from xml.etree.ElementTree import Element
 
 from vsdxkit.errors import InvalidOperationError, MalformedPackageError
@@ -19,16 +20,89 @@ from vsdxkit.glue import (
     routing_cells,
 )
 
-if TYPE_CHECKING:
-    from vsdxkit.pages import Page
-    from vsdxkit.shapes import Connector, Shape
 
-    # One end of a connector as the engine plans it: the shape it glues to and
-    # its connection point, `None` for dynamic glue. A floating end is `None`.
-    _End: TypeAlias = "tuple[Shape, int | None] | None"
+class _CellXml(Protocol):
+    """A cell the engine edits in place: it drops the cell's formula, or the cell itself."""
 
-    # an end that is glued: the shape, and its connection point or `None` for dynamic glue
-    _Glued: TypeAlias = "tuple[Shape, int | None]"
+    @property
+    def xml(self) -> Element: ...
+
+
+class _ShapeLookup(Protocol):
+    """The page's shapes, which the engine looks up by the ids its records name."""
+
+    def by_id(self, shape_id: str) -> _EndShape | None: ...
+
+
+class _ConnectorPage(Protocol):
+    """What the engine needs from the page a connector is on.
+
+    The page holds the ``Connect`` records and the shapes they name, and it
+    sits above this module, so the engine names only what it reads and writes.
+    """
+
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def shapes(self) -> _ShapeLookup: ...
+
+    def _connects(self) -> list[_Connect]: ...
+
+    def _add_connect(self, element: Element) -> None: ...
+
+    def _remove_connect_records(self, connector_ids: Iterable[str | int]) -> None: ...
+
+
+class _EndShape(Protocol):
+    """What the engine needs from a shape an end is glued to: its id, its connection points and its centre."""
+
+    @property
+    def ID(self) -> str | None: ...
+
+    @property
+    def xml(self) -> Element: ...
+
+    @property
+    def master_shape(self) -> _EndShape | None: ...
+
+    @property
+    def center_x_y(self) -> tuple[float | None, float | None]: ...
+
+
+class _ConnectorShape(_EndShape, Protocol):
+    """What the engine needs from a connector: its page, its end cells, and a way to write them."""
+
+    @property
+    def _page(self) -> _ConnectorPage: ...
+
+    @property
+    def begin_x(self) -> float | None: ...
+
+    @property
+    def begin_y(self) -> float | None: ...
+
+    @property
+    def end_x(self) -> float | None: ...
+
+    @property
+    def end_y(self) -> float | None: ...
+
+    def set_start_and_finish(
+        self, start: tuple[float | None, float | None], finish: tuple[float | None, float | None]
+    ) -> None: ...
+
+    def get_or_create_cell(self, name: str, v: str | None = None, f: str | None = None) -> object: ...
+
+    def _cell(self, name: str) -> _CellXml | None: ...
+
+    def _require_attached(self, operation: str) -> None: ...
+
+
+# One end of a connector as the engine plans it: the shape it glues to and
+# its connection point, `None` for dynamic glue. A floating end is `None`.
+_Glued: TypeAlias = tuple[_EndShape, int | None]
+_End: TypeAlias = _Glued | None
 
 namespace = "{http://schemas.microsoft.com/office/visio/2012/main}"
 
@@ -37,7 +111,7 @@ _FIRST_CONNECTION_POINT_PART = 100
 _CONNECTION_CELL = re.compile(r"Connections\.X(\d+)")
 
 
-def _connection_rows(shape: Shape) -> frozenset[int]:
+def _connection_rows(shape: _EndShape) -> frozenset[int]:
     """The rows of the shape's ``Connection`` section, its master's included.
 
     An instance inherits every row its master has and overrides or deletes
@@ -64,7 +138,7 @@ def _connection_rows(shape: Shape) -> frozenset[int]:
     return frozenset(rows)
 
 
-def _id(shape: Shape) -> str:
+def _id(shape: _EndShape) -> str:
     """The shape's id, which glue cannot name a shape without."""
     shape_id = shape.ID
     if shape_id is None:
@@ -72,7 +146,7 @@ def _id(shape: Shape) -> str:
     return shape_id
 
 
-def _check_endpoint(page: Page, shape: Shape, connector: Shape | None) -> None:
+def _check_endpoint(page: _ConnectorPage, shape: _EndShape, connector: _ConnectorShape | None) -> None:
     if connector is not None and shape == connector:
         raise InvalidOperationError(f"connector shape ID {connector.ID} cannot be glued to itself")
     if page.shapes.by_id(_id(shape)) != shape:
@@ -148,7 +222,9 @@ class _Connect:
         return self.xml.attrib.get("ToCell")
 
 
-def _plan_connector(page: Page, source: Shape, target: Shape, options: ConnectorOptions) -> tuple[_Glued, _Glued]:
+def _plan_connector(
+    page: _ConnectorPage, source: _EndShape, target: _EndShape, options: ConnectorOptions
+) -> tuple[_Glued, _Glued]:
     """The two ends of a new connector on `page`, glued from `source` to `target` as `options` say.
 
     Everything is checked before anything is written: both shapes are on
@@ -163,20 +239,27 @@ def _plan_connector(page: Page, source: Shape, target: Shape, options: Connector
     return begin, end
 
 
-def _glue_connector(connector: Shape, begin: _Glued, end: _Glued, options: ConnectorOptions) -> None:
-    """Glue a new connector's ends as :func:`_plan_connector` planned them."""
-    _write(connector, begin, end, routing_cells(options.routing, dynamic=options.glue is Glue.DYNAMIC))
-    # initial endpoints so the file renders sensibly even before Visio recalculates
-    connector.set_start_and_finish(begin[0].center_x_y, end[0].center_x_y)
+def _glue_connector(connector: _ConnectorShape, begin: _End, end: _End, options: ConnectorOptions | None) -> None:
+    """Glue the connector's ends as planned, by :func:`_plan_connector` or :func:`_retarget_connector`.
+
+    Without `options`, no routing cell is written. An end planned as `None`
+    stays where it is.
+    """
+    routing = () if options is None else routing_cells(options.routing, dynamic=options.glue is Glue.DYNAMIC)
+    _write(connector, begin, end, routing)
+    # endpoints so the file renders sensibly even before Visio recalculates
+    start = begin[0].center_x_y if begin else (connector.begin_x, connector.begin_y)
+    finish = end[0].center_x_y if end else (connector.end_x, connector.end_y)
+    connector.set_start_and_finish(start, finish)
 
 
 def _retarget_connector(
-    connector: Connector, source: Shape | None, target: Shape | None, options: ConnectorOptions | None
+    connector: _ConnectorShape, source: _EndShape | None, target: _EndShape | None, options: ConnectorOptions | None
 ) -> None:
     """Glue one or both ends of `connector` to other shapes; see :meth:`vsdxkit.shapes.Connector.retarget`."""
     if source is None and target is None:
         raise InvalidOperationError("retargeting a connector needs at least one endpoint")
-    page = connector.page
+    page = connector._page
     _check_endpoint(page, connector, None)
     for shape in (source, target):
         if shape is not None:
@@ -186,18 +269,13 @@ def _retarget_connector(
     end = _next_end(current_end, target, options, begin=False)
     for glued in (begin, end):
         _check_point(glued)
-
-    routing = () if options is None else routing_cells(options.routing, dynamic=options.glue is Glue.DYNAMIC)
-    _write(connector, begin, end, routing)
-    start = begin[0].center_x_y if begin else (connector.begin_x, connector.begin_y)
-    finish = end[0].center_x_y if end else (connector.end_x, connector.end_y)
-    connector.set_start_and_finish(start, finish)
+    _glue_connector(connector, begin, end, options)
 
 
-def _glued_ends(connector: Shape) -> tuple[_End, _End]:
+def _glued_ends(connector: _ConnectorShape) -> tuple[_End, _End]:
     """Each end as the connector's records have it glued; `None` for an end no record names a shape on the page for."""
-    page = connector.page
-    ends: dict[str, tuple[Shape, int | None]] = {}
+    page = connector._page
+    ends: dict[str, tuple[_EndShape, int | None]] = {}
     for connect in page._connects():
         if connect.from_id != connector.ID or connect.from_rel not in ("BeginX", "EndX"):
             continue
@@ -208,7 +286,7 @@ def _glued_ends(connector: Shape) -> tuple[_End, _End]:
     return ends.get("BeginX"), ends.get("EndX")
 
 
-def _next_end(current: _End, replacement: Shape | None, options: ConnectorOptions | None, *, begin: bool) -> _End:
+def _next_end(current: _End, replacement: _EndShape | None, options: ConnectorOptions | None, *, begin: bool) -> _End:
     """Where one end goes: the shape named, or the one it has, glued as `options` say or as it was."""
     shape = replacement if replacement is not None else (current[0] if current else None)
     if shape is None:
@@ -218,19 +296,19 @@ def _next_end(current: _End, replacement: Shape | None, options: ConnectorOption
     return shape, current[1] if current else None
 
 
-def _write(connector: Shape, begin: _End, end: _End, routing: tuple[CellWrite, ...]) -> None:
+def _write(connector: _ConnectorShape, begin: _End, end: _End, routing: tuple[CellWrite, ...]) -> None:
     """Glue the connector's ends as planned: its cells, then its records in place of the ones it had."""
     connector_id = _id(connector)
     begin_glue, end_glue = _end_glue(begin), _end_glue(end)
     for change in (*glue_cells(begin_glue, end_glue), *routing):
         _change_cell(connector, change)
-    page = connector.page
+    page = connector._page
     page._remove_connect_records({connector_id})
     for record in connection_records(connector_id, begin_glue, end_glue):
         page._add_connect(record_element(record))
 
 
-def _change_cell(connector: Shape, change: CellChange) -> None:
+def _change_cell(connector: _ConnectorShape, change: CellChange) -> None:
     if isinstance(change, CellWrite):
         connector.get_or_create_cell(change.name, v=change.value, f=change.formula)
         return
@@ -251,7 +329,7 @@ def _change_cell(connector: Shape, change: CellChange) -> None:
 _CONNECTOR_KIND_CELLS = frozenset({"GlueType", "ObjType"})
 
 
-def _float_ends(connector: Shape) -> None:
+def _float_ends(connector: _ConnectorShape) -> None:
     """Leave both of a 1-D shape's ends unglued: the cells a floating end has, and no records.
 
     A copy of a glued connector keeps glue formulas naming the shapes the
@@ -261,4 +339,4 @@ def _float_ends(connector: Shape) -> None:
     for change in glue_cells(None, None):
         if change.name not in _CONNECTOR_KIND_CELLS:
             _change_cell(connector, change)
-    connector.page._remove_connect_records({_id(connector)})
+    connector._page._remove_connect_records({_id(connector)})

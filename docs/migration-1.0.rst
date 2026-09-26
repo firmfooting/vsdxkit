@@ -465,6 +465,30 @@ Reading or writing a deleted shape
    :class:`vsdxkit.shapes.DataProperty`:
    ``shape.data_properties["Status"].value = "Done"``.
 
+``shape.page = page``, ``shape.parent = group``, ``page.vis = document``
+   Read-only. The XML does not follow a repointed reference, so assigning
+   one only ever made the wrapper lie. Move a shape into a group with
+   ``group.append_shape(shape)``.
+
+``shape.page.swimlanes``, ``shape.page.vis``, ``shape.page.filename``, ``page.vis``
+   Typed code sees ``shape.page`` as :class:`vsdxkit.shapes.PageView`, a
+   read-only view. The same type is the page half of ``shape.parent``
+   (``PageView | Shape``) and of ``shape.master_page`` (``PageView | None``).
+   ``PageView`` lists the page's API apart from ``swimlanes``,
+   ``require_swimlanes`` and ``vis``, whose types are declared above
+   ``shapes``, and apart from the page's part-level attributes, such as
+   ``filename``, ``page_id`` and ``rel_id``. For ``shape.master_page``,
+   those part-level attributes — ``page_id``, ``filename`` and
+   ``master_unique_id`` — are exactly what the view leaves out. At runtime
+   it is the same ``Page``. For all of those, use the ``Page`` you hold,
+   such as ``document.pages[0]``.
+
+   The same holds one level up. Typed code sees ``page.vis`` as
+   :class:`vsdxkit.pages.DocumentView`, which lists the document's
+   ``pages``, ``save`` and ``render``. At runtime it is the same
+   ``Document``. For the rest of the document's API, use the ``Document``
+   you opened.
+
 A page creates its own shapes
 -----------------------------
 

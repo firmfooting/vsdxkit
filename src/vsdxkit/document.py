@@ -24,7 +24,7 @@ from vsdxkit.logging_support import get_logger
 from vsdxkit.masters import MasterCatalog
 from vsdxkit.media import MEDIA, _connector_shape, _kind_shape, _style_copy
 from vsdxkit.package import PackageLimits, PackageStore, XmlPart, check_relationship_target
-from vsdxkit.pages import Page, PageCollection, _PagePosition
+from vsdxkit.pages import Page, PageCollection, _DocumentSeam, _PagePosition
 from vsdxkit.partnames import (
     APP_PART,
     CONTENT_TYPES_PART,
@@ -316,7 +316,7 @@ class Document:
         """The master page with this ID, as :attr:`Shape.master_page_ID` names it, or None."""
         return self._masters.by_id(id)
 
-    def _masters_for(self, master_ids: list[str], source: Document) -> dict[str, Page]:
+    def _masters_for(self, master_ids: list[str], source: _DocumentSeam) -> dict[str, Page]:
         """This document's master for each of `master_ids`, as `source` numbers its masters.
 
         From another document, a master this one lacks is imported, and listed
@@ -325,9 +325,13 @@ class Document:
         section is resolved before anything changes, so an app.xml it cannot
         be found in stops the import cleanly. An ID `source` cannot resolve is
         left out.
+
+        :raises TypeError: if ``source`` is not a :class:`Document`; every page's document is one
         """
         if source is self:
             return {master_id: master for master_id in master_ids if (master := self._masters.by_id(master_id)) is not None}
+        if not isinstance(source, Document):
+            raise TypeError(f"expected a vsdxkit Document, got {type(source).__name__}")
         lists_titles = self._lists_titles()
         if lists_titles:
             self._titles_of_parts_section(self.MASTERS, self._page_titles())

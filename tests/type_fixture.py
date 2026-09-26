@@ -69,3 +69,21 @@ def current_state(visio_file: Document) -> Page:
 
 def review_page(visio_file: Document) -> Page:
     return visio_file.pages.create("Review", index=0)
+
+
+def connect_through_back_reference(shape: Shape, other: Shape) -> Connector:
+    # the public view carries the page's API through `shape.page`
+    return shape.page.connect(shape, other)
+
+
+def page_shapes_through_back_reference(shape: Shape) -> list[Shape]:
+    return list(shape.page.shapes)
+
+
+def page_state_through_back_reference(shape: Shape) -> tuple[bool, int | None]:
+    return shape.page.background, shape.page.index_num
+
+
+def save_through_back_reference(page: Page, destination: Path) -> Path:
+    # `page.vis` is a DocumentView, which lists `pages`, `save` and `render`
+    return page.vis.save(destination)
