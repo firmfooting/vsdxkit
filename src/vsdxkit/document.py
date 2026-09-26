@@ -20,10 +20,7 @@ from vsdxkit import (
 from vsdxkit._logging_support import get_logger
 from vsdxkit._masters import MasterCatalog
 from vsdxkit._media import MEDIA, _connector_shape, _kind_shape, _style_copy
-from vsdxkit.errors import InvalidOperationError, MalformedPackageError, MissingPartError
-from vsdxkit.package import PackageLimits, PackageStore, XmlPart, check_relationship_target
-from vsdxkit.pages import Page, PageCollection, _DocumentSeam, _PagePosition
-from vsdxkit.partnames import (
+from vsdxkit._partnames import (
     APP_PART,
     CONTENT_TYPES_PART,
     DOCUMENT_PART,
@@ -32,11 +29,8 @@ from vsdxkit.partnames import (
     relationships_part_name,
     target_part_name,
 )
-from vsdxkit.relationships import append_if_absent, ensure_override, remove, remove_override
-from vsdxkit.shape_kind import ShapeKind
-from vsdxkit.shapes import Connector, Shape
-from vsdxkit.templating import render_document
-from vsdxkit.xmlio import (
+from vsdxkit._relationships import append_if_absent, ensure_override, remove, remove_override
+from vsdxkit._xmlio import (
     PartTree,
     adopt_prefixes,
     pretty_print_element,
@@ -45,6 +39,12 @@ from vsdxkit.xmlio import (
     require_element,
     require_tree,
 )
+from vsdxkit.errors import InvalidOperationError, MalformedPackageError, MissingPartError
+from vsdxkit.package import PackageLimits, PackageStore, XmlPart, check_relationship_target
+from vsdxkit.pages import Page, PageCollection, _DocumentSeam, _PagePosition
+from vsdxkit.shape_kind import ShapeKind
+from vsdxkit.shapes import Connector, Shape
+from vsdxkit.templating import render_document
 
 logger: Logger = get_logger(__name__)
 

@@ -13,9 +13,9 @@ import zipfile
 import pytest
 
 from vsdxkit._masters import MasterCatalog
+from vsdxkit._partnames import relationship_target, relationships_part_name
 from vsdxkit.document import Document
 from vsdxkit.errors import MissingPartError
-from vsdxkit.partnames import relationship_target, relationships_part_name
 
 RELS_NS = "{http://schemas.openxmlformats.org/package/2006/relationships}"
 MASTER_RELATIONSHIP = "http://schemas.microsoft.com/visio/2010/relationships/master"

@@ -1,4 +1,4 @@
-"""`vsdxkit.shape_tree` is the one walk of a shape tree (Phase 3, #98).
+"""`vsdxkit._shape_tree` is the one walk of a shape tree (Phase 3, #98).
 
 Each test names the defect it pins. The walk is checked three ways: on small
 hand-built trees, as a property over seeded random trees and every fixture's
@@ -16,8 +16,7 @@ import zipfile
 import pytest
 
 from vsdxkit import namespace
-from vsdxkit.document import Document
-from vsdxkit.shape_tree import (
+from vsdxkit._shape_tree import (
     SHEET_REFERENCE,
     find_or_create_shapes_tag,
     is_connector_element,
@@ -27,6 +26,7 @@ from vsdxkit.shape_tree import (
     parent_of,
     remap_sheet_references,
 )
+from vsdxkit.document import Document
 
 BASEDIR = os.path.dirname(os.path.realpath(__file__))
 SHAPE = f"{namespace}Shape"
@@ -159,7 +159,7 @@ def test_the_tree_helpers_live_in_shape_tree_only():
     import vsdxkit.shapes
 
     for name in ("parent_of", "find_or_create_shapes_tag"):
-        assert getattr(vsdxkit.shapes, name).__module__ == "vsdxkit.shape_tree", name
+        assert getattr(vsdxkit.shapes, name).__module__ == "vsdxkit._shape_tree", name
 
 
 def _random_tree(rng: random.Random, next_id: list[int], depth: int) -> ET.Element:

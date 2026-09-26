@@ -50,7 +50,18 @@ defines it:
    ``VisioFile(path, debug=True)`` below.
 
 ``from vsdx import pretty_print_element``
-   ``from vsdxkit.xmlio import pretty_print_element``
+   The standard library's ``ET.tostring``, after ``ET.indent`` on a copy,
+   because ``ET.indent`` changes the whitespace of the element it is given
+   and a save would write that whitespace:
+
+   .. code-block:: python
+
+      import copy
+      import xml.etree.ElementTree as ET
+
+      readable = copy.deepcopy(shape.xml)
+      ET.indent(readable)
+      print(ET.tostring(readable, encoding="unicode"))
 
 ``from vsdx import namespace``, and the other namespace constants
    ``from vsdxkit import namespace``: the root keeps the XML namespace
@@ -241,20 +252,20 @@ OPC name, and the file-system view of 0.x is gone.
    the saved file with :mod:`zipfile`.
 
 ``vsdx.xmlio.file_to_xml``, ``xmlio.xml_to_file``
-   Gone with the file-system view. ``vsdxkit.xmlio.parse_part(bytes)`` and
-   ``serialise_part(tree)`` parse and serialise a part's bytes.
+   Gone with the file-system view, with no public replacement: the document
+   parses and serialises its own parts. Work on ``page.xml`` and
+   ``shape.xml``, and read a saved part's bytes with :mod:`zipfile`.
 
 ``xmlio.require_xml_tree``, ``xmlio.require_root``
    Gone. They read a named part from the zip, refused one that was absent
    with the description given, and ``require_root`` returned the root. The
    parts are already parsed: take the tree from the object model, such as
-   ``page.xml``, and compose the two checks 1.0 keeps.
-   ``vsdxkit.xmlio.require_tree(tree, description)`` refuses ``None`` with
-   :class:`vsdxkit.errors.MissingPartError`, and
-   ``require_element(tree.getroot(), description)`` gives the root.
+   ``page.xml``, and its root with ``page.xml.getroot()``.
 
 ``vsdx.shapes.to_float``
-   ``vsdxkit.xmlio.to_float``.
+   Internal in 1.0. ``float(value)`` reads a number from a cell's
+   ``V`` attribute; ``shape.x``, ``shape.width`` and the other properties
+   already return one.
 
 ``vsdx.vsdxfile.DRAWING_CONTENT_TYPE``, ``vsdxfile.MACRO_ENABLED_CONTENT_TYPE``
    ``vsdxkit.document.DRAWING_CONTENT_TYPE`` and
@@ -773,7 +784,8 @@ These had no caller in the library, repeated a 1.0 name, or did nothing.
    shape shows from its master.
 
 ``vis.pretty_print_element(xml)``
-   ``vsdxkit.xmlio.pretty_print_element(xml)``.
+   ``ET.tostring``, as under ``from vsdx import pretty_print_element``
+   above.
 
 ``vis.document_rels()``
    Internal in 1.0; no public replacement. The document keeps its
@@ -819,10 +831,9 @@ shape is created, copied or repeated by a ``{% for %}`` loop, so there is
 nothing left for a caller to renumber.
 
 ``shapes.parent_of(root, element)``, ``shapes.find_or_create_shapes_tag(parent)``
-   ``vsdxkit.shape_tree.parent_of`` and
-   ``vsdxkit.shape_tree.find_or_create_shapes_tag``, unchanged, beside the
-   other element-level walks. For a shape, ``shape.parent`` is its page or
-   group.
+   Internal in 1.0. For a shape, ``shape.parent`` is its page or group,
+   and ``group.append_shape(shape)`` moves a shape into a group, giving the
+   group the ``<Shapes>`` element it holds its members in when it has none.
 
 ``vis.copy_shape(element, page)``, ``vis.insert_shape(element, shapes, page, page_path)``
    ``shape.copy(page)``: a copy of the shape at the page's top level, with
@@ -835,19 +846,17 @@ nothing left for a caller to renumber.
    to, as above.
 
 ``vis.update_ids(element, id_map)``
-   ``vsdxkit.shape_tree.remap_sheet_references(element, id_map)`` rewrites
-   the ``Sheet.N!`` and ``SheetN!`` references in every formula under
-   ``element``, keeping each one's form. It returns ``None``, where
-   ``update_ids`` returned the element.
+   Internal in 1.0; no public replacement. The page rewrites the
+   ``Sheet.N!`` and ``SheetN!`` references in every formula that names a
+   shape it renumbers, as above.
 
 Package internals are private
 -----------------------------
 
 The document keeps its package parts in step itself, and a page's
-part-level bookkeeping is the document's, so 1.0 makes both private. The
-part names are in :mod:`vsdxkit.partnames`. To read a part's bytes, save the
-document and open the file with :mod:`zipfile`. If you need one of these,
-open an issue asking for an API.
+part-level bookkeeping is the document's, so 1.0 makes both private. To
+read a part's bytes, save the document and open the file with
+:mod:`zipfile`. If you need one of these, open an issue asking for an API.
 
 ``vis.pages_xml``, ``vis.pages_xml_rels``, ``vis.content_types_xml``, ``vis.app_xml``, ``vis.document_xml``, ``vis.document_xml_rels``, ``vis.masters_xml``
    Internal in 1.0; no public replacement. Assigning a tree to one replaced
@@ -928,3 +937,16 @@ renamed with a leading underscore; nothing in them is supported.
 ``vsdx.logging_support.get_logger``
    ``logging.getLogger("vsdxkit")``. The library logs under ``vsdxkit`` and
    never configures a handler itself.
+
+``vsdx.relationships.all_of``, ``relationships.find``, ``relationships.allocate_id``, ``relationships.append_if_absent``, ``relationships.remove``, ``relationships.ensure_override``, ``relationships.remove_override``
+   Internal in 1.0; no public replacement. The document keeps its
+   relationships and content types in step with every page, master and
+   shape it adds, copies or removes.
+
+``vsdx.xmlio.NAMESPACE_PREFIXES``, ``xmlio.register_namespaces``, ``xmlio.adopt_prefixes``, ``xmlio.make_cell_element``, ``xmlio.xml_value``, ``xmlio.require_tree``, ``xmlio.require_element``, ``xmlio.pretty_print_element``
+   Internal in 1.0; no public replacement. A save spells each part's
+   namespaces as the part declared them, and new ones as Visio does. A
+   shape's cells are ``shape.cells``, and ``shape.get_or_create_cell(name)``
+   adds one. The XML namespaces are ``vsdxkit.namespace`` and the other
+   constants the root keeps, and ``from vsdx import pretty_print_element``
+   above shows the standard library's printer.

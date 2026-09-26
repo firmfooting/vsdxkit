@@ -15,8 +15,8 @@ else:
 from vsdxkit._inheritance import InheritedRow
 from vsdxkit._logging_support import get_logger
 from vsdxkit._shape_part import AttachedShape, ShapePart
+from vsdxkit._xmlio import make_cell_element, pretty_print_element, to_float, xml_value
 from vsdxkit.errors import InvalidOperationError
-from vsdxkit.xmlio import make_cell_element, pretty_print_element, to_float, xml_value
 
 logger: Logger = get_logger(__name__)
 

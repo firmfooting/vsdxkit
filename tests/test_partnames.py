@@ -2,7 +2,7 @@
 
 import pytest
 
-from vsdxkit.partnames import folder_of, relationship_target, relationships_part_name, target_part_name
+from vsdxkit._partnames import folder_of, relationship_target, relationships_part_name, target_part_name
 
 
 @pytest.mark.parametrize(

@@ -16,20 +16,21 @@ else:
 
 
 from vsdxkit import namespace, r_namespace
-from vsdxkit.connectors import _Connect, _float_ends, _glue_connector, _plan_connector
-from vsdxkit.errors import InvalidOperationError, MissingPartError, NotFoundError, PackageError
-from vsdxkit.glue import ConnectorOptions, Glue, Routing
-from vsdxkit.package import PackageStore, XmlPart
-from vsdxkit.partnames import relationship_target, relationships_part_name, target_part_name
-from vsdxkit.relationships import all_of, append_if_absent
-from vsdxkit.shape_kind import ShapeKind
-from vsdxkit.shape_tree import (
+from vsdxkit._partnames import relationship_target, relationships_part_name, target_part_name
+from vsdxkit._relationships import all_of, append_if_absent
+from vsdxkit._shape_tree import (
     SHEET_REFERENCE,
     find_or_create_shapes_tag,
     iter_descendants,
     parent_of,
     remap_sheet_references,
 )
+from vsdxkit._xmlio import PartTree, require_element, to_float, xml_value
+from vsdxkit.connectors import _Connect, _float_ends, _glue_connector, _plan_connector
+from vsdxkit.errors import InvalidOperationError, MissingPartError, NotFoundError, PackageError
+from vsdxkit.glue import ConnectorOptions, Glue, Routing
+from vsdxkit.package import PackageStore, XmlPart
+from vsdxkit.shape_kind import ShapeKind
 from vsdxkit.shapes import (
     Connector,
     PageView,
@@ -41,7 +42,6 @@ from vsdxkit.shapes import (
     is_connector,
 )
 from vsdxkit.swimlanes import SwimlaneDiagram, _diagram_on
-from vsdxkit.xmlio import PartTree, require_element, to_float, xml_value
 
 # the two places a Connect record names a shape: the connector it leads from,
 # and the shape that connector is glued to

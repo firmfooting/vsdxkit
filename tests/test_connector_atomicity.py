@@ -13,10 +13,10 @@ import pytest
 from helpers.connect_records import page_records
 
 from vsdxkit import document_rels_namespace
+from vsdxkit._partnames import DOCUMENT_PART, relationships_part_name
 from vsdxkit.document import Document
 from vsdxkit.errors import InvalidOperationError
 from vsdxkit.glue import ConnectorOptions, Glue
-from vsdxkit.partnames import DOCUMENT_PART, relationships_part_name
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 

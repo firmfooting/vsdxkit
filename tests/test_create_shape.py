@@ -7,9 +7,9 @@ import pytest
 from helpers.connect_records import page_records
 
 from vsdxkit import _media
+from vsdxkit._partnames import target_part_name
 from vsdxkit.document import Document
 from vsdxkit.errors import InvalidOperationError
-from vsdxkit.partnames import target_part_name
 from vsdxkit.shape_kind import ShapeKind
 
 BASE = "test8_simple_connector.vsdx"

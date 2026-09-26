@@ -24,6 +24,10 @@ PRIVATE_MODULES = (
     "masters",
     "media",
     "shape_part",
+    "partnames",
+    "relationships",
+    "shape_tree",
+    "xmlio",
 )
 
 # a renamed module under its old name, or any dotted segment with one leading

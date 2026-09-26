@@ -20,13 +20,13 @@ from vsdxkit._formulae import calc_value
 from vsdxkit._inheritance import InheritedRow
 from vsdxkit._logging_support import get_logger
 from vsdxkit._shape_part import AttachedShape, ShapePart
+from vsdxkit._shape_tree import find_or_create_shapes_tag, is_connector_element, iter_children, iter_edges, parent_of
+from vsdxkit._xmlio import PartTree, make_cell_element, to_float, xml_value
 from vsdxkit.connectors import _ConnectorPage, _glued_ends, _retarget_connector
 from vsdxkit.errors import InvalidOperationError, NotFoundError, PackageError
 from vsdxkit.geometry import Geometry, GeometryCell
 from vsdxkit.glue import ConnectorOptions, Glue, Routing
 from vsdxkit.shape_kind import ShapeKind
-from vsdxkit.shape_tree import find_or_create_shapes_tag, is_connector_element, iter_children, iter_edges, parent_of
-from vsdxkit.xmlio import PartTree, make_cell_element, to_float, xml_value
 
 logger: Logger = get_logger(__name__)
 

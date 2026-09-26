@@ -47,8 +47,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from vsdxkit._xmlio import PartTree, parse_part, serialise_part
 from vsdxkit.errors import MalformedPackageError, MissingPartError, PackageLimitError
-from vsdxkit.xmlio import PartTree, parse_part, serialise_part
 
 # --------------------------------------------------------------------------
 # load limits

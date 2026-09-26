@@ -8,9 +8,9 @@ from helpers.connect_records import page_records
 
 from vsdxkit import namespace
 from vsdxkit._formulae import calc_value
+from vsdxkit._xmlio import pretty_print_element
 from vsdxkit.document import Document
 from vsdxkit.shapes import Shape
-from vsdxkit.xmlio import pretty_print_element
 
 
 def _first_shape_containing(shapes, text: str):

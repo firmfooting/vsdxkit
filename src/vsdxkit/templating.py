@@ -19,10 +19,10 @@ from typing import Protocol
 from jinja2.sandbox import SandboxedEnvironment
 
 from vsdxkit._logging_support import get_logger
+from vsdxkit._xmlio import adopt_prefixes
 from vsdxkit.errors import NotFoundError
 from vsdxkit.pages import Page, PageCollection
 from vsdxkit.shapes import Shape
-from vsdxkit.xmlio import adopt_prefixes
 
 logger: Logger = get_logger(__name__)
 

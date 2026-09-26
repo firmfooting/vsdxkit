@@ -7,10 +7,10 @@ import pytest
 from helpers.connect_records import records_naming
 
 from vsdxkit import namespace
+from vsdxkit._xmlio import pretty_print_element
 from vsdxkit.document import Document
 from vsdxkit.errors import InvalidOperationError
 from vsdxkit.shapes import DataProperty, Shape
-from vsdxkit.xmlio import pretty_print_element
 
 
 def _first_shape_containing(shapes, text: str):

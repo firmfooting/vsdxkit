@@ -16,10 +16,10 @@ import zipfile
 import pytest
 
 import vsdxkit
+import vsdxkit._xmlio
 import vsdxkit.document
 import vsdxkit.errors
 import vsdxkit.package
-import vsdxkit.xmlio
 from vsdxkit import _media
 from vsdxkit.document import Document
 from vsdxkit.errors import (
@@ -192,7 +192,7 @@ def test_require_element_raises_missing_part_error():
     means an incomplete package, not a bad argument.
     """
     with pytest.raises(MissingPartError, match="Pages root"):
-        vsdxkit.xmlio.require_element(None, "Pages root")
+        vsdxkit._xmlio.require_element(None, "Pages root")
 
 
 def test_require_tree_raises_missing_part_error():
@@ -202,7 +202,7 @@ def test_require_tree_raises_missing_part_error():
     part that is not there.
     """
     with pytest.raises(MissingPartError, match=r"pages\.xml"):
-        vsdxkit.xmlio.require_tree(None, "pages.xml")
+        vsdxkit._xmlio.require_tree(None, "pages.xml")
 
 
 def test_store_require_xml_raises_missing_part_error(tmp_path):
@@ -645,7 +645,7 @@ def test_require_attribute_returns_the_value_when_it_is_there():
     open rather than only the malformed ones.
     """
     element = ET.fromstring('<Relationship Id="rId1"/>')
-    assert vsdxkit.xmlio.require_attribute(element, "Id", "Relationship") == "rId1"
+    assert vsdxkit._xmlio.require_attribute(element, "Id", "Relationship") == "rId1"
 
 
 def test_a_part_declaring_an_unknown_encoding_raises_malformed_package_error(bad_encoding_package):
@@ -660,10 +660,10 @@ def test_a_part_declaring_an_unknown_encoding_raises_malformed_package_error(bad
 
 def test_a_part_in_a_multibyte_encoding_the_parser_refuses_is_malformed():
     """Fails if parse_part lets expat's "multi-byte encodings are not supported" ValueError escape untranslated."""
-    from vsdxkit import xmlio
+    from vsdxkit import _xmlio
 
     with pytest.raises(MalformedPackageError, match="encoding"):
-        xmlio.parse_part(REFUSED_MULTIBYTE_PART, "/visio/pages/page1.xml")
+        _xmlio.parse_part(REFUSED_MULTIBYTE_PART, "/visio/pages/page1.xml")
 
 
 @pytest.mark.allow_invalid_package("unreadable-part")
@@ -850,7 +850,7 @@ def test_refusing_none_for_a_page_part_is_an_invalid_operation(vsdx_copy):
 def test_argument_checks_are_still_plain_builtin_errors():
     """Type and value checks on what a caller passed are not library conditions."""
     with pytest.raises(TypeError) as type_error:
-        vsdxkit.xmlio.xml_value(None)
+        vsdxkit._xmlio.xml_value(None)
     assert not isinstance(type_error.value, VsdxError)
 
     with pytest.raises(ValueError) as value_error:

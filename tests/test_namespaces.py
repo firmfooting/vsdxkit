@@ -16,7 +16,7 @@ from xml.etree import ElementTree
 
 import pytest
 
-from vsdxkit import namespace, xmlio
+from vsdxkit import _xmlio, namespace
 from vsdxkit.document import Document
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
@@ -126,7 +126,7 @@ LUCIDCHART = "http://www.lucidchart.com"
 
 def _round_trip_part(source: str) -> str:
     """Parse a part the way the library does, then write it straight back out."""
-    return xmlio.serialise_part(xmlio.parse_part(source.encode("utf-8"))).decode("utf-8")
+    return _xmlio.serialise_part(_xmlio.parse_part(source.encode("utf-8"))).decode("utf-8")
 
 
 def test_a_prefix_the_document_chose_survives_a_round_trip():
@@ -168,11 +168,11 @@ def test_a_generated_prefix_in_the_source_is_not_preserved():
 
 def _round_trip_with_added(source: str, tag: str) -> str:
     """Round-trip a part with one element the source never declared added to it."""
-    tree = xmlio.parse_part(source.encode("utf-8"))
+    tree = _xmlio.parse_part(source.encode("utf-8"))
     root = tree.getroot()
     assert root is not None
     root.append(ElementTree.Element(tag))
-    return xmlio.serialise_part(tree).decode("utf-8")
+    return _xmlio.serialise_part(tree).decode("utf-8")
 
 
 def test_a_namespace_the_part_never_declared_takes_the_registered_prefix():
@@ -197,7 +197,7 @@ def test_a_tree_the_library_built_itself_still_takes_the_registered_prefixes():
     """Templating and page creation parse from a string, not from the package."""
     root = ElementTree.fromstring(f'<PageContents xmlns="{VISIO_MAIN}"/>')
     root.append(ElementTree.Element(f"{{{RELATIONSHIPS}}}Rel"))
-    written = xmlio.serialise_part(ElementTree.ElementTree(root)).decode("utf-8")
+    written = _xmlio.serialise_part(ElementTree.ElementTree(root)).decode("utf-8")
     assert f'<PageContents xmlns="{VISIO_MAIN}"' in written
     assert f'xmlns:r="{RELATIONSHIPS}"' in written
 
@@ -400,8 +400,8 @@ def test_pretty_printing_spells_visio_prefixes_without_a_document_loaded():
     """
     script = (
         "import xml.etree.ElementTree as ET\n"
-        "from vsdxkit import namespace, xmlio\n"
-        "print(xmlio.pretty_print_element(ET.Element(namespace + 'Shape')))\n"
+        "from vsdxkit import namespace, _xmlio\n"
+        "print(_xmlio.pretty_print_element(ET.Element(namespace + 'Shape')))\n"
     )
     result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, check=True)
     assert "ns0" not in result.stdout

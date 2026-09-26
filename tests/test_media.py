@@ -45,7 +45,7 @@ def test_a_truncated_sentinel_is_refused():
 def test_what_the_library_creates_from_a_donor_is_a_copy(vsdx_copy):
     """Fails if a created shape, connector or style is a donor's own element, which a caller could edit past the closed guard.
 
-    `media` hands its donor shapes out uncopied, to the library alone:
+    `_media` hands its donor shapes out uncopied, to the library alone:
     `Page.create_shape`, `Document._copy_connector` and `_style_copy` copy them.
     """
     donor = _media._donor(_media.PALETTE, Document.open)

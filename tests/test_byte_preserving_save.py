@@ -13,8 +13,8 @@ from datetime import datetime
 
 import pytest
 
+from vsdxkit._xmlio import parse_part, serialise_part
 from vsdxkit.document import Document
-from vsdxkit.xmlio import parse_part, serialise_part
 
 BASEDIR = os.path.dirname(os.path.realpath(__file__))
 FIXTURES = sorted(os.path.basename(p) for p in glob.glob(os.path.join(BASEDIR, "*.vsd[xm]")))

@@ -16,9 +16,9 @@ import zipfile
 import pytest
 
 from vsdxkit import _media
+from vsdxkit._partnames import relationships_part_name
 from vsdxkit.document import Document
 from vsdxkit.errors import MalformedPackageError
-from vsdxkit.partnames import relationships_part_name
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
@@ -170,9 +170,9 @@ def test_a_document_has_no_zip_file_contents_or_directory(vsdx_copy):
 @pytest.mark.parametrize("name", ["file_to_xml", "xml_to_file", "require_xml_tree", "require_root"])
 def test_xmlio_has_no_helpers_over_the_old_mapping(name):
     """Fails if a helper that took the pre-store `{path: BytesIO}` mapping is still in `xmlio` (#91)."""
-    import vsdxkit.xmlio
+    import vsdxkit._xmlio
 
-    assert not hasattr(vsdxkit.xmlio, name)
+    assert not hasattr(vsdxkit._xmlio, name)
     assert not hasattr(vsdxkit.document, name)
 
 
