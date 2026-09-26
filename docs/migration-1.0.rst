@@ -824,8 +824,10 @@ These had no caller in the library, repeated a 1.0 name, or did nothing.
 ``shape.line_to_x``, ``shape.line_to_y``
    Gone. They read the last ``LineTo`` row of the shape's geometry, and
    wrote a cell outside the geometry when the shape had no such row. Read
-   and write the rows through ``shape.geometry.rows``, or move a line's end
-   with ``shape.geometry.set_line_to(x, y)``.
+   and write the rows through ``shape.geometry.rows``, or move one row's end
+   with ``shape.geometry.set_line_to(x, y, line_to_index)``, whose index
+   counts ``LineTo`` rows from the first, where these read the last.
+   ``shape.geometry`` is ``None`` for a shape with no geometry.
 
 The page allocates shape IDs
 ----------------------------

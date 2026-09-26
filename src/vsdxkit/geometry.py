@@ -268,7 +268,7 @@ class GeometryRow(InheritedRow, ShapePart):
         ``IX=None`` arrives as the literal ``"None"`` and passes the
         emptiness check.
         """
-        self._require_attached("GeometryRow._create_row_xml()")
+        self._require_attached("creating a geometry row")
         if not T or not IX:
             raise ValueError(f"cannot create a geometry row without T and IX (got T={T!r}, IX={IX!r})")
         # Create new row xml
@@ -406,7 +406,7 @@ class GeometryCell(ShapePart):
     def _create_cell_xml(self, name: str) -> Element:
         # also the first write of GeometryCell.__init__, so constructing a cell
         # on a detached shape refuses before it appends anything
-        self._require_attached("GeometryCell._create_cell_xml()")
+        self._require_attached("creating a geometry cell")
         cell = make_cell_element(name)
         self._parent_xml.append(cell)
         if isinstance(self.parent, GeometryRow):
