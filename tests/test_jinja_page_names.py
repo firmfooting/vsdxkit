@@ -9,6 +9,7 @@ taken out of the name only when it opened the name.
 import zipfile
 
 import pytest
+from jinja2.exceptions import TemplateSyntaxError
 
 from vsdxkit.document import Document
 from vsdxkit.errors import PackageError
@@ -153,3 +154,47 @@ def test_two_page_names_that_render_alike_leave_two_pages_of_one_name(vsdx_copy)
     assert [page.name for page in vis.pages] == ["Page-1", "Same", "Same"]
     with pytest.raises(PackageError, match="the document has 2 pages called 'Same'"):
         vis.pages.by_name("Same")
+
+
+def test_a_broken_template_in_a_page_name_fails_as_broken_shape_text_does(vsdx_copy):
+    """Fails if the page path's exception differs from the shape path's for the same broken template.
+
+    Both a page's name and a shape's text go through ``_template`` and the
+    same sandboxed ``_ENVIRONMENT``, so a syntax error in either should raise
+    the same way. Nothing pinned that before: the docstring's "as `{% if %}`
+    would" was a claim of parity, not a test of it.
+    """
+    broken = "{% if %}Broken"
+
+    page_vis = Document.open(vsdx_copy("test1.vsdx"))
+    page_vis.pages[1].name = broken
+    with pytest.raises(TemplateSyntaxError) as page_error:
+        page_vis.render({})
+
+    shape_vis = Document.open(vsdx_copy("test1.vsdx"))
+    shape_vis.pages[0].children.require_id("1").text = broken
+    with pytest.raises(TemplateSyntaxError) as shape_error:
+        shape_vis.render({})
+
+    assert type(page_error.value) is type(shape_error.value)
+
+
+def test_a_missing_variable_in_a_page_name_renders_as_it_does_in_shape_text(vsdx_copy):
+    """Fails if a page name's undefined variable renders differently from a shape's.
+
+    Jinja's default ``Undefined`` renders an unknown name as an empty string
+    rather than raising, in a page's name exactly as in a shape's text.
+    """
+    holding_missing = "{{ missing }} report"
+
+    page_vis = Document.open(vsdx_copy("test1.vsdx"))
+    page_vis.pages[1].name = holding_missing
+    page_vis.render({})
+
+    shape_vis = Document.open(vsdx_copy("test1.vsdx"))
+    shape = shape_vis.pages[0].children.require_id("1")
+    shape.text = holding_missing
+    shape_vis.render({})
+    shape_after = shape_vis.pages[0].shapes.by_id("1")
+
+    assert page_vis.pages[1].name == shape_after.text == " report"
