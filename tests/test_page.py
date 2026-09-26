@@ -603,7 +603,16 @@ def test_copy_and_move_shape(filename: str, shape_text: str, lx: float, ly: floa
 @pytest.mark.parametrize(
     ("filename", "shape_text", "start", "finish"),
     [
-        ("test9_rect_and_line.vsdx", "Line A", (2.0, 7.0), (3.0, 8.0)),
+        pytest.param(
+            "test9_rect_and_line.vsdx",
+            "Line A",
+            (2.0, 7.0),
+            (3.0, 8.0),
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason="hand-writes a line's derived cells; rewritten to use set_start_and_finish in the next task (#319)",
+            ),
+        ),
         ("test9_rect_and_line.vsdx", "Conn A", (2.0, 7.0), (3.0, 8.0)),
     ],
 )
