@@ -19,7 +19,6 @@ from vsdxkit import media
 from vsdxkit.document import Document
 from vsdxkit.errors import MalformedPackageError
 from vsdxkit.partnames import relationships_part_name
-from vsdxkit.shape_tree import find_or_create_shapes_tag
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
@@ -92,18 +91,6 @@ def test_a_page_target_outside_the_pages_folder_still_fails_the_open(tmp_path, t
             rewritten.writestr(entry, data)
     with pytest.raises(MalformedPackageError):
         Document.open(str(crafted))
-
-
-def test_insert_shape_takes_the_pages_part_name(vsdx_copy):
-    """Fails if `insert_shape` refuses the name `Page.filename` now holds, or accepts another page's."""
-    vis = Document.open(vsdx_copy("test2.vsdx"))
-    assert len(vis.pages) > 1, "the fixture has changed: it should have more than one page"
-    page, other = vis.pages[0], vis.pages[1]
-    shapes = find_or_create_shapes_tag(page.xml.getroot())
-    source = next(iter(page.children)).xml
-    vis.insert_shape(ET.fromstring(ET.tostring(source)), shapes, page, page.filename)
-    with pytest.raises(ValueError):
-        vis.insert_shape(ET.fromstring(ET.tostring(source)), shapes, page, other.filename)
 
 
 def test_the_connector_master_is_imported_from_the_donor_not_the_target(vsdx_copy):

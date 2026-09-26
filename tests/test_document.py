@@ -19,64 +19,6 @@ def _media_filename() -> str:
 # file structure
 
 
-def test_insert_shape_rejects_mismatched_page_path(vsdx_copy):
-    filename = vsdx_copy("test2.vsdx")
-    shape = ET.fromstring(f'<Shape xmlns="{namespace[1:-1]}" ID="1" />')
-    shapes = Element(f"{namespace}Shapes")
-
-    vis = Document.open(filename)
-    with pytest.raises(ValueError, match="does not match"):
-        vis.insert_shape(shape, shapes, vis.pages[0], "not-the-page.xml")
-
-    assert len(shapes) == 0
-
-
-def test_insert_shape_accepts_equivalent_mixed_separator_path(vsdx_copy):
-    filename = vsdx_copy("test2.vsdx")
-    shape = ET.fromstring(f'<Shape xmlns="{namespace[1:-1]}" ID="1" />')
-    shapes = Element(f"{namespace}Shapes")
-
-    vis = Document.open(filename)
-    page = vis.pages[0]
-    page_path = page.filename.replace("/", "\\")
-    result = vis.insert_shape(shape, shapes, page, page_path)
-
-    assert result is shapes
-    assert len(shapes) == 1
-
-
-def test_insert_shape_allocates_an_id_the_page_is_not_using(vsdx_copy, tmp_path):
-    """A shape inserted into a loaded page must not reuse an ID already on it.
-
-    Nothing tells the caller to prime the page's high-water mark, so an
-    allocator that trusts it hands out 1 on a page that already has a shape 1.
-    Duplicate IDs make Connect records ambiguous and Visio offers to repair the
-    file on open.
-    """
-    filename = vsdx_copy("test1.vsdx")
-    out_file = os.path.join(str(tmp_path), "test1_insert_shape.vsdx")
-    shape = ET.fromstring(f'<Shape xmlns="{namespace[1:-1]}" ID="1" Type="Shape" />')
-
-    vis = Document.open(filename)
-    page = vis.pages[0]
-    shapes = page.xml.getroot().find(f"{namespace}Shapes")
-    ids_before = [s.ID for s in page.shapes]
-
-    vis.insert_shape(shape, shapes, page, page.filename)
-
-    new_id = shape.attrib["ID"]
-    assert new_id not in ids_before
-    ids_after = [s.ID for s in page.shapes]
-    assert sorted(ids_after) == sorted([*ids_before, new_id])
-    vis.save(out_file)
-
-    vis = Document.open(out_file)
-    page = vis.pages[0]
-    ids = [s.ID for s in page.shapes]
-    assert new_id in ids
-    assert len(ids) == len(set(ids))
-
-
 def test_invalid_file_type():
     """Test that opening an invalid file name results in a TypeError"""
     filename = __file__
@@ -512,9 +454,9 @@ def test_vis_copy_shape(filename: str, shape_name: str, tmp_path, basedir):
     max_id = max(int(existing.ID) for existing in page.shapes)
 
     # note = this does add the shape, but prefer Shape.copy() as per next test which wraps this and returns Shape
-    new_shape = vis.copy_shape(shape=s.xml, page=page)
+    new_shape = page._copy_shape_xml(s.xml)
 
-    assert isinstance(new_shape, Element)  # check copy_shape returns xml
+    assert isinstance(new_shape, Element)  # check _copy_shape_xml returns xml
 
     print(f"created new shape {type(new_shape)} {new_shape} {new_shape.attrib['ID']}")
     assert int(new_shape.attrib.get("ID")) > int(s.ID)
@@ -544,13 +486,13 @@ def test_copy_shape_other_page(filename: str, shape_name: str, tmp_path, basedir
     shape_text = s.text
     print(f"Found shape id:{s.ID}")
 
-    new_shape = vis.copy_shape(shape=s.xml, page=page2)
-    assert isinstance(new_shape, Element)  # check copy_shape returns xml
+    new_shape = page2._copy_shape_xml(s.xml)
+    assert isinstance(new_shape, Element)  # check _copy_shape_xml returns xml
     print(f"created new shape {type(new_shape)} {new_shape} {new_shape.attrib['ID']}")
     page2_new_shape_id = new_shape.attrib["ID"]
 
-    new_shape = vis.copy_shape(shape=s.xml, page=page3)
-    assert isinstance(new_shape, Element)  # check copy_shape returns xml
+    new_shape = page3._copy_shape_xml(s.xml)
+    assert isinstance(new_shape, Element)  # check _copy_shape_xml returns xml
     print(f"created new shape {type(new_shape)} {new_shape} {new_shape.attrib['ID']}")
     print(f"created new shape {type(new_shape)} {new_shape} {new_shape.attrib['ID']}")
     page3_new_shape_id = new_shape.attrib["ID"]

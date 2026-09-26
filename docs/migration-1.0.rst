@@ -106,7 +106,8 @@ The class is :class:`vsdxkit.document.Document`, in the module
    :class:`~vsdxkit.templating.RenderTarget`. The context may be any mapping,
    not only a ``dict``. The mixin's
    ``JinjaTemplatingMixin.increment_sub_shape_ids`` was a placeholder for the
-   document's own method, which stays.
+   document's own method, which is gone as well; see "The page allocates
+   shape IDs" below.
 
 ``vis.jinja_render_shape``, ``vis.jinja_set_selfs``, ``vis.unescape_jinja_statements``, ``vis.jinja_create_for_loop_if``, ``vis.jinja_page_showif``
    Gone. They were the steps of one render, not something to call on their
@@ -219,7 +220,7 @@ OPC name, and the file-system view of 0.x is gone.
 
 ``page.filename``, ``page.rels_xml_filename``
    Now the part names, such as ``/visio/pages/page1.xml``, not paths on
-   disk. ``Document.insert_shape``'s ``page_path`` takes the same part name.
+   disk.
 
 ``VisioFile.zip_file_contents``, ``VisioFile.directory``
    Gone. Work through the object model; to read a part's raw bytes, open
@@ -810,3 +811,19 @@ nothing left for a caller to renumber.
    ``vsdxkit.shape_tree.find_or_create_shapes_tag``, unchanged, beside the
    other element-level walks. For a shape, ``shape.parent`` is its page or
    group.
+
+``vis.copy_shape(element, page)``, ``vis.insert_shape(element, shapes, page, page_path)``
+   ``shape.copy(page)``: a copy of the shape at the page's top level, with
+   IDs the page does not use, the master it instances and the page
+   relationships it needs. ``group.append_shape(shape)`` moves a shape into
+   a group.
+
+``vis.renumber_shape_ids(...)``, ``vis.increment_shape_ids(...)``, ``vis.increment_sub_shape_ids(...)``, ``vis.set_new_id(...)``
+   Internal in 1.0; no public replacement. The page renumbers what it needs
+   to, as above.
+
+``vis.update_ids(element, id_map)``
+   ``vsdxkit.shape_tree.remap_sheet_references(element, id_map)`` rewrites
+   the ``Sheet.N!`` and ``SheetN!`` references in every formula under
+   ``element``, keeping each one's form. It returns ``None``, where
+   ``update_ids`` returned the element.

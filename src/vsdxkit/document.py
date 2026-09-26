@@ -3,7 +3,6 @@ from __future__ import annotations
 import copy
 import logging
 import os
-import posixpath
 import xml.etree.ElementTree as ET
 from collections.abc import Mapping
 from pathlib import Path
@@ -34,7 +33,6 @@ from vsdxkit.partnames import (
 )
 from vsdxkit.relationships import append_if_absent, ensure_override, remove, remove_override
 from vsdxkit.shape_kind import ShapeKind
-from vsdxkit.shape_tree import find_or_create_shapes_tag, remap_sheet_references
 from vsdxkit.shapes import Connector, Shape
 from vsdxkit.templating import render_document
 from vsdxkit.xmlio import (
@@ -56,11 +54,6 @@ def _page_part_taken(taken: set[str], filename: str) -> bool:
     """Whether a page part called `filename`, or the relationships part it would have, is already in `taken`."""
     part_name = target_part_name(PAGES_PART, filename)
     return part_name in taken or relationships_part_name(part_name) in taken
-
-
-def _normalise_page_path(path: str) -> str:
-    """Normalise mixed platform separators without changing OPC case."""
-    return posixpath.normpath(path.replace("\\", "/"))
 
 
 # The main document part's content type, not the file extension, is what tells
@@ -958,154 +951,6 @@ class Document:
         )
 
         return new_page
-
-    def increment_sub_shape_ids(self, shape: Shape, page: Page, id_map: dict[str, int] | None = None) -> dict[str, int]:
-        """Renumber a shape and everything under it, then remap its formulas.
-
-        The layer-by-layer re-walk this used to do is gone: it made up for an
-        allocation walk that stopped short, and gave every child a second ID it
-        then threw away. ``increment_shape_ids`` now reaches the whole subtree.
-        """
-        return self.renumber_shape_ids(shape.xml, page, id_map)
-
-    def copy_shape(self, shape: Element, page: Page) -> Element:
-        """Insert shape into first Shapes tag in destination page, and return the copy.
-
-        If destination page does not have a Shapes tag yet, create it.
-
-        Parameters:
-            shape (Element): The source shape to be copied. Use Shape.xml
-            page (ElementTree): The page where the new Shape will be placed. Use Page.xml
-            page_path (str): The filename of the page where the new Shape will be placed. Use Page.filename
-
-        Returns:
-            ElementTree: The new shape ElementTree
-
-        """
-
-        new_shape = ET.fromstring(ET.tostring(shape))
-
-        shapes_tag = find_or_create_shapes_tag(page.xml.getroot())
-
-        self.renumber_shape_ids(new_shape, page)
-        shapes_tag.append(new_shape)
-
-        return new_shape
-
-    def insert_shape(self, shape: Element, shapes: Element, page: Page, page_path: str) -> Element:
-        # Keep page_path for the current API, but never let it select a different
-        # page from the typed Page argument that owns ID allocation.
-        if _normalise_page_path(page.filename) != _normalise_page_path(page_path):
-            raise ValueError(f"page_path {page_path!r} does not match page filename {page.filename!r}")
-
-        self.renumber_shape_ids(shape, page)
-        shapes.append(shape)
-        return shapes
-
-    def renumber_shape_ids(self, shape: Element, page: Page, id_map: dict[str, int] | None = None) -> dict[str, int]:
-        """Give a subtree IDs unused by ``page``, and follow them everywhere the page writes them.
-
-        One primitive, because a shape ID is written in two places: the
-        ``Sheet.N!`` references inside cell formulas, and the ``FromSheet`` and
-        ``ToSheet`` attributes of the page's ``Connect`` records. Allocating and
-        then sweeping only the formulas is what left a renumbered shape's glue
-        naming an ID that was no longer on the page.
-
-        Both stores are swept over the same ground: the whole page. Sweeping the
-        records page-wide and the formulas only inside the renumbered subtree
-        left behind every *other* shape that named the vacated ID in a cell
-        formula, so a connector's record moved on while the formula placing its
-        endpoint still addressed a sheet that had gone (#328).
-
-        A vacated ID is one that was on the page before and is gone after.
-        Renumbering does not always retire an ID - ``copy_shape`` leaves the
-        original where it was, and the Jinja loop renumbers the duplicates while
-        the shape they were copied from keeps its ID. Nor is every ID in the map
-        one this page ever had: a subtree arriving from elsewhere brings its own,
-        and a stale record that happens to name one of those numbers belongs to
-        whatever wrote the file, not to the shape now carrying it. When nothing
-        was vacated neither sweep runs, and nothing on the page is rewritten.
-
-        The subtree is swept twice when it is already on the page, and the second
-        sweep cannot chain onto what the first wrote. A subtree on the page has
-        every allocated ID stamped onto one of its shapes, so every allocated ID
-        is in ``after`` and none of them can be a vacated ID; a subtree that is
-        not on the page leaves ``before`` and ``after`` equal and vacates
-        nothing. The one way past that is a caller seeding ``id_map`` with a
-        mapping onto an ID the page is still using, which is not what the
-        parameter is for.
-
-        :param shape: root of the subtree to renumber, normally a ``Shape`` element
-        :param page: page that owns the ID high-water mark and the records
-        :param id_map: mapping to extend, so several subtrees renumbered
-            together share one map; a new one is started when omitted
-        :return: the ID map, old ID -> new ID
-        """
-        before = page._shape_ids()
-        id_map = self.increment_shape_ids(shape, page, id_map)
-        self.update_ids(shape, id_map)
-        after = page._shape_ids()
-        vacated = {old: new for old, new in id_map.items() if old in before and old not in after}
-        if vacated:
-            self.update_ids(require_element(page.xml.getroot(), "page root"), vacated)
-            page._remap_connect_records(vacated)
-        return id_map
-
-    def increment_shape_ids(self, shape: Element, page: Page, id_map: dict[str, int] | None = None) -> dict[str, int]:
-        """Give ``shape`` and the shapes inside it IDs unused by ``page``, and map old to new.
-
-        Allocation owns the page's high-water mark rather than trusting callers
-        to prime it: ``Page._max_id`` is 0 on a freshly loaded page, so a caller
-        that forgot handed out 1 to a page whose first shape was already 1.
-        Duplicate IDs make ``Connect`` records ambiguous and Visio offers to
-        repair the file. Every entry into this method syncs, including one that
-        passes an ``id_map`` to collect the mapping, because a caller who has to
-        remember is the fault being fixed. The page is scanned once here, and
-        the walk below allocates without scanning again.
-
-        That walk covers the whole subtree, to any depth. It used to descend
-        into a ``Shapes`` container but then only stamp the ``Shape`` elements
-        directly inside it, so a group's grandchildren arrived in the copy
-        still carrying their original IDs.
-
-        Only ``Shape`` elements are numbered. A ``Shapes`` container is not a
-        shape and takes no ``ID`` in the schema, and numbering one consumed an
-        ID that ``Page._set_max_ids`` could not see, since that scan looks at
-        shapes; a later allocation could then hand the same number to a real
-        shape. A root element outside the Visio namespace is left alone for the
-        same reason, so a caller that hand-builds one must namespace it to have
-        it numbered.
-
-        :param shape: root of the copied subtree, normally a ``Shape`` element
-        :param page: destination page, which owns the ID high-water mark
-        :param id_map: mapping to extend, so several subtrees copied together
-            share one map; a new one is started when omitted
-        :return: the ID map, old ID -> new ID, for ``update_ids`` to apply
-        """
-        page._set_max_ids()
-        if id_map is None:
-            id_map = {}
-        for element in shape.iter(f"{namespace}Shape"):
-            self.set_new_id(element, page, id_map)
-        return id_map
-
-    def set_new_id(self, element: Element, page: Page, id_map: dict[str, int]) -> int:
-        """Stamp the next free page ID onto one Shape element.
-
-        Call this only for a ``Shape``; ``increment_shape_ids`` is what decides
-        which elements qualify.
-        """
-        max_id = page._next_shape_id()
-        if element.attrib.get("ID"):
-            current_id = element.attrib["ID"]
-            id_map[current_id] = max_id  # record mappings
-        element.attrib["ID"] = str(max_id)
-        return max_id  # return new id for info
-
-    def update_ids(self, shape: Element, id_map: dict[str, int]) -> Element:
-        """Remap every sheet reference in a copied subtree through ``id_map``; see `remap_sheet_references`."""
-        remap_sheet_references(shape, id_map)
-        return shape
 
     def _main_part_content_type(self) -> str:
         """The declared content type of `/visio/document.xml`."""

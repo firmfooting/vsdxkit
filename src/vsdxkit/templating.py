@@ -54,12 +54,13 @@ _SETTABLE = ("x", "y")
 
 
 class RenderTarget(Protocol):
-    """What rendering needs from a document: its pages, and a way to renumber a shape a loop copied."""
+    """What rendering needs from a document: its pages.
+
+    Each page renumbers the copies a ``{% for %}`` loop makes of its shapes.
+    """
 
     @property
     def pages(self) -> PageCollection: ...
-
-    def increment_sub_shape_ids(self, shape: Shape, page: Page) -> object: ...
 
 
 def _template(source: str):
@@ -106,8 +107,8 @@ def render_document(document: RenderTarget, context: Mapping[str, object]) -> No
                 if shapes_by_id and len(shapes_by_id) > 1:
                     delta = 0.0
                     for shape in shapes_by_id[1:]:  # from the 2nd onwards - leaving original unchanged
-                        # increment each new shape duplicated by the jinja loop
-                        document.increment_sub_shape_ids(shape, page)
+                        # give each copy the loop made IDs of its own, and its formulas with them
+                        page._renumber_shape_ids(shape.xml)
                         delta += shape.height or 0.0  # automatically move each duplicate down
                         shape.move(0, -delta)  # move duplicated shapes so they are visible
 
