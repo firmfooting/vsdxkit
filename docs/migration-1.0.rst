@@ -950,3 +950,8 @@ renamed with a leading underscore; nothing in them is supported.
    adds one. The XML namespaces are ``vsdxkit.namespace`` and the other
    constants the root keeps, and ``from vsdx import pretty_print_element``
    above shows the standard library's printer.
+
+``vsdx.connectors.namespace``, ``geometry.namespace``
+   ``from vsdxkit import namespace``, the constant both were copies of. The
+   ``connectors`` module is internal in 1.0: with its copy gone it has no
+   public name left, and a connector is a :class:`vsdxkit.shapes.Connector`.

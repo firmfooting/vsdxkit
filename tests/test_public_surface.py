@@ -29,6 +29,7 @@ PRIVATE_MODULES = (
     "relationships",
     "shape_tree",
     "xmlio",
+    "connectors",
 )
 
 # a renamed module under its old name, or any dotted segment with one leading
@@ -119,3 +120,11 @@ def test_a_split_module_defines_only_its_user_api(module, public):
     """Fails if the store, or the glue planners and records, move back beside the names users import."""
     assert {name for name in _top_level_names(module) if not name.startswith("_")} == public
     assert importlib.util.find_spec(f"vsdxkit._{module}") is not None
+
+
+def test_only_the_root_defines_the_visio_namespace():
+    """Fails if a module keeps its own copy of `vsdxkit.namespace` again, as `connectors` and `geometry` did."""
+    copies = sorted(
+        path.name for path in SOURCE.glob("*.py") if path.name != "__init__.py" and "namespace" in _top_level_names(path.stem)
+    )
+    assert copies == []

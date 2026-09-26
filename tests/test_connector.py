@@ -337,6 +337,6 @@ def test_the_0x_connector_calls_are_gone(owner, name):
 
 
 def test_the_connection_record_class_is_gone():
-    from vsdxkit import connectors
+    from vsdxkit import _connectors
 
-    assert not hasattr(connectors, "Connect")
+    assert not hasattr(_connectors, "Connect")

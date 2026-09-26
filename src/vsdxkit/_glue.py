@@ -1,6 +1,6 @@
 """Connector glue as data: the cells and records each of a connector's options writes.
 
-Nothing here reads or changes a document. `vsdxkit.connectors` resolves each
+Nothing here reads or changes a document. `vsdxkit._connectors` resolves each
 end of a connector to an `EndGlue`, asks this module for the cells and records
 that glue means, and writes them. Keeping the formulas out of the writer is
 what lets create and retarget share them, and lets them be checked against

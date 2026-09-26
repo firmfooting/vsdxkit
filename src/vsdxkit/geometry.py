@@ -12,6 +12,7 @@ if sys.version_info >= (3, 12):
 else:
     from typing_extensions import override
 
+from vsdxkit import namespace
 from vsdxkit._inheritance import InheritedRow
 from vsdxkit._logging_support import get_logger
 from vsdxkit._shape_part import AttachedShape, ShapePart
@@ -37,9 +38,6 @@ class GeometryOwner(Protocol):
     def master_shape(self) -> GeometryOwner | None: ...
 
     def _require_attached(self, operation: str) -> None: ...
-
-
-namespace = "{http://schemas.microsoft.com/office/visio/2012/main}"  # visio file name space
 
 
 def _row_index_sort_key(index: str) -> tuple[int, int, str]:
