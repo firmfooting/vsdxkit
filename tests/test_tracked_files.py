@@ -33,6 +33,12 @@ GENERATED_ARTEFACTS = (
     "coverage.xml",
     "*.orig",
     "*.rej",
+    ".venv/*",
+    "*/.venv/*",
+    "build/*",
+    "*/build/*",
+    "dist/*",
+    "*/dist/*",
 )
 
 
@@ -78,3 +84,19 @@ def test_the_listing_is_not_silently_empty():
         pytest.skip("not a git checkout")
     assert "pyproject.toml" in paths
     assert len(paths) > 100
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ".venv/bin/python",
+        "build/lib/vsdxkit/vsdxfile.py",
+        "dist/vsdxkit-1.0.0-py3-none-any.whl",
+        "tools/.venv/x",
+        "docs/build/x",
+        "packages/vsdxkit/dist/x",
+    ],
+)
+def test_the_patterns_catch_environments_and_build_output(path):
+    """`.gitignore` alone guarded these; a rule that stops matching would let them in unnoticed."""
+    assert any(fnmatch.fnmatch(path, pattern) for pattern in GENERATED_ARTEFACTS)

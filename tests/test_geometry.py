@@ -590,7 +590,7 @@ def test_reprs_identify_the_element_they_describe():
     decision = vis.pages[0].shapes.by_text("PALETTE_DECISION")
     geometry = decision.geometry
 
-    assert repr(geometry.rows["2"].cells["A"]).startswith("A=POLYLINE(0, 0, 1,0.5, 0.5,0, 0,0.5) func=")
+    assert repr(geometry.rows["2"].cells["A"]).startswith("A=POLYLINE(0, 0, 1,0.5, 0.5,0, 0,0.5) formula=")
     assert repr(geometry.rows["1"]).startswith("Row[1] del:None: RelMoveTo=")
     assert "('PolylineTo', '2', 1.5, 2.0)" in repr(geometry)
 

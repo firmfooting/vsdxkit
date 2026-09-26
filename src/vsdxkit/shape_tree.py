@@ -36,6 +36,7 @@ _CELL = f"{namespace}Cell"
 # reference at an unrelated shape. `tests/helpers/package_validator.py` draws
 # the same line with its own copy of the pattern, and the two have to agree or
 # one of them is wrong about which references a page owns.
+#: Matches a `Sheet.N!` or `SheetN!` shape reference in a cell formula.
 SHEET_REFERENCE: re.Pattern[str] = re.compile(r"(?<!!)\bSheet(\.?)(\d+)!")
 
 

@@ -203,6 +203,16 @@ jobs:
           "$GITHUB_WORKSPACE/dist-check/bin/python" "$GITHUB_WORKSPACE/tools/smoke_wheel.py" "$GITHUB_WORKSPACE"/dist/*.whl
       - name: Smoke test the sdist
         run: uv run --no-sync python tools/smoke_sdist.py dist/*.tar.gz
+      - name: Type completeness of the wheel
+        # pyright --verifytypes against the installed wheel (#117). The
+        # threshold is a ratchet: raise it when the score rises, never lower it.
+        run: uv run --no-sync python tools/check_type_completeness.py 'dist/*.whl' --fail-under 100.0 --report type-completeness.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
+        if: ${{ !cancelled() }}
+        with:
+          name: type-completeness
+          path: type-completeness.json
+          if-no-files-found: warn
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: dist

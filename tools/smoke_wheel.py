@@ -9,6 +9,8 @@ Raises on any of:
 - vsdxkit not importable, or importable only via the checkout (source shadowing)
 - py.typed or the bundled media .vsdx files missing from the installation
 - loading the bundled donors, create_shape(), connector creation, save or reopen failing
+- the wheel's top-level modules differing from the checkout's src/vsdxkit/*.py,
+  as a wheel built over a stale build/lib does
 """
 
 import glob
@@ -17,6 +19,7 @@ import os
 import sys
 import tempfile
 import zipfile
+from pathlib import Path
 
 failures: list[str] = []
 
@@ -28,6 +31,29 @@ def fail(message: str) -> None:
 
 def ok(message: str) -> None:
     print(f"ok: {message}")
+
+
+# The checkout this script sits in. CI runs it from outside the checkout, so
+# the path comes from the script, not from the working directory.
+SOURCE_PACKAGE = Path(__file__).resolve().parent.parent / "src" / "vsdxkit"
+
+
+def module_set_mismatch(wheel_names: list[str], source_package: Path) -> str | None:
+    """How the wheel's top-level modules differ from `source_package`'s, or None if they match.
+
+    setuptools' build_py copies into build/lib and never deletes from it, so a
+    wheel built from a working tree that once held a module still ships it
+    after the module is deleted.
+    """
+    in_wheel = {
+        name.removeprefix("vsdxkit/")
+        for name in wheel_names
+        if name.startswith("vsdxkit/") and name.count("/") == 1 and name.endswith(".py")
+    }
+    in_source = {path.name for path in source_package.glob("*.py")}
+    if in_wheel == in_source:
+        return None
+    return f"extra in the wheel: {sorted(in_wheel - in_source)}; missing from the wheel: {sorted(in_source - in_wheel)}"
 
 
 def main() -> int:
@@ -49,6 +75,13 @@ def main() -> int:
         fail("py.typed missing from wheel")
     else:
         ok("py.typed present in wheel")
+
+    if not SOURCE_PACKAGE.is_dir():
+        fail(f"no {SOURCE_PACKAGE} beside this script to compare the wheel's modules with")
+    elif (mismatch := module_set_mismatch(names, SOURCE_PACKAGE)) is not None:
+        fail(f"wheel modules differ from src/vsdxkit: {mismatch}")
+    else:
+        ok("wheel modules match src/vsdxkit")
 
     # 2. the import must resolve inside site-packages, not a source checkout
     spec = importlib.util.find_spec("vsdxkit")

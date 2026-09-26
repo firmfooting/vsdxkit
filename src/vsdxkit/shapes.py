@@ -5,6 +5,7 @@ import html
 import sys
 import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterable, Iterator, Mapping
+from logging import Logger
 from typing import Protocol
 from xml.etree.ElementTree import Element
 
@@ -27,7 +28,7 @@ from vsdxkit.shape_part import AttachedShape, ShapePart
 from vsdxkit.shape_tree import find_or_create_shapes_tag, is_connector_element, iter_children, iter_edges, parent_of
 from vsdxkit.xmlio import PartTree, make_cell_element, to_float, xml_value
 
-logger = get_logger(__name__)
+logger: Logger = get_logger(__name__)
 
 
 class PageView(Protocol):
@@ -220,9 +221,8 @@ def _text_runs_of(text_element: Element | None) -> tuple[list[Element], str, lis
     with a newline that is not part of the text; it is reported separately so
     that writing the text back puts it there again.
 
-    Module level rather than a Shape method because it is also needed where
-    there is no Shape to ask: `Document.apply_text_context` is handed bare
-    elements.
+    Module level rather than a Shape method because it reads a bare `Text`
+    element and nothing of the Shape around it.
 
     A run between two pieces of content is folded into the content string and
     cannot be recovered from it, which corrupts the text on write. See #317;
@@ -307,6 +307,9 @@ def _write_text(
 class Cell(ShapePart):
     """Represents a Cell element in a vsdx xml file"""
 
+    xml: Element
+    shape: Shape
+
     def __init__(self, xml: Element, shape: Shape):
         self.xml = xml
         self.shape = shape
@@ -340,8 +343,8 @@ class Cell(ShapePart):
     def name(self) -> str | None:
         return self.xml.attrib.get("N")
 
-    def __repr__(self):
-        return f"Cell: name={self.name} val={self.value} func={self.formula}"
+    def __repr__(self) -> str:
+        return f"Cell: name={self.name} val={self.value} formula={self.formula}"
 
 
 class DataProperty(InheritedRow, ShapePart):
@@ -696,13 +699,13 @@ class Shape:
 
     @property
     def ID(self) -> str | None:
-        """This shape's page-scoped id, as its element declares it.
+        """This shape's page-scoped ID, as its element declares it.
 
-        Read-only. An id is not the shape's alone to change: the element
+        Read-only. An ID is not the shape's alone to change: the element
         attribute, the page's ``Connect`` records and the ``Sheet.N!``
-        references in other shapes' formulas all name it, and only the
-        page's allocator, ``Page._renumber_shape_ids``, moves the three
-        together.
+        references in other shapes' formulas all name it. The page assigns a
+        new ID when a shape is created, copied, repeated by a template loop,
+        or appended into a group, and moves all three together.
         """
         return self.xml.attrib.get("ID")
 
@@ -718,12 +721,13 @@ class Shape:
 
     @property
     def master_page_ID(self) -> str | None:
-        """The id of the master this shape instances, or its group's.
+        """The ID of the master this shape instances, or its group's.
 
         A sub-shape of a group usually carries no ``Master`` of its own and
         instances whatever its group does, so it falls back to the parent's.
-        Note this is the master page's id, not its index in
-        :attr:`Document.master_pages`.
+        This is the master's ID in the package, not its position in
+        :attr:`vsdxkit.document.Document.master_pages`; :attr:`master_page` is
+        the master itself.
         """
         own = self.xml.attrib.get("Master")
         if own is None and isinstance(self._parent, Shape):
@@ -868,9 +872,7 @@ class Shape:
 
     @property
     def master_shape(self) -> Shape | None:
-        """Get this shapes master
-
-        Returns this Shape's master as a Shape object (or None)
+        """The shape on this shape's master that it instances, or None.
 
         The result is held rather than rebuilt on every read. Resolving a
         master walks the master page and builds a Shape there, and a shape
@@ -879,12 +881,11 @@ class Shape:
 
         It is resolved again when what decides it changes: this shape's
         ``Master`` or ``MasterShape`` attribute, read from the XML each time;
-        the masters the document holds, which
-        :attr:`vsdxkit.masters.MasterCatalog.revision` counts; or the master
-        element's own children, by identity, since the Shape held locates its
-        Geometry section when it is built. The master's cells and properties
-        are read live through the Shape held, so an edit to one shows up on the
-        next read.
+        the masters the document holds, which change when a copy imports one;
+        or the master element's own children, by identity, since the Shape
+        held locates its Geometry section when it is built. The master's cells
+        and properties are read live through the Shape held, so an edit to one
+        shows up on the next read.
         """
         if self._master_shape_resolved and self._master_shape_key == self._master_shape_state():
             return self._master_shape

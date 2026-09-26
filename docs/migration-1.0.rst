@@ -144,9 +144,9 @@ as you hold it.
           vis.save_vsdx()
 
       # 1.0
-      vis = Document.open("diagram.vsdx")
-      vis.pages[0].name = "Current state"
-      vis.save()
+      document = Document.open("diagram.vsdx")
+      document.pages[0].name = "Current state"
+      document.save()
 
 ``VisioFile.close_vsdx()``
    Delete the call. Nothing needs releasing.
@@ -259,8 +259,11 @@ OPC name, and the file-system view of 0.x is gone.
    nothing in the document. Read the property again after a master changes.
 
 ``vis.load_master_pages()``
-   Unchanged, as ``document.load_master_pages()``: it re-reads the masters
-   from the package, after the masters' XML has been edited.
+   Unchanged, as ``document.load_master_pages()``. It rebuilds
+   ``document.master_pages`` and ``document.master_index`` by re-reading
+   every master from the package. Copying a shape whose master this document
+   lacks already adds that master to both, so this is for confirming the
+   catalog still matches the package, not for making an import visible.
 
 Pages and shapes are collections
 --------------------------------
@@ -314,41 +317,41 @@ Where a list is needed, ``list(page.children)`` makes one.
 Pages change through the collection
 -----------------------------------
 
-``vis.pages`` is the one place pages are looked up, created, copied and
+``document.pages`` is the one place pages are looked up, created, copied and
 deleted. The ``VisioFile`` methods that did the same are gone.
 
 ``vis.get_page(n)``
-   ``vis.pages[n]``, which raises ``IndexError`` where ``get_page`` returned
+   ``document.pages[n]``, which raises ``IndexError`` where ``get_page`` returned
    ``None``.
 
 ``vis.get_page_by_name(name)``
-   ``vis.pages.by_name(name)``, or ``vis.pages.require_name(name)``, which
+   ``document.pages.by_name(name)``, or ``document.pages.require_name(name)``, which
    raises :class:`vsdxkit.errors.NotFoundError`.
 
 ``vis.get_page_names()``
-   ``[page.name for page in vis.pages]``.
+   ``[page.name for page in document.pages]``.
 
 ``vis.add_page(name)``
-   ``vis.pages.create(name)``.
+   ``document.pages.create(name)``.
 
 ``vis.add_page_at(index, name)``
-   ``vis.pages.create(name, index=index)``. ``index`` runs from 0 to
-   ``len(vis.pages)``.
+   ``document.pages.create(name, index=index)``. ``index`` runs from 0 to
+   ``len(document.pages)``.
 
 ``vis.copy_page(page, index=..., name=...)``
-   ``vis.pages.copy(page, name=..., index=...)``. With no ``index`` the copy
+   ``document.pages.copy(page, name=..., index=...)``. With no ``index`` the copy
    goes straight after ``page``. A page of another document is refused.
 
 ``vis.remove_page_by_index(index)``
-   ``vis.pages.delete(vis.pages[index])``.
+   ``document.pages.delete(document.pages[index])``.
 
 ``vis.remove_page_by_name(name)``
-   ``vis.pages.delete(vis.pages.require_name(name))``. A name no page has
+   ``document.pages.delete(document.pages.require_name(name))``. A name no page has
    raises :class:`vsdxkit.errors.NotFoundError`, where 0.x did nothing.
 
 ``PagePosition.FIRST``, ``PagePosition.LAST``, ``PagePosition.END``, ``PagePosition.BEFORE``, ``PagePosition.AFTER``
-   An index instead: ``index=0`` for the first page, ``len(vis.pages)`` (or no
-   index, for ``create``) for the end, ``vis.pages.index(page)`` for before a
+   An index instead: ``index=0`` for the first page, ``len(document.pages)`` (or no
+   index, for ``create``) for the end, ``document.pages.index(page)`` for before a
    page, and no index, for ``copy``, for after it.
 
 Shapes delete themselves
@@ -418,13 +421,6 @@ page's finder and ``shape.descendants`` for a shape's.
      - ``[s for s in scope if (s.master_page_ID, s.master_shape_ID) == (page_id, shape_id)]``
    * - ``page.find_shapes_with_same_master(shape)``
      - ``[s for s in page.shapes if (s.master_page_ID, s.master_shape_ID) == (shape.master_page_ID, shape.master_shape_ID)]``
-
-``shape.data_properties``
-   Also a new ``dict`` on each read; 0.8 returned the same one while the
-   property rows were unchanged. A key added to the dict, or a dict kept
-   from an earlier read, is not the shape's. Change a property through its
-   :class:`vsdxkit.shapes.DataProperty`:
-   ``shape.data_properties["Status"].value = "Done"``.
 
 A shape is its element
 ----------------------

@@ -8,7 +8,7 @@ Document
 --------
 
 .. autoclass:: vsdxkit.document.Document
-   :members: open, pages, save, render
+   :members: open, pages, save, render, filename, is_macro_enabled, master_pages, master_index, load_master_pages
    :undoc-members:
 
 .. autoclass:: vsdxkit.pages.DocumentView
@@ -58,6 +58,14 @@ Shape, Connector, ShapeCollection, Cell and DataProperty
 .. autoclass:: vsdxkit.shapes.DataProperty
    :members:
    :undoc-members:
+
+Shape tree
+----------
+
+The functions for working on a shape's raw ``Element`` tree.
+
+.. automodule:: vsdxkit.shape_tree
+   :members:
 
 Glue, routing and SwimlaneDiagram
 ---------------------------------

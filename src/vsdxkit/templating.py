@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 import xml.etree.ElementTree as ET
 from collections.abc import Mapping
+from logging import Logger
 from typing import Protocol
 
 from jinja2.sandbox import SandboxedEnvironment
@@ -23,7 +24,7 @@ from vsdxkit.pages import Page, PageCollection
 from vsdxkit.shapes import Shape
 from vsdxkit.xmlio import adopt_prefixes
 
-logger = get_logger(__name__)
+logger: Logger = get_logger(__name__)
 
 # Every template rendered here comes out of the .vsdx being processed: shape
 # text, shape names, cell formulas. On Jinja's default environment that text is

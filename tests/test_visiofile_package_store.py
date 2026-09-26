@@ -310,7 +310,7 @@ def test_a_page_rename_renames_the_page_in_the_saved_file(vsdx_copy, tmp_path):
     """Fails if a rename writes a private copy of pages.xml over the store's tree.
 
     0.x's `Page.set_name` parsed pages.xml afresh, set only `Name` on that copy,
-    and assigned the copy to `vis._pages_xml`, after `self.name = value` had
+    and assigned the copy to `vis.pages_xml`, after `self.name = value` had
     already set `Name` and `NameU` on the store's own tree. The copy then
     replaced that tree, so the saved `NameU` kept the old name, and Visio shows
     `NameU`.

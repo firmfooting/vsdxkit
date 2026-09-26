@@ -43,8 +43,8 @@ whole package into memory and holds no file, so there is nothing to close.
 
    from vsdxkit.document import Document
 
-   vis = Document.open("diagram.vsdx")
-   page = vis.pages[0]
+   document = Document.open("diagram.vsdx")
+   page = document.pages[0]
    print(page.name)
 
 Find and edit a shape
@@ -56,14 +56,14 @@ before editing it. A ``require_*`` lookup raises
 
 .. code-block:: python
 
-   vis = Document.open("diagram.vsdx")
-   page = vis.pages[0]
+   document = Document.open("diagram.vsdx")
+   page = document.pages[0]
    shape = page.shapes.by_text("Draft")
 
    if shape is not None:
        shape.text = "Approved"
 
-   vis.save("approved.vsdx")
+   document.save("approved.vsdx")
 
 Save in place
 -------------
@@ -73,9 +73,9 @@ the source file. Nothing is saved until you call it.
 
 .. code-block:: python
 
-   vis = Document.open("diagram.vsdx")
-   vis.pages[0].name = "Current state"
-   vis.save()
+   document = Document.open("diagram.vsdx")
+   document.pages[0].name = "Current state"
+   document.save()
 
 Where next
 ----------

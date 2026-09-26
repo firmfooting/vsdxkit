@@ -115,6 +115,25 @@ def test_it_coerces_non_string_values(vsdx_copy):
     assert shape.text == "Year 2020"
 
 
+def test_it_substitutes_text_a_shape_shows_from_its_master(vsdx_copy):
+    """The case `Document.apply_text_context` could not resolve (#116): a shape with no `<Text>` of its own.
+
+    Substituting into it has to write shape 3's own XML, not the master's -
+    or every other shape sharing that master would show the substituted
+    value too.
+    """
+    page = Document.open(vsdx_copy("test5_master.vsdx")).pages[0]
+    shape = page.shapes.require_id("3")
+    master = shape.master_shape
+    assert master is not None
+    master.text = "M {{who}}"
+
+    page.apply_text_context({"who": "Ada"})
+
+    assert shape.text == "M Ada"
+    assert master.text == "M {{who}}"
+
+
 def test_the_other_implementations_are_gone():
     """`get_shape_text`/`set_shape_text` duplicated `Shape.text`, and the static `apply_text_context` duplicated this.
 

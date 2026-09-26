@@ -519,7 +519,7 @@ class PackageStore:
         # given: `open()` is what makes it absolute, so a store built there is
         # unaffected by later working-directory changes, and one constructed
         # directly with a relative path resolves it at each save.
-        self.source = source
+        self.source: Path = source
         # The limits this package was opened with, used during save to ensure
         # written members satisfy the compression ratio constraints.
         self._limits = limits if limits is not None else PackageLimits()

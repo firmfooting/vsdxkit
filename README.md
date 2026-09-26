@@ -52,22 +52,22 @@ Opening reads the whole package into memory and holds no file, so there is nothi
 ```python
 from vsdxkit.document import Document
 
-vis = Document.open("diagram.vsdx")
-page = vis.pages[0]
+document = Document.open("diagram.vsdx")
+page = document.pages[0]
 shape = page.shapes.by_text("Shape to remove")
 
 if shape is not None:
     shape.text = "Renamed shape"
 
-vis.save("edited.vsdx")
+document.save("edited.vsdx")
 ```
 
 Call `save()` without a filename to replace the source file in place:
 
 ```python
-vis = Document.open("diagram.vsdx")
-vis.pages[0].name = "Current state"
-vis.save()
+document = Document.open("diagram.vsdx")
+document.pages[0].name = "Current state"
+document.save()
 ```
 
 A save writes every part you did not change exactly as it arrived. A part you did change is written as equivalent XML, but not in Visio's own spelling: the XML declaration, attribute quotes, empty-element form and namespace declarations can differ, and a CRLF inside text becomes LF. Visio and LibreOffice open both.
@@ -77,8 +77,8 @@ A save writes every part you did not change exactly as it arrived. A part you di
 `page.shapes` is every shape on the page, inside groups too; `page.children` is only the page's top-level shapes. A `require_*` lookup wants exactly one match and raises `NotFoundError` for none, a `by_*` lookup returns `None` for none, and a `matching_*` lookup returns every match. Any other test is a comprehension over a collection.
 
 ```python
-vis = Document.open("diagram.vsdx")
-page = vis.pages[0]
+document = Document.open("diagram.vsdx")
+page = document.pages[0]
 
 shape = page.shapes.require_text("Shape to remove")
 missing = page.shapes.by_id("9999")
@@ -99,8 +99,8 @@ from vsdxkit.document import Document
 from vsdxkit.glue import Routing
 from vsdxkit.shape_kind import ShapeKind
 
-vis = Document.open("diagram.vsdx")
-page = vis.pages[0]
+document = Document.open("diagram.vsdx")
+page = document.pages[0]
 
 start = page.create_shape(ShapeKind.START_END, x=2.0, y=6.0, text="Start")
 work = page.create_shape(ShapeKind.PROCESS, x=6.0, y=6.0, text="Do the thing")
@@ -108,7 +108,7 @@ decision = page.create_shape(ShapeKind.DECISION, x=10.0, y=6.0, text="OK?")
 
 page.connect(start, work)
 page.connect(work, decision, routing=Routing.RIGHT_ANGLE)
-vis.save("flow.vsdx")
+document.save("flow.vsdx")
 ```
 
 [Create shapes and connectors](https://firmfooting.github.io/vsdxkit/create_connect.html) lists the shape kinds and covers copying a shape, glue to connection points, routing, and finding connectors.
@@ -118,14 +118,14 @@ vis.save("flow.vsdx")
 Name only the end that should move; the other stays where it is. The connector keeps its glue and routing unless you pass `options`.
 
 ```python
-vis = Document.open("flow.vsdx")
-page = vis.pages[0]
+document = Document.open("flow.vsdx")
+page = document.pages[0]
 store = page.create_shape(ShapeKind.DATABASE, x=10.0, y=2.0, text="Store")
 
 connector = page.connectors[0]
 connector.retarget(target=store)
 
-vis.save("retargeted.vsdx")
+document.save("retargeted.vsdx")
 ```
 
 `shape.delete()` also removes the connectors glued to the shape, and a group's members with it. [Retarget a connector](https://firmfooting.github.io/vsdxkit/create_connect.html#retarget-a-connector) covers connection points and `options`.
@@ -135,8 +135,8 @@ vis.save("retargeted.vsdx")
 Swimlane operations need a page that already holds a Visio cross-functional flowchart (CFF). `add_lane()` copies the top lane above it and grows the CFF container to match.
 
 ```python
-vis = Document.open("cross-functional-flow.vsdx")
-page = vis.pages[0]
+document = Document.open("cross-functional-flow.vsdx")
+page = document.pages[0]
 diagram = page.require_swimlanes()
 
 review_lane = diagram.add_lane("Review")
@@ -144,7 +144,7 @@ check = page.create_shape(ShapeKind.PROCESS, x=6.0, y=2.0, text="Check")
 diagram.move_to_lane(check, review_lane)
 
 assert diagram.lane_for(check) == review_lane
-vis.save("with-review-lane.vsdx")
+document.save("with-review-lane.vsdx")
 ```
 
 Lane membership is geometric: a shape is in the lane whose band contains its centre, and there is no separate membership field to write. [Cross-functional flowchart swimlanes](https://firmfooting.github.io/vsdxkit/swimlanes.html) has the rest.
@@ -154,11 +154,11 @@ Lane membership is geometric: a shape is in the lane whose band contains its cen
 Jinja expressions stored in shape text are rendered into a new file:
 
 ```python
-vis = Document.open("template.vsdx")
-vis.render(
+document = Document.open("template.vsdx")
+document.render(
     context={"project": "Ward refurbishment", "owner": "Facilities"}
 )
-vis.save("rendered.vsdx")
+document.save("rendered.vsdx")
 ```
 
 Rendering runs in Jinja's sandboxed environment. [Jinja templates](https://firmfooting.github.io/vsdxkit/templating.html) covers the group-shape loop and `showif` conventions, self assignments, and what the sandbox does not protect against.
