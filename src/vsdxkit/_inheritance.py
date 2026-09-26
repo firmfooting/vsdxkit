@@ -8,10 +8,15 @@ merges the master's :class:`vsdxkit.geometry.GeometryRow` objects into its own, 
 every other shape drawn from it.
 
 :class:`InheritedRow` is what tells the two apart. A row merged down from a
-master is flagged :attr:`inherited`, and every setter calls :meth:`make_local`
-before it writes. That materialises an override row on the instance and clears
-the flag, leaving the master untouched. An override row on the instance is what
+master is flagged :attr:`inherited`, and a setter that calls :meth:`make_local`
+before it writes materialises an override row on the instance and clears the
+flag, leaving the master untouched. An override row on the instance is what
 Visio itself writes. A row the shape already owns is written in place.
+
+Not every setter calls :meth:`make_local` first: :class:`vsdxkit.geometry.GeometryRow`'s
+``row_type``, ``index`` and ``del_bool`` setters write ``xml.attrib`` directly,
+so on an inherited row they edit the master's row rather than the instance's
+own (#273).
 """
 
 from __future__ import annotations
@@ -21,6 +26,7 @@ class InheritedRow:
     """Mixin for a row that may still belong to a shape's master."""
 
     inherited: bool = False
+    """Whether this row still belongs to a master, and so is shared with every other instance of it."""
 
     def make_local(self) -> None:
         """Give this row to the instance if it still belongs to a master.

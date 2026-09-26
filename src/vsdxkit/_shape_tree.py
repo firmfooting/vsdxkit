@@ -19,8 +19,11 @@ from xml.etree.ElementTree import Element
 from vsdxkit import namespace
 
 _SHAPE = f"{namespace}Shape"
+"""The `<Shape>` tag, namespaced."""
 _SHAPES = f"{namespace}Shapes"
+"""The `<Shapes>` tag, namespaced: what holds a page's or a group's children."""
 _CELL = f"{namespace}Cell"
+"""The `<Cell>` tag, namespaced."""
 
 # A ShapeSheet formula addresses another shape as `Sheet.5!Cell` or `Sheet5!Cell`.
 # Visio writes the dotted form. This library's connector glue has written the
@@ -36,8 +39,8 @@ _CELL = f"{namespace}Cell"
 # reference at an unrelated shape. `tests/helpers/package_validator.py` draws
 # the same line with its own copy of the pattern, and the two have to agree or
 # one of them is wrong about which references a page owns.
-#: Matches a `Sheet.N!` or `SheetN!` shape reference in a cell formula.
 SHEET_REFERENCE: re.Pattern[str] = re.compile(r"(?<!!)\bSheet(\.?)(\d+)!")
+"""Matches a `Sheet.N!` or `SheetN!` shape reference in a cell formula."""
 
 
 def iter_children(element: Element) -> Iterator[Element]:
@@ -82,6 +85,7 @@ def is_connector_element(element: Element, master: Element | None = None) -> boo
 
 
 def _has_cell(element: Element, name: str) -> bool:
+    """Whether `element` has a direct ``<Cell N="name">`` child."""
     # every wrapper a walk builds asks this: an ElementPath attribute predicate
     # tripled the cost of a walk, and any() over a generator costs half again
     # what this loop does
@@ -102,6 +106,7 @@ def remap_sheet_references(subtree: Element, id_map: Mapping[str, int]) -> None:
     """
 
     def replace(match: re.Match[str]) -> str:
+        """One `SHEET_REFERENCE` match, remapped through `id_map` if it names a renumbered shape, else unchanged."""
         separator, shape_id = match.group(1), match.group(2)
         if shape_id not in id_map:
             return match.group(0)

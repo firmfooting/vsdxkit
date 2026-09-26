@@ -32,16 +32,22 @@ from vsdxkit.errors import MissingPartError
 from vsdxkit.pages import Page
 
 MASTERS_RELATIONSHIP = "http://schemas.microsoft.com/visio/2010/relationships/masters"
+"""The relationship type `document.xml` uses to relate to `masters.xml`."""
 MASTER_RELATIONSHIP = "http://schemas.microsoft.com/visio/2010/relationships/master"
+"""The relationship type `masters.xml.rels` uses to relate to one master part."""
 MASTERS_CONTENT_TYPE = "application/vnd.ms-visio.masters+xml"
+"""The content type `[Content_Types].xml` declares for `masters.xml`."""
 MASTER_CONTENT_TYPE = "application/vnd.ms-visio.master+xml"
+"""The content type `[Content_Types].xml` declares for one master part."""
 
 # How a document reads one master as a page: the master part's tree, its part
 # name, the master's name, its ID in masters.xml and its relationship id there.
 MasterPageFactory = Callable[[PartTree, str, str, str, str], Page]
+"""What the document hands `MasterCatalog` so it can build a `Page` without importing the document."""
 
 
 def _empty_relationships() -> PartTree:
+    """A `Relationships` tree with no relationships, for a package bootstrapping `masters.xml.rels`."""
     return ET.ElementTree(
         ET.fromstring('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
     )
@@ -74,6 +80,7 @@ class MasterCatalog:
     """Every master in one package, and the only code that changes them."""
 
     def __init__(self, store: PackageStore, make_page: MasterPageFactory) -> None:
+        """Hold `store`'s masters, building each one's `Page` with `make_page`."""
         self._store = store
         self._make_page = make_page
         self._pages: list[Page] = []
@@ -108,6 +115,7 @@ class MasterCatalog:
         return None if tree is None else tree.getroot()
 
     def by_id(self, master_id: str) -> Page | None:
+        """The master with this ID, or None. Rebuilds its index only when `revision` has changed since the last call."""
         if self._by_id_revision != self._revision:
             self._by_id = {}
             for page in self._pages:
@@ -158,6 +166,7 @@ class MasterCatalog:
         return element is not None and is_connector_element(element)
 
     def _find_shape_element(self, master_id: str, master_shape_id: str | None) -> Element | None:
+        """The master shape `is_one_d` reads: `master_id`'s top shape, or the one `master_shape_id` names inside it."""
         page = self.by_id(master_id)
         root = None if page is None else page.xml.getroot()
         top = None if root is None else next(iter_children(root), None)
@@ -359,7 +368,9 @@ class MasterCatalog:
         return f"{prefix}{number}.xml"
 
     def _declare(self, part_name: str, content_type: str) -> None:
+        """Declare `part_name` in `[Content_Types].xml` as `content_type`."""
         ensure_override(self._required_root(CONTENT_TYPES_PART), part_name, content_type)
 
     def _required_root(self, part_name: str) -> Element:
+        """`part_name`'s root element, or a MissingPartError naming the part."""
         return require_element(self._store.require_xml(part_name).getroot(), f"{part_name} root")

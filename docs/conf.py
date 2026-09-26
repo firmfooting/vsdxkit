@@ -13,8 +13,34 @@ author = "Dave Howard and Firm Footing"
 release = vsdxkit.__version__
 version = vsdxkit.__version__
 
+# A single-backtick span is otherwise the `title reference` role, rendered as
+# italic text with no link even when it names a real object. As `py:obj` it
+# links where the name resolves, and falls back to ordinary code styling
+# everywhere else.
+default_role = "py:obj"
+
 extensions = [
-    "sphinx.ext.autodoc",
+    "autoapi.extension",
+]
+
+# The API reference is generated from the docstrings (#424): autoapi reads
+# src/vsdxkit statically, with astroid, and writes one page per public module
+# under api/. A module or name with a leading underscore is private and is
+# left out; nothing is listed by hand. `inherited-members` shows
+# `GeometryRow.inherited` and `make_local`, which the row takes from
+# `vsdxkit._inheritance.InheritedRow`, on the class a reader looks them up on.
+autoapi_dirs = ["../src/vsdxkit"]
+autoapi_root = "api"
+autoapi_type = "python"
+autoapi_add_toctree_entry = True
+autoapi_member_order = "bysource"
+autoapi_python_class_content = "class"
+autoapi_options = [
+    "members",
+    "undoc-members",
+    "show-inheritance",
+    "show-module-summary",
+    "inherited-members",
 ]
 
 templates_path = ["_templates"]

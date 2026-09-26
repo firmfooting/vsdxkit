@@ -29,14 +29,33 @@ class PackageLimits:
     (256 MiB by default); callers loading larger trusted documents should raise
     the caps explicitly via ``Document.open(filename, limits=PackageLimits(...))``
     or a JSON file passed as ``limits_path`` with the same keys.
+
+    A count or size field below 1, or ``max_ratio`` below 1.0, raises
+    :class:`ValueError`. A value :func:`float` cannot parse at all, such as
+    ``None`` or a list, raises :class:`TypeError` instead; a non-numeric
+    string raises :class:`ValueError` from that conversion. A numeric
+    string such as ``"5"`` passes the finiteness check but then fails the
+    ``< 1`` comparison against the *unconverted* string, so it raises
+    :class:`TypeError`, not :class:`ValueError`. A ``bool`` is not rejected
+    either: being an ``int`` subclass, ``True`` is accepted and behaves as
+    ``1`` (or ``1.0``), while ``False`` is rejected as below 1.
     """
 
     max_members: int = 512
+    """The most entries the archive may hold, directory entries included; 512 by default. A save of more parts is refused too."""
     max_member_size: int = 64 * 1024 * 1024
+    """The most bytes one member may hold uncompressed; 64 MiB by default. A save is held to it too."""
     max_total_uncompressed: int = 256 * 1024 * 1024
+    """The most bytes the members may hold together, uncompressed; 256 MiB by default. A save is held to it too."""
     max_ratio: float = 100.0
+    """The most one member may expand by, its uncompressed size over its compressed size; 100 by default.
+
+    A save stores a member uncompressed rather than compress it past this
+    ratio or the default, whichever is lower.
+    """
 
     def __post_init__(self) -> None:
+        """Refuse limits that could not be applied; see the class docstring for what is raised."""
         if not math.isfinite(float(self.max_ratio)):
             raise ValueError("max_ratio must be a finite number")
         for field_name in ("max_members", "max_member_size", "max_total_uncompressed"):

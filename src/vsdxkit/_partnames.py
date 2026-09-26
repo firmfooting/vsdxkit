@@ -13,10 +13,15 @@ from __future__ import annotations
 import posixpath
 
 PAGES_PART = "/visio/pages/pages.xml"
+"""The part naming a document's pages, in order, and each one's part."""
 MASTERS_PART = "/visio/masters/masters.xml"
+"""The part naming a document's masters, in order, and each one's part."""
 CONTENT_TYPES_PART = "/[Content_Types].xml"
+"""The part declaring every other part's content type; every OPC package has one, at this fixed name."""
 APP_PART = "/docProps/app.xml"
+"""The part carrying a document's page titles, kept in step with `pages.xml` by every page rename."""
 DOCUMENT_PART = "/visio/document.xml"
+"""The document's own part: its style sheets, and the relationships that reach `masters.xml` and `pages.xml`."""
 
 
 def relationships_part_name(part_name: str) -> str:

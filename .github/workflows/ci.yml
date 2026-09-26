@@ -165,6 +165,8 @@ jobs:
         run: uv run --no-sync python tools/check_action_pins.py
       - name: Public type-completeness gate
         run: uv run --no-sync python tools/check_public_annotations.py
+      - name: Every definition has a docstring
+        run: uv run --no-sync python tools/check_docstrings.py
       - name: Migration guide names every removed 0.8.0 name
         run: uv run --no-sync python tools/check_migration_guide.py
       - name: Mypy consumer fixture
@@ -190,8 +192,9 @@ jobs:
       - name: Build
         run: |
           # the test group is here for the sdist smoke test, which runs the
-          # packaged suite out of the unpacked archive
-          uv sync --locked --no-default-groups --group build --group test
+          # packaged suite out of the unpacked archive; the docs group, for the
+          # API reference gate below
+          uv sync --locked --no-default-groups --group build --group test --group docs
           uv run --no-sync python -m build
       - name: Smoke test the wheel
         run: |
@@ -207,6 +210,12 @@ jobs:
         # pyright --verifytypes against the installed wheel (#117). The
         # threshold is a ratchet: raise it when the score rises, never lower it.
         run: uv run --no-sync python tools/check_type_completeness.py 'dist/*.whl' --fail-under 100.0 --report type-completeness.json
+      - name: API reference documents every exported name
+        # the generated reference's objects.inv against pyright's export report
+        # (#424): -W cannot see a name left out of the reference, only this can
+        run: |
+          uv run --no-sync sphinx-build -W --keep-going -q -b html docs docs/_build/html
+          uv run --no-sync python tools/check_api_documented.py type-completeness.json docs/_build/html/objects.inv
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         if: ${{ !cancelled() }}
         with:

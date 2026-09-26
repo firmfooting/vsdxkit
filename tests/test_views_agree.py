@@ -2,15 +2,12 @@
 
 `PageView` is the type of `shape.page`, and `DocumentView` the type of
 `page.vis`. pyrefly checks only that `Page` and `Document` satisfy them, which
-a smaller view, or one with another default, still does. `docs/classes.rst`
-lists `Page`'s members by hand, a third copy.
+a smaller view, or one with another default, still does.
 """
 
 import copy
 import inspect
-import re
 import xml.etree.ElementTree as ET
-from pathlib import Path
 
 import pytest
 
@@ -18,8 +15,6 @@ from vsdxkit.document import Document
 from vsdxkit.errors import InvalidOperationError
 from vsdxkit.pages import DocumentView, Page
 from vsdxkit.shapes import PageView
-
-CLASSES_RST = Path(__file__).resolve().parents[1] / "docs" / "classes.rst"
 
 # what PageView's docstring says it leaves out: the members whose types are
 # declared above `shapes`
@@ -140,13 +135,3 @@ def test_a_tree_assigned_through_shape_page_is_saved_and_detaches_the_shape_that
     assert page.children.require_id(shape_id).xml is not shape.xml
     reopened = Document.open(vis.save(tmp_path / "saved.vsdx"))
     assert reopened.pages[0].children.require_id(shape_id) is not None
-
-
-def test_the_reference_documents_every_page_member_the_view_lists():
-    """Fails if `docs/classes.rst` misses a `PageView` member, or names one `Page` no longer has."""
-    if not CLASSES_RST.exists():
-        pytest.skip("docs/ is not in the sdist; the checkout runs this")
-    match = re.search(r"autoclass:: vsdxkit\.pages\.Page\n\s+:members: (.+)\n", CLASSES_RST.read_text(encoding="utf-8"))
-    assert match is not None, "the Page autoclass has no :members: line"
-    documented = {name.strip() for name in match.group(1).split(",")}
-    assert documented == _public(PageView) | PAGE_ONLY

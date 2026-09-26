@@ -1,3 +1,14 @@
+"""Connector glue as engine actions: what to glue, on a page, and where.
+
+`vsdxkit._glue` turns a glued end into cells and records; this module decides
+what a connector's ends should be glued to. `_plan_connector`,
+`_retarget_connector` and `_float_ends` are the entry points
+`vsdxkit.pages.Page` and `vsdxkit.shapes.Connector` call, and the Protocols
+above them (`_ConnectorPage`, `_EndShape`, `_ConnectorShape`) let the engine
+name only what it reads and writes on a page or a shape, without importing
+either module.
+"""
+
 from __future__ import annotations
 
 import re
@@ -25,13 +36,17 @@ class _CellXml(Protocol):
     """A cell the engine edits in place: it drops the cell's formula, or the cell itself."""
 
     @property
-    def xml(self) -> Element: ...
+    def xml(self) -> Element:
+        """The cell's own ``<Cell>`` element, for `_change_cell` to edit or remove."""
+        ...
 
 
 class _ShapeLookup(Protocol):
     """The page's shapes, which the engine looks up by the ids its records name."""
 
-    def by_id(self, shape_id: str) -> _EndShape | None: ...
+    def by_id(self, shape_id: str) -> _EndShape | None:
+        """The shape with this page-scoped ID, or None."""
+        ...
 
 
 class _ConnectorPage(Protocol):
@@ -42,71 +57,111 @@ class _ConnectorPage(Protocol):
     """
 
     @property
-    def name(self) -> str: ...
+    def name(self) -> str:
+        """The page's name, for an error naming where an endpoint check failed."""
+        ...
 
     @property
-    def shapes(self) -> _ShapeLookup: ...
+    def shapes(self) -> _ShapeLookup:
+        """Every shape on the page, for the engine to look one up by ID."""
+        ...
 
-    def _connects(self) -> list[_Connect]: ...
+    def _connects(self) -> list[_Connect]:
+        """Every ``<Connect>`` record on the page, in document order."""
+        ...
 
-    def _add_connect(self, element: Element) -> None: ...
+    def _add_connect(self, element: Element) -> None:
+        """Append a ``Connect`` record to the page."""
+        ...
 
-    def _remove_connect_records(self, connector_ids: Iterable[str | int]) -> None: ...
+    def _remove_connect_records(self, connector_ids: Iterable[str | int]) -> None:
+        """Remove Connect records leading from any of these connectors."""
+        ...
 
 
 class _EndShape(Protocol):
     """What the engine needs from a shape an end is glued to: its id, its connection points and its centre."""
 
     @property
-    def ID(self) -> str | None: ...
+    def ID(self) -> str | None:
+        """This shape's page-scoped ID, as its element declares it."""
+        ...
 
     @property
-    def xml(self) -> Element: ...
+    def xml(self) -> Element:
+        """The shape's own ``<Shape>`` element, which this object is a view onto."""
+        ...
 
     @property
-    def master_shape(self) -> _EndShape | None: ...
+    def master_shape(self) -> _EndShape | None:
+        """The shape on this shape's master that it instances, or None."""
+        ...
 
     @property
-    def center_x_y(self) -> tuple[float | None, float | None]: ...
+    def center_x_y(self) -> tuple[float | None, float | None]:
+        """A centre for the shape as ``(x, y)``, for the endpoints written while Visio has not yet recalculated."""
+        ...
 
 
 class _ConnectorShape(_EndShape, Protocol):
     """What the engine needs from a connector: its page, its end cells, and a way to write them."""
 
     @property
-    def _page(self) -> _ConnectorPage: ...
+    def _page(self) -> _ConnectorPage:
+        """The page this connector is on, for the engine to check endpoints and write records through."""
+        ...
 
     @property
-    def begin_x(self) -> float | None: ...
+    def begin_x(self) -> float | None:
+        """The x of the connector's begin point, for the fallback endpoint written when no shape is glued there."""
+        ...
 
     @property
-    def begin_y(self) -> float | None: ...
+    def begin_y(self) -> float | None:
+        """The y of the connector's begin point. Behaves as `begin_x` does."""
+        ...
 
     @property
-    def end_x(self) -> float | None: ...
+    def end_x(self) -> float | None:
+        """The x of the connector's end point. Behaves as `begin_x` does."""
+        ...
 
     @property
-    def end_y(self) -> float | None: ...
+    def end_y(self) -> float | None:
+        """The y of the connector's end point. Behaves as `begin_x` does."""
+        ...
 
     def set_start_and_finish(
         self, start: tuple[float | None, float | None], finish: tuple[float | None, float | None]
-    ) -> None: ...
+    ) -> None:
+        """Move the connector's endpoints to `start` and `finish`, so the file renders sensibly before Visio recalculates."""
+        ...
 
-    def get_or_create_cell(self, name: str, v: str | None = None, f: str | None = None) -> object: ...
+    def get_or_create_cell(self, name: str, v: str | None = None, f: str | None = None) -> object:
+        """Set or create the named cell, for the engine to write a glue cell without knowing it already exists."""
+        ...
 
-    def _cell(self, name: str) -> _CellXml | None: ...
+    def _cell(self, name: str) -> _CellXml | None:
+        """This connector's own cell `name`, or ``None``, for the engine to drop a formula or remove a cell in place."""
+        ...
 
-    def _require_attached(self, operation: str) -> None: ...
+    def _require_attached(self, operation: str) -> None:
+        """Refuse `operation`, naming it, once the connector is detached."""
+        ...
 
 
 # One end of a connector as the engine plans it: the shape it glues to and
 # its connection point, `None` for dynamic glue. A floating end is `None`.
 _Glued: TypeAlias = tuple[_EndShape, int | None]
+"""One glued end as the engine plans it: the shape and its connection point, or `None` for dynamic glue."""
 _End: TypeAlias = _Glued | None
+"""An end of a connector as the engine plans it: `_Glued`, or `None` for a floating end."""
 
 # a Connect record's ToPart for connection point row n is 100 + n, and its ToCell Connections.X{n + 1}
 _FIRST_CONNECTION_POINT_PART = 100
+"""The `ToPart` a Connect record gives connection point row 0; row n's `ToPart` is this plus n."""
 _CONNECTION_CELL = re.compile(r"Connections\.X(\d+)")
+"""Matches a Connect record's `ToCell` naming a connection point row, such as `Connections.X3`."""
 
 
 def _connection_rows(shape: _EndShape) -> frozenset[int]:
@@ -145,6 +200,7 @@ def _id(shape: _EndShape) -> str:
 
 
 def _check_endpoint(page: _ConnectorPage, shape: _EndShape, connector: _ConnectorShape | None) -> None:
+    """Refuse gluing `connector` to itself, or to a shape not on `page`."""
     if connector is not None and shape == connector:
         raise InvalidOperationError(f"connector shape ID {connector.ID} cannot be glued to itself")
     if page.shapes.by_id(_id(shape)) != shape:
@@ -152,6 +208,7 @@ def _check_endpoint(page: _ConnectorPage, shape: _EndShape, connector: _Connecto
 
 
 def _check_point(end: _End) -> None:
+    """Refuse gluing to a connection point index the glued shape does not have."""
     if end is None or end[1] is None:
         return
     shape, point = end
@@ -176,6 +233,7 @@ def _record_point(connect: _Connect) -> int | None:
 
 
 def _end_glue(end: _End) -> EndGlue | None:
+    """`end` as the data `vsdxkit._glue` works from, or ``None`` for a floating end."""
     return None if end is None else EndGlue(_id(end[0]), end[1])
 
 
@@ -189,6 +247,10 @@ class _Connect:
     """
 
     def __init__(self, xml: Element) -> None:
+        """Wrap `xml`, one page's ``<Connect>`` element.
+
+        :raises MalformedPackageError: if `xml` lacks ``FromSheet`` or ``ToSheet``
+        """
         # the attributes come from the package, so a record without them is a
         # malformed package rather than a bad argument
         missing = [name for name in ("FromSheet", "ToSheet") if name not in xml.attrib]
@@ -197,6 +259,7 @@ class _Connect:
         self.xml = xml
 
     def __repr__(self) -> str:
+        """Shows which shape is glued from which of which connector's ends to what."""
         return f"<Connect from={self.from_id} {self.from_rel} to={self.to_id} {self.to_rel}>"
 
     @property
@@ -307,6 +370,7 @@ def _write(connector: _ConnectorShape, begin: _End, end: _End, routing: tuple[Ce
 
 
 def _change_cell(connector: _ConnectorShape, change: CellChange) -> None:
+    """Apply one `CellChange`: write a cell, drop its formula, or drop the cell so it inherits the master's again."""
     if isinstance(change, CellWrite):
         connector.get_or_create_cell(change.name, v=change.value, f=change.formula)
         return
@@ -325,6 +389,7 @@ def _change_cell(connector: _ConnectorShape, change: CellChange) -> None:
 # what kind of connector a shape is, which floating its ends does not change:
 # a masterless connector has no master to take them back from
 _CONNECTOR_KIND_CELLS = frozenset({"GlueType", "ObjType"})
+"""The cells `_float_ends` leaves alone: a connector's kind, not part of what glue it has."""
 
 
 def _float_ends(connector: _ConnectorShape) -> None:

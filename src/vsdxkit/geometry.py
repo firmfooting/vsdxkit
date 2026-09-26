@@ -1,3 +1,12 @@
+"""A shape's geometry: the Geometry section that holds the path Visio draws it along.
+
+:class:`Geometry` is the section, merged with the master's; a
+:class:`GeometryRow` is one row of the path, such as a ``MoveTo`` or a
+``LineTo``; and a :class:`GeometryCell` is one named cell, of the section or
+of a row. Reach them through :attr:`vsdxkit.shapes.Shape.geometry`, never by
+constructing one: each is a view onto an element of the shape's XML.
+"""
+
 from __future__ import annotations
 
 import copy
@@ -20,24 +29,35 @@ from vsdxkit._xmlio import make_cell_element, pretty_print_element, to_float, xm
 from vsdxkit.errors import InvalidOperationError
 
 _logger: Logger = get_logger(__name__)
+"""This module's logger, under the ``vsdxkit`` hierarchy the library never configures a handler for."""
 
 
 class _GeometryOwner(Protocol):
     """What a Geometry reads from the shape it belongs to."""
 
     @property
-    def x(self) -> float | None: ...
+    def x(self) -> float | None:
+        """The x of the shape's pin, in inches, which `Geometry.start_pos` answers for a path that opens with ``RelMoveTo``."""
+        ...
 
     @property
-    def y(self) -> float | None: ...
+    def y(self) -> float | None:
+        """The y of the shape's pin, in inches, which `Geometry.start_pos` answers with `x`."""
+        ...
 
     @property
-    def geometry(self) -> Geometry | None: ...
+    def geometry(self) -> Geometry | None:
+        """The shape's Geometry, or None: read off the master shape, it is what an instance's Geometry merges its own section onto."""
+        ...
 
     @property
-    def master_shape(self) -> _GeometryOwner | None: ...
+    def master_shape(self) -> _GeometryOwner | None:
+        """The shape on this shape's master that it instances, or None: a new `Geometry` starts from that shape's geometry."""
+        ...
 
-    def _require_attached(self, operation: str) -> None: ...
+    def _require_attached(self, operation: str) -> None:
+        """Raise `InvalidOperationError`, naming `operation`, once the shape is detached: every write to its geometry asks first."""
+        ...
 
 
 def _row_index_sort_key(index: str) -> tuple[int, int, str]:
@@ -50,8 +70,9 @@ class Geometry(ShapePart):
 
     A shape that has a master starts from the master's section and layers its
     own on top. Rows merge by index and then by cell name, so a row that
-    overrides only X keeps the master's Y; a row carrying ``Del="1"`` removes
-    the inherited row entirely. Section cells merge less carefully: they are a
+    overrides only X keeps the master's Y; a row carrying a ``Del`` attribute
+    of any value removes the inherited row entirely, ``Del="0"`` included,
+    though Visio reads that as keeping the row. Section cells merge less carefully: they are a
     list, not a dict, so an instance cell is *appended* after the inherited one
     of the same name rather than replacing it.
 
@@ -71,11 +92,26 @@ class Geometry(ShapePart):
     """
 
     xml: Element
+    """The shape's own ``<Section N="Geometry">`` element, where a row this shape writes goes."""
     cells: list[GeometryCell]
+    """The cells directly under the section, in no row: the master's first, then this shape's, so one name can appear twice."""
     rows: dict[str, GeometryRow]
+    """The path's rows, keyed by their ``IX`` attribute as a string.
+
+    The master's rows come first, marked :attr:`GeometryRow.inherited`, and
+    this shape's own replace them by index. A row of this shape's that
+    carries a ``Del`` attribute of any value is left out, with the master's
+    row at its index; a row without an ``IX`` is not read.
+    """
     shape: _GeometryOwner
+    """The :class:`~vsdxkit.shapes.Shape` the section belongs to.
+
+    It is typed with a private protocol naming only what the geometry reads
+    from the shape, because :mod:`vsdxkit.shapes` imports this module.
+    """
 
     def __init__(self, xml: Element, shape: _GeometryOwner):
+        """Read `xml`, one of `shape`'s Geometry sections, merged over its master's; `Shape.geometry` makes these."""
         # get shape master geometry, and append/overwrite with actual shape instance data
 
         self.xml = xml  # expect an Element of Section with attr N='Geometry'
@@ -111,6 +147,7 @@ class Geometry(ShapePart):
     @property
     @override
     def _shape(self) -> AttachedShape:
+        """The shape the detached-shape guard asks, so a write to a deleted shape's geometry is refused."""
         # the shape, not its document: a write to a deleted shape's geometry is
         # refused, as a write to the shape itself is
         return self.shape
@@ -187,19 +224,29 @@ class Geometry(ShapePart):
             line_to.y = y
 
     def __repr__(self) -> str:
+        """Shows the section's cells, each row's type, index and coordinates, and then the section's XML, pretty-printed."""
         s = f"Geometry: {self.cells} {[(r.row_type, r.index, r.x, r.y) for r in self.rows.values()]}"
         s += f"\nGeometry: {pretty_print_element(self.xml)}"
         return s
 
 
 class GeometryRow(InheritedRow, ShapePart):
-    """A row with type(T) and index(IX), each containing a list of Cells"""
+    """One row of the path a Geometry section draws, such as a ``MoveTo`` or a ``LineTo``, holding its cells by name.
 
-    """See: https://docs.microsoft.com/en-us/office/client-developer/visio/row-element-geometry-sectionvisio-xml """
+    Reach a row through :attr:`Geometry.rows`, rather than constructing one.
+    See: https://docs.microsoft.com/en-us/office/client-developer/visio/row-element-geometry-sectionvisio-xml
+    """
 
     geometry: Geometry
+    """The :class:`Geometry` the row is in: for a row inherited from a master, the instance's, not the master's."""
     xml: Element
+    """The row's ``<Row>`` element: for an inherited row, the master's, until :meth:`make_local`, or a write through :attr:`x` or :attr:`y`, gives this shape a row of its own."""
     cells: dict[str, GeometryCell]
+    """The row's cells by name, such as ``X`` and ``Y``: the master row's, with this row's own over them.
+
+    An inherited cell is still the master's until a setter on the row
+    replaces it.
+    """
 
     def __init__(
         self,
@@ -209,6 +256,12 @@ class GeometryRow(InheritedRow, ShapePart):
         T: str | None = None,
         IX: str | int | None = None,
     ):
+        """Read `xml`, a row of `geometry`'s section, over `master_geometry_row`'s cells; without `xml`, add a row of type `T` at index `IX`.
+
+        Adding one raises `ValueError` without a `T`, and `InvalidOperationError`
+        where the section already has a row at `IX` or the shape is detached.
+        An `IX` of None is not refused: it is written as the text ``None``.
+        """
         self.geometry = geometry  # parent of this row
         self.xml = xml if type(xml) is Element else self._create_row_xml(T or "", str(IX))
         # Create a dictionary of each Cell element, indexed by name
@@ -223,6 +276,7 @@ class GeometryRow(InheritedRow, ShapePart):
     @property
     @override
     def _shape(self) -> AttachedShape:
+        """The shape the detached-shape guard asks: the one whose Geometry the row is in."""
         return self.geometry._shape
 
     def _inherited_by(self, geometry: Geometry) -> GeometryRow:
@@ -290,6 +344,12 @@ class GeometryRow(InheritedRow, ShapePart):
 
     @property
     def row_type(self) -> str | None:
+        """The row's type, its ``T`` attribute, such as ``MoveTo``, ``LineTo`` or ``RelMoveTo``; ``None`` for a row without one.
+
+        Setting it writes ``str(value)`` to :attr:`xml` as it stands, so on an
+        inherited row it changes the master's row. A write to a detached
+        shape's row raises :class:`~vsdxkit.errors.InvalidOperationError`.
+        """
         return self.xml.attrib.get("T")
 
     @row_type.setter
@@ -302,7 +362,10 @@ class GeometryRow(InheritedRow, ShapePart):
         """The row's IX attribute.
 
         :attr:`Geometry.rows` is keyed when the section is read, so setting
-        this afterwards leaves the row filed under its old index.
+        this afterwards leaves the row filed under its old index. Setting it
+        writes ``str(value)`` to :attr:`xml` as it stands, so on an inherited
+        row it changes the master's row. A write to a detached shape's row
+        raises :class:`~vsdxkit.errors.InvalidOperationError`.
         """
         return self.xml.attrib.get("IX")
 
@@ -359,7 +422,10 @@ class GeometryRow(InheritedRow, ShapePart):
         """The Del attribute: whether a row inherited from a master is deleted.
 
         Assigning a falsy value removes the attribute, and raises ``KeyError``
-        if it was not set to begin with.
+        if it was not set to begin with. Setting it writes to :attr:`xml` as
+        it stands, so on an inherited row it changes the master's row. A
+        write to a detached shape's row raises
+        :class:`~vsdxkit.errors.InvalidOperationError`.
         """
         return self.xml.attrib.get("Del")
 
@@ -372,16 +438,24 @@ class GeometryRow(InheritedRow, ShapePart):
             del self.xml.attrib["Del"]  # remove attribute if falsy
 
     def __repr__(self) -> str:
+        """Shows the row's index, its ``Del`` attribute, its type and its cells."""
         s = f"Row[{self.index}] del:{self.del_bool}: {self.row_type}={self.cells}"
         return s
 
 
 class GeometryCell(ShapePart):
-    """class to represent a Cell element, a name value pair. This may be a child of Geometry or of GeometryRow"""
+    """One cell of a Geometry section or one of its rows: a name and a value, such as ``X`` or ``Y``.
+
+    Reach a cell through :attr:`Geometry.cells` or :attr:`GeometryRow.cells`,
+    rather than constructing one.
+    """
 
     parent: GeometryRow | Geometry
+    """The :class:`GeometryRow` or :class:`Geometry` the cell is in: for a cell inherited from a master, the master's."""
     _parent_xml: Element
+    """The parent's element when the cell was made, which a new cell's ``<Cell>`` is appended to."""
     xml: Element
+    """The ``<Cell>`` element this reads and writes."""
 
     def __init__(
         self,
@@ -390,6 +464,7 @@ class GeometryCell(ShapePart):
         name: str | None = None,
         value: float | str | None = None,
     ):
+        """Wrap `xml`, a cell of `parent`, or without it add a cell named `name` to `parent`; then write `name` and `value` where given."""
         self.parent = parent
         self._parent_xml = parent.xml
         self.xml = xml if type(xml) is Element else self._create_cell_xml(name or "")
@@ -401,9 +476,11 @@ class GeometryCell(ShapePart):
     @property
     @override
     def _shape(self) -> AttachedShape:
+        """The shape the detached-shape guard asks: the one the cell's parent belongs to."""
         return self.parent._shape
 
     def _create_cell_xml(self, name: str) -> Element:
+        """Append a ``<Cell>`` named `name` to the parent's element, file this cell in the parent's `cells`, and return the element."""
         # also the first write of GeometryCell.__init__, so constructing a cell
         # on a detached shape refuses before it appends anything
         self._require_attached("creating a geometry cell")
@@ -417,6 +494,13 @@ class GeometryCell(ShapePart):
 
     @property
     def value(self) -> str | None:
+        """The cell's value, its ``V`` attribute, as the text the file holds; ``None`` when it has none.
+
+        Setting it writes ``str(value)`` to ``V`` and leaves the formula as it
+        was; on a cell inherited from a master, that is the master's cell.
+        ``None`` raises :class:`TypeError`, and a write to a detached shape's
+        cell raises :class:`~vsdxkit.errors.InvalidOperationError`.
+        """
         return self.xml.attrib.get("V")
 
     @value.setter
@@ -426,6 +510,12 @@ class GeometryCell(ShapePart):
 
     @property
     def formula(self) -> str | None:
+        """The cell's formula, its ``F`` attribute, or ``None`` when it has none.
+
+        Setting it writes the text to ``F`` and leaves the value as it was:
+        nothing here evaluates the formula. It refuses what :attr:`value`
+        refuses.
+        """
         return self.xml.attrib.get("F")
 
     @formula.setter
@@ -435,6 +525,12 @@ class GeometryCell(ShapePart):
 
     @property
     def name(self) -> str | None:
+        """The cell's name, its ``N`` attribute, such as ``X``; ``None`` for a cell without one.
+
+        Setting it writes the text to ``N`` and refuses what :attr:`value`
+        refuses. A row's :attr:`GeometryRow.cells` keeps the cell under the
+        name it had when it was filed.
+        """
         return self.xml.attrib.get("N")
 
     @name.setter
@@ -443,6 +539,7 @@ class GeometryCell(ShapePart):
         self.xml.attrib["N"] = xml_value(value)
 
     def __repr__(self) -> str:
+        """Shows the cell as ``name=value``, and its formula where it has one."""
         s = f"{self.name}={self.value}"
         if self.formula:
             s += f" formula={self.formula}"

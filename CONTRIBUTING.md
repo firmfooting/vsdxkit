@@ -28,6 +28,7 @@ uv run --no-sync ruff check src tests tools
 uv run --no-sync ruff format --check src tests tools
 uv run --no-sync pyrefly check src/vsdxkit --min-severity warn --output-format min-text
 uv run --no-sync zizmor .github/workflows
+uv run --no-sync python tools/check_docstrings.py
 uv run --no-sync sphinx-build -W --keep-going -b html docs docs/_build/html
 uv run --no-sync python -m build
 ```
@@ -49,10 +50,21 @@ CI runs the tests across Python 3.10–3.14 on Linux and Windows, and on 3.10 an
 Python 3.12. There is more besides: a lowest-direct dependency-floor job, a
 distribution build-and-smoke-test, a type-completeness threshold on the built
 wheel (`tools/check_type_completeness.py`, pyright `--verifytypes`, at 100.0%),
+a check that every name the wheel exports is in the generated API reference
+(`tools/check_api_documented.py`, against that report and the docs build's
+`objects.inv`),
 a LibreOffice import test, a coverage threshold, a mypy consumer fixture, and
-`tools/check_action_pins.py` and `tools/check_public_annotations.py`. zizmor
-runs as its own workflow rather than inside CI. You do not need to run those
-locally; the list above is what to run before submitting.
+`tools/check_action_pins.py`, `tools/check_public_annotations.py`, and
+`tools/check_docstrings.py`, which fails on any definition in `src/vsdxkit`
+without a docstring (a constant or field is documented by a string on the line
+after it). zizmor runs as its own workflow rather than inside CI. You do not
+need to run those locally; the list above is what to run before submitting.
+
+Every definition in `src/vsdxkit` has a docstring, private ones included, and
+the API reference is generated from them by sphinx-autoapi: there is no list
+of members to keep by hand. A new public name therefore needs a docstring
+that says what it is for; `tools/check_docstrings.py` finds a missing one, and
+`tools/check_api_documented.py` finds an exported name the reference lacks.
 
 To run the type-completeness gate locally, build the wheel from a fresh
 `build/`: setuptools never deletes from `build/lib`, so a stale one ships
@@ -64,8 +76,26 @@ uv build --wheel
 uv run python tools/check_type_completeness.py 'dist/*.whl' --fail-under 100.0
 ```
 
+To also run the API-reference completeness gate locally (`tools/check_api_documented.py`,
+which fails on an exported name the reference lacks), build the report the
+wheel step above skips, then build the docs and check the two against each
+other, as the CI build job does:
+
+```
+rm -rf build dist
+uv build --wheel
+uv run python tools/check_type_completeness.py 'dist/*.whl' --fail-under 100.0 --report type-completeness.json
+uv run sphinx-build -W --keep-going -b html docs docs/_build/html
+uv run python tools/check_api_documented.py type-completeness.json docs/_build/html/objects.inv
+```
+
+A new name is private by default: a leading underscore on the name or on its
+module, unless it is meant as user API. A part's folder name is derived only
+through `vsdxkit._partnames`; a folder string is never written anywhere else.
+
 Commit messages follow Conventional Commits (`feat:`, `fix:`, `docs:`, `ci:`,
-`chore:`), matching the existing history.
+`chore:`, `refactor:`, and the `!` breaking-change marker), matching the
+existing history.
 
 #### Ideas / Features
 If you have ideas for new features or improvements please raise a new

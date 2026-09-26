@@ -1,3 +1,15 @@
+"""Pages, and a document's collection of them.
+
+A :class:`Page` is one page of a document, or one of its master pages. A
+:class:`PageCollection` is a document's pages, in order, and the one place
+pages are created, copied and deleted. :class:`DocumentView` is the document
+as a page gives it.
+
+Reach a page through its document, as ``document.pages[0]`` or
+``document.pages.by_name("Page-1")``, never by constructing one: the document
+builds each page as it opens.
+"""
+
 from __future__ import annotations
 
 import math
@@ -46,12 +58,15 @@ from vsdxkit.swimlanes import SwimlaneDiagram, _diagram_on
 # the two places a Connect record names a shape: the connector it leads from,
 # and the shape that connector is glued to
 _CONNECT_SHEET_ATTRIBUTES = ("FromSheet", "ToSheet")
+"""The attributes of a ``Connect`` record that name a shape, which removing and renumbering shapes rewrites."""
 
 # how a shape names one of its page's relationships: an image's ForeignData Rel
 _RELATIONSHIP_ID = f"{r_namespace}id"
+"""The ``r:id`` attribute, as ElementTree spells it, by which `_carry_relationships` finds what a copied element names."""
 
 # the cells that size and place a 2-D shape, which a group member ties to its group
 _TRANSFORM_CELLS = ("Width", "Height", "LocPinX", "LocPinY", "Angle", "FlipX", "FlipY")
+"""The cells whose formula `_detach` drops when it names a shape the copy has left behind."""
 
 
 def _dimension_value(value: float | str | None) -> str:
@@ -137,8 +152,12 @@ def _place_one_d(shape: Shape, x: float, y: float, length: float | None) -> None
 
 
 class _PagePosition(IntEnum):
+    """Where `Document._get_index` puts a new page when no index is given; negative, so no page index can be taken for one."""
+
     LAST = -1
+    """At the end of the document's pages."""
     AFTER = -2
+    """Straight after the page being copied."""
 
 
 def _page_dimension(cell: ET.Element, name: str) -> float:
@@ -181,11 +200,23 @@ class DocumentView(Protocol):
     """
 
     @property
-    def pages(self) -> PageCollection: ...
+    def pages(self) -> PageCollection:
+        """The document's pages, in order: see :class:`PageCollection`."""
+        ...
 
-    def save(self, target: str | os.PathLike[str] | None = None) -> Path: ...
+    def save(self, target: str | os.PathLike[str] | None = None) -> Path:
+        """Write the document, and return the absolute path it was written to.
 
-    def render(self, context: Mapping[str, object]) -> None: ...
+        See :meth:`vsdxkit.document.Document.save` for ``target`` and what it raises.
+        """
+        ...
+
+    def render(self, context: Mapping[str, object]) -> None:
+        """Render the document as a Jinja template, in place.
+
+        See :meth:`vsdxkit.document.Document.render` for what the templates can do.
+        """
+        ...
 
 
 class _DocumentSeam(DocumentView, Protocol):
@@ -198,29 +229,54 @@ class _DocumentSeam(DocumentView, Protocol):
     """
 
     @property
-    def _pages_xml(self) -> PartTree | None: ...
+    def _pages_xml(self) -> PartTree | None:
+        """The `pages.xml` part, the list of the document's pages, read from the store; None where the package has none.
+
+        A page finds its own entry there, by position or by ID.
+        """
+        ...
 
     @property
-    def _masters_xml(self) -> ET.Element | None: ...
+    def _masters_xml(self) -> ET.Element | None:
+        """The `<Masters>` root, read from the store so it can never be a stale copy; `is_master_page` and a master's page sheet are read there."""
+        ...
 
     @property
-    def _package(self) -> PackageStore: ...
+    def _package(self) -> PackageStore:
+        """The store holding the document's parts, which a page asks whether the part at its name is still its own."""
+        ...
 
-    def _set_part_xml(self, name: str, tree: PartTree | None) -> None: ...
+    def _set_part_xml(self, name: str, tree: PartTree | None) -> None:
+        """Make `tree` the part called `name`, or take the part out for None: how a page writes its part and its rels part."""
+        ...
 
-    def _rename_page_in_app_xml(self, old_page_name: str, new_page_name: str) -> None: ...
+    def _rename_page_in_app_xml(self, old_page_name: str, new_page_name: str) -> None:
+        """Keep app.xml's list of page names in step with a page that was renamed."""
+        ...
 
-    def _master_page_by_id(self, id: str) -> Page | None: ...
+    def _master_page_by_id(self, id: str) -> Page | None:
+        """The master page with this ID, as :attr:`Shape.master_page_ID` names it, or None."""
+        ...
 
-    def _master_is_one_d(self, master_id: str, master_shape_id: str | None) -> bool: ...
+    def _master_is_one_d(self, master_id: str, master_shape_id: str | None) -> bool:
+        """Whether the master shape an instance inherits from is 1-D; see :meth:`MasterCatalog.is_one_d`."""
+        ...
 
-    def _master_revision(self) -> int: ...
+    def _master_revision(self) -> int:
+        """The catalog's :attr:`MasterCatalog.revision`: a master resolved at one count holds until the next."""
+        ...
 
-    def _masters_for(self, master_ids: list[str], source: _DocumentSeam) -> Mapping[str, Page]: ...
+    def _masters_for(self, master_ids: list[str], source: _DocumentSeam) -> Mapping[str, Page]:
+        """This document's master for each of `master_ids`, as `source` numbers its masters."""
+        ...
 
-    def _kind_source(self, kind: ShapeKind) -> Shape: ...
+    def _kind_source(self, kind: ShapeKind) -> Shape:
+        """The bundled shape `kind` is copied from, one of the donors `vsdxkit._media` loads."""
+        ...
 
-    def _copy_connector(self, page: Page) -> Connector: ...
+    def _copy_connector(self, page: Page) -> Connector:
+        """A copy of the bundled dynamic connector on `page`, one of this document's pages."""
+        ...
 
 
 class Page:
@@ -233,8 +289,14 @@ class Page:
     """
 
     xml: PartTree
+    """The page's part, parsed: its shapes and its ``Connect`` records."""
 
     def __init__(self, xml: PartTree, filename: str, page_name: str, page_id: str, rel_id: str, vis: _DocumentSeam):
+        """Wrap `xml`, the part stored as `filename`, under the name, ID and relationship ID its document `vis` lists it with.
+
+        A drawing page's come from pages.xml, a master's from masters.xml; the
+        document builds each page, and a caller never does.
+        """
         self._xml = xml
         self._filename = filename
         self._name = page_name
@@ -247,6 +309,7 @@ class Page:
         self._max_id = 0  # ID high-water mark, maintained by _increment_shape_ids
 
     def __repr__(self) -> str:
+        """Shows the page's name and the name of its part."""
         return f"<Page name={self.name} file={self._filename} >"
 
     @property
@@ -260,6 +323,16 @@ class Page:
 
     @property
     def name(self) -> str:
+        """The page's name.
+
+        Setting it writes the new name as both the page's name and its
+        universal name, in the document's page list and its ``app.xml``
+        titles. A name another page already has is not refused here, though
+        :meth:`vsdxkit.pages.PageCollection.by_name` then raises
+        :class:`vsdxkit.errors.PackageError` for that name. On a master
+        page, or one removed from its document, it raises
+        :class:`vsdxkit.errors.InvalidOperationError`.
+        """
         if self._name:
             return self._name
         page = self._page_xml()
@@ -294,6 +367,12 @@ class Page:
 
     @property
     def background(self) -> bool:
+        """Whether the page is a background page, which other pages can show behind their own shapes.
+
+        Setting it takes a ``bool``, and writes any true value as ``1``. On a
+        master page, or one removed from its document, reading or setting it
+        raises :class:`vsdxkit.errors.InvalidOperationError`.
+        """
         return self._page_xml().attrib.get("Background", "0") != "0"
 
     @background.setter
@@ -302,7 +381,7 @@ class Page:
 
     @property
     def is_master_page(self) -> bool:
-        """Return True if this page has a master unique id and there is a match in masters xml"""
+        """Whether this is one of the document's master pages rather than a drawing page."""
         if self._document._masters_xml is not None and self._master_unique_id:
             master_match = f'{namespace}Master[@UniqueID="{self._master_unique_id}"]'
             master_element = self._document._masters_xml.find(master_match)
@@ -311,6 +390,11 @@ class Page:
 
     @property
     def _pagesheet_xml(self) -> ET.Element:
+        """The page's `PageSheet` element, found by the page's ID in pages.xml and then in masters.xml; `MissingPartError` in neither.
+
+        pages.xml is asked first, so a master whose ID a drawing page also has
+        is given that drawing page's `PageSheet`.
+        """
         # get PageSheet element from _pages_xml based on _page_id
         ps = _pages_root(self._document).find(f'{namespace}Page[@ID="{self._page_id}"]/{namespace}PageSheet')
         if not isinstance(ps, ET.Element):
@@ -325,6 +409,17 @@ class Page:
 
     @property
     def width(self) -> float:
+        """The page's width, in inches, from its page sheet's ``PageWidth`` cell; ``0.0`` for a cell with no value.
+
+        Setting it takes a positive number, or a string that reads as one;
+        anything else raises :class:`ValueError`, and ``None`` raises
+        :class:`TypeError`. On a master page whose ID a drawing page also
+        has, this reads that drawing page's sheet instead of the master's
+        own.
+
+        :raises MissingPartError: if the page sheet has no ``PageWidth`` cell
+        :raises MalformedPackageError: if the ``PageWidth`` value is not a number
+        """
         return _page_dimension(self._pagesheet_cell("PageWidth"), "PageWidth")
 
     @width.setter
@@ -333,6 +428,15 @@ class Page:
 
     @property
     def height(self) -> float:
+        """The page's height, in inches, from its page sheet's ``PageHeight`` cell; ``0.0`` for a cell with no value.
+
+        Setting it takes what :attr:`width` takes, and refuses what it
+        refuses; a master page whose ID a drawing page shares reads that
+        drawing page's sheet here too.
+
+        :raises MissingPartError: if the page sheet has no ``PageHeight`` cell
+        :raises MalformedPackageError: if the ``PageHeight`` value is not a number
+        """
         return _page_dimension(self._pagesheet_cell("PageHeight"), "PageHeight")
 
     @height.setter
@@ -341,6 +445,15 @@ class Page:
 
     @property
     def xml(self) -> PartTree:
+        """The page's part, parsed: its shapes and its ``Connect`` records.
+
+        The value is an ``xml.etree.ElementTree.ElementTree``, which a caller
+        reads and edits with the standard library.
+
+        Assigning a tree replaces the part the document saves, while the page
+        is still in its document; a page removed from it only holds the tree.
+        The setter takes such a tree; ``None`` raises :class:`vsdxkit.errors.InvalidOperationError`.
+        """
         return self._xml
 
     @xml.setter
@@ -399,6 +512,12 @@ class Page:
 
     @property
     def _rels_xml(self) -> PartTree | None:
+        """The page's relationships part, parsed, or None for a page without one.
+
+        Assigning a tree, or None to remove the part, writes through to the
+        package only while `_rels_attached` allows it; otherwise the page just
+        holds the new value.
+        """
         return self._rels_tree
 
     @_rels_xml.setter
@@ -432,6 +551,7 @@ class Page:
         return [] if root is None else _wrap_descendants(root, self, self)
 
     def _scope(self) -> str:
+        """How a collection of the page's shapes names its scope in a message: ``page 'Page-1'``."""
         return f"page {self.name!r}"
 
     def _set_max_ids(self) -> None:
@@ -455,10 +575,12 @@ class Page:
 
     @property
     def index_num(self) -> int | None:
+        """The page's zero-based position in its document's pages, or ``None`` for a master page or one removed from the document."""
         # return zero-based index of this page in parent Document.pages list
         return self._document.pages.index(self) if self in self._document.pages else None
 
     def _add_connect(self, element: ET.Element) -> None:
+        """Append a ``Connect`` record to the page's ``Connects`` element, adding one at the end of the page's root if it has none."""
         connects = self.xml.find(f".//{namespace}Connects")
         if connects is None:
             connects = ET.fromstring(
@@ -489,12 +611,15 @@ class Page:
     # reaches through the page to the document (#114).
 
     def _master_by_id(self, master_id: str) -> Page | None:
+        """The master page with this ID, as `Shape.master_page_ID` names it, or None: the document's answer."""
         return self._document._master_page_by_id(master_id)
 
     def _master_is_one_d(self, master_id: str, master_shape_id: str | None) -> bool:
+        """Whether the master shape an instance inherits from is 1-D, which makes the instance a `Connector`: the document's answer."""
         return self._document._master_is_one_d(master_id, master_shape_id)
 
     def _master_revision(self) -> int:
+        """The document's count of changes to its masters: `Shape.master_shape`'s memo holds while it stays the same."""
         return self._document._master_revision()
 
     def _peer(self, other: PageView) -> Page:
@@ -612,6 +737,7 @@ class Page:
         return max_id  # return new id for info
 
     def _same_document(self, other: _PageSeam) -> bool:
+        """Whether `other` is a page of this page's document, which decides whether a copy crosses documents; `TypeError` for a look-alike that is not a `Page`."""
         return _as_page(other)._document is self._document
 
     def _rels_root(self) -> ET.Element:
@@ -651,10 +777,17 @@ class Page:
             node.attrib[_RELATIONSHIP_ID] = carried.attrib["Id"]
 
     def apply_text_context(self, context: dict[str, object]) -> None:
+        """Replace each ``{{key}}`` in the text of every shape on the page with its value from ``context``.
+
+        The match is literal, with no spaces inside the braces, and each value
+        is written as :func:`str` gives it. A shape whose text has nothing to
+        replace is left as it was.
+        """
         for shape in self._children():
             shape.apply_text_filter(context)
 
     def find_replace(self, old: str, new: str) -> None:
+        """Replace ``old`` with ``new`` in the text of every shape on the page; a shape without ``old`` is left as it was."""
         for shape in self._children():
             shape.find_replace(old, new)
 
@@ -670,10 +803,10 @@ class Page:
     ) -> Connector:
         """Create a connector glued from ``source`` to ``target``, both shapes on this page.
 
-        :param glue: :attr:`Glue.DYNAMIC` walks each end round its shape to the
-            nearest side; :attr:`Glue.POINT` glues the ends to ``from_point``
+        :param glue: :attr:`~vsdxkit.glue.Glue.DYNAMIC` walks each end round its shape to the
+            nearest side; :attr:`~vsdxkit.glue.Glue.POINT` glues the ends to ``from_point``
             and ``to_point``, 0-based rows of each shape's ``Connection`` section
-        :param routing: the path between the ends; :attr:`Routing.DEFAULT` is Visio's own
+        :param routing: the path between the ends; :attr:`~vsdxkit.glue.Routing.DEFAULT` is Visio's own
         :raises InvalidOperationError: the page is no longer in its document, a shape is not on this page,
             or a connection point does not exist; nothing is written
         :returns: the new connector
@@ -725,15 +858,17 @@ class Page:
         ``kind_or_prototype`` is a built-in :class:`~vsdxkit.shape_kind.ShapeKind`,
         or a shape from this document to copy: a prototype is how a shape
         with a custom master is made. Either way the new shape is a copy made
-        by :meth:`Shape.copy`, the one way a shape is created.
+        by :meth:`~vsdxkit.shapes.Shape.copy`, the one way a shape is created.
 
-        A 1-D shape, such as :attr:`ShapeKind.LINE`, is placed by its ends: it
+        A 1-D shape, such as :attr:`~vsdxkit.shape_kind.ShapeKind.LINE`, is placed by its ends: it
         keeps its direction, and ``width`` is its length.
 
         :param width, height: the new size; the kind's or prototype's when omitted
         :param text: the label. A kind starts blank; a prototype keeps its text when omitted.
         :raises TypeError: if ``kind_or_prototype`` is neither a kind nor a shape
-        :raises InvalidOperationError: if a prototype belongs to another document
+        :raises InvalidOperationError: if the page is no longer in its document; if a prototype is no
+            longer in its document, or belongs to another document; if ``height`` is given for a 1-D
+            shape; or if a 1-D shape lacks the begin and end points it is placed by
         :returns: the new shape
         """
         if not self._attached():
@@ -878,11 +1013,17 @@ class Page:
 class _PageLifecycle(Protocol):
     """What a :class:`PageCollection` needs from the document that owns its pages."""
 
-    def _add_page_at(self, index: int, name: str | None = None) -> Page: ...
+    def _add_page_at(self, index: int, name: str | None = None) -> Page:
+        """Add a new page at the specified index of the document, or at the end for `_PagePosition.LAST`, and return it."""
+        ...
 
-    def _copy_page(self, page: Page, *, index: int | _PagePosition = ..., name: str | None = None) -> Page: ...
+    def _copy_page(self, page: Page, *, index: int | _PagePosition = ..., name: str | None = None) -> Page:
+        """Copy an existing page and insert it in the document, straight after `page` for `_PagePosition.AFTER`, and return the copy."""
+        ...
 
-    def _remove_page_by_index(self, index: int) -> None: ...
+    def _remove_page_by_index(self, index: int) -> None:
+        """Remove the document's page at this zero-based index, with its part, its relationships and its title in app.xml."""
+        ...
 
 
 class PageCollection(Sequence[Page]):
@@ -894,17 +1035,21 @@ class PageCollection(Sequence[Page]):
     """
 
     def __init__(self, pages: list[Page], lifecycle: _PageLifecycle) -> None:
+        """A view of `pages`, the document's own list, which it reads live; `lifecycle`, the document, adds, copies and removes pages."""
         self._pages = pages
         self._lifecycle = lifecycle
 
     def __repr__(self) -> str:
+        """Shows the pages' names, as ``<PageCollection ['Page-1', 'Page-2']>``."""
         return f"<PageCollection {[page.name for page in self._pages]!r}>"
 
     def __len__(self) -> int:
+        """How many pages the document has now."""
         return len(self._pages)
 
     @override
     def __iter__(self) -> Iterator[Page]:
+        """The pages as they are when iteration starts: a page added or removed while iterating does not disturb it."""
         return iter(list(self._pages))
 
     @overload
@@ -914,6 +1059,7 @@ class PageCollection(Sequence[Page]):
     def __getitem__(self, index: slice) -> tuple[Page, ...]: ...
 
     def __getitem__(self, index: int | slice) -> Page | tuple[Page, ...]:
+        """The page at a zero-based index, negative ones counting from the end, or a slice's pages as a tuple; :class:`IndexError` out of range."""
         if isinstance(index, slice):
             return tuple(self._pages[index])
         return self._pages[index]
@@ -922,7 +1068,7 @@ class PageCollection(Sequence[Page]):
         """The page called `name`, or None.
 
         Visio keeps page names unique in a document, so two pages of one name
-        are a :class:`PackageError` rather than a choice between them.
+        are a :class:`~vsdxkit.errors.PackageError` rather than a choice between them.
         """
         matches = [page for page in self._pages if page.name == name]
         if len(matches) > 1:
@@ -930,7 +1076,12 @@ class PageCollection(Sequence[Page]):
         return matches[0] if matches else None
 
     def require_name(self, name: str) -> Page:
-        """The page called `name`."""
+        """The page called `name`.
+
+        :raises NotFoundError: if the document has no page called `name`
+        :raises PackageError: if the document has two pages called `name`,
+            which comes through :meth:`by_name`
+        """
         page = self.by_name(name)
         if page is None:
             raise NotFoundError(f"the document has no page called {name!r}")
@@ -967,6 +1118,7 @@ class PageCollection(Sequence[Page]):
         self._lifecycle._remove_page_by_index(self.index(page))
 
     def _insertion_index(self, index: int) -> int:
+        """`index` as a place to insert a page, from 0 to the number of pages; anything else raises `InvalidOperationError`."""
         # negative indexes are refused rather than read from the end: the
         # document's own page positions use -1 and -2 for LAST and AFTER
         if not 0 <= index <= len(self._pages):

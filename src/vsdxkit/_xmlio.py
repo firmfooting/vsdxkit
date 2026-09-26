@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     PartTree: TypeAlias = ET.ElementTree[ET.Element]
 else:
     PartTree = ET.ElementTree
+    """A parsed part: `ET.ElementTree`, typed precisely for checkers by the `TYPE_CHECKING` branch above."""
 
 # Prefixes Visio itself writes. ElementTree invents `ns0:`, `ns1:`, ... for any
 # namespace it has no prefix for, and consumers stricter than Visio -- libvisio
@@ -51,11 +52,13 @@ NAMESPACE_PREFIXES: dict[str, str] = {
     "http://purl.org/dc/terms/": "dcterms",
     "http://www.w3.org/2001/XMLSchema-instance": "xsi",
 }
+"""Visio's own prefix for every namespace this library introduces itself, so a part it builds never invents `ns0:`."""
 
 # `xml:` is bound by the XML spec itself: it is never declared and never
 # rebound. ElementTree recognises it only by finding it in this same table, so
 # it must survive every per-part swap untouched.
 _XML_NAMESPACE = "http://www.w3.org/XML/1998/namespace"
+"""The `xml:` namespace, bound by the XML spec itself rather than declared, so no part's prefix map may rebind it."""
 
 # Registering a prefix globally is a whole-process side effect, and only one
 # namespace can hold the default (empty) prefix at a time: ET.register_namespace
@@ -67,9 +70,12 @@ _GLOBAL_PREFIXES = {
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships": "r",
     "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes": "vt",
 }
+"""What `register_namespaces` claims process-wide, ahead of `serialise_part` overriding it per part."""
 
 _registration_lock = threading.RLock()
+"""Guards `register_namespaces` and `_serialising`'s swap of ElementTree's global prefix table."""
 _registered = False
+"""Whether `register_namespaces` has already run; makes a repeated call a no-op."""
 
 # What each parsed part declared for itself: `{namespace uri: prefix}`, keyed by
 # the root element of the tree it was parsed into. A prefix is a property of the
@@ -81,8 +87,10 @@ _registered = False
 # routinely rewrapped in a fresh tree before it is written, and held weakly so
 # that a part dropped from the package takes its prefixes with it.
 _declared_prefixes: weakref.WeakKeyDictionary[ET.Element, dict[str, str]] = weakref.WeakKeyDictionary()
+"""What each parsed part declared for itself, by its tree's root element; `_prefixes_for` reads it back."""
 
 _GENERATED_PREFIX_RE = re.compile(r"ns\d+")
+"""Matches a prefix ElementTree invented rather than one any document chose, so `parse_part` can discard it."""
 
 
 def register_namespaces() -> None:
@@ -214,6 +222,7 @@ def _serialising(root: ET.Element) -> Generator[None, None, None]:
 # The Visio main namespace in ElementTree's `{uri}tag` form, for building
 # elements rather than formatting them as strings.
 _VISIO_TAG_PREFIX = "{http://schemas.microsoft.com/office/visio/2012/main}"
+"""The Visio main namespace in ElementTree's `{uri}tag` form, for `make_cell_element` to build a `<Cell>` in it."""
 
 
 def make_cell_element(name: str, v: object | None = None, f: object | None = None) -> ET.Element:

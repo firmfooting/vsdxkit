@@ -25,6 +25,7 @@ from vsdxkit.pages import Page, PageCollection
 from vsdxkit.shapes import Shape
 
 _logger: Logger = get_logger(__name__)
+"""This module's logger, under the ``vsdxkit`` hierarchy the library never configures a handler for."""
 
 # Every template rendered here comes out of the .vsdx being processed: shape
 # text, shape names, cell formulas. On Jinja's default environment that text is
@@ -37,6 +38,7 @@ _logger: Logger = get_logger(__name__)
 # a fresh Environment on each call would recompile the filter and test registry
 # every time for no benefit.
 _ENVIRONMENT = SandboxedEnvironment()
+"""The one Jinja environment every template here is compiled in: sandboxed, because the templates come from the document."""
 
 # One `{% set self.<name> = <expression> %}` statement. Both names are bound
 # to an identifier rather than left as `.*`: a `.*` on the right-hand side
@@ -47,17 +49,21 @@ _ENVIRONMENT = SandboxedEnvironment()
 # text allows any amount of whitespace, so a single optional space here meant
 # `{% set self.x  =  2 %}` was removed without ever being assigned.
 _SET_SELF_STATEMENT = re.compile(r"{% set self\.([A-Za-z_]\w*)\s*=\s*(.*?) %}")
+"""One `{% set self.<name> = <expression> %}` in a shape's text: group 1 is the name, group 2 the expression."""
 _SELF_REFERENCE = re.compile(r"self\.([A-Za-z_]\w*)")
+"""One `self.<name>` in a set statement's expression, group 1 the name, for `_resolve_self_references` to replace."""
 
 # What a statement may assign. Reading stays wider on purpose: an expression
 # may reference any attribute of the shape.
 _SETTABLE = ("x", "y")
+"""The shape attributes a `{% set self.<name> = ... %}` statement writes; any other name is evaluated and discarded."""
 
 # A `{% showif <expression> %}` in a page name, anywhere in it. `findall`
 # gives the expressions; `sub` removes whole statements, since it replaces the
 # match and not the group. The statement is not Jinja, so it is taken out of
 # the name before the name is rendered.
 _PAGE_SHOWIF = re.compile(r"{% showif\s(.*?)\s%}")
+"""A `{% showif ... %}` in a page name: `_page_is_shown` evaluates each group 1, and `_render_page_name` removes each whole match."""
 
 
 class RenderTarget(Protocol):
@@ -67,7 +73,9 @@ class RenderTarget(Protocol):
     """
 
     @property
-    def pages(self) -> PageCollection: ...
+    def pages(self) -> PageCollection:
+        """The document's pages, in order: rendering reads each one's name and shapes, and deletes a page a ``{% showif %}`` hides."""
+        ...
 
 
 def _template(source: str):
@@ -158,6 +166,7 @@ def _resolve_self_references(shape: Shape, expression: str, statement: str) -> s
     """
 
     def resolve(reference: re.Match[str]) -> str:
+        """The shape's value for one `self.<name>`, as a string; a name the shape lacks raises `NotFoundError`."""
         name = reference.group(1)
         try:
             return str(getattr(shape, name))
@@ -201,6 +210,7 @@ def _apply_set_self(shape: Shape, context: Mapping[str, object]) -> None:
 
 
 def _unescape_statements(jinja_source: str) -> str:
+    """`jinja_source`, a page serialised to XML, with ``&gt;`` and ``&lt;`` inside each ``{% ... %}`` turned back into ``>`` and ``<`` for Jinja to read."""
     # unescape any text between {% ... %}
     jinja_source_out = jinja_source
     matches = re.findall("{%(.*?)%}", jinja_source)  # non-greedy search for all {%...%} strings
@@ -211,8 +221,19 @@ def _unescape_statements(jinja_source: str) -> str:
 
 
 def _open_block(shape: Shape, previous_shape: Shape | None) -> str | None:
-    # update a Shapes tag where text looks like a jinja {% for xxxx %} loop
-    # move text to start of Shapes tag and add {% endfor %} at end of tag
+    """Wrap `shape` in the Jinja blocks its text opens, and return its ID if one is a loop.
+
+    Each ``{% for %}`` and ``{% showif %}`` in the shape's text is taken out of
+    it and written into the XML around the shape's element: the opening tag
+    on `previous_shape`'s tail, or at the start of the ``<Shapes>`` element
+    the shape sits in when it is the first, and ``{% endfor %}`` or
+    ``{% endif %}`` on the shape's own tail. A ``showif`` becomes an ``if``.
+    Rendering the page then repeats or hides that one shape. The ID is
+    returned so the copies a loop makes, which all carry it, can be given IDs
+    of their own.
+    """
+    # wrap this shape in each jinja {% for xxxx %} loop its text holds: move
+    # the statement to just before the shape and add {% endfor %} just after it
     text = shape.text
 
     # use regex to find all loops
@@ -220,7 +241,7 @@ def _open_block(shape: Shape, previous_shape: Shape | None) -> str | None:
 
     for loop in jinja_loops:
         jinja_loop_text = f"{{% for {loop} %}}"
-        # move the for loop to start of shapes element (just before first Shape element)
+        # move the for loop to just before this shape: the previous shape's tail, or the start of the Shapes element
         if previous_shape:
             if previous_shape.xml.tail:
                 previous_shape.xml.tail += jinja_loop_text
@@ -234,7 +255,7 @@ def _open_block(shape: Shape, previous_shape: Shape | None) -> str | None:
                 container.text = (container.text or "") + jinja_loop_text
         shape.text = (shape.text or "").replace(jinja_loop_text, "")  # remove jinja loop from <Text> tag in element
 
-        # add closing 'endfor' to just inside the shapes element, after last shape
+        # add closing 'endfor' just after this shape, on its tail
         if shape.xml.tail:  # extend or set text at end of Shape element
             shape.xml.tail += "{% endfor %}"
         else:
@@ -244,7 +265,7 @@ def _open_block(shape: Shape, previous_shape: Shape | None) -> str | None:
     # jinja_show_if - translate non-standard {% showif statement %} to valid jinja if statement
     for show_if in jinja_show_ifs:
         jinja_show_if = f"{{% if {show_if} %}}"  # translate to actual jinja if statement
-        # move the for loop to start of shapes element (just before first Shape element)
+        # move the if statement to just before this shape: the previous shape's tail, or the start of the Shapes element
         if previous_shape:
             previous_shape.xml.tail = (previous_shape.xml.tail or "") + jinja_show_if
         else:
@@ -257,7 +278,7 @@ def _open_block(shape: Shape, previous_shape: Shape | None) -> str | None:
         # remove original jinja showif from <Text> tag in element
         shape.text = (shape.text or "").replace(f"{{% showif {show_if} %}}", "")
 
-        # add closing 'endfor' to just inside the shapes element, after last shape
+        # add closing 'endif' just after this shape, on its tail
         if shape.xml.tail:  # extend or set text at end of Shape element
             shape.xml.tail += "{% endif %}"
         else:
