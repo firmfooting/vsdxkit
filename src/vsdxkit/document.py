@@ -530,7 +530,8 @@ class Document:
         connector.text = ""  # the sentinel text it was found by
         master_shape = connector.master_shape
         line_style_id = master_shape.line_style_id if master_shape is not None else None
-        # a style with the same ID is taken to be the same style
+        # a style with the same ID is taken to be the same style; matching by
+        # name, and renumbering a clash, is #125
         if line_style_id is not None and self._get_style_by_id(line_style_id) is None:
             style = _style_copy(line_style_id, Document.open)
             if style is not None:
