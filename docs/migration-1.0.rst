@@ -100,6 +100,25 @@ The class is :class:`vsdxkit.document.Document`, in the module
 ``VisioFile.jinja_render_vsdx(context)``
    ``Document.render(context)``.
 
+A ``{% showif %}`` in a page name
+   Judged as ``{% if %}`` judges it, so a page is kept exactly when a shape
+   behind the same ``showif`` is. 0.8 rendered the expression to a string
+   and hid the page only for ``False``, ``0``, an empty string and the
+   empty ``()``, ``[]`` and ``{}``. It kept a page for ``None``, ``0.0`` or
+   an empty ``set()``, and hid one for the strings ``"0"`` and ``"False"``,
+   which are true. A name with two ``showif`` statements is kept only when
+   both are true, where 0.8 read the last one.
+
+A page name holding ``{{ ... }}``
+   Rendered with the context, as shape text is: a page named
+   ``{{ title }}`` is named ``Quarterly`` after
+   ``document.render({"title": "Quarterly"})``. 0.8 left the name as it was.
+   A ``showif`` anywhere in the name is taken out of it before it is
+   rendered, where 0.8 took one out only when it opened the name. Nothing
+   checks that the names rendered are unique: give each page a name the
+   others do not render to, because ``document.pages.by_name`` refuses a
+   name two pages share.
+
 ``vsdx.templating.JinjaTemplatingMixin``
    Gone. ``Document`` has no base class. ``Document.render(context)`` calls
    ``vsdxkit.templating.render_document(document, context)``, which takes a

@@ -1046,7 +1046,10 @@ class Document:
 
         Shape text, and page names, are Jinja templates. vsdx-specific
         extensions are available, such as `{% for item in list %}` statements
-        with no `{% endfor %}`. See :func:`vsdxkit.templating.render_document`.
+        with no `{% endfor %}`. A `{% showif expression %}` in a shape's text,
+        or anywhere in a page's name, removes the shape or the page when the
+        expression is false, as `{% if %}` would. See
+        :func:`vsdxkit.templating.render_document`.
 
         :param context: the values the templates can refer to
         """
