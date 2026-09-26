@@ -10,6 +10,7 @@ from vsdxkit import namespace
 from vsdxkit.document import Document
 from vsdxkit.errors import InvalidOperationError
 from vsdxkit.shapes import DataProperty, Shape
+from vsdxkit.xmlio import pretty_print_element
 
 
 def _first_shape_containing(shapes, text: str):
@@ -375,7 +376,7 @@ def test_set_shape_data_properties(filename: str, page_index: int, shape_name: s
         print(f"prop: lbl:'{prop.label}' name:'{prop.name}': val:'{prop.value}'")
         assert prop.value != property_dict.get(property_label)
         print(f"shape.text={shape.text}")
-        print(vis.pretty_print_element(shape.xml))
+        print(pretty_print_element(shape.xml))
 
     # check each key/value is expected after being set
     for property_label in property_dict:
@@ -560,11 +561,11 @@ def test_get_shape_geometry(filename: str, page_index: str, shape_text: str, exp
     page = vis.pages[page_index]
     shape = page.shapes.by_text(shape_text)
 
-    coords = [(r.row_type, [(c.name, c.value, c.func) for c in r.cells.values()]) for r in shape.geometry.rows.values()]
+    coords = [(r.row_type, [(c.name, c.value, c.formula) for c in r.cells.values()]) for r in shape.geometry.rows.values()]
     print(f"coords={coords}")
-    print(Document.pretty_print_element(shape.xml))
+    print(pretty_print_element(shape.xml))
     if shape.master_shape:
-        print(Document.pretty_print_element(shape.master_shape.xml))
+        print(pretty_print_element(shape.master_shape.xml))
     assert coords == expected_coords
 
 
@@ -994,3 +995,30 @@ def test_an_end_that_is_not_a_shape_is_refused(vsdx_copy, monkeypatch, end):
     monkeypatch.setattr("vsdxkit.shapes._glued_ends", lambda _: ((object(), None), (object(), None)))
     with pytest.raises(TypeError, match=r"^expected a vsdxkit Shape, got object$"):
         getattr(connector, end)
+
+
+def test_the_dead_shape_side_members_are_gone():
+    """Fails if a member Phase 7 deleted as dead comes back (#116)."""
+    import vsdxkit.shapes
+    from vsdxkit.geometry import GeometryCell
+    from vsdxkit.shapes import Cell
+
+    for owner, name in (
+        (Cell, "func"),
+        (GeometryCell, "func"),
+        (DataProperty, "remove_attribute"),
+        (Shape, "shape_value"),
+        (Shape, "text_raw"),
+        (Shape, "loc_x_f"),
+        (Shape, "loc_y_f"),
+        (Shape, "get_max_id"),
+    ):
+        assert not hasattr(owner, name), f"{owner.__name__}.{name}"
+    assert not hasattr(vsdxkit.shapes, "shape_type_names")
+
+
+def test_a_cells_repr_shows_its_formula(vsdx_copy):
+    shape = Document.open(vsdx_copy("test1.vsdx")).pages[0].shapes.by_text("Shape to copy")
+    assert shape is not None
+    cell = next(cell for cell in shape.cells.values() if cell.formula)
+    assert repr(cell) == f"Cell: name={cell.name} val={cell.value} func={cell.formula}"

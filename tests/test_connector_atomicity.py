@@ -12,9 +12,11 @@ import xml.etree.ElementTree as ET
 import pytest
 from helpers.connect_records import page_records
 
+from vsdxkit import document_rels_namespace
 from vsdxkit.document import Document
 from vsdxkit.errors import InvalidOperationError
 from vsdxkit.glue import ConnectorOptions, Glue
+from vsdxkit.partnames import DOCUMENT_PART, relationships_part_name
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 
@@ -32,7 +34,11 @@ def _snapshot(page):
     names = document._package.names()
     master_parts = sorted(name for name in names if name.endswith((".xml", ".rels")) and "/masters/" in name)
     page_rels = sorted(name for name in names if name.endswith("page1.xml.rels"))
-    document_rels = document.document_rels()
+    document_rels = (
+        document._package.require_xml(relationships_part_name(DOCUMENT_PART))
+        .getroot()
+        .findall(f"{document_rels_namespace}Relationship")
+    )
     rel_types = sorted(r.attrib.get("Type", "") for r in document_rels)
     return shapes, records, master_parts, page_rels, rel_types
 

@@ -430,12 +430,8 @@ class GeometryCell(ShapePart):
         self._require_attached("writing a geometry cell's name")
         self.xml.attrib["N"] = xml_value(value)
 
-    @property
-    def func(self) -> str | None:  # assume F stands for function, i.e. F="Width*0.5"
-        return self.xml.attrib.get("F")
-
     def __repr__(self):
         s = f"{self.name}={self.value}"
-        if self.func:
-            s += f" func={self.func}"
+        if self.formula:
+            s += f" func={self.formula}"
         return s

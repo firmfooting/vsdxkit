@@ -1,19 +1,28 @@
-"""One implementation of "substitute into shape text", reachable two ways.
+"""`Page.apply_text_context` is the one way to substitute a context into shape text.
 
-`Document.apply_text_context` and `Page.apply_text_context` are both public and
-both claim to do this. They used to disagree.
+`Document.apply_text_context`, a static method handed bare elements, was a
+second route to the same thing and could not resolve master inheritance. It
+is gone (#116). These are its cases, asked of the page.
 """
 
 import xml.etree.ElementTree as ET
 
 from vsdxkit import namespace
 from vsdxkit.document import Document
+from vsdxkit.pages import Page
 
 NS = namespace[1:-1]
 
 
-def _shapes(inner: str) -> ET.Element:
-    return ET.fromstring(f'<Shapes xmlns="{NS}">{inner}</Shapes>')
+def _page_holding(vsdx_copy, inner: str) -> tuple[Page, ET.Element]:
+    """A page of test1.vsdx whose top-level `<Shapes>` holds only `inner`, and that `<Shapes>`."""
+    page = Document.open(vsdx_copy("test1.vsdx")).pages[0]
+    shapes = page.xml.getroot().find(f"{namespace}Shapes")
+    assert shapes is not None
+    for child in list(shapes):
+        shapes.remove(child)
+    shapes.extend(ET.fromstring(f'<Shapes xmlns="{NS}">{inner}</Shapes>'))
+    return page, shapes
 
 
 def _texts(element: ET.Element) -> list[str]:
@@ -24,134 +33,93 @@ def _xml(element: ET.Element) -> str:
     return ET.tostring(element, encoding="unicode")
 
 
-class TestTheStaticEntryPoint:
-    def test_it_substitutes_inside_a_group(self):
-        """A group's children live in the group's own `<Shapes>`, one level down.
+def test_it_substitutes_inside_a_group(vsdx_copy):
+    """A group's children live in the group's own `<Shapes>`, one level down.
 
-        Walking only the top level leaves every grouped shape with its
-        placeholder intact.
-        """
-        root = _shapes(
-            '<Shape ID="1"><Text>outer {{who}}</Text><Shapes><Shape ID="2"><Text>inner {{who}}</Text></Shape></Shapes></Shape>'
-        )
+    Walking only the top level leaves every grouped shape with its
+    placeholder intact.
+    """
+    page, shapes = _page_holding(
+        vsdx_copy,
+        '<Shape ID="1" Type="Group"><Text>outer {{who}}</Text>'
+        '<Shapes><Shape ID="2"><Text>inner {{who}}</Text></Shape></Shapes></Shape>',
+    )
 
-        Document.apply_text_context(root, {"who": "Ada"})
+    page.apply_text_context({"who": "Ada"})
 
-        assert _texts(root) == ["outer Ada", "inner Ada"]
-
-    def test_it_does_not_raise_on_an_empty_text_element(self):
-        """Visio writes `<Text/>`; four such elements ship in this repo's fixtures."""
-        root = _shapes('<Shape ID="1"><Text /></Shape>')
-
-        Document.apply_text_context(root, {"who": "Ada"})
-
-        assert _texts(root) == [""]
-
-    def test_it_keeps_a_run_that_follows_the_text(self):
-        """A trailing run is markup, not text, and has to survive the write.
-
-        A run *between* two pieces of content does not survive, in either route.
-        That is #317, and it predates this consolidation.
-        """
-        root = _shapes('<Shape ID="1"><Text>{{who}}<cp IX="0"/></Text></Shape>')
-
-        Document.apply_text_context(root, {"who": "Ada"})
-
-        text = next(iter(root.iter(f"{namespace}Text")))
-        assert [child.tag for child in text] == [f"{namespace}cp"]
-        assert text.text == "Ada"
-
-    def test_it_does_not_write_to_a_shapes_container(self):
-        """A `<Shapes>` element is not a shape, even if it carries a `<Text>` child.
-
-        The container is given text of its own here precisely so that a walk
-        which treated it as a shape would be visible. The implementation this
-        replaced did exactly that.
-        """
-        root = _shapes('<Shapes><Text>container {{who}}</Text><Shape ID="2"><Text>{{who}}</Text></Shape></Shapes>')
-
-        Document.apply_text_context(root, {"who": "Ada"})
-
-        assert _texts(root) == ["container {{who}}", "Ada"]
-
-    def test_a_context_that_matches_nothing_leaves_the_xml_alone(self):
-        """Writing back unchanged text is not free, so it is not done.
-
-        A run between two pieces of content does not survive the round trip
-        (#317), so a shape with nothing to substitute would be corrupted merely
-        by being visited. Both routes share this guard.
-        """
-        root = _shapes('<Shape ID="1"><Text>a<cp IX="0"/>b</Text></Shape>')
-        before = _xml(root)
-
-        Document.apply_text_context(root, {"nothing": "here"})
-
-        assert _xml(root) == before
-
-    def test_it_leaves_master_inherited_text_alone(self):
-        """The documented limit of this entry point, pinned so it stays documented.
-
-        It is handed elements, so it has no master to resolve. A shape showing
-        its master's text has no `<Text>` of its own and is skipped.
-        `Page.apply_text_context` is the route that resolves inheritance.
-        """
-        root = _shapes('<Shape ID="1" Master="4" />')
-        before = _xml(root)
-
-        Document.apply_text_context(root, {"who": "Ada"})
-
-        assert _xml(root) == before
+    assert _texts(shapes) == ["outer Ada", "inner Ada"]
 
 
-def test_the_second_implementation_is_gone():
-    """`get_shape_text`/`set_shape_text` duplicated `Shape.text`, badly.
+def test_it_does_not_raise_on_an_empty_text_element(vsdx_copy):
+    """Visio writes `<Text/>`; four such elements ship in this repo's fixtures."""
+    page, shapes = _page_holding(vsdx_copy, '<Shape ID="1"><Text /></Shape>')
+
+    page.apply_text_context({"who": "Ada"})
+
+    assert _texts(shapes) == [""]
+
+
+def test_it_keeps_a_run_that_follows_the_text(vsdx_copy):
+    """A trailing run is markup, not text, and has to survive the write.
+
+    A run *between* two pieces of content does not survive the write. That is #317.
+    """
+    page, shapes = _page_holding(vsdx_copy, '<Shape ID="1"><Text>{{who}}<cp IX="0"/></Text></Shape>')
+
+    page.apply_text_context({"who": "Ada"})
+
+    text = next(iter(shapes.iter(f"{namespace}Text")))
+    assert [child.tag for child in text] == [f"{namespace}cp"]
+    assert text.text == "Ada"
+
+
+def test_it_does_not_write_to_a_shapes_container(vsdx_copy):
+    """A `<Shapes>` element is not a shape, even if it carries a `<Text>` child.
+
+    The container is given text of its own here precisely so that a walk
+    which treated it as a shape would be visible.
+    """
+    page, shapes = _page_holding(
+        vsdx_copy,
+        '<Shape ID="1" Type="Group"><Shapes><Text>container {{who}}</Text>'
+        '<Shape ID="2"><Text>{{who}}</Text></Shape></Shapes></Shape>',
+    )
+
+    page.apply_text_context({"who": "Ada"})
+
+    assert _texts(shapes) == ["container {{who}}", "Ada"]
+
+
+def test_a_context_that_matches_nothing_leaves_the_xml_alone(vsdx_copy):
+    """Writing back unchanged text is not free, so it is not done.
+
+    A run between two pieces of content does not survive the round trip
+    (#317), so a shape with nothing to substitute would be corrupted merely
+    by being visited.
+    """
+    page, shapes = _page_holding(vsdx_copy, '<Shape ID="1"><Text>a<cp IX="0"/>b</Text></Shape>')
+    before = _xml(shapes)
+
+    page.apply_text_context({"nothing": "here"})
+
+    assert _xml(shapes) == before
+
+
+def test_it_coerces_non_string_values(vsdx_copy):
+    page = Document.open(vsdx_copy("test1.vsdx")).pages[0]
+    shape = next(iter(page.children))
+    shape.text = "Year {{year}}"
+
+    page.apply_text_context({"year": 2020})
+
+    assert shape.text == "Year 2020"
+
+
+def test_the_other_implementations_are_gone():
+    """`get_shape_text`/`set_shape_text` duplicated `Shape.text`, and the static `apply_text_context` duplicated this.
 
     `set_shape_text` raised `IndexError` on an empty `<Text/>` and silently
     dropped the text on a shape with no `<Text>` at all.
     """
-    assert not hasattr(Document, "get_shape_text")
-    assert not hasattr(Document, "set_shape_text")
-
-
-def _seed_some(path: str) -> int:
-    """Put a placeholder in the text of shapes that have their own `<Text>`.
-
-    Deliberately not every shape. Assigning `shape.text` creates a `<Text>`
-    element where there was none, which would give a master-inheriting shape
-    local text and dissolve the one case where the two routes differ - leaving
-    a parity assertion that cannot fail.
-    """
-    document = Document.open(path)
-    seeded = 0
-    for shape in document.pages[0].shapes:
-        if shape.xml.find(f"{namespace}Text") is None:
-            continue
-        shape.text = f"shape {shape.ID} {{{{tok}}}}"
-        seeded += 1
-    document.save(path)
-    return seeded
-
-
-def test_the_two_entry_points_agree_on_shapes_that_hold_their_own_text(vsdx_copy):
-    """Same file, same context, same answer, over the shapes both can reach.
-
-    `test2.vsdx` carries groups, which is what the static route used to miss.
-    """
-    through_page = vsdx_copy("test2.vsdx")
-    seeded = _seed_some(through_page)
-    assert seeded > 1, "the fixture has to have shapes with text for this to compare anything"
-
-    document = Document.open(through_page)
-    page = document.pages[0]
-    page.apply_text_context({"tok": "SUBSTITUTED"})
-    by_page = sorted(shape.text for shape in page.shapes)
-
-    through_static = vsdx_copy("test2.vsdx")
-    _seed_some(through_static)
-    document = Document.open(through_static)
-    page = document.pages[0]
-    Document.apply_text_context(page.xml.getroot(), {"tok": "SUBSTITUTED"})
-    by_static = sorted(shape.text for shape in page.shapes)
-
-    assert all("{{tok}}" not in text for text in by_page), "a placeholder was left behind"
-    assert by_static == by_page
+    for name in ("get_shape_text", "set_shape_text", "apply_text_context"):
+        assert not hasattr(Document, name), name

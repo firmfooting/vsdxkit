@@ -136,11 +136,8 @@ def _place_one_d(shape: Shape, x: float, y: float, length: float | None) -> None
 
 
 class _PagePosition(IntEnum):
-    FIRST = 0
     LAST = -1
-    END = -1
     AFTER = -2
-    BEFORE = -3
 
 
 def _page_dimension(cell: ET.Element, name: str) -> float:
@@ -248,12 +245,10 @@ class Page:
         self.page_id = page_id
         self.rel_id = rel_id
         self.master_unique_id: str | None = None
-        self.master_base_id: str | None = None
         self.rels_xml_filename: str | None = None
         self._rels_xml: PartTree | None = None
         self._document = vis
         self._max_id = 0  # ID high-water mark, maintained by Document's ID allocator
-        # todo: add page id - from pages_xml - PageSheet[ID]
 
     def __repr__(self):
         return f"<Page name={self.name} file={self.filename} >"
@@ -878,7 +873,7 @@ class PageCollection(Sequence[Page]):
 
     def _insertion_index(self, index: int) -> int:
         # negative indexes are refused rather than read from the end: the
-        # document's own page positions use -1 to -3 for LAST, AFTER and BEFORE
+        # document's own page positions use -1 and -2 for LAST and AFTER
         if not 0 <= index <= len(self._pages):
             raise InvalidOperationError(f"page index {index} is outside 0..{len(self._pages)}")
         return index

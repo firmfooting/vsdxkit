@@ -571,16 +571,16 @@ def test_a_new_cell_joins_its_row_under_its_name():
     assert row.xml.find(f'{namespace}Cell[@N="A"]') is cell.xml
 
 
-def test_formula_and_func_read_the_same_attribute():
+def test_formula_reads_and_writes_the_f_attribute():
     vis = Document.open(PALETTE)
     decision = vis.pages[0].shapes.by_text("PALETTE_DECISION")
     cell = decision.geometry.rows["2"].cells["A"]
 
-    assert cell.formula == cell.func == "POLYLINE(0, 0, 1,0.5, 0.5,0, 0,0.5)"
+    assert cell.formula == "POLYLINE(0, 0, 1,0.5, 0.5,0, 0,0.5)"
 
     cell.formula = "POLYLINE(0,0)"
 
-    assert cell.func == "POLYLINE(0,0)"
+    assert cell.formula == "POLYLINE(0,0)"
     assert cell.xml.attrib["F"] == "POLYLINE(0,0)"
 
 

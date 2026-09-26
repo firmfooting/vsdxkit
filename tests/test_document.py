@@ -19,20 +19,6 @@ def _media_filename() -> str:
 # file structure
 
 
-def test_apply_text_context_coerces_non_string_values():
-    root = ET.fromstring(
-        f'<PageContents xmlns="{namespace[1:-1]}"><Shapes><Shape ID="1"><Text>Year {{{{year}}}}</Text></Shape></Shapes></PageContents>'
-    )
-
-    Document.apply_text_context(root, {"year": 2020})
-
-    shape = root.find(f".//{namespace}Shape")
-    assert shape is not None
-    text = shape.find(f"{namespace}Text")
-    assert text is not None
-    assert "".join(text.itertext()) == "Year 2020"
-
-
 def test_insert_shape_rejects_mismatched_page_path(vsdx_copy):
     filename = vsdx_copy("test2.vsdx")
     shape = ET.fromstring(f'<Shape xmlns="{namespace[1:-1]}" ID="1" />')
@@ -646,6 +632,33 @@ def test_the_0x_names_are_gone(vsdx_copy):
         assert not hasattr(vis, name), name
     with pytest.raises(TypeError):
         Document.open(vsdx_copy("test1.vsdx"), debug=True)  # type: ignore[call-arg]
+
+
+def test_the_dead_document_members_are_gone():
+    """Fails if a member Phase 7 deleted as dead comes back (#116)."""
+    import dataclasses
+
+    from vsdxkit.package import XmlPart
+    from vsdxkit.pages import _PagePosition
+
+    for name in (
+        "get_shape_location",
+        "set_shape_location",
+        "get_shape_id",
+        "apply_text_context",
+        "pretty_print_element",
+        "document_rels",
+        "_part_tree",
+        "_require_part_xml",
+        "_get_styles_name_list",
+        "_get_style_by_name",
+        "_get_app_xml_value",
+    ):
+        assert not hasattr(Document, name), name
+    # iteration skips aliases, so END is checked by name
+    assert [position.name for position in _PagePosition] == ["LAST", "AFTER"]
+    assert "END" not in _PagePosition.__members__
+    assert "promoted_from" not in {field.name for field in dataclasses.fields(XmlPart)}
 
 
 def test_masters_from_something_that_is_not_a_document_are_refused(vsdx_copy):

@@ -743,3 +743,55 @@ which is gone along with its module. Membership is still geometric.
 
 A shape on the edge two lanes share is now in the upper lane only. It used to
 count as a member of both.
+
+Members removed as unused
+-------------------------
+
+These had no caller in the library, repeated a 1.0 name, or did nothing.
+
+``vis.get_shape_location(element)``, ``vis.set_shape_location(element, x, y)``, ``vis.get_shape_id(element)``
+   Gone. Ask the shape: ``shape.x`` and ``shape.y`` read and write its
+   position, and ``shape.ID`` is its ID.
+   ``page.shapes.by_id(element.attrib["ID"])`` finds the shape for an
+   element.
+
+``vis.apply_text_context(element, context)``
+   ``page.apply_text_context(context)``, which also substitutes into text a
+   shape shows from its master.
+
+``vis.pretty_print_element(xml)``
+   ``vsdxkit.xmlio.pretty_print_element(xml)``.
+
+``vis.document_rels()``
+   Internal in 1.0; no public replacement. The document keeps its
+   relationships in step itself.
+
+``Cell.func``, ``GeometryCell.func``
+   ``cell.formula``, which is the same value.
+
+``shape.shape_value(name)``
+   ``shape.xml.get(name)``, the attribute it read.
+
+``shape.text_raw``
+   ``shape.text``, which leaves out the formatting-run markup and the
+   trailing newline ``text_raw`` also showed.
+
+``shape.loc_x_f``, ``shape.loc_y_f``
+   ``shape.cell_formula("LocPinX")`` and ``shape.cell_formula("LocPinY")``.
+
+``shape.get_max_id()``
+   Gone. The page allocates shape IDs itself. For the highest ID in a shape
+   and the shapes inside it, use
+   ``max((int(s.ID) for s in (shape, *shape.descendants) if s.ID), default=0)``.
+
+``shapes.shape_type_names``
+   Gone, with no replacement: nothing read it. ``isinstance(shape, Connector)``
+   tells whether a shape is a connector.
+
+``DataProperty.remove_attribute(name, attrib)``
+   Gone, with no replacement. On a property the shape inherits it removed
+   the attribute from the master's cell, which changed every shape that
+   uses the master.
+
+``page.master_base_id``
+   Gone, with no replacement: nothing read it.

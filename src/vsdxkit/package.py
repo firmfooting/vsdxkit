@@ -43,7 +43,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 import zlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
@@ -489,10 +489,6 @@ class XmlPart:
     tree: PartTree
     original_bytes: bytes | None
     original_canonical_hash: str | None
-    # the part this one was parsed from, so a holder of that part can tell a
-    # promotion, which changes how the store holds the part but not what it
-    # holds, from a write that replaced it. None for a part written as a tree
-    promoted_from: BytesPart | None = field(default=None, compare=False, repr=False)
 
     def current_bytes(self) -> bytes:
         data = serialise_part(self.tree)
@@ -506,7 +502,7 @@ PartValue = BytesPart | XmlPart
 
 def _promoted(name: str, part: BytesPart) -> XmlPart:
     tree = parse_part(part.data, name)
-    return XmlPart(tree=tree, original_bytes=part.data, original_canonical_hash=canonical_hash(tree), promoted_from=part)
+    return XmlPart(tree=tree, original_bytes=part.data, original_canonical_hash=canonical_hash(tree))
 
 
 # --------------------------------------------------------------------------
