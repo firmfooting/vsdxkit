@@ -136,11 +136,8 @@ def _place_one_d(shape: Shape, x: float, y: float, length: float | None) -> None
 
 
 class _PagePosition(IntEnum):
-    FIRST = 0
     LAST = -1
-    END = -1
     AFTER = -2
-    BEFORE = -3
 
 
 def _page_dimension(cell: ET.Element, name: str) -> float:
@@ -878,7 +875,7 @@ class PageCollection(Sequence[Page]):
 
     def _insertion_index(self, index: int) -> int:
         # negative indexes are refused rather than read from the end: the
-        # document's own page positions use -1 to -3 for LAST, AFTER and BEFORE
+        # document's own page positions use -1 and -2 for LAST and AFTER
         if not 0 <= index <= len(self._pages):
             raise InvalidOperationError(f"page index {index} is outside 0..{len(self._pages)}")
         return index

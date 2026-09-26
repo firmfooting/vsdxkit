@@ -13,7 +13,6 @@ from xml.etree.ElementTree import Element
 
 from vsdxkit import (
     cont_types_namespace,
-    document_rels_namespace,
     ext_prop_namespace,
     namespace,
     r_namespace,
@@ -36,7 +35,7 @@ from vsdxkit.partnames import (
 )
 from vsdxkit.relationships import append_if_absent, ensure_override, remove, remove_override
 from vsdxkit.shape_kind import ShapeKind
-from vsdxkit.shapes import Connector, Shape, _text_runs_of, _write_text, find_or_create_shapes_tag, substitute
+from vsdxkit.shapes import Connector, Shape, find_or_create_shapes_tag
 from vsdxkit.templating import render_document
 from vsdxkit.xmlio import (
     PartTree,
@@ -155,29 +154,13 @@ class Document:
         return cls(PackageStore.open(filename, limits=limits if limits is not None else PackageLimits()), filename)
 
     @staticmethod
-    def _part_tree(tree: PartTree | None, description: str) -> PartTree:
-        """A required document part (pages.xml, app.xml, ...).
+    def _part_root(tree: PartTree | None, description: str) -> ET.Element:
+        """Root element of a required document part.
 
         A missing part means the package is malformed for the operation being
         attempted, so raise with the part name rather than failing on None.
         """
-        return require_tree(tree, description)
-
-    @staticmethod
-    def _part_root(tree: PartTree | None, description: str) -> ET.Element:
-        """Root element of a required document part."""
-        return require_element(Document._part_tree(tree, description).getroot(), f"{description} root")
-
-    @staticmethod
-    def pretty_print_element(xml: Element | PartTree) -> str:
-        return pretty_print_element(xml)
-
-    def _require_part_xml(self, name: str, description: str) -> PartTree:
-        """The store's own tree for a required part, or a MissingPartError naming it."""
-        tree = self._package.read_xml(name)
-        if tree is None:
-            raise MissingPartError(f"expected XML part not found: {description} ({name})")
-        return tree
+        return require_element(require_tree(tree, description).getroot(), f"{description} root")
 
     def _set_part_xml(self, name: str, tree: PartTree | None) -> None:
         """Make `tree` the part called `name`, or take the part out for None.
@@ -345,10 +328,10 @@ class Document:
 
     def load_pages(self) -> None:
         rels_name = relationships_part_name(PAGES_PART)
-        pages_xml_rels = self._require_part_xml(rels_name, "pages.xml.rels")
+        pages_xml_rels = self._package.require_xml(rels_name)
         rels = require_element(pages_xml_rels.getroot(), "pages.xml.rels")
         if logger.isEnabledFor(logging.DEBUG):
-            logger.debug("Relationships(%s)\n%s", rels_name, Document.pretty_print_element(rels))
+            logger.debug("Relationships(%s)\n%s", rels_name, pretty_print_element(rels))
         relid_page_dict = {}
 
         for rel in rels:
@@ -357,10 +340,10 @@ class Document:
             relid_page_dict[rel_id] = page_file
 
         # pages.xml contains Page name, width, height, mapped to Id
-        pages_xml = self._require_part_xml(PAGES_PART, "pages.xml")
+        pages_xml = self._package.require_xml(PAGES_PART)
         pages = require_element(pages_xml.getroot(), "pages.xml")
         if logger.isEnabledFor(logging.DEBUG):
-            logger.debug("Pages(%s)\n%s", PAGES_PART, Document.pretty_print_element(pages))
+            logger.debug("Pages(%s)\n%s", PAGES_PART, pretty_print_element(pages))
 
         for page in pages:  # type: Element
             rel_id = require_attribute(
@@ -375,7 +358,7 @@ class Document:
             check_relationship_target(page_path, f"pages.xml.rels Relationship {rel_id!r}", page_file)
             page_id = page.attrib.get("ID", "")
 
-            new_page = Page(self._require_part_xml(page_path, "page part"), page_path, page_name, page_id, rel_id, self)
+            new_page = Page(self._package.require_xml(page_path), page_path, page_name, page_id, rel_id, self)
             # look for /visio/pages/_rels/page3.xml.rels
             page_rels_path = relationships_part_name(page_path)
 
@@ -388,7 +371,7 @@ class Document:
             self._pages.append(new_page)
 
             if logger.isEnabledFor(logging.DEBUG):
-                logger.debug("Page(%s)\n%s", new_page.filename, Document.pretty_print_element(new_page.xml))
+                logger.debug("Page(%s)\n%s", new_page.filename, pretty_print_element(new_page.xml))
 
         # content_types_xml, app_xml, document_xml and document_xml_rels are
         # store-backed properties, but promoted here rather than left to the
@@ -498,42 +481,25 @@ class Document:
         return max_page_id
 
     def _get_index(self, *, index: int | _PagePosition, page: Page | None) -> int:
-        if isinstance(index, _PagePosition):  # only update index if it is relative to source page
-            if index == _PagePosition.LAST:
-                index = len(self.pages)
-            elif index == _PagePosition.FIRST:
-                index = 0
-            elif page:  # need page for BEFORE or AFTER
-                orig_page_idx = self.pages.index(page)
-                if index == _PagePosition.BEFORE:
-                    # insert new page at the original page's index
-                    index = orig_page_idx
-                elif index == _PagePosition.AFTER:
-                    # insert new page after the original page
-                    index = orig_page_idx + 1
-            else:
-                raise ValueError(f"{index!r} requires a reference page; pass the source page to position relative to")
+        """Where a new page goes: `index` itself, or the place the position names.
 
-        return index
+        :raises ValueError: for `AFTER` with no page to go after
+        """
+        if not isinstance(index, _PagePosition):
+            return index
+        if index is _PagePosition.LAST:
+            return len(self.pages)
+        if page is None:
+            raise ValueError(f"{index!r} requires a reference page; pass the source page to position relative to")
+        return self.pages.index(page) + 1
 
     def _add_content_types_override(self, part_name_path: str, content_type: str) -> None:
         ensure_override(self._part_root(self.content_types_xml, "[Content_Types].xml"), part_name_path, content_type)
-
-    def document_rels(self) -> list[Element]:
-        rels_root = self._part_root(self.document_xml_rels, "visio/_rels/document.xml.rels")
-        rels = rels_root.findall(f"{document_rels_namespace}Relationship")
-        return rels
 
     def _style_sheets(self) -> Element:
         # return StyleSheets element from document.xml
         root = self._part_root(self.document_xml, "document.xml")
         return require_element(root.find(f"{namespace}StyleSheets"), "document.xml StyleSheets")
-
-    def _get_styles_name_list(self) -> list[str]:
-        return [s.attrib.get("Name", "") for s in self._style_sheets().findall(f"{namespace}StyleSheet")]
-
-    def _get_style_by_name(self, name: str) -> Element | None:
-        return self._style_sheets().find(f"{namespace}StyleSheet[@Name = '{name}']")
 
     def _get_style_by_id(self, ID: str) -> Element | None:
         return self._style_sheets().find(f"{namespace}StyleSheet[@ID = '{ID}']")
@@ -794,13 +760,6 @@ class Document:
                 vector[position].text = new_title
                 return
 
-    def _get_app_xml_value(self, name: str) -> str | None:
-        """The count HeadingPairs gives `name`, or None if it names no such section."""
-        for section, count in self._heading_pairs_list():
-            if section == name:
-                return count.text or ""
-        return None
-
     def _set_app_xml_value(self, name: str, value: str) -> None:
         for section, count in self._heading_pairs_list():
             if section == name:
@@ -1030,49 +989,6 @@ class Document:
         )
 
         return new_page
-
-    @staticmethod
-    def get_shape_location(shape: Element) -> tuple[float, float]:
-        cell_PinX = require_element(shape.find(f'{namespace}Cell[@N="PinX"]'), "PinX cell")
-        cell_PinY = require_element(shape.find(f'{namespace}Cell[@N="PinY"]'), "PinY cell")
-        x = float(cell_PinX.attrib["V"])
-        y = float(cell_PinY.attrib["V"])
-
-        return x, y
-
-    @staticmethod
-    def set_shape_location(shape: Element, x: float, y: float) -> None:
-        cell_PinX = require_element(shape.find(f'{namespace}Cell[@N="PinX"]'), "PinX cell")
-        cell_PinY = require_element(shape.find(f'{namespace}Cell[@N="PinY"]'), "PinY cell")
-        cell_PinX.attrib["V"] = str(x)
-        cell_PinY.attrib["V"] = str(y)
-
-    @staticmethod
-    def apply_text_context(shapes: Element, context: dict[str, object]) -> None:
-        """Substitute `{{key}}` in the text of every shape under `shapes`.
-
-        For example a shape reading "For {{customer_name}} (c){{year}}" becomes
-        "For codypy.com (c)2020".
-
-        `iter` rather than a hand-rolled descent: a group holds its children in
-        its own `<Shapes>`, and the recursion this replaced never went in there.
-
-        This reads a shape's own `<Text>` and does not resolve master
-        inheritance, because it is handed elements rather than Shapes and has no
-        master to consult. A shape showing its master's text is left alone;
-        `Page.apply_text_context` is the route that resolves it.
-        """
-        for shape in shapes.iter(f"{namespace}Shape"):
-            prefix, text, suffix, trailing = _text_runs_of(shape.find(f"{namespace}Text"))
-            substituted = substitute(text, context)
-            # see Shape.apply_text_filter: visiting a shape that needs no
-            # substitution is not free, so do not write one back unchanged
-            if substituted != text:
-                _write_text(shape, substituted, prefix=prefix, suffix=suffix, trailing=trailing)
-
-    @staticmethod
-    def get_shape_id(shape: Element) -> str:
-        return shape.attrib["ID"]
 
     def increment_sub_shape_ids(self, shape: Shape, page: Page, id_map: dict[str, int] | None = None) -> dict[str, int]:
         """Renumber a shape and everything under it, then remap its formulas.

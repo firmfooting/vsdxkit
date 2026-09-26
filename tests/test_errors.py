@@ -319,12 +319,13 @@ def test_a_required_attribute_missing_on_open_raises_malformed_package_error(vsd
 
 @pytest.mark.allow_invalid_package
 def test_a_page_part_the_relationships_name_and_the_package_lacks_raises_missing_part_error(vsdx_copy, tmp_path):
-    """Fails if `Document._require_part_xml` reports a required part that is not there as a plain `ValueError`.
+    """Fails if a page part the relationships name, and the package lacks, is not a `MissingPartError` naming it.
 
-    #365 made `require_xml` raise `MissingPartError`, and the open path read
-    every required part through it. #371 moved the open path onto the store,
-    through `_require_part_xml`, which kept the old `ValueError`; the merge
-    has to carry the type across to the helper that replaced it.
+    #365 made `require_xml` raise `MissingPartError`. The open path then read
+    its required parts through a helper of its own, which kept the old
+    `ValueError` until it was fixed to match; now it reads them through
+    `PackageStore.require_xml` itself, the one "read an XML part or raise"
+    (#116), so the error names the part.
     """
     source = vsdx_copy("test1.vsdx")
     destination = str(tmp_path / "no-page-part.vsdx")
@@ -334,7 +335,7 @@ def test_a_page_part_the_relationships_name_and_the_package_lacks_raises_missing
             if entry.filename != "visio/pages/page1.xml":
                 rewritten.writestr(entry, original.read(entry.filename))
 
-    with pytest.raises(MissingPartError, match=r"page part"):
+    with pytest.raises(MissingPartError, match=r"^expected XML part not found: /visio/pages/page1\.xml$"):
         Document.open(destination)
 
 

@@ -10,6 +10,7 @@ from vsdxkit import namespace
 from vsdxkit.document import Document
 from vsdxkit.formulae import calc_value
 from vsdxkit.shapes import Shape
+from vsdxkit.xmlio import pretty_print_element
 
 
 def _first_shape_containing(shapes, text: str):
@@ -38,7 +39,7 @@ def test_get_page_child_shapes(filename: str, child_count: int, basedir):
 def test_get_page_size(filename: str, page_index: int, height_width: tuple, basedir):
     vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[page_index]
-    print(Document.pretty_print_element(page._pagesheet_xml))
+    print(pretty_print_element(page._pagesheet_xml))
     print(f"\n w x h={page.width} x {page.height}")
     assert (page.width, page.height) == height_width
 
@@ -56,7 +57,7 @@ def test_set_page_size(filename: str, page_index: int, page_scale: float, tmp_pa
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_set_page_size_{page_index}.vsdx")
     vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[page_index]
-    # print(Document.pretty_print_element(page._pagesheet_xml))
+    # print(pretty_print_element(page._pagesheet_xml))
     print(f"\n w x h={page.width} x {page.height}")
     page_width = page.width * page_scale
     page_height = page.height * page_scale
@@ -127,7 +128,7 @@ def test_get_page_bounds(filename: str, page_index: int, expected_bounds: dict, 
 def test_get_page_name(filename: str, page_index: int, page_name: str, basedir):
     vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[page_index]
-    print(Document.pretty_print_element(page._pagesheet_xml))
+    print(pretty_print_element(page._pagesheet_xml))
     assert page.name == page_name
 
 
@@ -144,7 +145,7 @@ def test_set_page_name(filename: str, page_index: int, page_name: str, tmp_path,
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_set_page_name_{page_name}.vsdx")
     vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[page_index]
-    print(Document.pretty_print_element(page._pagesheet_xml))
+    print(pretty_print_element(page._pagesheet_xml))
     page.name = page_name
     vis.save(out_file)
 

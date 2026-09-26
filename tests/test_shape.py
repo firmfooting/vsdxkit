@@ -10,6 +10,7 @@ from vsdxkit import namespace
 from vsdxkit.document import Document
 from vsdxkit.errors import InvalidOperationError
 from vsdxkit.shapes import DataProperty, Shape
+from vsdxkit.xmlio import pretty_print_element
 
 
 def _first_shape_containing(shapes, text: str):
@@ -375,7 +376,7 @@ def test_set_shape_data_properties(filename: str, page_index: int, shape_name: s
         print(f"prop: lbl:'{prop.label}' name:'{prop.name}': val:'{prop.value}'")
         assert prop.value != property_dict.get(property_label)
         print(f"shape.text={shape.text}")
-        print(vis.pretty_print_element(shape.xml))
+        print(pretty_print_element(shape.xml))
 
     # check each key/value is expected after being set
     for property_label in property_dict:
@@ -562,9 +563,9 @@ def test_get_shape_geometry(filename: str, page_index: str, shape_text: str, exp
 
     coords = [(r.row_type, [(c.name, c.value, c.func) for c in r.cells.values()]) for r in shape.geometry.rows.values()]
     print(f"coords={coords}")
-    print(Document.pretty_print_element(shape.xml))
+    print(pretty_print_element(shape.xml))
     if shape.master_shape:
-        print(Document.pretty_print_element(shape.master_shape.xml))
+        print(pretty_print_element(shape.master_shape.xml))
     assert coords == expected_coords
 
 

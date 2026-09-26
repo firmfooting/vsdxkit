@@ -195,9 +195,7 @@ class MasterCatalog:
                 raise MissingPartError(f"no master part found for relationship {rel_id}")
             part_name = target_part_name(MASTERS_PART, target)
             check_relationship_target(part_name, f"masters.xml.rels Relationship {rel_id!r}", target)
-            tree = self._store.read_xml(part_name)
-            if tree is None:
-                raise MissingPartError(f"expected XML part not found: master part ({part_name})")
+            tree = self._store.require_xml(part_name)
             page = self._make_page(
                 tree,
                 part_name,
@@ -344,9 +342,7 @@ class MasterCatalog:
         masters_root.append(element)
         self._declare(part_name, MASTER_CONTENT_TYPE)
 
-        tree = self._store.read_xml(part_name)
-        if tree is None:
-            raise MissingPartError(f"imported master part {part_name} missing from package")
+        tree = self._store.require_xml(part_name)
         page = self._make_page(tree, part_name, _page_name(element), new_id, relationship.attrib["Id"])
         page.master_unique_id = element.attrib.get("UniqueID")
         page.master_base_id = element.attrib.get("BaseID")
@@ -368,7 +364,4 @@ class MasterCatalog:
         ensure_override(self._required_root(CONTENT_TYPES_PART), part_name, content_type)
 
     def _required_root(self, part_name: str) -> Element:
-        tree = self._store.read_xml(part_name)
-        if tree is None:
-            raise MissingPartError(f"expected XML part not found: {part_name}")
-        return require_element(tree.getroot(), f"{part_name} root")
+        return require_element(self._store.require_xml(part_name).getroot(), f"{part_name} root")

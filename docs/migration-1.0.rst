@@ -743,3 +743,25 @@ which is gone along with its module. Membership is still geometric.
 
 A shape on the edge two lanes share is now in the upper lane only. It used to
 count as a member of both.
+
+Members removed as unused
+-------------------------
+
+These had no caller in the library, repeated a 1.0 name, or did nothing.
+
+``vis.get_shape_location(element)``, ``vis.set_shape_location(element, x, y)``, ``vis.get_shape_id(element)``
+   Gone. Ask the shape: ``shape.x`` and ``shape.y`` read and write its
+   position, and ``shape.ID`` is its ID.
+   ``page.shapes.by_id(element.attrib["ID"])`` finds the shape for an
+   element.
+
+``vis.apply_text_context(element, context)``
+   ``page.apply_text_context(context)``, which also substitutes into text a
+   shape shows from its master.
+
+``vis.pretty_print_element(xml)``
+   ``vsdxkit.xmlio.pretty_print_element(xml)``.
+
+``vis.document_rels()``
+   Internal in 1.0; no public replacement. The document keeps its
+   relationships in step itself.
