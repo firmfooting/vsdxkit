@@ -580,7 +580,7 @@ def test_the_dead_document_members_are_gone():
     """Fails if a member Phase 7 deleted as dead comes back (#116)."""
     import dataclasses
 
-    from vsdxkit.package import XmlPart
+    from vsdxkit._package import XmlPart
     from vsdxkit.pages import _PagePosition
 
     for name in (

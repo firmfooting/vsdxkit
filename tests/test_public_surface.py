@@ -7,6 +7,7 @@ deleted. Each test here fails if one of those names comes back public, or if a
 page a user reads still sends them to one.
 """
 
+import ast
 import importlib.util
 import re
 from pathlib import Path
@@ -38,6 +39,19 @@ PRIVATE_REFERENCE = re.compile(rf"\bvsdxkit\.(?:(?:{'|'.join(PRIVATE_MODULES)})\
 def private_references(text: str) -> list[tuple[int, str]]:
     """Each line of `text` that names a private module or name, with its line number."""
     return [(number, line.strip()) for number, line in enumerate(text.splitlines(), start=1) if PRIVATE_REFERENCE.search(line)]
+
+
+def _top_level_names(module: str) -> set[str]:
+    """The names a module's own source binds at its top level, not the ones it imports."""
+    names = set()
+    for node in ast.parse((SOURCE / f"{module}.py").read_text(encoding="utf-8")).body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, ast.Assign):
+            names |= {target.id for target in node.targets if isinstance(target, ast.Name)}
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names.add(node.target.id)
+    return names
 
 
 @pytest.mark.parametrize("module", PRIVATE_MODULES)
@@ -95,3 +109,13 @@ def test_no_page_a_user_reads_names_a_private_module_or_name():
         for number, line in private_references(page.read_text(encoding="utf-8"))
     ]
     assert found == []
+
+
+@pytest.mark.parametrize(
+    ("module", "public"),
+    [("package", {"PackageLimits"}), ("glue", {"ConnectorOptions", "Glue", "Routing"})],
+)
+def test_a_split_module_defines_only_its_user_api(module, public):
+    """Fails if the store, or the glue planners and records, move back beside the names users import."""
+    assert {name for name in _top_level_names(module) if not name.startswith("_")} == public
+    assert importlib.util.find_spec(f"vsdxkit._{module}") is not None

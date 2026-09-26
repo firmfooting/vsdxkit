@@ -8,9 +8,10 @@ import pytest
 from helpers.broken_package import make_package
 from helpers.package_diff import PackageDiff, PackageDiffLimitError
 
+from vsdxkit._package import _preflight_eocd
 from vsdxkit.document import Document
 from vsdxkit.errors import PackageLimitError
-from vsdxkit.package import PackageLimits, _preflight_eocd
+from vsdxkit.package import PackageLimits
 
 # Most packages here are synthetic archives built to exercise the zip reader:
 # declared entry counts that lie, directories that disagree with their bounds,

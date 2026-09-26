@@ -1,4 +1,4 @@
-"""`vsdxkit.glue` builds connector glue as data, with no document to hand.
+"""`vsdxkit._glue` builds connector glue as data, from the options in `vsdxkit.glue`, with no document to hand.
 
 The formulas pinned here are the ones Visio writes, from
 `tests/fixtures/com_reference`: `_WALKGLUE`/`_XFTRIGGER`/`GlueType=2` from s01
@@ -7,21 +7,19 @@ and s02, the routing codes from s03, and point glue from s07.
 
 import pytest
 
-from vsdxkit.errors import InvalidOperationError
-from vsdxkit.glue import (
+from vsdxkit._glue import (
     CellFreeze,
     CellInherit,
     CellWrite,
     ConnectionRecord,
-    ConnectorOptions,
     EndGlue,
-    Glue,
-    Routing,
     connection_records,
     glue_cells,
     record_element,
     routing_cells,
 )
+from vsdxkit.errors import InvalidOperationError
+from vsdxkit.glue import ConnectorOptions, Glue, Routing
 
 WALKGLUE_BEGIN = "_WALKGLUE(BegTrigger,EndTrigger,WalkPreference)"
 WALKGLUE_END = "_WALKGLUE(EndTrigger,BegTrigger,WalkPreference)"

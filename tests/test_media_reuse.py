@@ -16,9 +16,9 @@ from collections import Counter
 import pytest
 
 from vsdxkit import _media
+from vsdxkit._package import PackageStore
 from vsdxkit.document import Document
 from vsdxkit.glue import Routing
-from vsdxkit.package import PackageStore
 from vsdxkit.shape_kind import ShapeKind
 
 BASE = "test8_simple_connector.vsdx"

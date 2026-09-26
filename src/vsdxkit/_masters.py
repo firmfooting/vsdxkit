@@ -15,6 +15,7 @@ from collections.abc import Callable, Iterable
 from xml.etree.ElementTree import Element
 
 from vsdxkit import namespace, r_namespace
+from vsdxkit._package import PackageStore, check_relationship_target
 from vsdxkit._partnames import (
     CONTENT_TYPES_PART,
     DOCUMENT_PART,
@@ -28,7 +29,6 @@ from vsdxkit._relationships import all_of, append_if_absent, ensure_override
 from vsdxkit._shape_tree import is_connector_element, iter_children, iter_descendants
 from vsdxkit._xmlio import PartTree, require_attribute, require_element
 from vsdxkit.errors import MissingPartError
-from vsdxkit.package import PackageStore, check_relationship_target
 from vsdxkit.pages import Page
 
 MASTERS_RELATIONSHIP = "http://schemas.microsoft.com/visio/2010/relationships/masters"

@@ -9,9 +9,10 @@ import zipfile
 import pytest
 from helpers.broken_package import append_member, understated
 
+from vsdxkit._package import _read_bounded, read_archive_members
 from vsdxkit.document import Document
 from vsdxkit.errors import MalformedPackageError, PackageLimitError
-from vsdxkit.package import PackageLimits, _read_bounded, read_archive_members
+from vsdxkit.package import PackageLimits
 
 # Every test here builds a package designed to be wrong - padding members to
 # trip a count cap, names that escape the archive, payloads that expand out of

@@ -18,9 +18,10 @@ from pathlib import Path
 
 import pytest
 
-import vsdxkit.package as package_module
+import vsdxkit._package as package_module
+from vsdxkit._package import PackageStore
 from vsdxkit.errors import PackageLimitError
-from vsdxkit.package import PackageLimits, PackageStore
+from vsdxkit.package import PackageLimits
 
 BASEDIR = os.path.dirname(os.path.realpath(__file__))
 PAGE_PART = "/visio/pages/page1.xml"
@@ -232,7 +233,7 @@ def test_save_detects_symlink_race_on_temp_file(source, tmp_path, monkeypatch):
     write through the descriptor and check that the path still points to the
     file we wrote.
     """
-    import vsdxkit.package as package_module
+    import vsdxkit._package as package_module
 
     original_mkstemp = tempfile.mkstemp
     victim_file = tmp_path / "victim"

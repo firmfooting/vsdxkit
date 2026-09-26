@@ -16,6 +16,7 @@ else:
 
 
 from vsdxkit import namespace, r_namespace
+from vsdxkit._package import PackageStore, XmlPart
 from vsdxkit._partnames import relationship_target, relationships_part_name, target_part_name
 from vsdxkit._relationships import all_of, append_if_absent
 from vsdxkit._shape_tree import (
@@ -29,7 +30,6 @@ from vsdxkit._xmlio import PartTree, require_element, to_float, xml_value
 from vsdxkit.connectors import _Connect, _float_ends, _glue_connector, _plan_connector
 from vsdxkit.errors import InvalidOperationError, MissingPartError, NotFoundError, PackageError
 from vsdxkit.glue import ConnectorOptions, Glue, Routing
-from vsdxkit.package import PackageStore, XmlPart
 from vsdxkit.shape_kind import ShapeKind
 from vsdxkit.shapes import (
     Connector,

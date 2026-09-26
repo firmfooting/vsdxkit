@@ -20,6 +20,7 @@ from vsdxkit import (
 from vsdxkit._logging_support import get_logger
 from vsdxkit._masters import MasterCatalog
 from vsdxkit._media import MEDIA, _connector_shape, _kind_shape, _style_copy
+from vsdxkit._package import PackageStore, XmlPart, check_relationship_target
 from vsdxkit._partnames import (
     APP_PART,
     CONTENT_TYPES_PART,
@@ -40,7 +41,7 @@ from vsdxkit._xmlio import (
     require_tree,
 )
 from vsdxkit.errors import InvalidOperationError, MalformedPackageError, MissingPartError
-from vsdxkit.package import PackageLimits, PackageStore, XmlPart, check_relationship_target
+from vsdxkit.package import PackageLimits
 from vsdxkit.pages import Page, PageCollection, _DocumentSeam, _PagePosition
 from vsdxkit.shape_kind import ShapeKind
 from vsdxkit.shapes import Connector, Shape

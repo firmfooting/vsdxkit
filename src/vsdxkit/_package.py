@@ -1,0 +1,727 @@
+"""The package as a map from OPC part name to part value.
+
+A `.vsdx` is an OPC package: a zip whose members are *parts*, addressed by a
+part name that begins with a slash -- `/visio/document.xml`, `/_rels/.rels`,
+`/[Content_Types].xml`. The archive spells the same thing without the slash,
+and this library spells it a third way again, as an absolute filesystem path
+under a directory that never existed on disk. Three spellings of one name are
+three chances to look a part up and not find it.
+
+`PackageStore` holds one spelling. A name that is not an OPC part name is
+refused rather than repaired: a name without its leading slash is the archive's
+spelling and belongs to the reader, a name with a backslash in it would
+normalise onto some other part, and a `..` segment addresses something outside
+the package. Each of those is a caller confusing two naming schemes, and the
+useful thing to do with it is say so.
+
+Parts are held as the bytes they arrived as. A part becomes a tree only when
+something asks for its tree, and at that moment the store records the canonical
+hash of the tree it just parsed. That baseline is what lets `read_bytes` answer
+the question a byte-preserving save has to ask of every part: did anything
+actually change? If the live tree still canonicalises to the baseline the part
+reads back as the bytes it arrived as, spelling and all; if it does not, it
+reads back as a fresh serialisation. Parsing a part and writing it straight
+back is not the identity -- ElementTree rewrites the XML declaration, requotes
+attributes and drops namespace declarations the part does not use -- so
+"unchanged" has to mean unchanged, not re-serialised the same way.
+
+The baseline is taken from the tree rather than from the original bytes on
+purpose. A parse loses things a serialisation cannot put back, so a baseline
+read off the bytes would call an untouched part changed and re-serialise it,
+which is the one thing this is here to avoid.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import hashlib
+import os
+import stat
+import tempfile
+import xml.etree.ElementTree as ET
+import zipfile
+import zlib
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Protocol
+
+from vsdxkit._xmlio import PartTree, parse_part, serialise_part
+from vsdxkit.errors import MalformedPackageError, MissingPartError, PackageLimitError
+from vsdxkit.package import PackageLimits
+
+
+def _check_member_names(names: list[str]) -> None:
+    """Reject duplicate and path-like unsafe member names before any state is materialised."""
+    seen: set[str] = set()
+    for name in names:
+        if name in seen:
+            raise PackageLimitError("duplicate_member", f"duplicate package member: {name}")
+        seen.add(name)
+        unsafe = (
+            name.startswith("/")
+            or name.startswith("\\")
+            or ":" in name
+            or "\\" in name
+            or any(part == ".." for part in name.split("/"))
+        )
+        if unsafe:
+            raise PackageLimitError("member_name", f"unsafe package member name: {name!r}")
+
+
+class _MemberReader(Protocol):
+    """Minimal structural type for a readable archive member stream."""
+
+    def read(self, size: int = -1, /) -> bytes: ...
+
+
+def _read_bounded(reader: _MemberReader, declared_size: int, name: str, limits: PackageLimits) -> bytes:
+    """Stream a member through a byte counter so over-delivery cannot bypass the per-member cap."""
+    chunks: list[bytes] = []
+    received = 0
+    while True:
+        chunk = reader.read(1024 * 1024)
+        if not chunk:
+            break
+        received += len(chunk)
+        if received > limits.max_member_size:
+            raise PackageLimitError(
+                "member_size",
+                f"package member '{name}' delivered {received} bytes (declared {declared_size});"
+                f" max_member_size={limits.max_member_size}",
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _preflight_eocd(path: str, limits: PackageLimits) -> None:
+    """Validate the central directory before ZipFile parses it.
+
+    Issue #20 review: the ``ZipFile`` constructor reads the whole central
+    directory and builds a ``ZipInfo`` per entry before any of our checks
+    run, so a crafted archive with millions of tiny entries costs memory
+    proportional to its entry count first.
+
+    Every EOCD/Z64 field is attacker-controlled and ``ZipFile`` reserves
+    the right to reinterpret them, so this preflight derives the
+    central-directory start the same way ``ZipFile`` does — from the EOCD
+    locator's own file position minus the declared directory size — and
+    then walks the real records (headers only, no payload) until one
+    fails to parse, the declared directory is exhausted, or the member
+    cap is exceeded. A falsified count, offset, or ZIP64 sentinel cannot
+    hide entries from the walk.
+    """
+    with open(path, "rb") as handle:
+        handle.seek(0, os.SEEK_END)
+        size = handle.tell()
+        window = min(size, 65536 + 22)  # EOCD comment is at most 64 KiB
+        handle.seek(size - window)
+        tail = handle.read()
+    signature = b"PK\x05\x06"
+    position = tail.rfind(signature)
+    if position == -1:
+        return  # not a zip / truncated: ZipFile will raise its own error
+    eocd_file_position = size - window + position  # absolute offset of the EOCD record
+    declared_entries = int.from_bytes(tail[position + 10 : position + 12], "little")
+    cd_size = int.from_bytes(tail[position + 12 : position + 16], "little")
+    # note: the classic cd_offset field is deliberately not read — the
+    # walk derives its start from the EOCD's own file position, matching
+    # zipfile's concat adjustment, so a falsified offset cannot misdirect
+    # the scan away from the records ZipFile will parse.
+
+    # Detect ZIP64 by its locator (PK\x06\x07), exactly as zipfile does:
+    # the locator may exist regardless of the classic count, and when the
+    # ZIP64 EOCD is found it replaces all classic values.
+    locator = tail.rfind(b"PK\x06\x07")
+    if locator != -1:
+        z64_offset = int.from_bytes(tail[locator + 8 : locator + 16], "little")
+        z64_tail_position = z64_offset - (size - window)
+        if 0 <= z64_tail_position <= len(tail) - 56 and tail[z64_tail_position : z64_tail_position + 4] == b"PK\x06\x06":
+            z64 = z64_tail_position
+            z64_count_this_disk = int.from_bytes(tail[z64 + 24 : z64 + 32], "little")
+            z64_total = int.from_bytes(tail[z64 + 32 : z64 + 40], "little")
+            z64_cd_size = int.from_bytes(tail[z64 + 40 : z64 + 48], "little")
+            z64_cd_offset = int.from_bytes(tail[z64 + 48 : z64 + 56], "little")
+            if z64_count_this_disk != 0xFFFF and z64_total != 0xFFFF:
+                declared_entries = z64_total
+            if z64_cd_size != 0xFFFFFFFF and z64_cd_offset != 0xFFFFFFFF:
+                cd_size = z64_cd_size  # the walk derives its start from cd_size + EOCD position
+
+    if declared_entries > limits.max_members:
+        raise PackageLimitError(
+            "member_count",
+            f"package declares {declared_entries} entries in its central directory; max_members={limits.max_members}",
+        )
+    if cd_size == 0 or cd_size > size:
+        return
+    # Derive the effective directory start the way zipfile's
+    # _EndRecData does: concat-adjust from the EOCD's own location.
+    effective_start = max(eocd_file_position - cd_size, 0)
+    # Walk the real central-directory records: each header is at least 46
+    # bytes and carries its own name/extra/comment lengths. The declared
+    # count is never trusted — including a declared zero, which must not
+    # skip the walk while ZipFile would still parse entries by size — so
+    # records are visited until one fails to parse, the declared
+    # directory is exhausted, or the member cap is exceeded.
+    walked = 0
+    with open(path, "rb") as handle:
+        handle.seek(effective_start)
+        while walked < declared_entries or declared_entries == 0:
+            header = handle.read(46)
+            if len(header) < 46 or header[:4] != b"PK\x01\x02":
+                break  # malformed/short directory: ZipFile will judge it
+            name_len = int.from_bytes(header[28:30], "little")
+            extra_len = int.from_bytes(header[30:32], "little")
+            comment_len = int.from_bytes(header[32:34], "little")
+            record_len = 46 + name_len + extra_len + comment_len
+            if record_len > 46 + 3 * 65535:  # impossible per spec: corrupt
+                break
+            if handle.seek(record_len - 46, 1) > size:
+                break
+            walked += 1
+            if walked > limits.max_members:
+                break  # cap already exceeded; no need to count further
+    if walked > limits.max_members:
+        raise PackageLimitError(
+            "member_count",
+            f"package central directory holds at least {walked} entries; max_members={limits.max_members}",
+        )
+
+
+def read_archive_members(path: str | os.PathLike[str], limits: PackageLimits) -> list[tuple[str, bytes]]:
+    """Every file member of a zip archive, in archive order, within `limits`.
+
+    The end-of-central-directory entry count is checked before ``ZipFile``
+    parses the central directory, and ZipInfo metadata is checked against
+    ``limits`` before any member body is read.
+
+    ``max_total_uncompressed`` is applied to the sizes the central directory
+    declares, which the archive chooses. That bounds what is materialised only
+    because ``ZipFile`` will not hand back more of a member than the member
+    claims to hold: it truncates the output at ``file_size`` and fails the CRC,
+    so a declaration that lies can only make the loader read *less*. That is a
+    dependency on CPython rather than on anything here, and
+    ``test_a_member_cannot_deliver_more_bytes_than_it_declares`` is what holds
+    it. ``_read_bounded`` is the second line, for a reader that is not
+    ``ZipFile``.
+
+    Directory entries are not parts and are dropped, but they are counted
+    against ``max_members`` first: an archive can be padded with them just as
+    cheaply as with files.
+    """
+    source = os.fspath(path)
+    _preflight_eocd(source, limits)
+    try:
+        return _members_within(source, limits)
+    except (zipfile.BadZipFile, UnicodeDecodeError, NotImplementedError) as error:
+        # A file that is not an archive, one whose members do not read back as
+        # they were declared, or one whose central directory claims a member
+        # name is UTF-8 and then is not, is a malformed package rather than a
+        # zipfile problem the caller of this library asked for. The name is
+        # decoded by the `ZipFile` constructor, before `infolist()` runs. So is
+        # a central directory record that needs a zip version above 6.3: the
+        # constructor refuses it with `NotImplementedError`, but the version is
+        # the package's own claim about itself, not a gap in this library.
+        raise MalformedPackageError(f"{source} is not a readable package: {error}") from error
+
+
+def _members_within(source: str, limits: PackageLimits) -> list[tuple[str, bytes]]:
+    """`read_archive_members` without the archive-level error translation."""
+    with zipfile.ZipFile(source, "r") as archive:
+        infos = archive.infolist()
+        if len(infos) > limits.max_members:
+            raise PackageLimitError(
+                "member_count",
+                f"package has {len(infos)} entries (including directories); max_members={limits.max_members}",
+            )
+        _check_member_names([info.filename for info in infos])
+        file_infos = [info for info in infos if info.filename and not info.filename.endswith("/")]
+        declared_total = 0
+        for info in file_infos:
+            declared_total += info.file_size
+            if info.file_size > limits.max_member_size:
+                raise PackageLimitError(
+                    "member_size",
+                    f"package member '{info.filename}' declares {info.file_size} bytes;"
+                    f" max_member_size={limits.max_member_size}",
+                )
+            ratio = info.file_size / max(info.compress_size, 1)
+            if ratio > limits.max_ratio:
+                raise PackageLimitError(
+                    "compression_ratio",
+                    f"package member '{info.filename}' has compression ratio {ratio:.1f}; max_ratio={limits.max_ratio}",
+                )
+        if declared_total > limits.max_total_uncompressed:
+            raise PackageLimitError(
+                "total_size",
+                f"package declares {declared_total} uncompressed bytes;"
+                f" max_total_uncompressed={limits.max_total_uncompressed}",
+            )
+        members: list[tuple[str, bytes]] = []
+        for info in file_infos:
+            members.append((info.filename, _member_bytes(archive, info, limits)))
+    return members
+
+
+def _member_bytes(archive: zipfile.ZipFile, info: zipfile.ZipInfo, limits: PackageLimits) -> bytes:
+    """One member's bytes, or a MalformedPackageError saying it cannot be decoded.
+
+    Every codec reports a stream it cannot decode differently: `zlib.error`
+    from deflate, `lzma.LZMAError` from LZMA, a bare `OSError` from bz2, a
+    `RuntimeError` for an encrypted member, a `NotImplementedError` for a
+    method this build does not have, and whatever the next codec CPython gains
+    chooses. Enumerating them is a list that goes stale one release at a time,
+    so this translates whatever the read raises: inside this block there is
+    nothing but opening a member and reading it, and a member that cannot be
+    read is a malformed package however the codec says so.
+
+    Two exceptions are handed back rather than translated. `PackageLimitError`
+    is raised by `_read_bounded` from inside this very block, and is the
+    library's own answer already. And an `OSError` carrying an `errno` came
+    from the operating system - the disk the archive is on - where saying the
+    package is malformed would be a lie about a file that is fine; a codec's
+    `OSError` carries no `errno`.
+
+    That claim holds only once a member that lies before the archive is
+    refused. `ZipFile` places each header by adding the gap between where the
+    central directory is and where the end record says it is, so an end record
+    that overstates the directory's offset puts a header before byte zero, and
+    seeking there raises `OSError(EINVAL)` about a disk that is fine.
+    """
+    if info.header_offset < 0:
+        raise MalformedPackageError(f"package member {info.filename!r} lies before the start of the archive")
+    try:
+        with archive.open(info, "r") as member_reader:
+            return _read_bounded(member_reader, info.file_size, info.filename, limits)
+    except PackageLimitError:
+        raise
+    except OSError as error:
+        if error.errno is not None:
+            raise
+        raise MalformedPackageError(f"package member {info.filename!r} cannot be read: {error}") from error
+    except MemoryError:
+        # the process ran out, not the package: blaming the archive would let an
+        # `except VsdxError` caller carry on under memory pressure
+        raise
+    except Exception as error:
+        raise MalformedPackageError(f"package member {info.filename!r} cannot be read: {error}") from error
+
+
+# --------------------------------------------------------------------------
+# part names
+# --------------------------------------------------------------------------
+
+# A segment of a part name may not be empty, and `.` and `..` are the relative
+# forms a part name never has: ECMA-376 Part 2 requires a part name to be a
+# sequence of non-empty segments and forbids both dot segments outright.
+#
+# Nothing here splits a segment on its final period. OPC's notion of an
+# extension is "everything after the last period", which makes `.rels` a
+# segment with an extension and no stem -- `posixpath.splitext` reads it as a
+# dotfile with no extension, and any rule built on that reads the relationship
+# part every package has as malformed.
+_REJECTED_SEGMENTS = frozenset({"", ".", ".."})
+
+
+def _checked(name: str) -> str:
+    """The part name, or a ValueError saying which rule it broke.
+
+    Names are never repaired. A caller that hands over `visio/document.xml` has
+    an archive member name and expects the part it addresses; silently
+    prefixing a slash would make the two spellings interchangeable here and
+    incompatible everywhere else.
+    """
+    if not name.startswith("/"):
+        raise ValueError(f"{name!r} is not an OPC part name: a part name begins with '/'")
+    if name.endswith("/"):
+        raise ValueError(f"{name!r} is not an OPC part name: a part name does not end with '/'")
+    if "\\" in name or ":" in name or "\x00" in name:
+        raise ValueError(f"{name!r} is not an OPC part name: a part name cannot contain '\\', ':', or NUL")
+    for segment in name[1:].split("/"):
+        if segment in _REJECTED_SEGMENTS:
+            raise ValueError(f"{name!r} is not an OPC part name: {segment!r} is not a usable segment")
+    return name
+
+
+def check_relationship_target(name: str, subject: str, target: str) -> None:
+    """Refuse a relationship whose `target`, joined into `name`, names no part.
+
+    The store checks every name it is handed and reports a bad one as a plain
+    `ValueError`, because a caller passing it one has made an argument error.
+    A relationship `Target` is not an argument: it is package content, so a
+    `Target` that joins into something that is not a part name (`../page1.xml`,
+    a URI, an empty string) makes the package malformed, and opening it has to
+    say so with `MalformedPackageError`. Only this check is translated. The read
+    that follows goes on raising `MissingPartError` and `PartParseError` as
+    themselves, which wrapping it in `except ValueError` would have swallowed.
+    """
+    try:
+        _checked(name)
+    except ValueError as error:
+        raise MalformedPackageError(f"{subject} targets {target!r}, which is not a part name in this package") from error
+
+
+def _part_name_for_member(member: str) -> str:
+    """The part name an archive member holds: the same string, made absolute.
+
+    Checked against the same rules every read is checked against, and reported
+    as the load-limit failure it is. `_check_member_names` runs first and
+    cheaply, over every entry in the central directory, but it only looks for
+    names that escape the archive; a member called `visio/./document.xml` stays
+    inside it and still has no part name, and a store that held one would list
+    a part that `read_bytes` then refused.
+    """
+    try:
+        return _checked(f"/{member}")
+    except ValueError as error:
+        raise PackageLimitError("member_name", f"unsafe package member name: {member!r} ({error})") from error
+
+
+# --------------------------------------------------------------------------
+# part values
+# --------------------------------------------------------------------------
+
+
+def _canonical_hash_of(data: bytes) -> str:
+    """A hash of what a part means, whatever spelling it arrived in.
+
+    Each option is a decision about what counts as the same part. Comments are
+    kept because a caller can build one that ElementTree's own parser never
+    would; text is not stripped because Visio marks the parts carrying shape
+    text `xml:space="preserve"`, and whitespace in those is content; prefixes
+    are not rewritten because a part that arrives under one prefix and leaves
+    under another is a part libvisio rejects (#60).
+
+    The hash is taken over re-parsed bytes, so it inherits XML's own input
+    normalisation: setting an element's text to `a\r\nb` where it was `a\nb`
+    hashes the same, because no parser can tell those apart on the way back in.
+    Such a change is unrepresentable in the format rather than lost by this.
+    """
+    canonical = ET.canonicalize(xml_data=data, with_comments=True, strip_text=False, rewrite_prefixes=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def canonical_hash(tree: PartTree) -> str:
+    """The canonical hash of the bytes this tree would be written as.
+
+    Comparable with `XmlPart.original_canonical_hash`, which is this same
+    function applied to the tree the moment it was parsed, and that comparison
+    is the only thing it is for. It is not a hash of the tree in the abstract:
+    it goes through `serialise_part`, so the prefixes that part declared are
+    part of what it hashes.
+    """
+    return _canonical_hash_of(serialise_part(tree))
+
+
+@dataclass(frozen=True)
+class BytesPart:
+    """A part nothing has asked the XML of: the bytes it arrived as."""
+
+    data: bytes
+
+    def current_bytes(self) -> bytes:
+        return self.data
+
+
+@dataclass(frozen=True)
+class XmlPart:
+    """A part that has been parsed. The tree is authoritative from then on.
+
+    `original_bytes` and `original_canonical_hash` are the promotion baseline:
+    the bytes the part arrived as, and what the tree parsed out of them meant
+    before anything touched it. Both are None for a part written as a tree,
+    which has no earlier bytes to preserve and is therefore always serialised.
+    """
+
+    tree: PartTree
+    original_bytes: bytes | None
+    original_canonical_hash: str | None
+
+    def current_bytes(self) -> bytes:
+        data = serialise_part(self.tree)
+        if self.original_bytes is not None and _canonical_hash_of(data) == self.original_canonical_hash:
+            return self.original_bytes
+        return data
+
+
+PartValue = BytesPart | XmlPart
+
+
+def _promoted(name: str, part: BytesPart) -> XmlPart:
+    tree = parse_part(part.data, name)
+    return XmlPart(tree=tree, original_bytes=part.data, original_canonical_hash=canonical_hash(tree))
+
+
+# --------------------------------------------------------------------------
+# the store
+# --------------------------------------------------------------------------
+
+
+class PackageStore:
+    """The parts of one package, in archive order, addressed by part name."""
+
+    def __init__(self, source: Path, limits: PackageLimits | None = None) -> None:
+        # The one copy of where this package came from. It is only knowable at
+        # open, and #89's `save(target=None)` writes back over it. Kept as
+        # given: `open()` is what makes it absolute, so a store built there is
+        # unaffected by later working-directory changes, and one constructed
+        # directly with a relative path resolves it at each save.
+        self.source: Path = source
+        # The limits this package was opened with, used during save to ensure
+        # written members satisfy the compression ratio constraints.
+        self._limits = limits if limits is not None else PackageLimits()
+        self._parts: dict[str, PartValue] = {}
+
+    @classmethod
+    def open(cls, source: str | os.PathLike[str], *, limits: PackageLimits | None = None) -> PackageStore:
+        """Read a package off disk. Nothing is parsed as XML here."""
+        # Store the absolute path so that save() calls are not affected by
+        # working directory changes.
+        path = Path(os.path.abspath(source))
+        limits_obj = limits if limits is not None else PackageLimits()
+        store = cls(path, limits_obj)
+        for member, data in read_archive_members(path, limits_obj):
+            store._parts[_part_name_for_member(member)] = BytesPart(data)
+        return store
+
+    def names(self) -> tuple[str, ...]:
+        """Every part name, in the order the archive listed them.
+
+        A part written for the first time goes on the end; a part written over
+        keeps the place it had, so the order a package arrived in survives any
+        number of writes to it.
+        """
+        return tuple(self._parts)
+
+    def part(self, name: str) -> PartValue | None:
+        """The part as it is held right now, without promoting it.
+
+        The promotion baseline made visible. `read_bytes` is what consumes it
+        in anger -- it is the whole of the write-original-or-serialise decision
+        -- so this is here for the caller that needs to see whether a part has
+        been parsed at all, and what it arrived as.
+        """
+        return self._parts.get(_checked(name))
+
+    def read_bytes(self, name: str) -> bytes | None:
+        """The bytes this part would be written as now, or None if it is absent."""
+        value = self._parts.get(_checked(name))
+        return None if value is None else value.current_bytes()
+
+    def write_bytes(self, name: str, data: bytes) -> None:
+        """Replace a part with these bytes, discarding any tree it had."""
+        self._parts[_checked(name)] = BytesPart(data)
+
+    def read_xml(self, name: str) -> PartTree | None:
+        """This part's tree, promoting it on first ask, or None if it is absent."""
+        checked = _checked(name)
+        value = self._parts.get(checked)
+        if value is None:
+            return None
+        if isinstance(value, XmlPart):
+            return value.tree
+        promoted = _promoted(checked, value)
+        self._parts[checked] = promoted
+        return promoted.tree
+
+    def require_xml(self, name: str) -> PartTree:
+        """This part's tree, or a MissingPartError naming the part that is not there."""
+        tree = self.read_xml(name)
+        if tree is None:
+            raise MissingPartError(f"expected XML part not found: {name}")
+        return tree
+
+    def write_xml(self, name: str, tree: PartTree) -> None:
+        """Replace a part with this tree.
+
+        A part written this way has no promotion baseline, so it is serialised
+        rather than copied: a caller that went to the trouble of writing a tree
+        is telling the store the part changed.
+        """
+        self._parts[_checked(name)] = XmlPart(tree=tree, original_bytes=None, original_canonical_hash=None)
+
+    def replace_tree(self, name: str, tree: PartTree) -> None:
+        """Make `tree` a part's tree, keeping the bytes the part arrived as to compare it against.
+
+        `write_xml` is for a part that is new, or that the caller means to
+        rewrite. This is for a part rebuilt wholesale -- a rendered template, a
+        page assigned through `Page.xml` -- where the rebuild may mean exactly
+        what the part already meant. Carrying the held part's baseline across
+        lets the save ask the one question it asks of every part: if the new
+        tree canonicalises to what the part arrived as, the part is written as
+        those bytes, and a rebuild that changed nothing changes nothing on disk.
+
+        A part with no baseline -- absent, never parsed, or itself written as
+        a tree -- is written the way `write_xml` writes it.
+        """
+        checked = _checked(name)
+        held = self._parts.get(checked)
+        if isinstance(held, XmlPart):
+            self._parts[checked] = XmlPart(
+                tree=tree, original_bytes=held.original_bytes, original_canonical_hash=held.original_canonical_hash
+            )
+        else:
+            self._parts[checked] = XmlPart(tree=tree, original_bytes=None, original_canonical_hash=None)
+
+    def remove(self, name: str) -> None:
+        """Take a part out of the package, or raise KeyError if it is not in it.
+
+        A KeyError rather than a quiet no-op: the callers are removing a page
+        or a relationship part they believe is there, and one that is not is a
+        package the caller has misread.
+        """
+        checked = _checked(name)
+        if checked not in self._parts:
+            raise KeyError(name)
+        del self._parts[checked]
+
+    def save(self, target: str | os.PathLike[str] | None = None) -> Path:
+        """Write the package to `target`, or back over the source, and say where.
+
+        The only archive writer. Every part goes out once, in `names()` order,
+        as `read_bytes` gives it -- which is the original bytes for any part
+        nothing changed, promoted or not. The archive is built beside the
+        target and moved over it, so a failure part-way leaves the target as
+        it was; the temporary file takes the target's mode, or the source's
+        when the target is new, wherever the platform can set it through the
+        open descriptor (see below).
+
+        Saving elsewhere does not make elsewhere the source. A later `save()`
+        with no target still writes where the package was opened from.
+
+        Each member is written with ZIP_DEFLATED compression unless deflating it
+        would exceed the compression ratio limit, in which case it is stored
+        uncompressed. This ensures that the written package satisfies the same
+        limits that `open()` enforces on arrival, so the writer's output can be
+        read back without rejection.
+
+        The package is validated against the limits it was opened with before
+        any file is created or modified. A member's name is checked against
+        zipfile's own transformations to ensure the written archive can be read
+        back as written.
+
+        The temporary file goes through a fixed sequence. `mkstemp` creates it
+        and the archive is written through that descriptor, never by reopening
+        the path. While the descriptor is still open its identity is taken with
+        `fstat`, and the mode is applied with `fchmod` where the platform has
+        it. The descriptor is then closed, because Windows will not rename a
+        file while any handle to it is open. Only then is the path checked with
+        `lstat` against the identity taken through the descriptor, so a
+        temporary entry swapped for a symlink or another file after creation
+        is refused rather than moved over the target. The rename follows the
+        check directly.
+
+        Where there is no `fchmod` (Windows before Python 3.13) the mode is not
+        copied at all. Applying it by path after the close would change
+        whatever the temporary entry had been swapped for, and the identity
+        check can refuse the rename but cannot undo that chmod. On those
+        platforms the only mode bit that means anything is read-only, so what
+        is given up is small: a new target there is created with default
+        permissions instead of inheriting the source's read-only bit.
+
+        A window remains between that check and the rename: someone with write
+        access to the directory can swap the temporary entry in that interval,
+        and nothing short of `renameat2` (which checks and renames in one step)
+        closes it. The mode is decided before anything is written, from the
+        destination as it stood before the save, so the rename cannot make the
+        destination its own mode source.
+        """
+        # Use self.source directly (already absolute from open()) when target is None,
+        # avoiding working-directory-dependent behavior.
+        destination = Path(self.source if target is None else os.path.abspath(target))
+
+        # Gather all member bytes and validate against load limits before creating any files.
+        # This prevents leaving the destination or directory in an inconsistent state.
+        members_bytes: list[tuple[str, bytes]] = []
+        total_uncompressed = 0
+        for name in self.names():
+            data = self.read_bytes(name)
+            assert data is not None  # names() lists only parts that are present
+            members_bytes.append((name, data))
+            total_uncompressed += len(data)
+
+        # The limit messages below mirror read_archive_members word for word on
+        # purpose: a limit is one rule whichever side of the archive trips it, and
+        # a caller matching on the message should not have to know which did.
+        # The member names are the archive spelling for the same reason.
+        if len(members_bytes) > self._limits.max_members:
+            raise PackageLimitError(
+                "member_count",
+                f"package has {len(members_bytes)} entries (including directories); max_members={self._limits.max_members}",
+            )
+        for name, data in members_bytes:
+            if len(data) > self._limits.max_member_size:
+                raise PackageLimitError(
+                    "member_size",
+                    f"package member '{name[1:]}' declares {len(data)} bytes; max_member_size={self._limits.max_member_size}",
+                )
+        if total_uncompressed > self._limits.max_total_uncompressed:
+            raise PackageLimitError(
+                "total_size",
+                f"package declares {total_uncompressed} uncompressed bytes;"
+                f" max_total_uncompressed={self._limits.max_total_uncompressed}",
+            )
+
+        # Check that zipfile will not transform any member names.
+        for name, _data in members_bytes:
+            archive_name = name[1:]  # Remove leading slash for archive spelling
+            if zipfile.ZipInfo(archive_name).filename != archive_name:
+                raise ValueError(
+                    f"part name {name!r} would be transformed by zipfile to {zipfile.ZipInfo(archive_name).filename!r}"
+                )
+
+        # Decide the mode before anything is written. Once the rename has run the
+        # destination always exists, so asking afterwards would read the new
+        # file's own mode back and a new target would lose the source's.
+        #
+        # The mode goes on only through the open descriptor, so it is decided only
+        # where fchmod exists. Without it (Windows before Python 3.13) the mode is
+        # not copied: a chmod by path could land on whatever the temporary entry
+        # has been swapped for, and the identity check below can refuse the rename
+        # but cannot undo that side effect. Read-only is the only mode bit that
+        # means anything there, so a new target just misses the source's read-only.
+        mode: int | None = None
+        if hasattr(os, "fchmod"):
+            mode_source = destination if destination.exists() else self.source
+            if mode_source.exists():
+                mode = stat.S_IMODE(os.stat(mode_source).st_mode)
+
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        fd, temporary = tempfile.mkstemp(prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent)
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                # The ratio a member is stored at is the stricter of the opened limit
+                # and the default one, unlike the size and count checks above. A ratio
+                # violation is always avoidable -- storing a member makes its ratio 1 --
+                # so the writer defers to the strictest reader likely to open the file,
+                # and a store opened with a permissive max_ratio still writes a package
+                # a default reader accepts. A size violation cannot be avoided short of
+                # refusing to save, so for those the caller's own raised limits stand.
+                store_above = min(self._limits.max_ratio, PackageLimits().max_ratio)
+                with zipfile.ZipFile(handle, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                    for name, data in members_bytes:
+                        # Measure deflated size the way zipfile does: zlib with window=-15
+                        # to skip the zlib header/trailer. If the ratio would exceed the
+                        # limit, store the member uncompressed instead.
+                        compressor = zlib.compressobj(zlib.Z_DEFAULT_COMPRESSION, zlib.DEFLATED, -15)
+                        compressed = compressor.compress(data) + compressor.flush()
+                        ratio = len(data) / max(len(compressed), 1)
+                        if ratio > store_above:
+                            archive.writestr(name[1:], data, compress_type=zipfile.ZIP_STORED)
+                        else:
+                            archive.writestr(name[1:], data)
+                # The identity of the file actually written, taken through the
+                # descriptor so no path lookup can substitute another file.
+                kept = os.fstat(handle.fileno())
+                # mode is only ever set where fchmod exists; hasattr repeats that
+                # so type checkers targeting Windows before 3.13 accept the call.
+                if mode is not None and hasattr(os, "fchmod"):
+                    os.fchmod(handle.fileno(), mode)
+            # The handle is closed from here on: Windows refuses to rename a file
+            # that has an open handle, and mkstemp does not share delete access.
+            if not os.path.samestat(kept, os.lstat(temporary)):
+                raise OSError(f"{temporary} was replaced while the package was being written to it")
+            os.replace(temporary, destination)
+        finally:
+            with contextlib.suppress(FileNotFoundError):
+                os.unlink(temporary)
+        return destination

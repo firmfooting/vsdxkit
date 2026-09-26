@@ -5,20 +5,19 @@ from collections.abc import Iterable
 from typing import Protocol, TypeAlias
 from xml.etree.ElementTree import Element
 
-from vsdxkit.errors import InvalidOperationError, MalformedPackageError
-from vsdxkit.glue import (
+from vsdxkit._glue import (
     CellChange,
     CellFreeze,
     CellInherit,
     CellWrite,
-    ConnectorOptions,
     EndGlue,
-    Glue,
     connection_records,
     glue_cells,
     record_element,
     routing_cells,
 )
+from vsdxkit.errors import InvalidOperationError, MalformedPackageError
+from vsdxkit.glue import ConnectorOptions, Glue
 
 
 class _CellXml(Protocol):

@@ -11,10 +11,10 @@ import pytest
 from helpers.broken_package import rewritten
 
 from vsdxkit import namespace, r_namespace
+from vsdxkit._package import XmlPart
 from vsdxkit._xmlio import serialise_part
 from vsdxkit.document import Document
 from vsdxkit.errors import MalformedPackageError, PartParseError, VsdxError
-from vsdxkit.package import XmlPart
 
 
 def test_the_page_tree_is_the_stores_tree(vsdx_copy):
