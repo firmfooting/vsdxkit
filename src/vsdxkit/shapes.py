@@ -28,7 +28,7 @@ from vsdxkit.geometry import Geometry, GeometryCell
 from vsdxkit.glue import ConnectorOptions, Glue, Routing
 from vsdxkit.shape_kind import ShapeKind
 
-logger: Logger = get_logger(__name__)
+_logger: Logger = get_logger(__name__)
 
 
 class PageView(Protocol):
@@ -161,7 +161,7 @@ class _PageSeam(PageView, _ConnectorPage, Protocol):
     def _renumber_shape_ids(self, subtree: Element, id_map: dict[str, int] | None = None) -> dict[str, int]: ...
 
 
-def is_connector(shape: Shape) -> bool:
+def _is_connector(shape: Shape) -> bool:
     """Whether `shape` is 1-D, reading the master it inherits from as well as its own cells."""
     return _is_one_d(shape.xml, shape._parent, shape._page)
 
@@ -284,7 +284,7 @@ def _text_runs_of(text_element: Element | None) -> tuple[list[Element], str, lis
     return children[:start], content, suffix, trailing
 
 
-def substitute(text: str, context: dict[str, object]) -> str:
+def _substitute(text: str, context: dict[str, object]) -> str:
     """Replace every `{{key}}` in `text` with its value from `context`."""
     for key, value in context.items():
         text = text.replace("{{" + key + "}}", str(value))
@@ -436,7 +436,7 @@ class DataProperty(InheritedRow, ShapePart):
         # shape is refused, as a write to the shape itself is
         return self.shape
 
-    def inherited_by(self, shape: Shape) -> DataProperty:
+    def _inherited_by(self, shape: Shape) -> DataProperty:
         """This property as an instance of the master sees it, marked inherited.
 
         The copy reads the master's Row element, so label, type and prompt are
@@ -475,7 +475,7 @@ class DataProperty(InheritedRow, ShapePart):
                 row.append(copy.deepcopy(label_cell))
         section.append(row)
         self.xml = row
-        logger.debug("materialised inherited data property %r on shape %s", self.label, self.shape.ID)
+        _logger.debug("materialised inherited data property %r on shape %s", self.label, self.shape.ID)
 
     @property
     def value(self) -> str | None:
@@ -976,7 +976,7 @@ class Shape:
         # inherited property reaches what the master hands back
         master = self.master_shape
         properties: dict[str, DataProperty] = (
-            {label: prop.inherited_by(self) for label, prop in master.data_properties.items()} if master is not None else {}
+            {label: prop._inherited_by(self) for label, prop in master.data_properties.items()} if master is not None else {}
         )
         for prop in property_rows:
             data_prop = DataProperty(xml=prop, shape=self)
@@ -1096,7 +1096,7 @@ class Shape:
         if master is not None:
             master_cell_xml = master.xml.find(f'{namespace}Cell[@N="{name}"]')
             if master_cell_xml is not None:
-                logger.debug("creating cell from: %s", ET.tostring(master_cell_xml))
+                _logger.debug("creating cell from: %s", ET.tostring(master_cell_xml))
                 cell_xml = ET.fromstring(ET.tostring(master_cell_xml))
         if cell_xml is None:
             cell_xml = make_cell_element(name)
@@ -1620,7 +1620,7 @@ class Shape:
         # a shape whose text has nothing to substitute never reaches the text
         # setter, so its guard alone would let this one through
         self._require_attached("Shape.apply_text_filter()")
-        self._rewrite_texts(lambda text: substitute(text, context))
+        self._rewrite_texts(lambda text: _substitute(text, context))
 
     def find_replace(self, old: str, new: str) -> None:
         """Replace `old` with `new` in the text of this shape and every shape inside it."""

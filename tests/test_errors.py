@@ -813,7 +813,7 @@ def test_a_duplicate_geometry_row_index_raises_invalid_operation(vsdx_copy):
     assert geometry is not None
     existing = geometry.rows[sorted(geometry.rows)[0]]
     with pytest.raises(InvalidOperationError, match="already exists"):
-        existing.create_row_xml(existing.row_type, str(existing.index))
+        existing._create_row_xml(existing.row_type, str(existing.index))
 
 
 def test_saving_an_empty_package_raises_invalid_operation(vsdx_copy, tmp_path):

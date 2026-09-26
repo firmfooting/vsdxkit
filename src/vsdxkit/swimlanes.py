@@ -24,7 +24,7 @@ from typing import Protocol
 
 from vsdxkit import namespace
 from vsdxkit.errors import InvalidOperationError
-from vsdxkit.shapes import PageView, Shape, is_connector
+from vsdxkit.shapes import PageView, Shape, _is_connector
 
 
 class _DiagramPage(PageView, Protocol):
@@ -50,13 +50,13 @@ _EDGE_TOLERANCE = 1e-9
 ROW_HEADING_TEXT = "visHeadingText"
 ROW_SWIMLANE_GUID = "SwimlaneListGUID"
 
-CONTAINER_NAME = "CFF Container"
+_CONTAINER_NAME = "CFF Container"
 _SWIMLANE_LIST_NAME = "Swimlane List"
 
 _LANE_NAME = "Swimlane"
 
 # top-level shape NameU values of the CFF machinery (excluded from membership)
-_CFF_MACHINERY = (CONTAINER_NAME, _SWIMLANE_LIST_NAME, "Phase List", "Separator", _LANE_NAME)
+_CFF_MACHINERY = (_CONTAINER_NAME, _SWIMLANE_LIST_NAME, "Phase List", "Separator", _LANE_NAME)
 
 
 def _named(shape: Shape, name: str) -> bool:
@@ -72,7 +72,7 @@ def _named(shape: Shape, name: str) -> bool:
 
 def _is_member(shape: Shape) -> bool:
     """Whether the top-level shape is part of the flowchart: not the CFF machinery, a lane or a connector."""
-    return not any(_named(shape, name) for name in _CFF_MACHINERY) and not is_connector(shape)
+    return not any(_named(shape, name) for name in _CFF_MACHINERY) and not _is_connector(shape)
 
 
 def _user_row(shape: Shape, name: str) -> ET.Element | None:
@@ -148,7 +148,7 @@ def _diagram_on(page: _DiagramPage) -> SwimlaneDiagram | None:
     """
     if not page._attached():
         raise InvalidOperationError(f"page {page.name!r} is no longer in its document, so it has no swimlane diagram")
-    containers = [shape for shape in page.children if _named(shape, CONTAINER_NAME)]
+    containers = [shape for shape in page.children if _named(shape, _CONTAINER_NAME)]
     if len(containers) > 1:
         ids = ", ".join(str(shape.ID) for shape in containers)
         raise InvalidOperationError(f"page {page.name!r} has {len(containers)} CFF containers (shapes {ids}), not one")

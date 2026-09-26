@@ -47,7 +47,7 @@ from vsdxkit.shape_kind import ShapeKind
 from vsdxkit.shapes import Connector, Shape
 from vsdxkit.templating import render_document
 
-logger: Logger = get_logger(__name__)
+_logger: Logger = get_logger(__name__)
 
 register_namespaces()
 
@@ -62,9 +62,9 @@ def _page_part_taken(taken: set[str], filename: str) -> bool:
 # a consumer whether a package carries macros. Visio reports a package whose
 # extension and content type disagree as corrupt, so the two must be kept in
 # step on save.
-MACRO_ENABLED_CONTENT_TYPE = "application/vnd.ms-visio.drawing.macroEnabled.main+xml"
-DRAWING_CONTENT_TYPE = "application/vnd.ms-visio.drawing.main+xml"
-_SUFFIX_BY_CONTENT_TYPE = {MACRO_ENABLED_CONTENT_TYPE: ".vsdm", DRAWING_CONTENT_TYPE: ".vsdx"}
+_MACRO_ENABLED_CONTENT_TYPE = "application/vnd.ms-visio.drawing.macroEnabled.main+xml"
+_DRAWING_CONTENT_TYPE = "application/vnd.ms-visio.drawing.main+xml"
+_SUFFIX_BY_CONTENT_TYPE = {_MACRO_ENABLED_CONTENT_TYPE: ".vsdm", _DRAWING_CONTENT_TYPE: ".vsdx"}
 
 
 class Document:
@@ -86,9 +86,9 @@ class Document:
         self._load_pages()
         self._masters = MasterCatalog(self._package, self._master_page)
         self._masters.load()
-        if logger.isEnabledFor(logging.DEBUG):
+        if _logger.isEnabledFor(logging.DEBUG):
             for master in self._masters.pages:
-                logger.debug("Master(%s, id=%s)\n%s", master._filename, master._page_id, pretty_print_element(master.xml))
+                _logger.debug("Master(%s, id=%s)\n%s", master._filename, master._page_id, pretty_print_element(master.xml))
 
     @classmethod
     def open(
@@ -106,7 +106,7 @@ class Document:
         :raises TypeError: if ``source`` does not name a ``.vsdx`` or ``.vsdm`` file
         """
         filename = os.fspath(source)
-        logger.debug("Document.open(%s)", filename)
+        _logger.debug("Document.open(%s)", filename)
         suffix = filename.rsplit(".", 1)[-1]
         if suffix.lower() not in ("vsdx", "vsdm"):
             raise TypeError(f"Invalid File Type:{suffix}")
@@ -300,8 +300,8 @@ class Document:
         rels_name = relationships_part_name(PAGES_PART)
         pages_xml_rels = self._package.require_xml(rels_name)
         rels = require_element(pages_xml_rels.getroot(), "pages.xml.rels")
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug("Relationships(%s)\n%s", rels_name, pretty_print_element(rels))
+        if _logger.isEnabledFor(logging.DEBUG):
+            _logger.debug("Relationships(%s)\n%s", rels_name, pretty_print_element(rels))
         relid_page_dict = {}
 
         for rel in rels:
@@ -312,8 +312,8 @@ class Document:
         # pages.xml contains Page name, width, height, mapped to Id
         pages_xml = self._package.require_xml(PAGES_PART)
         pages = require_element(pages_xml.getroot(), "pages.xml")
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug("Pages(%s)\n%s", PAGES_PART, pretty_print_element(pages))
+        if _logger.isEnabledFor(logging.DEBUG):
+            _logger.debug("Pages(%s)\n%s", PAGES_PART, pretty_print_element(pages))
 
         for page in pages:  # type: Element
             rel_id = require_attribute(
@@ -340,8 +340,8 @@ class Document:
                 new_page._rels_tree = self._package.read_xml(page_rels_path)
             self._pages.append(new_page)
 
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug("Page(%s)\n%s", new_page._filename, pretty_print_element(new_page.xml))
+            if _logger.isEnabledFor(logging.DEBUG):
+                _logger.debug("Page(%s)\n%s", new_page._filename, pretty_print_element(new_page.xml))
 
         # `_content_types_xml`, `_app_xml`, `_document_xml` and
         # `_document_xml_rels` are store-backed properties, but promoted here
@@ -758,7 +758,7 @@ class Document:
 
     def _remove_page_from_app_xml(self, page_name: str) -> None:
         if self._app_xml is not None:
-            logger.debug("_remove_page_from_app_xml()")
+            _logger.debug("_remove_page_from_app_xml()")
             self._titles_of_parts_remove(page_name, Document._PAGES)
 
     def _rename_page_in_app_xml(self, old_page_name: str, new_page_name: str) -> None:
@@ -979,7 +979,7 @@ class Document:
     @property
     def is_macro_enabled(self) -> bool:
         """Whether this package declares the macro-enabled main document part."""
-        return self._main_part_content_type() == MACRO_ENABLED_CONTENT_TYPE
+        return self._main_part_content_type() == _MACRO_ENABLED_CONTENT_TYPE
 
     def _check_destination_kind(self, filename: str) -> str | None:
         """Refuse a filename whose Visio extension contradicts the package kind.
@@ -1002,12 +1002,12 @@ class Document:
         if macro_enabled:
             raise InvalidOperationError(
                 f"cannot save a macro-enabled package as {filename!r}: it declares "
-                f"{MACRO_ENABLED_CONTENT_TYPE} and still contains its vbaProject part, so it must be saved "
+                f"{_MACRO_ENABLED_CONTENT_TYPE} and still contains its vbaProject part, so it must be saved "
                 "with a .vsdm extension"
             )
         raise InvalidOperationError(
             f"cannot save {filename!r}: the .vsdm extension is for macro-enabled packages, and this "
-            f"package declares {self._main_part_content_type() or DRAWING_CONTENT_TYPE}"
+            f"package declares {self._main_part_content_type() or _DRAWING_CONTENT_TYPE}"
         )
 
     def _destination_filename(self, new_filename: str) -> str:

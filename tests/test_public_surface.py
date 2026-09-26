@@ -9,10 +9,20 @@ page a user reads still sends them to one.
 
 import ast
 import importlib.util
+import inspect
 import re
 from pathlib import Path
 
 import pytest
+
+import vsdxkit.document
+import vsdxkit.geometry
+import vsdxkit.pages
+import vsdxkit.shapes
+import vsdxkit.swimlanes
+import vsdxkit.templating
+from vsdxkit.geometry import GeometryCell, GeometryRow
+from vsdxkit.shapes import DataProperty
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src" / "vsdxkit"
@@ -53,6 +63,11 @@ def _top_level_names(module: str) -> set[str]:
         elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
             names.add(node.target.id)
     return names
+
+
+def _has(owner: object, name: str) -> bool:
+    """Whether `owner` has `name`, as an attribute or as an annotation-only class member."""
+    return hasattr(owner, name) or (inspect.isclass(owner) and name in inspect.get_annotations(owner))
 
 
 @pytest.mark.parametrize("module", PRIVATE_MODULES)
@@ -128,3 +143,31 @@ def test_only_the_root_defines_the_visio_namespace():
         path.name for path in SOURCE.glob("*.py") if path.name != "__init__.py" and "namespace" in _top_level_names(path.stem)
     )
     assert copies == []
+
+
+@pytest.mark.parametrize(
+    ("owner", "name"),
+    [
+        (vsdxkit.document, "logger"),
+        (vsdxkit.geometry, "logger"),
+        (vsdxkit.shapes, "logger"),
+        (vsdxkit.templating, "logger"),
+        (vsdxkit.geometry, "GeometryOwner"),
+        (GeometryRow, "create_row_xml"),
+        (GeometryRow, "inherited_by"),
+        (GeometryCell, "create_cell_xml"),
+        (GeometryCell, "parent_xml"),
+        (DataProperty, "inherited_by"),
+        (vsdxkit.shapes, "is_connector"),
+        (vsdxkit.shapes, "substitute"),
+        (vsdxkit.pages, "PageLifecycle"),
+        (vsdxkit.swimlanes, "CONTAINER_NAME"),
+        (vsdxkit.document, "DRAWING_CONTENT_TYPE"),
+        (vsdxkit.document, "MACRO_ENABLED_CONTENT_TYPE"),
+    ],
+    ids=lambda value: getattr(value, "__name__", value),
+)
+def test_an_internal_name_in_a_public_module_is_private(owner, name):
+    """Fails if an internal of a public module or class loses its leading underscore."""
+    assert not _has(owner, name)
+    assert _has(owner, f"_{name}")

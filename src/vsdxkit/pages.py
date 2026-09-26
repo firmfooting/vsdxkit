@@ -36,10 +36,10 @@ from vsdxkit.shapes import (
     PageView,
     Shape,
     ShapeCollection,
+    _is_connector,
     _PageSeam,
     _wrap_children,
     _wrap_descendants,
-    is_connector,
 )
 from vsdxkit.swimlanes import SwimlaneDiagram, _diagram_on
 
@@ -751,7 +751,7 @@ class Page:
         else:
             kinds = ", ".join(f"ShapeKind.{kind.name}" for kind in ShapeKind)
             raise TypeError(f"create_shape takes a Shape or one of {kinds}, not {kind_or_prototype!r}")
-        one_d = is_connector(source)
+        one_d = _is_connector(source)
         if one_d and height is not None:
             raise InvalidOperationError(f"shape ID {source.ID} is 1-D, so it has no height to set; its width is its length")
         # what the copy's formulas may no longer name: the groups the prototype
@@ -798,7 +798,7 @@ class Page:
             # the master too: a connector may inherit BeginX from it, and one
             # missed here survives as a detached line whose glue record has just
             # been removed
-            if str(s.ID) in connector_ids and is_connector(s):
+            if str(s.ID) in connector_ids and _is_connector(s):
                 doomed.add(s)
         for s in doomed:
             self._remove_shape_xml(s)
@@ -875,7 +875,7 @@ class Page:
         return {shape_id for element in iter_descendants(root) if (shape_id := element.attrib.get("ID"))}
 
 
-class PageLifecycle(Protocol):
+class _PageLifecycle(Protocol):
     """What a :class:`PageCollection` needs from the document that owns its pages."""
 
     def _add_page_at(self, index: int, name: str | None = None) -> Page: ...
@@ -893,7 +893,7 @@ class PageCollection(Sequence[Page]):
     removed through any route is seen by a collection taken before.
     """
 
-    def __init__(self, pages: list[Page], lifecycle: PageLifecycle) -> None:
+    def __init__(self, pages: list[Page], lifecycle: _PageLifecycle) -> None:
         self._pages = pages
         self._lifecycle = lifecycle
 

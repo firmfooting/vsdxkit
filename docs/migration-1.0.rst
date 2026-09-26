@@ -268,8 +268,8 @@ OPC name, and the file-system view of 0.x is gone.
    already return one.
 
 ``vsdx.vsdxfile.DRAWING_CONTENT_TYPE``, ``vsdxfile.MACRO_ENABLED_CONTENT_TYPE``
-   ``vsdxkit.document.DRAWING_CONTENT_TYPE`` and
-   ``vsdxkit.document.MACRO_ENABLED_CONTENT_TYPE``.
+   Internal in 1.0. ``document.is_macro_enabled`` answers the question they
+   served: whether the document is a macro-enabled ``.vsdm``.
 
 ``vsdx.vsdxfile.PackageLimits``
    ``vsdxkit.package.PackageLimits``.
@@ -955,3 +955,19 @@ renamed with a leading underscore; nothing in them is supported.
    ``from vsdxkit import namespace``, the constant both were copies of. The
    ``connectors`` module is internal in 1.0: with its copy gone it has no
    public name left, and a connector is a :class:`vsdxkit.shapes.Connector`.
+
+``GeometryRow.create_row_xml``, ``GeometryCell.create_cell_xml``, ``GeometryCell.parent_xml``
+   Internal in 1.0. A row or a cell creates its element when it is made,
+   and calling either method again added a second one. ``cell.parent.xml``
+   is the element ``parent_xml`` held.
+
+``GeometryRow.inherited_by``, ``DataProperty.inherited_by``
+   Internal in 1.0. They were the step that hands a master's row to an
+   instance, which ``shape.geometry`` and ``shape.data_properties`` take
+   themselves. ``row.make_local()`` gives the shape a row of its own.
+
+``vsdx.shapes.substitute``
+   Internal in 1.0. ``page.apply_text_context(context)`` substitutes a
+   context into the text of every shape on a page, and
+   ``shape.apply_text_filter(context)`` into one shape and the shapes inside
+   it.
