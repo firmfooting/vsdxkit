@@ -230,7 +230,7 @@ class Geometry(ShapePart):
 
 
 class GeometryRow(InheritedRow, ShapePart):
-    """A row with type(T) and index(IX), each containing a list of Cells"""
+    """A row with type(T) and index(IX), each containing its Cells by name"""
 
     """See: https://docs.microsoft.com/en-us/office/client-developer/visio/row-element-geometry-sectionvisio-xml """
 

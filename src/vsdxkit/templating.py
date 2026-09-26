@@ -232,8 +232,8 @@ def _open_block(shape: Shape, previous_shape: Shape | None) -> str | None:
     returned so the copies a loop makes, which all carry it, can be given IDs
     of their own.
     """
-    # update a Shapes tag where text looks like a jinja {% for xxxx %} loop
-    # move text to start of Shapes tag and add {% endfor %} at end of tag
+    # wrap this shape in each jinja {% for xxxx %} loop its text holds: move
+    # the statement to just before the shape and add {% endfor %} just after it
     text = shape.text
 
     # use regex to find all loops
@@ -241,7 +241,7 @@ def _open_block(shape: Shape, previous_shape: Shape | None) -> str | None:
 
     for loop in jinja_loops:
         jinja_loop_text = f"{{% for {loop} %}}"
-        # move the for loop to start of shapes element (just before first Shape element)
+        # move the for loop to just before this shape: the previous shape's tail, or the start of the Shapes element
         if previous_shape:
             if previous_shape.xml.tail:
                 previous_shape.xml.tail += jinja_loop_text
@@ -255,7 +255,7 @@ def _open_block(shape: Shape, previous_shape: Shape | None) -> str | None:
                 container.text = (container.text or "") + jinja_loop_text
         shape.text = (shape.text or "").replace(jinja_loop_text, "")  # remove jinja loop from <Text> tag in element
 
-        # add closing 'endfor' to just inside the shapes element, after last shape
+        # add closing 'endfor' just after this shape, on its tail
         if shape.xml.tail:  # extend or set text at end of Shape element
             shape.xml.tail += "{% endfor %}"
         else:
@@ -265,7 +265,7 @@ def _open_block(shape: Shape, previous_shape: Shape | None) -> str | None:
     # jinja_show_if - translate non-standard {% showif statement %} to valid jinja if statement
     for show_if in jinja_show_ifs:
         jinja_show_if = f"{{% if {show_if} %}}"  # translate to actual jinja if statement
-        # move the for loop to start of shapes element (just before first Shape element)
+        # move the if statement to just before this shape: the previous shape's tail, or the start of the Shapes element
         if previous_shape:
             previous_shape.xml.tail = (previous_shape.xml.tail or "") + jinja_show_if
         else:
@@ -278,7 +278,7 @@ def _open_block(shape: Shape, previous_shape: Shape | None) -> str | None:
         # remove original jinja showif from <Text> tag in element
         shape.text = (shape.text or "").replace(f"{{% showif {show_if} %}}", "")
 
-        # add closing 'endfor' to just inside the shapes element, after last shape
+        # add closing 'endif' just after this shape, on its tail
         if shape.xml.tail:  # extend or set text at end of Shape element
             shape.xml.tail += "{% endif %}"
         else:
