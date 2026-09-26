@@ -36,10 +36,8 @@ class PageView(Protocol):
     The type of a shape's back-reference to its page. It is read-only: it
     lists the page's public API apart from ``swimlanes``,
     ``require_swimlanes`` and ``vis``, whose types are declared above this
-    module, and apart from the page's part-level attributes, such as
-    ``filename``, ``page_id`` and ``rel_id``. To change a page (set
-    ``name``, ``width``, ``height``, ``background`` and so on), or to reach
-    those part-level attributes, use the :class:`vsdxkit.pages.Page` you
+    module. To change a page (set ``name``, ``width``, ``height``,
+    ``background`` and so on), use the :class:`vsdxkit.pages.Page` you
     hold, such as ``document.pages[0]``. At runtime the object is that
     ``Page`` itself.
     """
@@ -103,13 +101,13 @@ class PageView(Protocol):
 
 class _PageSeam(PageView, _ConnectorPage, Protocol):
     """What a shape needs from its page beyond the public view: the page's
-    own bookkeeping, and the document operations the page forwards."""
+    own bookkeeping, and the document operations the page passes on."""
 
     @property
-    def page_id(self) -> str: ...
+    def _page_id(self) -> str: ...
 
     @property
-    def filename(self) -> str: ...
+    def _filename(self) -> str: ...
 
     @property
     def _pagesheet_xml(self) -> Element: ...
@@ -858,7 +856,7 @@ class Shape:
             if not master_id:
                 continue
             if master_id in masters:
-                node.attrib["Master"] = masters[master_id].page_id
+                node.attrib["Master"] = masters[master_id]._page_id
             elif cross_document:
                 # a master the source could not resolve: in another document it
                 # would name a master that package does not declare, and Visio
@@ -870,12 +868,12 @@ class Shape:
             # the master a copy now names may be built differently from the one
             # it was copied under - a MatchByName master answers for its name
             # alone - or may be gone altogether
-            members = {master.page_id: _shape_ids(master) for master in masters.values()}
+            members = {master._page_id: _shape_ids(master) for master in masters.values()}
             _drop_unreachable_master_shapes(new_shape_xml, members, dropped, root_names_inherited=bool(inherited))
         # every page that shows an instance of a master relates to it, as Visio
         # writes it; a copy onto another page of this document adds one too
         for master in masters.values():
-            dst_page._ensure_page_master_rel(master.filename)
+            dst_page._ensure_page_master_rel(master._filename)
         if not cross_document and dst_page is not self._page:
             dst_page._carry_relationships(new_shape_xml, self._page)
 

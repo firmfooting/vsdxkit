@@ -19,12 +19,8 @@ from vsdxkit.shapes import PageView
 CLASSES_RST = Path(__file__).resolve().parents[1] / "docs" / "classes.rst"
 
 # what PageView's docstring says it leaves out: the members whose types are
-# declared above `shapes` ...
+# declared above `shapes`
 PAGE_ONLY = {"swimlanes", "require_swimlanes", "vis"}
-# ... and the page's part-level attributes. `rels_xml` is the one on the
-# class; `filename`, `page_id` and the rest are set in `__init__`, so no
-# class-level walk sees them
-PART_LEVEL = {"rels_xml"}
 
 # what DocumentView's docstring says it lists
 DOCUMENT_VIEW = {"pages", "save", "render"}
@@ -45,7 +41,7 @@ def _signature(cls: type, name: str) -> inspect.Signature:
 
 def test_page_view_leaves_out_only_what_it_says_it_does():
     """Fails if `PageView` drops a page member, or `Page` gains one the view does not list."""
-    assert _public(Page) - _public(PageView) == PAGE_ONLY | PART_LEVEL
+    assert _public(Page) - _public(PageView) == PAGE_ONLY
     assert _public(PageView) <= _public(Page)
 
 

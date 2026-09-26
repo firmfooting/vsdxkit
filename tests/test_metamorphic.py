@@ -133,7 +133,7 @@ def _page_part_names(source: str) -> dict[int, str]:
     pages.
     """
     vis = Document.open(source)
-    return {index: f"visio/pages/{os.path.basename(page.filename)}" for index, page in enumerate(vis.pages)}
+    return {index: f"visio/pages/{os.path.basename(page._filename)}" for index, page in enumerate(vis.pages)}
 
 
 def _with_pages_reordered(source: str, destination: str, order: list[int]) -> str:

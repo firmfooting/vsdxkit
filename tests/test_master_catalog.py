@@ -42,10 +42,10 @@ def _master_instance(vis: Document):
 
 def _page_rels_root(page) -> ET.Element:
     """The page's rels root, created empty where the page has none yet."""
-    if page.rels_xml is None:
-        page.rels_xml_filename = relationships_part_name(page.filename)
-        page.rels_xml = ET.ElementTree(ET.Element(f"{RELS_NS}Relationships"))
-    return page.rels_xml.getroot()
+    if page._rels_xml is None:
+        page._rels_xml_filename = relationships_part_name(page._filename)
+        page._rels_xml = ET.ElementTree(ET.Element(f"{RELS_NS}Relationships"))
+    return page._rels_xml.getroot()
 
 
 def test_loading_the_masters_twice_lists_each_master_once(vsdx_copy):
@@ -166,7 +166,7 @@ def test_a_page_master_relationship_takes_an_id_the_page_rels_does_not_hold(vsdx
     shapes = list(page.children)
     connector = page.connect(shapes[0], shapes[1])
 
-    target = relationship_target(page.filename, connector.master_page.filename)
+    target = relationship_target(page._filename, connector.master_page._filename)
     master_relationships = [r for r in rels_root if r.attrib["Type"] == MASTER_RELATIONSHIP and r.attrib["Target"] == target]
     assert len(master_relationships) == 1
     assert master_relationships[0].attrib["Id"] not in prefilled
@@ -184,7 +184,7 @@ def test_a_nameless_master_imports_under_a_name_of_its_own(vsdx_copy, tmp_path):
     saved = str(tmp_path / "nameless.vsdx")
     source = Document.open(vsdx_copy("test4_connectors.vsdx"))
     target = Document.open(vsdx_copy("test1.vsdx"))
-    for master in source.masters_xml:
+    for master in source._masters_xml:
         master.attrib.pop("NameU", None)
         master.attrib.pop("Name", None)
     source.load_master_pages()
@@ -193,7 +193,7 @@ def test_a_nameless_master_imports_under_a_name_of_its_own(vsdx_copy, tmp_path):
     shape.copy(target.pages[0])
     assert len(target.master_pages) == 1
     (master,) = target.master_pages
-    assert master.name == f"Master.{master.page_id}"
+    assert master.name == f"Master.{master._page_id}"
     assert target.master_index[master.name] is master
     target.save(saved)
 
@@ -206,7 +206,7 @@ def test_two_nameless_masters_import_under_two_names(vsdx_copy):
         master.attrib.pop("NameU", None)
         master.attrib.pop("Name", None)
     source.load_master_pages()
-    target._masters.import_masters(source._masters, [page.page_id for page in source.master_pages])
+    target._masters.import_masters(source._masters, [page._page_id for page in source.master_pages])
     names = [page.name for page in target.master_pages]
     assert len(names) == 2
     assert len(set(names)) == 2, names
@@ -251,7 +251,7 @@ def test_a_document_without_app_xml_still_takes_a_master(vsdx_copy, tmp_path):
     saved = str(tmp_path / "test5_master_connected.vsdx")
     source = Document.open(vsdx_copy("test4_connectors.vsdx"))
     target = Document.open(vsdx_copy("test5_master.vsdx"))
-    assert target.app_xml is None, "fixture is expected to have no app.xml"
+    assert target._app_xml is None, "fixture is expected to have no app.xml"
     page = target.pages[0]
     _master_instance(source).copy(page)
     shapes = list(page.children)
@@ -265,10 +265,10 @@ def test_a_master_that_cannot_be_read_leaves_the_target_as_it_was(vsdx_copy, mon
     target = Document.open(vsdx_copy("test1.vsdx"))
     first, second = source.master_pages[:2]
     read_bytes = source._package.read_bytes
-    monkeypatch.setattr(source._package, "read_bytes", lambda name: None if name == second.filename else read_bytes(name))
+    monkeypatch.setattr(source._package, "read_bytes", lambda name: None if name == second._filename else read_bytes(name))
     before = target._package.names()
     with pytest.raises(MissingPartError, match="could not be read"):
-        target._masters.import_masters(source._masters, [first.page_id, second.page_id])
+        target._masters.import_masters(source._masters, [first._page_id, second._page_id])
     assert target._package.names() == before
     assert target.master_pages == []
 
@@ -279,9 +279,9 @@ def test_a_copy_onto_another_page_of_the_same_document_relates_that_page_to_the_
     shape = _master_instance(vis)
     new_page = vis.pages.create()
     shape.copy(new_page)
-    target = relationship_target(new_page.filename, shape.master_page.filename)
-    assert new_page.rels_xml is not None
-    assert any(r.attrib["Type"] == MASTER_RELATIONSHIP and r.attrib["Target"] == target for r in new_page.rels_xml.getroot())
+    target = relationship_target(new_page._filename, shape.master_page._filename)
+    assert new_page._rels_xml is not None
+    assert any(r.attrib["Type"] == MASTER_RELATIONSHIP and r.attrib["Target"] == target for r in new_page._rels_xml.getroot())
 
 
 def test_a_copy_within_one_document_keeps_a_master_reference_it_cannot_resolve(vsdx_copy):
@@ -325,7 +325,7 @@ def test_the_catalog_answers_by_id_and_by_name(vsdx_copy):
     catalog = vis._masters
     assert isinstance(catalog, MasterCatalog)
     for page in catalog.pages:
-        assert catalog.by_id(page.page_id) is page
+        assert catalog.by_id(page._page_id) is page
         assert catalog.by_name(page.name) is page
     assert catalog.by_id("no-such-id") is None
 
@@ -345,7 +345,7 @@ def test_a_same_name_master_is_imported_when_neither_unique_id_nor_match_by_name
     target = Document.open(vsdx_copy("test_master.vsdx"))
     own = _master_element(target, "Test Master")
     own.attrib["UniqueID"] = "{00000000-0000-0000-0000-000000000001}"
-    before = {page.page_id for page in target.master_pages}
+    before = {page._page_id for page in target.master_pages}
     instance = next(shape for shape in source.pages[0].shapes if shape.master_page == source.master_index["Test Master"])
     copied = instance.copy(target.pages[0])
     assert copied.master_page_ID not in before
@@ -358,10 +358,10 @@ def test_a_master_with_the_same_unique_id_is_reused(vsdx_copy):
     """Fails if a copy of a master the target already holds, unchanged, is imported a second time."""
     source = Document.open(vsdx_copy("test_master.vsdx"))
     target = Document.open(vsdx_copy("test_master.vsdx"))
-    before = [page.page_id for page in target.master_pages]
+    before = [page._page_id for page in target.master_pages]
     instance = next(shape for shape in source.pages[0].shapes if shape.master_page == source.master_index["Test Master"])
     copied = instance.copy(target.pages[0])
-    assert [page.page_id for page in target.master_pages] == before
+    assert [page._page_id for page in target.master_pages] == before
     assert copied.master_page is target.master_index["Test Master"]
 
 
@@ -370,7 +370,7 @@ def test_a_match_by_name_master_answers_for_its_name(vsdx_copy):
     source = Document.open(vsdx_copy("fixtures/com_reference/s01_autoconnect_right.vsdx"))
     target = Document.open(vsdx_copy("test4_connectors.vsdx"))
     own = target.master_index["Dynamic connector"]
-    assert own.master_unique_id != source.master_index["Dynamic connector"].master_unique_id
+    assert own._master_unique_id != source.master_index["Dynamic connector"]._master_unique_id
     before = len(target.master_pages)
     connector = next(shape for shape in source.pages[0].shapes if shape.master_page_ID)
     copied = connector.copy(target.pages[0])
@@ -392,7 +392,7 @@ def test_a_master_shape_the_reused_master_lacks_is_dropped(vsdx_copy, tmp_path):
     first = group.copy(target.pages[0])
     master = first.master_page
     # the target's master becomes one that matches by name and lacks a member
-    element = target._masters.element_by_id(master.page_id)
+    element = target._masters.element_by_id(master._page_id)
     element.attrib["MatchByName"] = "1"
     element.attrib["UniqueID"] = "{00000000-0000-0000-0000-000000000002}"
     member = next(child for child in group.children if child.master_shape_ID)
@@ -426,7 +426,7 @@ def test_a_target_whose_app_xml_lists_no_titles_still_takes_a_copy(vsdx_copy):
     """Fails if a copy into a document whose app.xml has no TitlesOfParts raises: the element is optional."""
     source = Document.open(vsdx_copy("test_master.vsdx"))
     target = Document.open(vsdx_copy("test1.vsdx"))
-    app = target.app_xml.getroot()
+    app = target._app_xml.getroot()
     app.remove(app.find("{http://schemas.openxmlformats.org/officeDocument/2006/extended-properties}TitlesOfParts"))
     plain = next(shape for shape in source.pages[0].shapes if not shape.master_page_ID)
     plain.copy(target.pages[0])
@@ -441,7 +441,7 @@ def test_same_name_masters_without_unique_ids_in_one_batch_import_once(vsdx_copy
     for master in source._masters.root:
         master.attrib.pop("UniqueID", None)
         master.attrib["NameU"] = master.attrib["Name"] = "Shared"
-    ids = [page.page_id for page in source.master_pages]
+    ids = [page._page_id for page in source.master_pages]
     assert len(ids) == 2
     found = target._masters.import_masters(source._masters, ids)
     assert found[ids[0]] is found[ids[1]]
@@ -468,7 +468,7 @@ def test_a_target_whose_app_xml_has_no_heading_pairs_still_takes_a_copy(vsdx_cop
     """Fails if a copy into a document whose app.xml has no HeadingPairs raises: without them no title has a section."""
     source = Document.open(vsdx_copy("test_master.vsdx"))
     target = Document.open(vsdx_copy("test1.vsdx"))
-    app = target.app_xml.getroot()
+    app = target._app_xml.getroot()
     app.remove(app.find("{http://schemas.openxmlformats.org/officeDocument/2006/extended-properties}HeadingPairs"))
     _master_instance(source).copy(target.pages[0])
     assert len(target.master_pages) == 1

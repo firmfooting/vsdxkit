@@ -43,7 +43,7 @@ def test_one_edit_changes_one_member(vsdx_copy, tmp_path):
     shape = vis.pages[0].shapes.by_text("Shape A")
     assert shape is not None
     shape.text = "Renamed A"
-    page_member = vis.pages[0].filename[1:]
+    page_member = vis.pages[0]._filename[1:]
     vis.save(str(target))
     before, after = dict(_members(source)), dict(_members(target))
     assert list(after) == list(before)
@@ -166,11 +166,11 @@ def test_a_tree_held_across_a_save_stays_the_documents_tree(vsdx_copy, tmp_path)
     source = vsdx_copy("test1.vsdx")
     first, second = tmp_path / "first.vsdx", tmp_path / "second.vsdx"
     vis = Document.open(source)
-    app, pages, page = vis.app_xml, vis.pages_xml, vis.pages[0].xml
-    page_member = vis.pages[0].filename[1:]
+    app, pages, page = vis._app_xml, vis._pages_xml, vis.pages[0].xml
+    page_member = vis.pages[0]._filename[1:]
     vis.save(str(first))
-    assert vis.app_xml is app
-    assert vis.pages_xml is pages
+    assert vis._app_xml is app
+    assert vis._pages_xml is pages
     assert vis.pages[0].xml is page
 
     shape = next(page.getroot().iter("{http://schemas.microsoft.com/office/visio/2012/main}Shape"))
@@ -183,7 +183,7 @@ def test_a_tree_held_across_a_save_stays_the_documents_tree(vsdx_copy, tmp_path)
 
 
 def test_clearing_a_pages_rels_takes_its_part_out_of_the_package(vsdx_copy, tmp_path):
-    """Fails if `Page.rels_xml = None` forgets the tree but leaves the part in the store.
+    """Fails if `Page._rels_xml = None` forgets the tree but leaves the part in the store.
 
     The save writes whatever the store holds, so a rels part the page no longer
     has would still reach the file.
@@ -192,9 +192,9 @@ def test_clearing_a_pages_rels_takes_its_part_out_of_the_package(vsdx_copy, tmp_
     target = tmp_path / "out.vsdx"
     vis = Document.open(source)
     page = vis.pages[0]
-    assert page.rels_xml_filename is not None
-    rels_member = page.rels_xml_filename[1:]
-    page.rels_xml = None
+    assert page._rels_xml_filename is not None
+    rels_member = page._rels_xml_filename[1:]
+    page._rels_xml = None
     vis.save(str(target))
     with zipfile.ZipFile(source) as archive:
         assert rels_member in archive.namelist()
@@ -205,36 +205,36 @@ def test_clearing_a_pages_rels_takes_its_part_out_of_the_package(vsdx_copy, tmp_
 def test_setting_a_pages_xml_to_none_is_refused(vsdx_copy):
     """Fails if `Page.xml = None` removes the page part.
 
-    Unlike `rels_xml`, nothing else names a page's rels part, but pages.xml,
+    Unlike `_rels_xml`, nothing else names a page's rels part, but pages.xml,
     pages.xml.rels and the content-type override all still point at the page
     part after this assignment, so removing it would leave the package
     promising a part it does not hold.
     """
     vis = Document.open(vsdx_copy("test3_house.vsdx"))
     page = vis.pages[0]
-    part_name = page.filename
+    part_name = page._filename
     with pytest.raises(ValueError, match=r"Page\.xml"):
         page.xml = None
     assert vis._package.part(part_name) is not None
 
 
 def test_a_rels_tree_assigned_after_the_part_is_cleared_is_saved(vsdx_copy, tmp_path):
-    """Fails if `Page.rels_xml` writes through only over the page's own rels tree, not where the part is gone.
+    """Fails if `Page._rels_xml` writes through only over the page's own rels tree, not where the part is gone.
 
-    `Page.rels_xml = None` takes the part out of the package and leaves the
+    `Page._rels_xml = None` takes the part out of the package and leaves the
     page attached with no rels part at all. A tree the caller assigns
     afterwards is their later word and must bring the part back, or the save
     would leave the page's master and image relationships out of the file.
     """
     target = str(tmp_path / "saved.vsdx")
     vis = Document.open(vsdx_copy("test4_connectors.vsdx"))
-    page = next(p for p in vis.pages if p.rels_xml is not None)
-    assert page.rels_xml is not None
-    replacement = parse_part(serialise_part(page.rels_xml))
-    page.rels_xml = None
-    page.rels_xml = replacement
-    assert page.rels_xml_filename is not None
-    member = page.rels_xml_filename[1:]
+    page = next(p for p in vis.pages if p._rels_xml is not None)
+    assert page._rels_xml is not None
+    replacement = parse_part(serialise_part(page._rels_xml))
+    page._rels_xml = None
+    page._rels_xml = replacement
+    assert page._rels_xml_filename is not None
+    member = page._rels_xml_filename[1:]
     vis.save(target)
     with zipfile.ZipFile(target) as archive:
         assert member in archive.namelist()
@@ -266,13 +266,13 @@ def test_a_tree_assigned_after_the_pages_part_is_removed_is_saved(vsdx_copy, tmp
     target = str(tmp_path / "saved.vsdx")
     vis = Document.open(crafted)
     first, second = vis.pages[0], vis.pages[1]
-    assert first.filename == second.filename, "the crafted package should give both pages one part"
+    assert first._filename == second._filename, "the crafted package should give both pages one part"
     replacement = parse_part(serialise_part(second.xml))
     root = replacement.getroot()
     assert root is not None
     root.set("VsdxkitMarker", "1")
     vis.pages.delete(vis.pages[0])
-    assert vis._package.part(second.filename) is None
+    assert vis._package.part(second._filename) is None
     second.xml = replacement
     vis.save(target)
     saved = Document.open(target)

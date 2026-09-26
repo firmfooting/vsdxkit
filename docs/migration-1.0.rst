@@ -207,20 +207,11 @@ arrived. 0.x re-serialised every XML part it had parsed, so tooling that
 relied on the library normalising every part's declaration, prefixes or
 quoting now sees the producer's own spelling on the parts left alone.
 
-``vis.pages_xml = None``, and the same for ``app_xml``, ``document_xml``, ``masters_xml`` and the other document parts
-   Refused with ``ValueError``. Removing the part would leave relationships
-   and content-type overrides naming it. ``page.rels_xml = None`` still
-   removes a page's relationships part.
-
 Parts are named by part name
 ----------------------------
 
 A document holds its package in memory, part by part, under each part's
 OPC name, and the file-system view of 0.x is gone.
-
-``page.filename``, ``page.rels_xml_filename``
-   Now the part names, such as ``/visio/pages/page1.xml``, not paths on
-   disk.
 
 ``VisioFile.zip_file_contents``, ``VisioFile.directory``
    Gone. Work through the object model; to read a part's raw bytes, open
@@ -234,9 +225,9 @@ OPC name, and the file-system view of 0.x is gone.
    Gone. They read a named part from the zip, refused one that was absent
    with the description given, and ``require_root`` returned the root. The
    parts are already parsed: take the tree from the object model, such as
-   ``document.pages_xml`` or ``page.xml``, and compose the two checks 1.0
-   keeps. ``vsdxkit.xmlio.require_tree(tree, description)`` refuses ``None``
-   with :class:`vsdxkit.errors.MissingPartError`, and
+   ``page.xml``, and compose the two checks 1.0 keeps.
+   ``vsdxkit.xmlio.require_tree(tree, description)`` refuses ``None`` with
+   :class:`vsdxkit.errors.MissingPartError`, and
    ``require_element(tree.getroot(), description)`` gives the root.
 
 ``vsdx.shapes.to_float``
@@ -266,10 +257,6 @@ OPC name, and the file-system view of 0.x is gone.
    read-only. Each read builds a new list or dict: one kept from before a
    master is imported does not show it, and changing the list or dict changes
    nothing in the document. Read the property again after a master changes.
-
-``vis.masters_xml``
-   Unchanged, as ``document.masters_xml``: it was the mixin's, and is now the
-   document's own.
 
 ``vis.load_master_pages()``
    Unchanged, as ``document.load_master_pages()``: it re-reads the masters
@@ -471,18 +458,14 @@ Reading or writing a deleted shape
    one only ever made the wrapper lie. Move a shape into a group with
    ``group.append_shape(shape)``.
 
-``shape.page.swimlanes``, ``shape.page.vis``, ``shape.page.filename``, ``page.vis``
+``shape.page.swimlanes``, ``shape.page.vis``, ``page.vis``
    Typed code sees ``shape.page`` as :class:`vsdxkit.shapes.PageView`, a
    read-only view. The same type is the page half of ``shape.parent``
    (``PageView | Shape``) and of ``shape.master_page`` (``PageView | None``).
    ``PageView`` lists the page's API apart from ``swimlanes``,
    ``require_swimlanes`` and ``vis``, whose types are declared above
-   ``shapes``, and apart from the page's part-level attributes, such as
-   ``filename``, ``page_id`` and ``rel_id``. For ``shape.master_page``,
-   those part-level attributes — ``page_id``, ``filename`` and
-   ``master_unique_id`` — are exactly what the view leaves out. At runtime
-   it is the same ``Page``. For all of those, use the ``Page`` you hold,
-   such as ``document.pages[0]``.
+   ``shapes``. At runtime it is the same ``Page``. For those three, use the
+   ``Page`` you hold, such as ``document.pages[0]``.
 
    The same holds one level up. Typed code sees ``page.vis`` as
    :class:`vsdxkit.pages.DocumentView`, which lists the document's
@@ -827,3 +810,33 @@ nothing left for a caller to renumber.
    the ``Sheet.N!`` and ``SheetN!`` references in every formula under
    ``element``, keeping each one's form. It returns ``None``, where
    ``update_ids`` returned the element.
+
+Package internals are private
+-----------------------------
+
+The document keeps its package parts in step itself, and a page's
+part-level bookkeeping is the document's, so 1.0 makes both private. The
+part names are in :mod:`vsdxkit.partnames`. To read a part's bytes, save the
+document and open the file with :mod:`zipfile`. If you need one of these,
+open an issue asking for an API.
+
+``vis.pages_xml``, ``vis.pages_xml_rels``, ``vis.content_types_xml``, ``vis.app_xml``, ``vis.document_xml``, ``vis.document_xml_rels``, ``vis.masters_xml``
+   Internal in 1.0; no public replacement. Assigning a tree to one replaced
+   the part without the relationships and content types that name it; the
+   library's own writes keep those in step.
+
+``vis.load_pages()``
+   Internal in 1.0; no public replacement. The document reads its pages when
+   it opens, and calling this again added every page a second time.
+
+``vis.get_master_page_by_id(master_id)``
+   Internal in 1.0. ``shape.master_page`` is the master a shape instances,
+   and ``document.master_index[name]`` finds a master by name.
+
+``page.filename``, ``page.rels_xml_filename``, ``page.rels_xml``
+   Internal in 1.0; no public replacement. They were the page's part name,
+   the name of its relationships part, and that part's tree.
+
+``page.page_id``, ``page.rel_id``, ``page.master_unique_id``
+   Internal in 1.0; no public replacement. A page is known by ``page.name``
+   and by its place in ``document.pages``.

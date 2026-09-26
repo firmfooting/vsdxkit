@@ -725,7 +725,7 @@ def test_page_all_shapes(filename, page_index, expected_ids, basedir):
 def test_page_id(filename, page_index, expected_page_id, basedir):
     vis = Document.open(os.path.join(basedir, filename))
     page = vis.pages[page_index]
-    assert page.page_id == expected_page_id
+    assert page._page_id == expected_page_id
 
 
 @pytest.mark.parametrize(
@@ -741,7 +741,7 @@ def test_page_id(filename, page_index, expected_page_id, basedir):
 def test_master_page_id(filename, master_index, expected_page_id, basedir):
     vis = Document.open(os.path.join(basedir, filename))
     page = vis.master_pages[master_index]
-    assert page.page_id == expected_page_id
+    assert page._page_id == expected_page_id
 
 
 @pytest.mark.parametrize(
@@ -769,5 +769,5 @@ def test_page_has_page_sheet_xml(filename, basedir):
 def test_master_page_has_sheet_xml(filename, basedir):
     vis = Document.open(os.path.join(basedir, filename))
     for page in vis.master_pages:
-        print(page.page_id, page.name)
+        print(page._page_id, page.name)
         assert page._pagesheet_xml is not None

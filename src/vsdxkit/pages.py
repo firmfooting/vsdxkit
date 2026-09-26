@@ -154,7 +154,7 @@ def _page_dimension(cell: ET.Element, name: str) -> float:
 
 def _pages_root(vis: _DocumentSeam) -> ET.Element:
     """The required root element of the document's pages.xml part."""
-    pages_xml = vis.pages_xml
+    pages_xml = vis._pages_xml
     if pages_xml is None:
         raise MissingPartError("document has no pages.xml part")
     return require_element(pages_xml.getroot(), "Pages root")
@@ -192,16 +192,16 @@ class _DocumentSeam(DocumentView, Protocol):
     """What a page needs from its document beyond the public view.
 
     A page's part, its entry in pages.xml and its title in app.xml live in
-    the document's package. The masters, and the shapes a new shape is
-    copied from, are the document's. `document` imports this module, so the
-    page declares what it reads rather than importing `Document`.
+    the document's package. The masters, and the shapes a new shape is copied
+    from, are the document's. `document` imports this module, so the page
+    declares what it reads rather than importing `Document`.
     """
 
     @property
-    def pages_xml(self) -> PartTree | None: ...
+    def _pages_xml(self) -> PartTree | None: ...
 
     @property
-    def masters_xml(self) -> ET.Element | None: ...
+    def _masters_xml(self) -> ET.Element | None: ...
 
     @property
     def _package(self) -> PackageStore: ...
@@ -210,7 +210,7 @@ class _DocumentSeam(DocumentView, Protocol):
 
     def _rename_page_in_app_xml(self, old_page_name: str, new_page_name: str) -> None: ...
 
-    def get_master_page_by_id(self, id: str) -> Page | None: ...
+    def _master_page_by_id(self, id: str) -> Page | None: ...
 
     def _master_is_one_d(self, master_id: str, master_shape_id: str | None) -> bool: ...
 
@@ -236,18 +236,18 @@ class Page:
 
     def __init__(self, xml: PartTree, filename: str, page_name: str, page_id: str, rel_id: str, vis: _DocumentSeam):
         self._xml = xml
-        self.filename = filename
+        self._filename = filename
         self._name = page_name
-        self.page_id = page_id
-        self.rel_id = rel_id
-        self.master_unique_id: str | None = None
-        self.rels_xml_filename: str | None = None
-        self._rels_xml: PartTree | None = None
+        self._page_id = page_id
+        self._rel_id = rel_id
+        self._master_unique_id: str | None = None
+        self._rels_xml_filename: str | None = None
+        self._rels_tree: PartTree | None = None
         self._document = vis
         self._max_id = 0  # ID high-water mark, maintained by _increment_shape_ids
 
     def __repr__(self):
-        return f"<Page name={self.name} file={self.filename} >"
+        return f"<Page name={self.name} file={self._filename} >"
 
     @property
     def vis(self) -> DocumentView:
@@ -303,21 +303,21 @@ class Page:
     @property
     def is_master_page(self) -> bool:
         """Return True if this page has a master unique id and there is a match in masters xml"""
-        if self._document.masters_xml is not None and self.master_unique_id:
-            master_match = f'{namespace}Master[@UniqueID="{self.master_unique_id}"]'
-            master_element = self._document.masters_xml.find(master_match)
+        if self._document._masters_xml is not None and self._master_unique_id:
+            master_match = f'{namespace}Master[@UniqueID="{self._master_unique_id}"]'
+            master_element = self._document._masters_xml.find(master_match)
             return master_element is not None
         return False
 
     @property
     def _pagesheet_xml(self) -> ET.Element:
-        # get PageSheet element from pages_xml based on page_id
-        ps = _pages_root(self._document).find(f'{namespace}Page[@ID="{self.page_id}"]/{namespace}PageSheet')
+        # get PageSheet element from _pages_xml based on _page_id
+        ps = _pages_root(self._document).find(f'{namespace}Page[@ID="{self._page_id}"]/{namespace}PageSheet')
         if not isinstance(ps, ET.Element):
-            masters_xml = self._document.masters_xml
+            masters_xml = self._document._masters_xml
             if masters_xml is not None:
-                ps = masters_xml.find(f'{namespace}Master[@ID="{self.page_id}"]/{namespace}PageSheet')
-        return require_element(ps, f"PageSheet for page_id={self.page_id}")
+                ps = masters_xml.find(f'{namespace}Master[@ID="{self._page_id}"]/{namespace}PageSheet')
+        return require_element(ps, f"PageSheet for page_id={self._page_id}")
 
     def _pagesheet_cell(self, name: str) -> ET.Element:
         """A named Cell element on this page's PageSheet."""
@@ -347,14 +347,14 @@ class Page:
     def xml(self, value: PartTree | None) -> None:
         if value is None:
             raise InvalidOperationError(
-                f"Page.xml cannot be set to None: {self.filename} cannot be removed through "
+                f"Page.xml cannot be set to None: {self._filename} cannot be removed through "
                 f"this property, because pages.xml, pages.xml.rels and the content-type "
                 f"override would still name it"
             )
         attached = self._attached()
         self._xml = value
         if attached:
-            self._document._set_part_xml(self.filename, value)
+            self._document._set_part_xml(self._filename, value)
 
     def _holds(self, filename: str, tree: PartTree | None) -> bool:
         """Whether the package's part at `filename` is `tree` itself."""
@@ -377,12 +377,12 @@ class Page:
         takes the part out from under the other. pages.xml still names the
         part, so a tree assigned to the page left behind must bring it back.
         """
-        if self._holds(self.filename, self._xml):
+        if self._holds(self._filename, self._xml):
             return True
-        return self._document._package.part(self.filename) is None and any(page is self for page in self._document.pages)
+        return self._document._package.part(self._filename) is None and any(page is self for page in self._document.pages)
 
     def _rels_attached(self) -> bool:
-        """Whether an assignment to `rels_xml` may write this page's relationship part.
+        """Whether an assignment to `_rels_xml` may write this page's relationship part.
 
         Only while the page itself is attached, and only over the relationship
         part the page holds -- or where the package holds none yet, which is
@@ -390,26 +390,26 @@ class Page:
         with its page's, and the page that takes the name must not be given
         the removed page's relationships.
         """
-        if self.rels_xml_filename is None or not self._attached():
+        if self._rels_xml_filename is None or not self._attached():
             return False
-        held = self._document._package.part(self.rels_xml_filename)
+        held = self._document._package.part(self._rels_xml_filename)
         if held is None:
             return True
-        return isinstance(held, XmlPart) and held.tree is self._rels_xml
+        return isinstance(held, XmlPart) and held.tree is self._rels_tree
 
     @property
-    def rels_xml(self) -> PartTree | None:
-        return self._rels_xml
+    def _rels_xml(self) -> PartTree | None:
+        return self._rels_tree
 
-    @rels_xml.setter
-    def rels_xml(self, value: PartTree | None) -> None:
+    @_rels_xml.setter
+    def _rels_xml(self, value: PartTree | None) -> None:
         # None takes the rels part out of the package as well: the save writes
         # whatever the store holds, so a part left behind would reach the file
         attached = self._rels_attached()
-        self._rels_xml = value
+        self._rels_tree = value
         if attached:
-            assert self.rels_xml_filename is not None  # _rels_attached() says so
-            self._document._set_part_xml(self.rels_xml_filename, value)
+            assert self._rels_xml_filename is not None  # _rels_attached() says so
+            self._document._set_part_xml(self._rels_xml_filename, value)
 
     @property
     def shapes(self) -> ShapeCollection:
@@ -482,14 +482,14 @@ class Page:
         append_if_absent(
             self._rels_root(),
             rel_type="http://schemas.microsoft.com/visio/2010/relationships/master",
-            target=relationship_target(self.filename, master_part_name),
+            target=relationship_target(self._filename, master_part_name),
         )
 
     # A shape asks its page, and the page asks its document: a shape never
     # reaches through the page to the document (#114).
 
     def _master_by_id(self, master_id: str) -> Page | None:
-        return self._document.get_master_page_by_id(master_id)
+        return self._document._master_page_by_id(master_id)
 
     def _master_is_one_d(self, master_id: str, master_shape_id: str | None) -> bool:
         return self._document._master_is_one_d(master_id, master_shape_id)
@@ -616,14 +616,14 @@ class Page:
 
     def _rels_root(self) -> ET.Element:
         """This page's `<Relationships>` element, creating the part on demand; assigning it writes it into the package."""
-        rels_xml: PartTree | None = self.rels_xml
+        rels_xml: PartTree | None = self._rels_xml
         if rels_xml is None:
-            self.rels_xml_filename = relationships_part_name(self.filename)
+            self._rels_xml_filename = relationships_part_name(self._filename)
             rels_xml = ET.ElementTree(
                 ET.fromstring('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>')
             )
-            self.rels_xml = rels_xml
-        return require_element(rels_xml.getroot(), f"{self.rels_xml_filename} root")
+            self._rels_xml = rels_xml
+        return require_element(rels_xml.getroot(), f"{self._rels_xml_filename} root")
 
     def _carry_relationships(self, copied: ET.Element, source: _PageSeam) -> None:
         """Relate this page to what each ``r:id`` in `copied` names on `source`, and point the copy at it.
@@ -633,7 +633,7 @@ class Page:
         document the part is shared, so the copy needs only a relationship of
         its own to the same part.
         """
-        source_rels = _as_page(source).rels_xml
+        source_rels = _as_page(source)._rels_xml
         if source_rels is None:
             return
         by_id = {rel.attrib.get("Id"): rel for rel in all_of(source_rels.getroot())}
@@ -644,7 +644,7 @@ class Page:
             mode = relationship.attrib.get("TargetMode")
             target = relationship.attrib.get("Target", "")
             if mode != "External":
-                target = relationship_target(self.filename, target_part_name(source.filename, target))
+                target = relationship_target(self._filename, target_part_name(source._filename, target))
             carried = append_if_absent(
                 self._rels_root(), rel_type=relationship.attrib.get("Type", ""), target=target, mode=mode
             )

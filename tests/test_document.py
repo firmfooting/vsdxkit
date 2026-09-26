@@ -110,7 +110,7 @@ def test_xml_findall_group_shapes(filename: str, group_shape_elements: int, base
 
 
 def _app_xml_page_count(vis) -> int:
-    heading_pairs = vis.app_xml.getroot().find(f"{ext_prop_namespace}HeadingPairs")
+    heading_pairs = vis._app_xml.getroot().find(f"{ext_prop_namespace}HeadingPairs")
     return int(heading_pairs.find(f".//{vt_namespace}i4").text)
 
 
@@ -120,7 +120,7 @@ def _app_xml_page_names(vis) -> list[str]:
     `app.xml` is document metadata written alongside `pages.xml`, and the two
     going out of step is invisible from either one alone.
     """
-    titles = vis.app_xml.getroot().find(f"{ext_prop_namespace}TitlesOfParts")
+    titles = vis._app_xml.getroot().find(f"{ext_prop_namespace}TitlesOfParts")
     vector = titles.find(f"{vt_namespace}vector")
     return [lpstr.text for lpstr in vector.findall(f"{vt_namespace}lpstr")]
 
@@ -341,16 +341,16 @@ def test_copy_page_clones_relationship_part(vsdx_copy, tmp_path):
 
     vis = Document.open(filename)
     source = vis.pages[0]
-    assert source.rels_xml is not None
-    source_rels = ET.tostring(source.rels_xml.getroot())
+    assert source._rels_xml is not None
+    source_rels = ET.tostring(source._rels_xml.getroot())
 
     copied = vis.pages.copy(source)
 
-    assert copied.rels_xml is not None
-    assert copied.rels_xml is not source.rels_xml
-    assert ET.tostring(copied.rels_xml.getroot()) == source_rels
-    assert copied.rels_xml_filename is not None
-    member = copied.rels_xml_filename[1:]
+    assert copied._rels_xml is not None
+    assert copied._rels_xml is not source._rels_xml
+    assert ET.tostring(copied._rels_xml.getroot()) == source_rels
+    assert copied._rels_xml_filename is not None
+    member = copied._rels_xml_filename[1:]
     vis.save(str(output))
 
     with zipfile.ZipFile(output) as archive:
@@ -601,6 +601,29 @@ def test_the_dead_document_members_are_gone():
     assert [position.name for position in _PagePosition] == ["LAST", "AFTER"]
     assert "END" not in _PagePosition.__members__
     assert "promoted_from" not in {field.name for field in dataclasses.fields(XmlPart)}
+
+
+def test_the_package_internals_are_private(vsdx_copy):
+    """Fails if a package internal of `Document` or `Page` is public again (#116, decision 1)."""
+    vis = Document.open(vsdx_copy("test1.vsdx"))
+    for name in (
+        "pages_xml",
+        "pages_xml_rels",
+        "content_types_xml",
+        "app_xml",
+        "document_xml",
+        "document_xml_rels",
+        "masters_xml",
+        "load_pages",
+        "get_master_page_by_id",
+        "PAGES",
+        "MASTERS",
+    ):
+        assert not hasattr(vis, name), f"Document.{name}"
+    page = vis.pages[0]
+    for name in ("filename", "page_id", "rel_id", "master_unique_id", "rels_xml", "rels_xml_filename"):
+        assert not hasattr(page, name), f"Page.{name}"
+        assert hasattr(page, f"_{name}"), f"Page._{name}"
 
 
 def test_masters_from_something_that_is_not_a_document_are_refused(vsdx_copy):

@@ -68,9 +68,9 @@ def test_remove_then_add_allocates_unused_part_and_resolves_graph(tmp_path):
     for rel_id, target in rel_pairs.items():
         assert f"visio/pages/{target}" in names, f"{rel_id} targets missing part {target}"
     assert len(set(rel_pairs.values())) == len(rel_pairs), f"colliding relationship targets: {rel_pairs}"
-    assert new_page.rel_id in rel_pairs
-    assert new_page.filename.rsplit("/", 1)[-1] == rel_pairs[new_page.rel_id]
-    assert f"visio/pages/{rel_pairs[new_page.rel_id]}" in names
+    assert new_page._rel_id in rel_pairs
+    assert new_page._filename.rsplit("/", 1)[-1] == rel_pairs[new_page._rel_id]
+    assert f"visio/pages/{rel_pairs[new_page._rel_id]}" in names
 
 
 def test_new_page_part_name_is_an_unused_value(tmp_path):
@@ -80,7 +80,7 @@ def test_new_page_part_name_is_an_unused_value(tmp_path):
     new_page = vis.pages.create("replacement")
     # page count went 3 -> 2; page-count derivation would say page3.xml (taken);
     # unused-value allocation must pick page2.xml
-    assert new_page.filename.endswith("page2.xml")
+    assert new_page._filename.endswith("page2.xml")
 
 
 def test_removed_page_reopening_round_trip(tmp_path):
@@ -91,5 +91,5 @@ def test_removed_page_reopening_round_trip(tmp_path):
     vis.save(document)
     vis = Document.open(document)
     assert [p.name for p in vis.pages] == ["Page-1", "Page-3", "replacement"]
-    assert all(page.filename for page in vis.pages)
-    assert all(page.rel_id for page in vis.pages)
+    assert all(page._filename for page in vis.pages)
+    assert all(page._rel_id for page in vis.pages)

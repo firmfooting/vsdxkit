@@ -76,20 +76,19 @@ class Document:
     def __init__(self, package: PackageStore, filename: str) -> None:
         """Wrap a package already read into memory. Use :meth:`open` to open a file."""
         self.filename = filename
-        # pages_xml, pages_xml_rels, content_types_xml, app_xml, document_xml,
-        # document_xml_rels and masters_xml are store-backed properties, defined
-        # below -- there is nothing to initialise here, since the store itself
-        # is the state.
+        # the raw part XML (`_pages_xml`, `_app_xml` and the rest) is a set of
+        # store-backed properties, defined below -- there is nothing to
+        # initialise here, since the store itself is the state.
         self._package = package
         # `filename` as the store was opened from it; see save
         self._opened_filename = filename
         self._pages: list[Page] = []
-        self.load_pages()
+        self._load_pages()
         self._masters = MasterCatalog(self._package, self._master_page)
         self._masters.load()
         if logger.isEnabledFor(logging.DEBUG):
             for master in self._masters.pages:
-                logger.debug("Master(%s, id=%s)\n%s", master.filename, master.page_id, pretty_print_element(master.xml))
+                logger.debug("Master(%s, id=%s)\n%s", master._filename, master._page_id, pretty_print_element(master.xml))
 
     @classmethod
     def open(
@@ -149,7 +148,7 @@ class Document:
         relationship and described by a content-type override. Taking one out
         of the store leaves both behind, and the saved package promises a part
         it does not hold. A page's rels part is different -- nothing points at
-        it -- so `Page.rels_xml = None` still removes it, through
+        it -- so `Page._rels_xml = None` still removes it, through
         `_set_part_xml` directly.
         """
         if tree is None:
@@ -162,63 +161,63 @@ class Document:
         self._set_part_xml(name, tree)
 
     @property
-    def pages_xml(self) -> PartTree | None:
+    def _pages_xml(self) -> PartTree | None:
         return self._package.read_xml(PAGES_PART)
 
-    @pages_xml.setter
-    def pages_xml(self, tree: PartTree | None) -> None:
-        self._set_document_part_xml("pages_xml", PAGES_PART, tree)
+    @_pages_xml.setter
+    def _pages_xml(self, tree: PartTree | None) -> None:
+        self._set_document_part_xml("_pages_xml", PAGES_PART, tree)
 
     @property
-    def pages_xml_rels(self) -> PartTree | None:
+    def _pages_xml_rels(self) -> PartTree | None:
         return self._package.read_xml(relationships_part_name(PAGES_PART))
 
-    @pages_xml_rels.setter
-    def pages_xml_rels(self, tree: PartTree | None) -> None:
-        self._set_document_part_xml("pages_xml_rels", relationships_part_name(PAGES_PART), tree)
+    @_pages_xml_rels.setter
+    def _pages_xml_rels(self, tree: PartTree | None) -> None:
+        self._set_document_part_xml("_pages_xml_rels", relationships_part_name(PAGES_PART), tree)
 
     @property
-    def content_types_xml(self) -> PartTree | None:
+    def _content_types_xml(self) -> PartTree | None:
         return self._package.read_xml(CONTENT_TYPES_PART)
 
-    @content_types_xml.setter
-    def content_types_xml(self, tree: PartTree | None) -> None:
-        self._set_document_part_xml("content_types_xml", CONTENT_TYPES_PART, tree)
+    @_content_types_xml.setter
+    def _content_types_xml(self, tree: PartTree | None) -> None:
+        self._set_document_part_xml("_content_types_xml", CONTENT_TYPES_PART, tree)
 
     @property
-    def app_xml(self) -> PartTree | None:
+    def _app_xml(self) -> PartTree | None:
         return self._package.read_xml(APP_PART)
 
-    @app_xml.setter
-    def app_xml(self, tree: PartTree | None) -> None:
-        self._set_document_part_xml("app_xml", APP_PART, tree)
+    @_app_xml.setter
+    def _app_xml(self, tree: PartTree | None) -> None:
+        self._set_document_part_xml("_app_xml", APP_PART, tree)
 
     @property
-    def document_xml(self) -> PartTree | None:
+    def _document_xml(self) -> PartTree | None:
         return self._package.read_xml(DOCUMENT_PART)
 
-    @document_xml.setter
-    def document_xml(self, tree: PartTree | None) -> None:
-        self._set_document_part_xml("document_xml", DOCUMENT_PART, tree)
+    @_document_xml.setter
+    def _document_xml(self, tree: PartTree | None) -> None:
+        self._set_document_part_xml("_document_xml", DOCUMENT_PART, tree)
 
     @property
-    def document_xml_rels(self) -> PartTree | None:
+    def _document_xml_rels(self) -> PartTree | None:
         return self._package.read_xml(relationships_part_name(DOCUMENT_PART))
 
-    @document_xml_rels.setter
-    def document_xml_rels(self, tree: PartTree | None) -> None:
-        self._set_document_part_xml("document_xml_rels", relationships_part_name(DOCUMENT_PART), tree)
+    @_document_xml_rels.setter
+    def _document_xml_rels(self, tree: PartTree | None) -> None:
+        self._set_document_part_xml("_document_xml_rels", relationships_part_name(DOCUMENT_PART), tree)
 
     @property
-    def masters_xml(self) -> ET.Element | None:
+    def _masters_xml(self) -> ET.Element | None:
         """The `<Masters>` root, read from the store so it can never be a stale copy."""
         tree = self._package.read_xml(MASTERS_PART)
         return None if tree is None else tree.getroot()
 
-    @masters_xml.setter
-    def masters_xml(self, root: ET.Element | None) -> None:
+    @_masters_xml.setter
+    def _masters_xml(self, root: ET.Element | None) -> None:
         if root is None:
-            self._set_document_part_xml("masters_xml", MASTERS_PART, None)  # raises: see there
+            self._set_document_part_xml("_masters_xml", MASTERS_PART, None)  # raises: see there
             return
         # asked of the part as held rather than through `read_xml`: whether the
         # root is already the part's own needs no parse, and promoting the part
@@ -226,7 +225,7 @@ class Document:
         held = self._package.part(MASTERS_PART)
         if isinstance(held, XmlPart) and held.tree.getroot() is root:
             return
-        self._set_document_part_xml("masters_xml", MASTERS_PART, ET.ElementTree(root))
+        self._set_document_part_xml("_masters_xml", MASTERS_PART, ET.ElementTree(root))
 
     def _master_page(self, tree: PartTree, part_name: str, name: str, master_id: str, rel_id: str) -> Page:
         """The page a master is read as; the factory this document hands its catalog."""
@@ -257,7 +256,7 @@ class Document:
         """Whether the master shape an instance inherits from is 1-D; see :meth:`MasterCatalog.is_one_d`."""
         return self._masters.is_one_d(master_id, master_shape_id)
 
-    def get_master_page_by_id(self, id: str) -> Page | None:
+    def _master_page_by_id(self, id: str) -> Page | None:
         """The master page with this ID, as :attr:`Shape.master_page_ID` names it, or None."""
         return self._masters.by_id(id)
 
@@ -279,16 +278,16 @@ class Document:
             raise TypeError(f"expected a vsdxkit Document, got {type(source).__name__}")
         lists_titles = self._lists_titles()
         if lists_titles:
-            self._titles_of_parts_section(self.MASTERS, self._page_titles())
-        known = {page.page_id for page in self._masters.pages}
+            self._titles_of_parts_section(self._MASTERS, self._page_titles())
+        known = {page._page_id for page in self._masters.pages}
         masters = self._masters.import_masters(source._masters, master_ids)
         for master in masters.values():
-            if lists_titles and master.page_id not in known:
-                self._titles_of_parts_insert(master.name, self.MASTERS)
-                known.add(master.page_id)
+            if lists_titles and master._page_id not in known:
+                self._titles_of_parts_insert(master.name, self._MASTERS)
+                known.add(master._page_id)
         return masters
 
-    def load_pages(self) -> None:
+    def _load_pages(self) -> None:
         rels_name = relationships_part_name(PAGES_PART)
         pages_xml_rels = self._package.require_xml(rels_name)
         rels = require_element(pages_xml_rels.getroot(), "pages.xml.rels")
@@ -325,24 +324,25 @@ class Document:
             page_rels_path = relationships_part_name(page_path)
 
             if self._package.part(page_rels_path) is not None:
-                new_page.rels_xml_filename = page_rels_path
+                new_page._rels_xml_filename = page_rels_path
                 # past the setter: the document is not open yet, which the
                 # setter refuses, and the tree is the store's own, so there is
                 # nothing for it to write through
-                new_page._rels_xml = self._package.read_xml(page_rels_path)
+                new_page._rels_tree = self._package.read_xml(page_rels_path)
             self._pages.append(new_page)
 
             if logger.isEnabledFor(logging.DEBUG):
-                logger.debug("Page(%s)\n%s", new_page.filename, pretty_print_element(new_page.xml))
+                logger.debug("Page(%s)\n%s", new_page._filename, pretty_print_element(new_page.xml))
 
-        # content_types_xml, app_xml, document_xml and document_xml_rels are
-        # store-backed properties, but promoted here rather than left to the
-        # first later access: a part promoted at load is an `XmlPart` from the
-        # moment the document opens, which is what lets a caller compare the
-        # store's own identity for a part it has not yet touched (app.xml, in
-        # particular, may simply be missing, and promoting a missing part is
-        # just None), and a part that is not well-formed XML fails the open
-        # itself, with a `PartParseError`, rather than the first access to it.
+        # `_content_types_xml`, `_app_xml`, `_document_xml` and
+        # `_document_xml_rels` are store-backed properties, but promoted here
+        # rather than left to the first later access: a part promoted at load
+        # is an `XmlPart` from the moment the document opens, which is what
+        # lets a caller compare the store's own identity for a part it has not
+        # yet touched (app.xml, in particular, may simply be missing, and
+        # promoting a missing part is just None), and a part that is not
+        # well-formed XML fails the open itself, with a `PartParseError`,
+        # rather than the first access to it.
         self._package.read_xml(CONTENT_TYPES_PART)
         self._package.read_xml(APP_PART)
         self._package.read_xml(DOCUMENT_PART)
@@ -366,7 +366,7 @@ class Document:
 
         # remove Page element from pages.xml file - zero based index
         if isinstance(index, int):
-            pages_root = self._part_root(self.pages_xml, "pages.xml")
+            pages_root = self._part_root(self._pages_xml, "pages.xml")
             page = pages_root.find(f"{namespace}Page[{index + 1}]")
             if isinstance(page, Element):
                 pages_root.remove(page)
@@ -377,24 +377,24 @@ class Document:
 
                 # issue #7: a dangling rId pointing at a deleted part corrupts
                 # the OPC graph, and so does an Override naming one
-                remove(self._part_root(self.pages_xml_rels, "pages.xml.rels"), page.rel_id or "")
+                remove(self._part_root(self._pages_xml_rels, "pages.xml.rels"), page._rel_id or "")
                 remove_override(
-                    self._part_root(self.content_types_xml, "[Content_Types].xml"),
-                    page.filename,
+                    self._part_root(self._content_types_xml, "[Content_Types].xml"),
+                    page._filename,
                 )
 
                 # remove the page's own rels part if one exists
-                if page.rels_xml_filename and self._package.part(page.rels_xml_filename) is not None:
-                    self._package.remove(page.rels_xml_filename)
+                if page._rels_xml_filename and self._package.part(page._rels_xml_filename) is not None:
+                    self._package.remove(page._rels_xml_filename)
 
                 # remove page<index>.xml file
-                self._package.remove(self.pages[index].filename)
+                self._package.remove(self.pages[index]._filename)
                 del self._pages[index]
 
     def _update_pages_xml_rels(self, new_page_filename: str) -> str:
         """Updates the pages.xml.rels file with a reference to the new page and returns the new relid"""
 
-        rels_root = self._part_root(self.pages_xml_rels, "pages.xml.rels")
+        rels_root = self._part_root(self._pages_xml_rels, "pages.xml.rels")
         relationship = append_if_absent(
             rels_root,
             rel_type="http://schemas.microsoft.com/visio/2010/relationships/page",
@@ -424,11 +424,11 @@ class Document:
         different member name than the one being tested -- so a new page
         reusing ``pageN.xml`` would find the store already holding a part at
         its rels name. `Page._rels_attached()` treats that as not the page's
-        own tree and refuses to write over it, so the new page's `rels_xml`
+        own tree and refuses to write over it, so the new page's `_rels_xml`
         assignment becomes a silent no-op.
         """
         taken = set(self._package.names())
-        rels_root = self._part_root(self.pages_xml_rels, "pages.xml.rels")
+        rels_root = self._part_root(self._pages_xml_rels, "pages.xml.rels")
         taken.update(target_part_name(PAGES_PART, rel.attrib["Target"]) for rel in rels_root)
         counter = 1
         while _page_part_taken(taken, f"page{counter}.xml"):
@@ -436,7 +436,7 @@ class Document:
         return f"page{counter}.xml"
 
     def _get_max_page_id(self) -> int:
-        pages_root = self._part_root(self.pages_xml, "pages.xml")
+        pages_root = self._part_root(self._pages_xml, "pages.xml")
         page_with_max_id = max(pages_root, key=lambda page: int(page.attrib["ID"]))
         max_page_id = int(page_with_max_id.attrib["ID"])
 
@@ -456,11 +456,11 @@ class Document:
         return self.pages.index(page) + 1
 
     def _add_content_types_override(self, part_name_path: str, content_type: str) -> None:
-        ensure_override(self._part_root(self.content_types_xml, "[Content_Types].xml"), part_name_path, content_type)
+        ensure_override(self._part_root(self._content_types_xml, "[Content_Types].xml"), part_name_path, content_type)
 
     def _style_sheets(self) -> Element:
         # return StyleSheets element from document.xml
-        root = self._part_root(self.document_xml, "document.xml")
+        root = self._part_root(self._document_xml, "document.xml")
         return require_element(root.find(f"{namespace}StyleSheets"), "document.xml StyleSheets")
 
     def _get_style_by_id(self, ID: str) -> Element | None:
@@ -493,7 +493,7 @@ class Document:
 
     def _heading_pairs(self) -> Element:
         # return HeadingPairs element from app.xml
-        root = self._part_root(self.app_xml, "docProps/app.xml")
+        root = self._part_root(self._app_xml, "docProps/app.xml")
         return require_element(root.find(f"{ext_prop_namespace}HeadingPairs"), "app.xml HeadingPairs")
 
     def _lists_titles(self) -> bool:
@@ -503,16 +503,16 @@ class Document:
         Without HeadingPairs no title belongs to a section, so there is no
         section for a new one to join.
         """
-        if self.app_xml is None:
+        if self._app_xml is None:
             return False
-        root = self._part_root(self.app_xml, "docProps/app.xml")
+        root = self._part_root(self._app_xml, "docProps/app.xml")
         titles = root.find(f"{ext_prop_namespace}TitlesOfParts")
         has_titles = titles is not None and titles.find(f"{vt_namespace}vector") is not None
         return has_titles and root.find(f"{ext_prop_namespace}HeadingPairs") is not None
 
     def _titles_of_parts(self) -> Element:
         # return TitlesOfParts element from app.xml
-        root = self._part_root(self.app_xml, "docProps/app.xml")
+        root = self._part_root(self._app_xml, "docProps/app.xml")
         return require_element(root.find(f"{ext_prop_namespace}TitlesOfParts"), "app.xml TitlesOfParts")
 
     class _Section(NamedTuple):
@@ -531,8 +531,8 @@ class Document:
         label: str
         is_pages: bool
 
-    PAGES = _Section("Pages", is_pages=True)
-    MASTERS = _Section("Masters", is_pages=False)
+    _PAGES = _Section("Pages", is_pages=True)
+    _MASTERS = _Section("Masters", is_pages=False)
 
     def _heading_pairs_list(self) -> list[tuple[str, Element]]:
         """Each section HeadingPairs names, as (name, the element holding its count).
@@ -745,12 +745,12 @@ class Document:
         vector.attrib["size"] = str(int(vector.attrib.get("size", 0)) + 2)
 
     def _add_page_to_app_xml(self, new_page_name: str) -> None:
-        self._titles_of_parts_insert(new_page_name, Document.PAGES)
+        self._titles_of_parts_insert(new_page_name, Document._PAGES)
 
     def _remove_page_from_app_xml(self, page_name: str) -> None:
-        if self.app_xml is not None:
+        if self._app_xml is not None:
             logger.debug("_remove_page_from_app_xml()")
-            self._titles_of_parts_remove(page_name, Document.PAGES)
+            self._titles_of_parts_remove(page_name, Document._PAGES)
 
     def _rename_page_in_app_xml(self, old_page_name: str, new_page_name: str) -> None:
         """Keep app.xml's list of page names in step with a page that was renamed.
@@ -760,9 +760,9 @@ class Document:
         writes nothing, so a document whose metadata never listed the parts is
         left as it is rather than made to raise over a property assignment.
         """
-        if self.app_xml is None:
+        if self._app_xml is None:
             return
-        root = self._part_root(self.app_xml, "docProps/app.xml")
+        root = self._part_root(self._app_xml, "docProps/app.xml")
         if root.find(f"{ext_prop_namespace}HeadingPairs") is None:
             return
         if root.find(f"{ext_prop_namespace}TitlesOfParts") is None:
@@ -771,7 +771,7 @@ class Document:
         # one, so the titles to look for are today's with that swap undone. On a
         # one-page document nothing else identifies the section.
         expected = (self._page_titles() - {new_page_name}) | {old_page_name}
-        self._titles_of_parts_rename(old_page_name, new_page_name, Document.PAGES, expected)
+        self._titles_of_parts_rename(old_page_name, new_page_name, Document._PAGES, expected)
 
     def _create_page(
         self,
@@ -802,13 +802,13 @@ class Document:
 
         # update pages.xml - insert the PageElement Element in it's correct location
         index = self._get_index(index=index, page=source_page)
-        self._part_root(self.pages_xml, "pages.xml").insert(index, new_page_element)
+        self._part_root(self._pages_xml, "pages.xml").insert(index, new_page_element)
 
         # update [Content_Types].xml - insert reference to the new page
         self._add_content_types_override(new_page_path, "application/vnd.ms-visio.page+xml")
 
         # update app.xml, if it exists
-        if self.app_xml:
+        if self._app_xml:
             self._add_page_to_app_xml(page_name)
 
         # Update Document object; the page carries its real ID and relationship
@@ -821,13 +821,13 @@ class Document:
         # store and nothing else
         self._package.write_xml(new_page_path, new_page_xml)
         new_page = Page(new_page_xml, new_page_path, page_name, page_id, new_page_relid, self)
-        if source_page is not None and source_page.rels_xml is not None:
-            source_rels_root = require_element(source_page.rels_xml.getroot(), "source page relationships root")
-            # the filename first: the `rels_xml` setter only writes through when
-            # `rels_xml_filename` is already set (and the page's own tree, above,
-            # is already its part)
-            new_page.rels_xml_filename = relationships_part_name(new_page_path)
-            new_page.rels_xml = ET.ElementTree(copy.deepcopy(source_rels_root))
+        if source_page is not None and source_page._rels_xml is not None:
+            source_rels_root = require_element(source_page._rels_xml.getroot(), "source page relationships root")
+            # the filename first: the `_rels_xml` setter only writes through
+            # when `_rels_xml_filename` is already set (and the page's own
+            # tree, above, is already its part)
+            new_page._rels_xml_filename = relationships_part_name(new_page_path)
+            new_page._rels_xml = ET.ElementTree(copy.deepcopy(source_rels_root))
 
         self._pages.insert(index, new_page)  # insert new page at defined index
 
@@ -926,7 +926,7 @@ class Document:
         new_page_relid = self._update_pages_xml_rels(new_page_filename)
 
         # Copy the source page and update relevant attributes
-        pages_root = self._part_root(self.pages_xml, "pages.xml")
+        pages_root = self._part_root(self._pages_xml, "pages.xml")
         page_element = require_element(
             pages_root.find(f"{namespace}Page[@Name='{page.name}']"), f"pages.xml Page named {page.name}"
         )
@@ -954,7 +954,7 @@ class Document:
 
     def _main_part_content_type(self) -> str:
         """The declared content type of `/visio/document.xml`."""
-        content_types = self._part_root(self.content_types_xml, "[Content_Types].xml")
+        content_types = self._part_root(self._content_types_xml, "[Content_Types].xml")
         overrides = content_types.findall(f"{cont_types_namespace}Override")
         for override in overrides:
             if override.attrib.get("PartName") == DOCUMENT_PART:

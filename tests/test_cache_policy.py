@@ -87,7 +87,7 @@ def test_a_master_added_after_a_shape_missed_it_is_resolved(vsdx_copy):
 
     master = waiting.master_shape
     assert master is not None
-    assert master.page.page_id == imported_id
+    assert master.page._page_id == imported_id
 
 
 def test_a_geometry_section_added_to_a_resolved_master_is_merged(vsdx_copy):

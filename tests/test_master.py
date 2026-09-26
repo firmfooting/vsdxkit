@@ -17,7 +17,7 @@ def test_load_master_file(filename: str, expected_length: int, basedir):
     assert len(vis.master_pages) == expected_length
 
 
-@pytest.mark.parametrize("attribute", ["master_unique_id"])
+@pytest.mark.parametrize("attribute", ["_master_unique_id"])
 @pytest.mark.parametrize(
     "filename",
     [

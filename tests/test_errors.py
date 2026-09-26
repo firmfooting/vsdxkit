@@ -299,7 +299,7 @@ def test_the_parse_error_is_kept_as_the_cause(broken_document_package):
 def test_a_required_attribute_missing_on_open_raises_malformed_package_error(vsdx_copy, tmp_path, member, old, expected):
     """Well-formed XML that breaks the schema used to surface as a bare `KeyError`.
 
-    `load_pages` indexed `rel.attrib` directly, so a package a caller could not
+    `_load_pages` indexed `rel.attrib` directly, so a package a caller could not
     have validated first reported a malformed relationship as `KeyError: 'Id'`
     and `except VsdxError` missed it (#365 review).
     """
@@ -381,7 +381,7 @@ def test_a_relationship_target_that_is_not_a_part_name_raises_malformed_package_
     that joins into something that is not an OPC part name was reported by the
     store's argument check, as a plain `ValueError`. That missed
     `except VsdxError`, which is the promise an open makes about a malformed
-    package. `load_pages` and `load_master_pages` translate that one check;
+    package. `_load_pages` and `load_master_pages` translate that one check;
     resolving such targets properly is a separate change.
     """
     destination = str(tmp_path / "bad-target.vsdx")
@@ -832,7 +832,7 @@ def test_refusing_none_for_a_document_part_is_an_invalid_operation(vsdx_copy):
     """Fails if Document's document-part setters refuse None with a plain ValueError."""
     vis = Document.open(vsdx_copy("test1.vsdx"))
     with pytest.raises(InvalidOperationError):
-        vis.app_xml = None
+        vis._app_xml = None
 
 
 def test_refusing_none_for_a_page_part_is_an_invalid_operation(vsdx_copy):
