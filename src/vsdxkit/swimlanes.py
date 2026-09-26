@@ -37,26 +37,40 @@ class _DiagramPage(PageView, Protocol):
     onto; and whether the page is still in its document.
     """
 
-    def _attached(self) -> bool: ...
+    def _attached(self) -> bool:
+        """Whether the page is still in its document: a page that is not has no swimlane diagram to read."""
+        ...
 
 
 # observed lane pitch in the Visio 16 CFF capture (inches)
 LANE_PITCH_INCHES = 1.18110236220472
+"""The pitch lanes stack at, in inches: 30 mm, as Visio's own cross-functional flowchart spaces them.
+
+:meth:`SwimlaneDiagram.add_lane` puts a new lane this far above the top one,
+and grows the Swimlane List and the container by as much. A lane whose
+height is missing or 0 is taken to be this tall.
+"""
 
 # how far apart, in inches, two lane edges can be and still be one edge: the
 # lanes in the capture meet to within 1e-15
 _EDGE_TOLERANCE = 1e-9
+"""The distance in inches within which `_bands` snaps two lane edges to one, so adjoining lanes share an edge."""
 
 # User-section row names written by Visio on lane shapes
 ROW_HEADING_TEXT = "visHeadingText"
+"""The User-section row in which Visio keeps a lane's label; :meth:`SwimlaneDiagram.set_lane_label` writes its ``Value`` cell."""
 
 _CONTAINER_NAME = "CFF Container"
+"""The name Visio gives the CFF container shape, which `_diagram_on` finds a page's diagram by; `_named` also takes a numbered copy."""
 _SWIMLANE_LIST_NAME = "Swimlane List"
+"""The name Visio gives the Swimlane List shape, which `add_lane` grows along with the container."""
 
 _LANE_NAME = "Swimlane"
+"""The name Visio gives each lane shape, which `SwimlaneDiagram.lanes` finds the lanes by."""
 
 # top-level shape NameU values of the CFF machinery (excluded from membership)
 _CFF_MACHINERY = (_CONTAINER_NAME, _SWIMLANE_LIST_NAME, "Phase List", "Separator", _LANE_NAME)
+"""The names of the shapes that draw the diagram rather than belong to it, which `_is_member` leaves out of every lane."""
 
 
 def _named(shape: Shape, name: str) -> bool:
@@ -86,6 +100,7 @@ def _user_row(shape: Shape, name: str) -> ET.Element | None:
 
 
 def _value_cell(row: ET.Element) -> ET.Element | None:
+    """The row's ``<Cell N="Value">``, where a User row keeps its value, or None."""
     for cell in row.findall(f"{namespace}Cell"):
         if cell.attrib.get("N") == "Value":
             return cell
@@ -110,6 +125,7 @@ def _bands(lanes: tuple[Shape, ...]) -> dict[Shape, tuple[float, float]]:
     edges: list[float] = []
 
     def snap(value: float) -> float:
+        """The first edge seen within `_EDGE_TOLERANCE` of `value`, or `value` itself, kept as an edge for later ones."""
         for edge in edges:
             if abs(edge - value) <= _EDGE_TOLERANCE:
                 return edge
@@ -169,6 +185,7 @@ class SwimlaneDiagram:
         self._container = container
 
     def __repr__(self) -> str:
+        """Shows the page's name, the container's ID and how many lanes there are, or ``detached`` for a container that has left the document."""
         if not self._container.is_attached:
             return f"<SwimlaneDiagram page={self._page.name!r} container={self._container.ID} detached>"
         return f"<SwimlaneDiagram page={self._page.name!r} container={self._container.ID} lanes={len(self.lanes)}>"
@@ -285,9 +302,11 @@ class SwimlaneDiagram:
         shape.get_or_create_cell("PinY", v=str(lane.y or 0.0))
 
     def _swimlane_list(self) -> Shape | None:
+        """The page's first top-level Swimlane List shape, which `add_lane` grows, or None for a page without one."""
         return next((shape for shape in self._page.children if _named(shape, _SWIMLANE_LIST_NAME)), None)
 
     def _require_lane(self, lane: Shape) -> None:
+        """Refuse a `lane` that is not one of `lanes`, with `InvalidOperationError`."""
         if lane not in self.lanes:
             raise InvalidOperationError(f"shape {lane.ID} is not a swimlane lane of this diagram")
 

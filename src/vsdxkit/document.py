@@ -1,3 +1,11 @@
+"""The document: a Visio drawing, opened from a ``.vsdx`` or ``.vsdm`` file.
+
+:meth:`Document.open` reads the whole package into memory and holds no file.
+A document's pages, and its master pages, are reached from the
+:class:`Document`; :meth:`Document.render` fills it in as a Jinja template;
+and :meth:`Document.save` writes it back, or to a new name.
+"""
+
 from __future__ import annotations
 
 import copy
@@ -48,6 +56,7 @@ from vsdxkit.shapes import Connector, Shape
 from vsdxkit.templating import render_document
 
 _logger: Logger = get_logger(__name__)
+"""This module's logger, under the ``vsdxkit`` hierarchy the library never configures a handler for."""
 
 register_namespaces()
 
@@ -63,8 +72,11 @@ def _page_part_taken(taken: set[str], filename: str) -> bool:
 # extension and content type disagree as corrupt, so the two must be kept in
 # step on save.
 _MACRO_ENABLED_CONTENT_TYPE = "application/vnd.ms-visio.drawing.macroEnabled.main+xml"
+"""The main document part's content type in a macro-enabled package, which only a ``.vsdm`` name may carry."""
 _DRAWING_CONTENT_TYPE = "application/vnd.ms-visio.drawing.main+xml"
+"""The main document part's content type in a drawing without macros, which a ``.vsdx`` name goes with."""
 _SUFFIX_BY_CONTENT_TYPE = {_MACRO_ENABLED_CONTENT_TYPE: ".vsdm", _DRAWING_CONTENT_TYPE: ".vsdx"}
+"""The extension each main-part content type goes with. Only the keys are read: `_main_part_content_type` recognises a main part under an unusual name by them."""
 
 
 class Document:
@@ -171,6 +183,11 @@ class Document:
 
     @property
     def _pages_xml(self) -> PartTree | None:
+        """The `pages.xml` part, the list of the document's pages, read from the store; None where the package has none.
+
+        Assigning a tree replaces the part; None raises `InvalidOperationError`,
+        as it does for each part property here: see `_set_document_part_xml`.
+        """
         return self._package.read_xml(PAGES_PART)
 
     @_pages_xml.setter
@@ -179,6 +196,7 @@ class Document:
 
     @property
     def _pages_xml_rels(self) -> PartTree | None:
+        """The `pages.xml.rels` part, which relates each page's entry to its part, read from the store; None where the package has none."""
         return self._package.read_xml(relationships_part_name(PAGES_PART))
 
     @_pages_xml_rels.setter
@@ -187,6 +205,7 @@ class Document:
 
     @property
     def _content_types_xml(self) -> PartTree | None:
+        """The `[Content_Types].xml` part, which gives each part its content type, read from the store; None where the package has none."""
         return self._package.read_xml(CONTENT_TYPES_PART)
 
     @_content_types_xml.setter
@@ -195,6 +214,7 @@ class Document:
 
     @property
     def _app_xml(self) -> PartTree | None:
+        """The `docProps/app.xml` part, which lists the pages and masters by title, read from the store; None where the package has none, as it may."""
         return self._package.read_xml(APP_PART)
 
     @_app_xml.setter
@@ -203,6 +223,7 @@ class Document:
 
     @property
     def _document_xml(self) -> PartTree | None:
+        """The main `document.xml` part, which holds the style sheets, read from the store; None where the package has none."""
         return self._package.read_xml(DOCUMENT_PART)
 
     @_document_xml.setter
@@ -211,6 +232,7 @@ class Document:
 
     @property
     def _document_xml_rels(self) -> PartTree | None:
+        """The `document.xml.rels` part, which relates the main part to `pages.xml`, `masters.xml` and the other document-wide parts, read from the store; None where the package has none."""
         return self._package.read_xml(relationships_part_name(DOCUMENT_PART))
 
     @_document_xml_rels.setter
@@ -297,6 +319,12 @@ class Document:
         return masters
 
     def _load_pages(self) -> None:
+        """Build a `Page` for each entry in pages.xml, in order, over the part its relationship names; the open's first read.
+
+        A missing or malformed pages.xml, relationship or page part raises
+        here, as `MissingPartError` or `MalformedPackageError`, so a package
+        that cannot be read fails the open rather than a later access.
+        """
         rels_name = relationships_part_name(PAGES_PART)
         pages_xml_rels = self._package.require_xml(rels_name)
         rels = require_element(pages_xml_rels.getroot(), "pages.xml.rels")
@@ -412,6 +440,11 @@ class Document:
         return relationship.attrib["Id"]
 
     def _get_new_page_name(self, new_page_name: str) -> str:
+        """`new_page_name`, or a name no page has yet made from it by appending ``-1``, then ``-2``, and so on.
+
+        The suffixes accumulate: when ``Page`` and ``Page-1`` are both taken,
+        the answer is ``Page-1-2``, not ``Page-2``.
+        """
         i = 1
         while new_page_name in [page.name for page in self.pages]:
             new_page_name = f"{new_page_name}-{i}"  # Page-X-i
@@ -445,6 +478,7 @@ class Document:
         return f"page{counter}.xml"
 
     def _get_max_page_id(self) -> int:
+        """The highest page ID in pages.xml, which a new page's ID is one more than."""
         pages_root = self._part_root(self._pages_xml, "pages.xml")
         page_with_max_id = max(pages_root, key=lambda page: int(page.attrib["ID"]))
         max_page_id = int(page_with_max_id.attrib["ID"])
@@ -465,14 +499,17 @@ class Document:
         return self.pages.index(page) + 1
 
     def _add_content_types_override(self, part_name_path: str, content_type: str) -> None:
+        """Declare `content_type` for the part `part_name_path` in [Content_Types].xml, unless an override already names it."""
         ensure_override(self._part_root(self._content_types_xml, "[Content_Types].xml"), part_name_path, content_type)
 
     def _style_sheets(self) -> Element:
+        """document.xml's `StyleSheets` element, which a connector's imported line style joins; `MissingPartError` without one."""
         # return StyleSheets element from document.xml
         root = self._part_root(self._document_xml, "document.xml")
         return require_element(root.find(f"{namespace}StyleSheets"), "document.xml StyleSheets")
 
     def _get_style_by_id(self, ID: str) -> Element | None:
+        """The `StyleSheet` with this ID in document.xml's style sheets, or None; a bundled donor answers the same question for `_style_copy`."""
         return self._style_sheets().find(f"{namespace}StyleSheet[@ID = '{ID}']")
 
     def _kind_source(self, kind: ShapeKind) -> Shape:
@@ -501,6 +538,7 @@ class Document:
         return connector
 
     def _heading_pairs(self) -> Element:
+        """app.xml's `HeadingPairs` element, which names each TitlesOfParts section and counts its titles; `MissingPartError` without one."""
         # return HeadingPairs element from app.xml
         root = self._part_root(self._app_xml, "docProps/app.xml")
         return require_element(root.find(f"{ext_prop_namespace}HeadingPairs"), "app.xml HeadingPairs")
@@ -520,6 +558,7 @@ class Document:
         return has_titles and root.find(f"{ext_prop_namespace}HeadingPairs") is not None
 
     def _titles_of_parts(self) -> Element:
+        """app.xml's `TitlesOfParts` element, which lists the page and master names section by section; `MissingPartError` without one."""
         # return TitlesOfParts element from app.xml
         root = self._part_root(self._app_xml, "docProps/app.xml")
         return require_element(root.find(f"{ext_prop_namespace}TitlesOfParts"), "app.xml TitlesOfParts")
@@ -538,10 +577,14 @@ class Document:
         """
 
         label: str
+        """The section's English name in HeadingPairs, which is matched first and written when the section is created."""
         is_pages: bool
+        """Whether this is the pages section, which `_resolve_section` identifies by its titles when the label misses."""
 
     _PAGES = _Section("Pages", is_pages=True)
+    """The TitlesOfParts section that lists the document's page names."""
     _MASTERS = _Section("Masters", is_pages=False)
+    """The TitlesOfParts section that lists the document's master names."""
 
     def _heading_pairs_list(self) -> list[tuple[str, Element]]:
         """Each section HeadingPairs names, as (name, the element holding its count).
@@ -732,6 +775,7 @@ class Document:
                 return
 
     def _set_app_xml_value(self, name: str, value: str) -> None:
+        """Set the count of the HeadingPairs section called `name` to `value`, adding the section's pair at the end if there is none."""
         for section, count in self._heading_pairs_list():
             if section == name:
                 count.text = value
@@ -754,9 +798,11 @@ class Document:
         vector.attrib["size"] = str(int(vector.attrib.get("size", 0)) + 2)
 
     def _add_page_to_app_xml(self, new_page_name: str) -> None:
+        """List a new page's name in app.xml's pages section, and count it there."""
         self._titles_of_parts_insert(new_page_name, Document._PAGES)
 
     def _remove_page_from_app_xml(self, page_name: str) -> None:
+        """Take a removed page's name out of app.xml's pages section, and its count; a document without app.xml is left alone."""
         if self._app_xml is not None:
             _logger.debug("_remove_page_from_app_xml()")
             self._titles_of_parts_remove(page_name, Document._PAGES)
@@ -793,6 +839,15 @@ class Document:
         new_page_filename: str,
         new_page_relid: str,
     ) -> Page:
+        """Add a page, whose pages.xml.rels relationship the caller has made, and return it.
+
+        The page's part, named from `new_page_filename`, is parsed from
+        `new_page_xml_str`, and `new_page_element` is its entry in pages.xml,
+        inserted at `index`. The part gets a content-type override, and
+        `page_name` a title in app.xml where there is an app.xml. A
+        `source_page`, for a copy, lends the copy its namespace prefixes and a
+        copy of its relationships part.
+        """
         # Create visio\pages\pageX.xml file
         # Add to visio\pages\_rels\pages.xml.rels (done by the caller, which
         # also allocates the part name and relationship id)

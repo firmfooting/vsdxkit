@@ -109,11 +109,14 @@ class PartParseError(MalformedPackageError, ET.ParseError):
     """
 
     def __init__(self, message: str) -> None:
+        """Hold `message`, which the library writes as the part's name and the parser's own report of where it broke."""
         super().__init__(message)
         self.msg = message
+        """The error's message, which :func:`str` gives: the part's name and the parser's own report."""
 
     @override
     def __str__(self) -> str:
+        """The message, :attr:`msg`, and nothing else."""
         return self.msg
 
 
@@ -129,5 +132,7 @@ class PackageLimitError(PackageError, OSError):
     """
 
     def __init__(self, reason: str, message: str) -> None:
+        """Hold `reason`, one of the slugs above, and `message`, the text `str` gives, which names what was refused."""
         super().__init__(message)
         self.reason: str = reason
+        """Which limit was violated, as a stable slug: ``member_size``, ``total_size``, ``member_count``, ``compression_ratio``, ``duplicate_member``, ``member_name`` or ``limits_file``."""
