@@ -122,7 +122,7 @@ These rulings are mine, not the maintainer's. Each follows from decision 1 or fr
   - the `partnames` sentence;
   - the `ROW_SWIMLANE_GUID` line.
 - No page in `docs/` or the README names a private module or name as something to use. A test checks this: it searches `README.md` and `docs/*.rst` for `vsdxkit._` and for the eleven old module names. It skips nothing: the guide spells 0.8.0 names `vsdx.<module>`, so any `vsdxkit.<old module>` in it is a 1.0 recommendation.
-- `src/vsdxkit/media/`, the folder the bundled donors ship in, keeps its name. After `media.py` becomes `_media.py`, `import vsdxkit.media` still succeeds, as an empty namespace package with no code, while `from vsdxkit.media import PALETTE` fails.
+- `src/vsdxkit/media/`, the folder the bundled donors ship in, becomes `src/vsdxkit/_bundled/`. The maintainer decided this on 2026-09-26, after reviewing the plan. Left as it was, it would keep `import vsdxkit.media` working as an empty namespace package once `media.py` is `_media.py`.
 
 ### Every definition has a docstring
 

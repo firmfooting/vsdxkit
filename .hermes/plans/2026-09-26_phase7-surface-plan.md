@@ -65,7 +65,7 @@ The five failure modes most likely to reach a user, each with the test that pins
 2. **Two page names that render to the same text.** The render sets both (the `Page.name` setter does not refuse a duplicate), and `document.pages.by_name(...)` then raises `PackageError("the document has 2 pages called 'Same'; ...")`. Test: Task 2, `test_two_page_names_that_render_alike_leave_two_pages_of_one_name`.
 3. **A page named `{% showif flag %}{{ quarter }} report`.** The showif is judged first, then comes out of the name, then the rest is rendered: `Q3 report`. Leaving the showif in would hand Jinja an unknown tag and raise. Test: Task 2, `test_a_page_name_with_a_showif_and_an_expression_is_judged_then_rendered`.
 4. **`shape.page.xml = tree` now type-checks.** The page's part is replaced and saved, and the shape the caller went through is detached: reading it raises `InvalidOperationError`, rather than answering from a tree that is no longer saved. Test: Task 1, `test_a_tree_assigned_through_shape_page_is_saved_and_detaches_the_shape_that_led_there`.
-5. **0.8/1.0-dev code that imports an internal module.** `from vsdxkit.xmlio import pretty_print_element` raises `ModuleNotFoundError`. `vsdxkit.media` is the trap: `src/vsdxkit/media/` stays as the folder the bundled `.vsdx` donors ship in, so `import vsdxkit.media` still succeeds, as an empty namespace package, and only `from vsdxkit.media import PALETTE` fails. Test: Task 4, `test_an_internal_module_is_private[media]`, which asserts the name resolves to no code.
+5. **0.8/1.0-dev code that imports an internal module.** `from vsdxkit.xmlio import pretty_print_element` raises `ModuleNotFoundError`. `vsdxkit.media` was the trap: the bundled-donor folder `src/vsdxkit/media/` would have kept the name alive as an empty namespace package, so Task 4 renames the folder `_bundled/` as well, and `import vsdxkit.media` fails like the rest. Test: Task 4, `test_an_internal_module_is_private[media]`, which asserts `find_spec("vsdxkit.media") is None`.
 
 ---
 
@@ -1007,7 +1007,8 @@ extended as each task adds modules. An informal mention of `xmlio` or
 **Files:**
 - Create: `tests/test_public_surface.py`
 - Create: `S/p7e/imports.py` (the import rewriter; outside the repository)
-- Rename: `src/vsdxkit/{formulae,inheritance,logging_support,shape_part,masters,media}.py` → `src/vsdxkit/_<module>.py`
+- Rename: `src/vsdxkit/{formulae,inheritance,logging_support,shape_part,masters,media}.py` → `src/vsdxkit/_<module>.py`, and the folder `src/vsdxkit/media/` → `src/vsdxkit/_bundled/`
+- Modify (by hand, for the folder): `src/vsdxkit/_media.py` (`media_path`), `pyproject.toml` (package data), `tools/smoke_wheel.py`, `tests/test_smoke_wheel_modules.py`, `tests/test_media.py` (`MEDIA_DIR`)
 - Modify (by the script): `src/vsdxkit/_formulae.py`, `document.py`, `geometry.py`, `shapes.py`, `templating.py`; `tests/test_create_shape.py`, `test_document.py`, `test_errors.py`, `test_formulae.py`, `test_master_catalog.py`, `test_media.py`, `test_media_reuse.py`, `test_page.py`, `test_part_names.py`; `tools/smoke_wheel.py`
 - Modify (by hand): `src/vsdxkit/geometry.py:61`, `shapes.py:354`, `shape_kind.py:5`, `document.py:478`; `tests/test_master_catalog.py:312,317`
 - Modify: `docs/migration-1.0.rst:40-44` and a new section at the end
@@ -1069,14 +1070,13 @@ def private_references(text: str) -> list[tuple[int, str]]:
 
 @pytest.mark.parametrize("module", PRIVATE_MODULES)
 def test_an_internal_module_is_private(module):
-    """Fails if an internal module's code imports under its public name again, or its private one is gone.
+    """Fails if an internal module resolves under its public name again, or its private one is gone.
 
-    ``src/vsdxkit/media/`` stays, as the folder the bundled donors ship in, so
-    ``vsdxkit.media`` still resolves: as a namespace package with no code, whose
-    spec has no origin. ``from vsdxkit.media import PALETTE`` fails.
+    For ``media`` this also covers the bundled-donor folder: were it still
+    ``src/vsdxkit/media/``, ``vsdxkit.media`` would resolve as an empty
+    namespace package.
     """
-    public = importlib.util.find_spec(f"vsdxkit.{module}")
-    assert public is None or public.origin is None
+    assert importlib.util.find_spec(f"vsdxkit.{module}") is None
     assert importlib.util.find_spec(f"vsdxkit._{module}") is not None
 
 
@@ -1329,7 +1329,19 @@ Run each:
 - `git mv src/vsdxkit/masters.py src/vsdxkit/_masters.py`
 - `git mv src/vsdxkit/media.py src/vsdxkit/_media.py`
 
-(`src/vsdxkit/media/`, the folder of bundled `.vsdx` files, stays where it is: `_media.media_path` reads it beside the module, and `pyproject.toml`'s package-data names `media/*.vsdx`.)
+The folder of bundled `.vsdx` donors moves too, so that nothing answers to `vsdxkit.media`. It becomes `_bundled/`, not `_donors/`, because `_media._donors` is already the name of the loaded-donor cache:
+- `git mv src/vsdxkit/media src/vsdxkit/_bundled`
+- In `src/vsdxkit/_media.py`, the `media_path` function: its docstring `"""Path to a bundled donor in the module-adjacent 'media' folder."""` becomes `"""Path to a bundled donor in the module-adjacent '_bundled' folder."""`, and `return str(Path(__file__).resolve().parent / "media" / filename)` becomes `return str(Path(__file__).resolve().parent / "_bundled" / filename)`.
+- In `pyproject.toml`, the package data `vsdxkit = ["media/*.vsdx", "py.typed"]` becomes `vsdxkit = ["_bundled/*.vsdx", "py.typed"]`.
+- In `tools/smoke_wheel.py`:
+  - the wheel check `name.startswith("vsdxkit/media/")` becomes `name.startswith("vsdxkit/_bundled/")`, and its messages say `bundled .vsdx members` rather than `media .vsdx members`;
+  - the installed check `os.path.join(package_dir, "media", member_name)` becomes `os.path.join(package_dir, "_bundled", member_name)`, and its two messages say `_bundled/{member_name}`;
+  - the sample document `glob.glob(os.path.join(package_dir, "media", "*.vsdx"))` becomes `glob.glob(os.path.join(package_dir, "_bundled", "*.vsdx"))`.
+- In `tests/test_smoke_wheel_modules.py`, the fake wheel's `"vsdxkit/media/media.vsdx"` becomes `"vsdxkit/_bundled/media.vsdx"`.
+- In `tests/test_media.py`, `MEDIA_DIR = Path(__file__).resolve().parents[1] / "src" / "vsdxkit" / "media"` becomes `... / "vsdxkit" / "_bundled"`.
+
+Run: `grep -rnE "\"media\"|'media'|vsdxkit/media|media/\*" src tests tools pyproject.toml MANIFEST.in`
+Expected: no output. (`visio/media/...` part names in tests are Visio package paths, not this folder, and do not match.)
 
 Run: `uv run --no-sync python S/p7e/imports.py REPO rename formulae inheritance logging_support shape_part masters media`
 Expected: `changed` lines for `src/vsdxkit/_formulae.py`, `document.py`, `geometry.py`, `shapes.py`, `templating.py`, `tests/test_create_shape.py`, `test_document.py`, `test_errors.py`, `test_formulae.py`, `test_master_catalog.py`, `test_media.py`, `test_media_reuse.py`, `test_page.py`, `test_part_names.py` and `tools/smoke_wheel.py`, and no `refused` line.
@@ -1422,8 +1434,9 @@ refactor!: six internal modules become private (#424)
 
 formulae, inheritance, logging_support, shape_part, masters and media are
 renamed with a leading underscore; nothing in them is user API. The
-bundled-donor folder src/vsdxkit/media/ stays. tests/test_public_surface.py
-pins each module private and checks no page a user reads names one.
+bundled-donor folder src/vsdxkit/media/ becomes _bundled/, so nothing answers
+to vsdxkit.media. tests/test_public_surface.py pins each module private and
+checks no page a user reads names one.
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_014SeJzNKgmmqyg4BHg7odRt
@@ -3564,7 +3577,7 @@ brings (Task 11 Step 5), and closes #424 with 7e.
 - **A `#:` comment does not document a constant.** The spec accepts "a `#:` comment on the line above or a string literal on the line after". `sphinx-autoapi` 3.8.1 reads only the string after (`autoapi/_parser.py` takes `node.next_sibling()`), and a probe build showed a `#:` comment's text nowhere in the page. A gate that accepted it would pass constants the reference shows undocumented. The one `#:` in `src/`, on `SHEET_REFERENCE`, becomes a string (Task 15).
 - **The docs test is part of `tests/test_public_surface.py`, and skips no heading.** The spec's test skips "`migration-1.0.rst`'s 0.8.0 headings". The guide spells 0.8.0 names `vsdx.<module>`, so a `vsdxkit.<old module>` match anywhere in it, heading or not, is a 1.0 recommendation: at `899aa7a` it finds exactly the rewrites the spec lists, plus `classes.rst`'s `shape_tree` directive. Sharing `PRIVATE_MODULES` with the module test keeps one list of the renamed modules, and lets each rename task turn its own guide lines red.
 - **39 guide entries, not 38.** The simulation missed `DataProperty.inherited_by`, which the spec's own ruling underscores "for consistency with the row"; the checker reports it (Task 8).
-- **`vsdxkit.media` still imports.** `src/vsdxkit/media/`, the folder of bundled donors, keeps its name (`_media.media_path` and `pyproject.toml`'s package-data use it), so `vsdxkit.media` resolves as a namespace package with no code. The test asserts "no code under the public name" (`spec.origin is None`), not "no such name". Renaming the folder was not in the spec, and would touch the package data and the wheel smoke; it is left for the maintainer.
+- **The bundled-donor folder is renamed `_bundled/`,** which the spec did not ask for. Left as `media/`, it would keep `vsdxkit.media` importable as an empty namespace package. The maintainer asked for the rename on reviewing the plan, and it is folded into Task 4, Step 5: the folder, `_media.media_path`, `pyproject.toml`'s package data, `tools/smoke_wheel.py`, and two test paths. The wheel smoke's contents and installed-file checks prove the donors still ship.
 - **`inherited-members` does repeat members.** It adds 56 of `Shape`'s members to `Connector` and `count`/`index` to `PageCollection`; nothing from a builtin base. It stays, because without it `GeometryRow.inherited`/`make_local` and `DataProperty`'s appear nowhere, and pyright exports them only under the private `InheritedRow`, so the documentation gate could not notice (Task 11, Step 5).
 - **The render sweep has ten cases, not seven.** The spec asks for "a case for each" intended 7d difference; the three new cases make it 10 of 10 from 7e on.
 - **Two page showifs must both be true.** The spec does not say; the old code read the last one. A shape with two showifs sits inside two `{% if %}` blocks, so a page judged "as a shape is" needs both.
@@ -3594,7 +3607,7 @@ brings (Task 11 Step 5), and closes #424 with 7e.
 **6. Review Focus.** Each of the five has its test in the owning task:
 - 1, 2 and 3 are in Task 2. 1 and 3 fail on `899aa7a`, which is the change; 2 fails there too, because the old code never rendered the names.
 - 4 is in Task 1. It passes on `899aa7a` at runtime (the setter existed on `Page`); what Task 1 changes is that mypy accepts the line, which `tests/type_fixture.py` pins.
-- 5 is in Task 4. `test_an_internal_module_is_private[media]` failed on `899aa7a` and passes on the prototype, where `find_spec("vsdxkit.media")` returns a namespace spec with no origin.
+- 5 is in Task 4. `test_an_internal_module_is_private[media]` fails on `899aa7a`, and passes once both `media.py` and the `media/` folder are renamed. The folder rename was added after prototyping, so Task 4's run is its first proof, together with the wheel smoke.
 
 **7. What was prototyped.** Every task, in a scratch worktree at `899aa7a`
 (`S/p7d/plan-work/wt`, removed after writing):
