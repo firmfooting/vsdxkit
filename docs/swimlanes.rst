@@ -19,8 +19,8 @@ container is ambiguous, and both raise
 
    from vsdxkit.document import Document
 
-   vis = Document.open("cross-functional-flow.vsdx")
-   page = vis.pages[0]
+   document = Document.open("cross-functional-flow.vsdx")
+   page = document.pages[0]
    diagram = page.require_swimlanes()
 
    for lane in diagram.lanes:
@@ -52,7 +52,7 @@ Put a shape in a lane
    diagram.move_to_lane(check, review_lane)
 
    assert diagram.lane_for(check) == review_lane
-   vis.save("with-review-lane.vsdx")
+   document.save("with-review-lane.vsdx")
 
 Membership is geometric
 -----------------------

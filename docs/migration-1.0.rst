@@ -259,8 +259,11 @@ OPC name, and the file-system view of 0.x is gone.
    nothing in the document. Read the property again after a master changes.
 
 ``vis.load_master_pages()``
-   Unchanged, as ``document.load_master_pages()``: it re-reads the masters
-   from the package, after the masters' XML has been edited.
+   Unchanged, as ``document.load_master_pages()``. It rebuilds
+   ``document.master_pages`` and ``document.master_index`` by re-reading
+   every master from the package. Copying a shape whose master this document
+   lacks already adds that master to both, so this is for confirming the
+   catalog still matches the package, not for making an import visible.
 
 Pages and shapes are collections
 --------------------------------
@@ -418,13 +421,6 @@ page's finder and ``shape.descendants`` for a shape's.
      - ``[s for s in scope if (s.master_page_ID, s.master_shape_ID) == (page_id, shape_id)]``
    * - ``page.find_shapes_with_same_master(shape)``
      - ``[s for s in page.shapes if (s.master_page_ID, s.master_shape_ID) == (shape.master_page_ID, shape.master_shape_ID)]``
-
-``shape.data_properties``
-   Also a new ``dict`` on each read; 0.8 returned the same one while the
-   property rows were unchanged. A key added to the dict, or a dict kept
-   from an earlier read, is not the shape's. Change a property through its
-   :class:`vsdxkit.shapes.DataProperty`:
-   ``shape.data_properties["Status"].value = "Done"``.
 
 A shape is its element
 ----------------------

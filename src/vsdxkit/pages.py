@@ -224,12 +224,12 @@ class _DocumentSeam(DocumentView, Protocol):
 
 
 class Page:
-    """Represents a page or a master page in a vsdx file
+    """A page of a document, or one of its master pages.
 
-    :param vis: the Document object the page belongs to
-    :type vis: :class:`Document`
-    :param name: the name of the page
-    :type name: str
+    Reach a page through its document, as ``document.pages[0]`` or
+    ``document.pages.by_name("Page-1")``, rather than constructing one: the
+    document builds each page as it opens. ``page.vis`` is the document the
+    page belongs to.
     """
 
     xml: PartTree

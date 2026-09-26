@@ -7,19 +7,19 @@ shape may contain nested shapes of its own.
 Select a page
 -------------
 
-``vis.pages`` is a :class:`vsdxkit.pages.PageCollection`: a sequence of the
+``document.pages`` is a :class:`vsdxkit.pages.PageCollection`: a sequence of the
 document's pages in order, with lookup by name.
 
 .. code-block:: python
 
    from vsdxkit.document import Document
 
-   vis = Document.open("diagram.vsdx")
-   first_page = vis.pages[0]
-   current = vis.pages.require_name("Current state")
-   draft = vis.pages.by_name("Draft")  # None if there is no such page
+   document = Document.open("diagram.vsdx")
+   first_page = document.pages[0]
+   current = document.pages.require_name("Current state")
+   draft = document.pages.by_name("Draft")  # None if there is no such page
 
-   for page in vis.pages:
+   for page in document.pages:
        print(page.name)
 
 Page names are unique in a document, so two pages with one name raise
@@ -30,12 +30,12 @@ Add, copy and delete pages
 
 .. code-block:: python
 
-   review = vis.pages.create("Review")              # at the end
-   cover = vis.pages.create("Cover", index=0)        # at the front
-   again = vis.pages.copy(review, name="Review 2")   # straight after review
-   vis.pages.delete(cover)
+   review = document.pages.create("Review")              # at the end
+   cover = document.pages.create("Cover", index=0)        # at the front
+   again = document.pages.copy(review, name="Review 2")   # straight after review
+   document.pages.delete(cover)
 
-``index`` is the position the new page will take, from 0 to ``len(vis.pages)``.
+``index`` is the position the new page will take, from 0 to ``len(document.pages)``.
 A page can be copied only within its own document.
 
 Find shapes in a scope
@@ -54,8 +54,8 @@ is live: it sees shapes added or removed after it was taken.
 
 .. code-block:: python
 
-   vis = Document.open("diagram.vsdx")
-   page = vis.pages[0]
+   document = Document.open("diagram.vsdx")
+   page = document.pages[0]
 
    start = page.shapes.require_text("Start")
    maybe = page.shapes.by_id("12")

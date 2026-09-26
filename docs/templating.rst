@@ -17,9 +17,9 @@ Render ordinary expressions
        "owner": "Facilities",
    }
 
-   vis = Document.open("template.vsdx")
-   vis.render(context)
-   vis.save("rendered.vsdx")
+   document = Document.open("template.vsdx")
+   document.render(context)
+   document.save("rendered.vsdx")
 
 A shape containing ``{{ project }}`` becomes ``Ward refurbishment`` in the
 saved document.
