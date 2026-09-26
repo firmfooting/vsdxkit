@@ -4,6 +4,7 @@ Ground truth: tests/fixtures/com_reference/s05_swimlanes_cfflow.vsdx
 (Visio 16 cross-functional flowchart capture).
 
 Model (verified against the capture):
+
 - CFF shapes (CFF Container, Swimlane List, Swimlane lanes, Phase List,
   Separator, and all flowchart shapes) live as TOP-LEVEL shapes on the page;
   Visio keeps them flat and links them logically

@@ -50,7 +50,6 @@ Where to go next
    swimlanes
    templating
    find_shape
-   classes
    migration-1.0
 
 Format support

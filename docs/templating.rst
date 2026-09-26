@@ -85,8 +85,3 @@ Rendering as a function
 :func:`vsdxkit.templating.render_document`. The function takes a
 :class:`~vsdxkit.templating.RenderTarget`, and a context that is any mapping,
 not only a ``dict``.
-
-.. autofunction:: vsdxkit.templating.render_document
-
-.. autoclass:: vsdxkit.templating.RenderTarget
-   :members:

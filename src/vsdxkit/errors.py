@@ -11,7 +11,16 @@ Most classes keep a builtin base alongside :class:`VsdxError`. Those sites
 raised the builtin before this module existed, and code catching it is entitled
 to go on working; the second base is what keeps that true. The exception is
 :class:`PackageError`, whose sites raised ``OSError`` (``PackageLimitError``)
-or nothing at all.
+or nothing at all. The hierarchy, with each builtin base in brackets::
+
+   VsdxError
+   +-- InvalidOperationError (ValueError)
+   +-- NotFoundError (ValueError)
+   |   +-- MissingPartError
+   +-- PackageError
+       +-- MalformedPackageError (ValueError)
+       |   +-- PartParseError (xml.etree.ElementTree.ParseError)
+       +-- PackageLimitError (OSError)
 
 The guarantee covers what the library checks, which is not the whole Visio
 schema. Opening a document validates the parts and attributes it reads on the
