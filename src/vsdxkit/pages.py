@@ -86,17 +86,6 @@ def _dimension_value(value: float | str | None) -> str:
     return xml_value(number)
 
 
-def _drop_formula(shape: Shape, name: str) -> None:
-    """Keep the value just written to a cell and drop its formula, which Visio would recalculate over it on open.
-
-    A prototype's pin can be a formula of the group it sat in, such as
-    ``Sheet.9!Width*0.5``.
-    """
-    cell = shape._cell(name)
-    if cell is not None:
-        cell.xml.attrib.pop("F", None)
-
-
 def _left_behind(source: Shape, destination: Page) -> Callable[[str], bool]:
     """Whether a shape id a copy of `source` names is one the copy has left behind.
 
@@ -122,12 +111,13 @@ def _detach(shape: Shape, left_behind: Callable[[str], bool]) -> None:
     own = {element.attrib.get("ID") for element in shape.xml.iter(f"{namespace}Shape")}
     for name in _TRANSFORM_CELLS:
         cell = shape._cell(name)
-        formula = None if cell is None else cell.formula
-        if formula is None:
+        if cell is None or cell.formula is None:
             continue
-        named = {match.group(2) for match in SHEET_REFERENCE.finditer(formula)}
+        named = {match.group(2) for match in SHEET_REFERENCE.finditer(cell.formula)}
         if any(sheet not in own and left_behind(sheet) for sheet in named):
-            _drop_formula(shape, name)
+            # a library write: this removes a formula naming a shape the copy
+            # left behind, keeping the value the cell already had
+            cell.xml.attrib.pop("F", None)
 
 
 def _place_one_d(shape: Shape, x: float, y: float, length: float | None) -> None:
@@ -900,15 +890,11 @@ class Page:
             # a 2-D shape is drawn around its pin
             shape.get_or_create_cell("PinX", v=str(x))
             shape.get_or_create_cell("PinY", v=str(y))
-            _drop_formula(shape, "PinX")
-            _drop_formula(shape, "PinY")
             _detach(shape, left_behind)
             if width is not None:
                 shape.width = width
-                _drop_formula(shape, "Width")
         if height is not None:
             shape.height = height
-            _drop_formula(shape, "Height")
         if width is not None or height is not None:
             # LocPinX is Width*0.5 and the geometry scales with the size: their
             # values would otherwise describe the old size until Visio opens it

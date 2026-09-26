@@ -7,7 +7,6 @@ import pytest
 from helpers.connect_records import page_records
 
 from vsdxkit import namespace
-from vsdxkit._formulae import calc_value
 from vsdxkit._xmlio import pretty_print_element
 from vsdxkit.document import Document
 from vsdxkit.shapes import Shape
@@ -603,25 +602,17 @@ def test_copy_and_move_shape(filename: str, shape_text: str, lx: float, ly: floa
 @pytest.mark.parametrize(
     ("filename", "shape_text", "start", "finish"),
     [
-        pytest.param(
-            "test9_rect_and_line.vsdx",
-            "Line A",
-            (2.0, 7.0),
-            (3.0, 8.0),
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="hand-writes a line's derived cells; rewritten to use set_start_and_finish in the next task (#319)",
-            ),
-        ),
+        ("test9_rect_and_line.vsdx", "Line A", (2.0, 7.0), (3.0, 8.0)),
         ("test9_rect_and_line.vsdx", "Conn A", (2.0, 7.0), (3.0, 8.0)),
     ],
 )
 def test_copy_and_move_line(filename: str, shape_text: str, start: tuple, finish: tuple, tmp_path, basedir):
     """A copied 1-D shape is placed by its endpoints, and its geometry follows them.
 
-    There was no assertion in here either, and both parameter rows are 1-D
-    shapes, so the `if cp1.begin_x is not None` the body hung on was never
-    false.
+    `set_start_and_finish` is how a 1-D shape is placed by its ends: it
+    derives the pin, the size, the geometry and the text position from them,
+    and keeps the formulas those cells carry rather than hand-writing values
+    that happen to match.
     """
     out_file = os.path.join(str(tmp_path), f"{filename[:-5]}_test_copy_and_move_line_{shape_text}_{start}_{finish}.vsdx")
     marker = f" moved to {start}-{finish}"
@@ -633,42 +624,7 @@ def test_copy_and_move_line(filename: str, shape_text: str, start: tuple, finish
 
     cp1 = shape.copy()
     cp1.text = cp1.text + marker
-    cp1.begin_x, cp1.begin_y = start
-    cp1.end_x, cp1.end_y = finish
-    cp1.width = cp1.end_x - cp1.begin_x
-    # a connector spans both axes; a line carries its slope in its geometry
-    # and is zero high
-    cp1.height = cp1.end_y - cp1.begin_y if is_connector else 0.0
-    cp1.geometry.set_move_to(0.0, 0.0)
-    cp1.geometry.set_line_to(cp1.width, cp1.height)
-
-    txt_pin_x = cp1.cells.get("TxtPinX")
-    txt_pin_y = cp1.cells.get("TxtPinY")
-    if txt_pin_x and txt_pin_y:
-        if is_connector:
-            txt_pin_x.value, txt_pin_y.value = cp1.width / 2, cp1.height / 2
-        else:
-            txt_pin_x.value, txt_pin_y.value = cp1.center_x_y
-        cp1.set_cell_value(name="Control/TextPosition/X", value=txt_pin_x.value)
-        cp1.set_cell_value(name="Control/TextPosition/Y", value=txt_pin_y.value)
-        cp1.set_cell_value(name="Control/TextPosition/XDyn", value=txt_pin_x.value)
-        cp1.set_cell_value(name="Control/TextPosition/YDyn", value=txt_pin_y.value)
-
-    # Cells that hold a formula still carry the value they were written
-    # with, so every one is re-evaluated against the shape as it now is.
-    cells = list(cp1.cells.values()) + cp1.geometry.cells
-    for row in cp1.geometry.rows.values():
-        cells.extend(row.cells.values())
-    for cell in cells:  # type: Cell
-        formula = cell.formula
-        if not formula:
-            continue
-        if formula == "Inh" and cp1.master_shape:
-            master_cell = cp1.master_shape.cells.get(cell.name)
-            formula = master_cell.formula if master_cell else formula
-        value = calc_value(cp1, formula)
-        if value is not None:
-            cell.value = value
+    cp1.set_start_and_finish(start, finish)
 
     vis.save(out_file)
 
