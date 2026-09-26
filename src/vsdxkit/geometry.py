@@ -447,5 +447,5 @@ class GeometryCell(ShapePart):
     def __repr__(self) -> str:
         s = f"{self.name}={self.value}"
         if self.formula:
-            s += f" func={self.formula}"
+            s += f" formula={self.formula}"
         return s

@@ -344,7 +344,7 @@ class Cell(ShapePart):
         return self.xml.attrib.get("N")
 
     def __repr__(self) -> str:
-        return f"Cell: name={self.name} val={self.value} func={self.formula}"
+        return f"Cell: name={self.name} val={self.value} formula={self.formula}"
 
 
 class DataProperty(InheritedRow, ShapePart):
@@ -704,8 +704,8 @@ class Shape:
         Read-only. An ID is not the shape's alone to change: the element
         attribute, the page's ``Connect`` records and the ``Sheet.N!``
         references in other shapes' formulas all name it. The page assigns a
-        new ID when a shape is created, copied or repeated by a template loop,
-        and moves all three together.
+        new ID when a shape is created, copied, repeated by a template loop,
+        or appended into a group, and moves all three together.
         """
         return self.xml.attrib.get("ID")
 

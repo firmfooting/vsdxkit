@@ -1021,4 +1021,4 @@ def test_a_cells_repr_shows_its_formula(vsdx_copy):
     shape = Document.open(vsdx_copy("test1.vsdx")).pages[0].shapes.by_text("Shape to copy")
     assert shape is not None
     cell = next(cell for cell in shape.cells.values() if cell.formula)
-    assert repr(cell) == f"Cell: name={cell.name} val={cell.value} func={cell.formula}"
+    assert repr(cell) == "Cell: name=LocPinX val=1.082677148526936 formula=Width*0.5"

@@ -28,7 +28,7 @@ def test_load_master_file(filename: str, expected_length: int, basedir):
 def test_master_identifiers_are_populated(filename: str, attribute: str, basedir):
     """Every loaded master page carries its Visio unique id.
 
-    test5_master.vsdx is not covered: LucidChart writes no base id.
+    test5_master.vsdx is not covered: LucidChart writes no unique id.
     """
     vis = Document.open(os.path.join(basedir, filename))
     assert vis.master_pages, "no master pages loaded; the loop below would assert nothing"

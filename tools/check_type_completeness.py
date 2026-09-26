@@ -31,6 +31,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+# Renovate does not watch this file, so it does not bump this pin. Move it by
+# hand when the dev dependency's pyright moves.
 PYRIGHT = "pyright==1.1.414"
 PACKAGE = "vsdxkit"
 

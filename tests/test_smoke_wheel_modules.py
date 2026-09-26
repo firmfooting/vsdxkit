@@ -38,7 +38,7 @@ def test_a_wheel_with_exactly_the_source_modules_passes():
 
 
 def test_a_wheel_built_over_a_stale_build_lib_is_caught():
-    """Fails if a module `src/` deleted can ship unnoticed: this worktree's build/lib still holds four."""
+    """Fails if a module `src/` deleted can ship unnoticed: a stale `build/lib` can carry deleted modules into a wheel."""
     mismatch = smoke_wheel.module_set_mismatch(_wheel_names("vsdxkit/vsdxfile.py", "vsdxkit/containers.py"), SOURCE)
     assert mismatch is not None
     assert "containers.py" in mismatch and "vsdxfile.py" in mismatch
