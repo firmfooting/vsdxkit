@@ -795,3 +795,18 @@ These had no caller in the library, repeated a 1.0 name, or did nothing.
 
 ``page.master_base_id``
    Gone, with no replacement: nothing read it.
+
+The page allocates shape IDs
+----------------------------
+
+A shape ID is written in three places: the shape's own element, the
+``Sheet.N!`` references in other shapes' formulas, and the page's glue
+records. The page allocates IDs and moves all three together, whenever a
+shape is created, copied or repeated by a ``{% for %}`` loop, so there is
+nothing left for a caller to renumber.
+
+``shapes.parent_of(root, element)``, ``shapes.find_or_create_shapes_tag(parent)``
+   ``vsdxkit.shape_tree.parent_of`` and
+   ``vsdxkit.shape_tree.find_or_create_shapes_tag``, unchanged, beside the
+   other element-level walks. For a shape, ``shape.parent`` is its page or
+   group.

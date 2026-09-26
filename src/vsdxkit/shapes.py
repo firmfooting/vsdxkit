@@ -24,7 +24,7 @@ from vsdxkit.inheritance import InheritedRow
 from vsdxkit.logging_support import get_logger
 from vsdxkit.shape_kind import ShapeKind
 from vsdxkit.shape_part import AttachedShape, ShapePart
-from vsdxkit.shape_tree import is_connector_element, iter_children, iter_edges
+from vsdxkit.shape_tree import find_or_create_shapes_tag, is_connector_element, iter_children, iter_edges, parent_of
 from vsdxkit.xmlio import PartTree, make_cell_element, to_float, xml_value
 
 logger = get_logger(__name__)
@@ -141,14 +141,6 @@ class _PageSeam(PageView, _ConnectorPage, Protocol):
     def _renumber_shape_ids(self, element: Element) -> None: ...
 
 
-def parent_of(root: Element, element: Element) -> Element | None:
-    """The element that holds `element`, or None if it is not in this tree."""
-    for candidate in root.iter():
-        if element in list(candidate):
-            return candidate
-    return None
-
-
 def is_connector(shape: Shape) -> bool:
     """Whether `shape` is 1-D, reading the master it inherits from as well as its own cells."""
     return _is_one_d(shape.xml, shape._parent, shape._page)
@@ -200,21 +192,6 @@ def _drop_unreachable_master_shapes(
     for parent, child in iter_edges(root):
         masters[child] = None if child in dropped else child.attrib.get("Master") or masters[parent]
         check(child, masters[child], own_counts=False)
-
-
-def find_or_create_shapes_tag(parent: Element) -> Element:
-    """Return the ``<Shapes>`` container inside ``parent``, creating it if absent.
-
-    A ``<Shape>`` is never a legal child of a ``<Shape>``: a group holds its
-    children in a ``<Shapes>`` container, and a group that is currently empty
-    has no such container until something is put into it. The same is true of a
-    page, whose contents hang off one ``<Shapes>`` tag under ``<PageContents>``.
-    """
-    shapes_tag = parent.find(f"{namespace}Shapes")
-    if shapes_tag is None:
-        shapes_tag = Element(f"{namespace}Shapes")
-        parent.append(shapes_tag)
-    return shapes_tag
 
 
 def _coordinate_value(value: float | str | None) -> str:

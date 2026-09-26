@@ -4,7 +4,6 @@ import copy
 import logging
 import os
 import posixpath
-import re
 import xml.etree.ElementTree as ET
 from collections.abc import Mapping
 from pathlib import Path
@@ -35,7 +34,8 @@ from vsdxkit.partnames import (
 )
 from vsdxkit.relationships import append_if_absent, ensure_override, remove, remove_override
 from vsdxkit.shape_kind import ShapeKind
-from vsdxkit.shapes import Connector, Shape, find_or_create_shapes_tag
+from vsdxkit.shape_tree import find_or_create_shapes_tag, remap_sheet_references
+from vsdxkit.shapes import Connector, Shape
 from vsdxkit.templating import render_document
 from vsdxkit.xmlio import (
     PartTree,
@@ -70,37 +70,6 @@ def _normalise_page_path(path: str) -> str:
 MACRO_ENABLED_CONTENT_TYPE = "application/vnd.ms-visio.drawing.macroEnabled.main+xml"
 DRAWING_CONTENT_TYPE = "application/vnd.ms-visio.drawing.main+xml"
 _SUFFIX_BY_CONTENT_TYPE = {MACRO_ENABLED_CONTENT_TYPE: ".vsdm", DRAWING_CONTENT_TYPE: ".vsdx"}
-
-# A ShapeSheet formula addresses another shape as `Sheet.5!Cell` or `Sheet5!Cell`.
-# Visio writes the dotted form. This library's connector glue has written the
-# undotted one -- `_XFTRIGGER(Sheet5!EventXFMod)`,
-# `PAR(PNT(Sheet5!Connections.X1,...))` -- and files it saved carry it (#400).
-# In both, the reference is nested inside a function call rather than at the
-# start of the formula.
-#
-# The lookbehind excludes the sheet of a cross-page reference: the `Sheet.5!` in
-# `Pages[Page-2]!Sheet.5!Width` is an id on the page named in front of it, and
-# ids are page-scoped, so remapping it through this page's map would repoint the
-# reference at an unrelated shape. `tests/helpers/package_validator.py` draws
-# the same line, and the two have to agree or one of them is wrong about which
-# references a page owns.
-_SHEET_REFERENCE_RE = re.compile(r"(?<!!)\bSheet(\.?)(\d+)!")
-
-
-def _remap_sheet_references(formula: str, id_map: dict[str, int]) -> str:
-    """Rewrite the shape ids in a formula, keeping each reference's own form.
-
-    Ids absent from ``id_map`` address shapes outside the copied subtree (the
-    Swimlane List, for instance) and are left exactly as they are.
-    """
-
-    def replace(match: re.Match[str]) -> str:
-        separator, shape_id = match.group(1), match.group(2)
-        if shape_id not in id_map:
-            return match.group(0)
-        return f"Sheet{separator}{id_map[shape_id]}!"
-
-    return _SHEET_REFERENCE_RE.sub(replace, formula)
 
 
 class Document:
@@ -1134,19 +1103,8 @@ class Document:
         return max_id  # return new id for info
 
     def update_ids(self, shape: Element, id_map: dict[str, int]) -> Element:
-        """Remap every sheet reference in a copied subtree through ``id_map``.
-
-        Covers the shape's own cells as well as its descendants', and cells
-        nested inside Sections, since a formula anywhere in the subtree may
-        address a shape whose id the copy has just changed.
-        """
-        for cell in shape.iter(f"{namespace}Cell"):
-            formula = cell.attrib.get("F")
-            if formula is None or "Sheet" not in formula:
-                continue
-            remapped = _remap_sheet_references(formula, id_map)
-            if remapped != formula:
-                cell.attrib["F"] = remapped
+        """Remap every sheet reference in a copied subtree through ``id_map``; see `remap_sheet_references`."""
+        remap_sheet_references(shape, id_map)
         return shape
 
     def _main_part_content_type(self) -> str:

@@ -12,7 +12,8 @@ built over them.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+import re
+from collections.abc import Iterator, Mapping
 from xml.etree.ElementTree import Element
 
 from vsdxkit import namespace
@@ -20,6 +21,22 @@ from vsdxkit import namespace
 _SHAPE = f"{namespace}Shape"
 _SHAPES = f"{namespace}Shapes"
 _CELL = f"{namespace}Cell"
+
+# A ShapeSheet formula addresses another shape as `Sheet.5!Cell` or `Sheet5!Cell`.
+# Visio writes the dotted form. This library's connector glue has written the
+# undotted one -- `_XFTRIGGER(Sheet5!EventXFMod)`,
+# `PAR(PNT(Sheet5!Connections.X1,...))` -- and files it saved carry it (#400).
+# In both, the reference is nested inside a function call rather than at the
+# start of the formula. Group 1 is the separator, `.` or empty, and group 2 the
+# shape's ID.
+#
+# The lookbehind excludes the sheet of a cross-page reference: the `Sheet.5!` in
+# `Pages[Page-2]!Sheet.5!Width` is an ID on the page named in front of it, and
+# IDs are page-scoped, so remapping it through this page's map would repoint the
+# reference at an unrelated shape. `tests/helpers/package_validator.py` draws
+# the same line with its own copy of the pattern, and the two have to agree or
+# one of them is wrong about which references a page owns.
+SHEET_REFERENCE: re.Pattern[str] = re.compile(r"(?<!!)\bSheet(\.?)(\d+)!")
 
 
 def iter_children(element: Element) -> Iterator[Element]:
@@ -71,3 +88,51 @@ def _has_cell(element: Element, name: str) -> bool:
         if child.get("N") == name and child.tag == _CELL:
             return True
     return False
+
+
+def remap_sheet_references(subtree: Element, id_map: Mapping[str, int]) -> None:
+    """Rewrite the shape IDs in every cell formula under `subtree`, keeping each reference's own form.
+
+    Covers `subtree`'s own cells as well as its descendants', and cells nested
+    inside Sections, since a formula anywhere in the subtree may address a
+    shape whose ID has just changed. An ID absent from `id_map` addresses a
+    shape outside the renumbered subtree (the Swimlane List, for instance) and
+    is left exactly as it is.
+    """
+
+    def replace(match: re.Match[str]) -> str:
+        separator, shape_id = match.group(1), match.group(2)
+        if shape_id not in id_map:
+            return match.group(0)
+        return f"Sheet{separator}{id_map[shape_id]}!"
+
+    for cell in subtree.iter(_CELL):
+        formula = cell.attrib.get("F")
+        if formula is None or "Sheet" not in formula:
+            continue
+        remapped = SHEET_REFERENCE.sub(replace, formula)
+        if remapped != formula:
+            cell.attrib["F"] = remapped
+
+
+def parent_of(root: Element, element: Element) -> Element | None:
+    """The element that holds `element`, or None if it is not in this tree."""
+    for candidate in root.iter():
+        if element in list(candidate):
+            return candidate
+    return None
+
+
+def find_or_create_shapes_tag(parent: Element) -> Element:
+    """Return the ``<Shapes>`` container inside ``parent``, creating it if absent.
+
+    A ``<Shape>`` is never a legal child of a ``<Shape>``: a group holds its
+    children in a ``<Shapes>`` container, and a group that is currently empty
+    has no such container until something is put into it. The same is true of a
+    page, whose contents hang off one ``<Shapes>`` tag under ``<PageContents>``.
+    """
+    shapes_tag = parent.find(_SHAPES)
+    if shapes_tag is None:
+        shapes_tag = Element(_SHAPES)
+        parent.append(shapes_tag)
+    return shapes_tag

@@ -19,7 +19,7 @@ from vsdxkit import media
 from vsdxkit.document import Document
 from vsdxkit.errors import MalformedPackageError
 from vsdxkit.partnames import relationships_part_name
-from vsdxkit.shapes import find_or_create_shapes_tag
+from vsdxkit.shape_tree import find_or_create_shapes_tag
 
 FIXTURES = os.path.dirname(os.path.realpath(__file__))
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import math
 import os
-import re
 import sys
 import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
@@ -24,7 +23,7 @@ from vsdxkit.package import PackageStore, XmlPart
 from vsdxkit.partnames import relationship_target, relationships_part_name, target_part_name
 from vsdxkit.relationships import all_of, append_if_absent
 from vsdxkit.shape_kind import ShapeKind
-from vsdxkit.shape_tree import iter_descendants
+from vsdxkit.shape_tree import SHEET_REFERENCE, iter_descendants, parent_of
 from vsdxkit.shapes import (
     Connector,
     PageView,
@@ -34,7 +33,6 @@ from vsdxkit.shapes import (
     _wrap_children,
     _wrap_descendants,
     is_connector,
-    parent_of,
 )
 from vsdxkit.swimlanes import SwimlaneDiagram, _diagram_on
 from vsdxkit.xmlio import PartTree, require_element, to_float, xml_value
@@ -48,9 +46,6 @@ _RELATIONSHIP_ID = f"{r_namespace}id"
 
 # the cells that size and place a 2-D shape, which a group member ties to its group
 _TRANSFORM_CELLS = ("Width", "Height", "LocPinX", "LocPinY", "Angle", "FlipX", "FlipY")
-
-# a formula names another shape on its page as Sheet.5! (Visio) or Sheet5!
-_SHEET_REFERENCE = re.compile(r"(?<!!)\bSheet\.?(\d+)!")
 
 
 def _dimension_value(value: float | str | None) -> str:
@@ -109,7 +104,7 @@ def _detach(shape: Shape, left_behind: Callable[[str], bool]) -> None:
         formula = None if cell is None else cell.formula
         if formula is None:
             continue
-        named = {match.group(1) for match in _SHEET_REFERENCE.finditer(formula)}
+        named = {match.group(2) for match in SHEET_REFERENCE.finditer(formula)}
         if any(sheet not in own and left_behind(sheet) for sheet in named):
             _drop_formula(shape, name)
 
