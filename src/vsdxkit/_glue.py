@@ -60,7 +60,7 @@ class CellFreeze:
     """A cell whose formula goes and whose value stays, as a floating end's coordinates do."""
 
     name: str
-    """The cell's name."""
+    """The cell's name, one of ``BeginX``, ``BeginY``, ``EndX`` and ``EndY``."""
 
 
 @dataclass(frozen=True)
@@ -68,7 +68,7 @@ class CellInherit:
     """A cell of the connector's own to remove, so that it takes its master's again."""
 
     name: str
-    """The cell's name."""
+    """The cell's name, such as ``BegTrigger`` on a floating end or ``GlueType`` without dynamic glue."""
 
 
 CellChange: TypeAlias = CellWrite | CellFreeze | CellInherit

@@ -35,7 +35,7 @@ class ShapeMetrics(Protocol):
 
     @property
     def begin_x(self) -> float | None:
-        """The x of a 1-D shape's begin point, for the formulas that place a connector's text or centre."""
+        """The x of a 1-D shape's begin point, for the formulas that derive its pin, width, height and angle from its ends."""
         ...
 
     @property
