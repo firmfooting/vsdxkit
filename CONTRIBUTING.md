@@ -49,6 +49,9 @@ CI runs the tests across Python 3.10–3.14 on Linux and Windows, and on 3.10 an
 Python 3.12. There is more besides: a lowest-direct dependency-floor job, a
 distribution build-and-smoke-test, a type-completeness threshold on the built
 wheel (`tools/check_type_completeness.py`, pyright `--verifytypes`, at 100.0%),
+a check that every name the wheel exports is in the generated API reference
+(`tools/check_api_documented.py`, against that report and the docs build's
+`objects.inv`),
 a LibreOffice import test, a coverage threshold, a mypy consumer fixture, and
 `tools/check_action_pins.py` and `tools/check_public_annotations.py`. zizmor
 runs as its own workflow rather than inside CI. You do not need to run those
