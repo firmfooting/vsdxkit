@@ -144,9 +144,9 @@ as you hold it.
           vis.save_vsdx()
 
       # 1.0
-      vis = Document.open("diagram.vsdx")
-      vis.pages[0].name = "Current state"
-      vis.save()
+      document = Document.open("diagram.vsdx")
+      document.pages[0].name = "Current state"
+      document.save()
 
 ``VisioFile.close_vsdx()``
    Delete the call. Nothing needs releasing.
@@ -317,41 +317,41 @@ Where a list is needed, ``list(page.children)`` makes one.
 Pages change through the collection
 -----------------------------------
 
-``vis.pages`` is the one place pages are looked up, created, copied and
+``document.pages`` is the one place pages are looked up, created, copied and
 deleted. The ``VisioFile`` methods that did the same are gone.
 
 ``vis.get_page(n)``
-   ``vis.pages[n]``, which raises ``IndexError`` where ``get_page`` returned
+   ``document.pages[n]``, which raises ``IndexError`` where ``get_page`` returned
    ``None``.
 
 ``vis.get_page_by_name(name)``
-   ``vis.pages.by_name(name)``, or ``vis.pages.require_name(name)``, which
+   ``document.pages.by_name(name)``, or ``document.pages.require_name(name)``, which
    raises :class:`vsdxkit.errors.NotFoundError`.
 
 ``vis.get_page_names()``
-   ``[page.name for page in vis.pages]``.
+   ``[page.name for page in document.pages]``.
 
 ``vis.add_page(name)``
-   ``vis.pages.create(name)``.
+   ``document.pages.create(name)``.
 
 ``vis.add_page_at(index, name)``
-   ``vis.pages.create(name, index=index)``. ``index`` runs from 0 to
-   ``len(vis.pages)``.
+   ``document.pages.create(name, index=index)``. ``index`` runs from 0 to
+   ``len(document.pages)``.
 
 ``vis.copy_page(page, index=..., name=...)``
-   ``vis.pages.copy(page, name=..., index=...)``. With no ``index`` the copy
+   ``document.pages.copy(page, name=..., index=...)``. With no ``index`` the copy
    goes straight after ``page``. A page of another document is refused.
 
 ``vis.remove_page_by_index(index)``
-   ``vis.pages.delete(vis.pages[index])``.
+   ``document.pages.delete(document.pages[index])``.
 
 ``vis.remove_page_by_name(name)``
-   ``vis.pages.delete(vis.pages.require_name(name))``. A name no page has
+   ``document.pages.delete(document.pages.require_name(name))``. A name no page has
    raises :class:`vsdxkit.errors.NotFoundError`, where 0.x did nothing.
 
 ``PagePosition.FIRST``, ``PagePosition.LAST``, ``PagePosition.END``, ``PagePosition.BEFORE``, ``PagePosition.AFTER``
-   An index instead: ``index=0`` for the first page, ``len(vis.pages)`` (or no
-   index, for ``create``) for the end, ``vis.pages.index(page)`` for before a
+   An index instead: ``index=0`` for the first page, ``len(document.pages)`` (or no
+   index, for ``create``) for the end, ``document.pages.index(page)`` for before a
    page, and no index, for ``copy``, for after it.
 
 Shapes delete themselves

@@ -246,7 +246,7 @@ class Document:
 
     @property
     def master_index(self) -> dict[str, Page]:
-        """Every master by name, e.g. 'Dynamic connector'. The first of a name, as `MasterCatalog.by_name` answers."""
+        """Every master by name, e.g. 'Dynamic connector'. Where two masters share a name, the first wins."""
         index: dict[str, Page] = {}
         for page in self._masters.pages:
             index.setdefault(page.name, page)
