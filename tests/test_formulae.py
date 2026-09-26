@@ -11,7 +11,7 @@ import math
 import pytest
 
 from vsdxkit import namespace
-from vsdxkit.formulae import calc_value
+from vsdxkit._formulae import calc_value
 
 NS = namespace[1:-1]
 
@@ -65,7 +65,7 @@ def test_a_diagonal_cannot_pin_the_argument_order():
 
 def test_every_formula_in_the_table_is_callable():
     """The table is a lookup from Visio formula text to an implementation."""
-    from vsdxkit.formulae import func_map
+    from vsdxkit._formulae import func_map
 
     assert func_map, "the formula table is empty"
     assert all(callable(f) for f in func_map.values())

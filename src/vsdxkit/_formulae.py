@@ -5,7 +5,7 @@ from collections.abc import Callable
 from logging import Logger
 from typing import Protocol
 
-from vsdxkit.logging_support import get_logger
+from vsdxkit._logging_support import get_logger
 
 logger: Logger = get_logger(__name__)
 

@@ -38,10 +38,12 @@ defines it:
    the library raises.
 
 ``from vsdx import calc_value``
-   ``from vsdxkit.formulae import calc_value``
+   Internal in 1.0; no public replacement. See "Internal modules are
+   private" below.
 
 ``from vsdx import get_logger``
-   ``from vsdxkit.logging_support import get_logger``
+   ``logging.getLogger("vsdxkit")``, as shown under
+   ``VisioFile(path, debug=True)`` below.
 
 ``from vsdx import attach_debug_stream_handler``, ``vsdx.logging_support.attach_debug_stream_handler()``
    Gone. Configure logging for the ``vsdxkit`` logger instead, as shown under
@@ -901,3 +903,28 @@ The package differ is gone
    ``VisioFileDiff.extract_file_data``, ``VisioFileDiff.filepath_a``,
    ``VisioFileDiff.filepath_b``, ``VisioFileDiff.get_file_diffs`` and
    ``VisioFileDiff.removed_members``.
+
+Internal modules are private
+----------------------------
+
+Every name 1.0 exports is user API on purpose. The rest start with an
+underscore, in their own name or their module's, and may change in any
+release. The modules below hold only the library's plumbing, so each is
+renamed with a leading underscore; nothing in them is supported.
+
+``vsdx.formulae.calc_value``, ``formulae.func_map``, ``formulae.width_x_1``, ``formulae.width_x_0``, ``formulae.middle_x``, ``formulae.middle_y``, ``formulae.center_x``, ``formulae.center_y``, ``formulae.diag_width``, ``formulae.angle``, ``formulae.width``, ``formulae.height``
+   Internal in 1.0; no public replacement. They compute the values
+   ``shape.set_start_and_finish(...)`` writes beside a line's formulas,
+   which it still does.
+
+``vsdx.inheritance.InheritedRow``, ``InheritedRow.inherited``, ``InheritedRow.make_local``
+   ``InheritedRow`` is internal in 1.0. Its two members are public on the
+   rows a shape inherits from its master,
+   :class:`vsdxkit.geometry.GeometryRow` and
+   :class:`vsdxkit.shapes.DataProperty`: ``row.inherited`` says whether the
+   row is still the master's, and ``row.make_local()`` gives the shape a
+   row of its own.
+
+``vsdx.logging_support.get_logger``
+   ``logging.getLogger("vsdxkit")``. The library logs under ``vsdxkit`` and
+   never configures a handler itself.

@@ -7,8 +7,8 @@ import pytest
 from helpers.connect_records import page_records
 
 from vsdxkit import namespace
+from vsdxkit._formulae import calc_value
 from vsdxkit.document import Document
-from vsdxkit.formulae import calc_value
 from vsdxkit.shapes import Shape
 from vsdxkit.xmlio import pretty_print_element
 

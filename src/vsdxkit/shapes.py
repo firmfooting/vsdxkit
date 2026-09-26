@@ -16,15 +16,15 @@ else:
 
 
 from vsdxkit import namespace
+from vsdxkit._formulae import calc_value
+from vsdxkit._inheritance import InheritedRow
+from vsdxkit._logging_support import get_logger
+from vsdxkit._shape_part import AttachedShape, ShapePart
 from vsdxkit.connectors import _ConnectorPage, _glued_ends, _retarget_connector
 from vsdxkit.errors import InvalidOperationError, NotFoundError, PackageError
-from vsdxkit.formulae import calc_value
 from vsdxkit.geometry import Geometry, GeometryCell
 from vsdxkit.glue import ConnectorOptions, Glue, Routing
-from vsdxkit.inheritance import InheritedRow
-from vsdxkit.logging_support import get_logger
 from vsdxkit.shape_kind import ShapeKind
-from vsdxkit.shape_part import AttachedShape, ShapePart
 from vsdxkit.shape_tree import find_or_create_shapes_tag, is_connector_element, iter_children, iter_edges, parent_of
 from vsdxkit.xmlio import PartTree, make_cell_element, to_float, xml_value
 
@@ -372,7 +372,7 @@ class DataProperty(InheritedRow, ShapePart):
     """Represents a single Data Property item associated with a Shape object
 
     A property a shape inherits from its master is handed out marked
-    :attr:`~vsdxkit.inheritance.InheritedRow.inherited`. Setting :attr:`value` on
+    :attr:`inherited`. Setting :attr:`value` on
     one materialises an override row on the instance rather than writing to the
     master page's XML.
     """

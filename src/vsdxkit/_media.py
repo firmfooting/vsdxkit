@@ -65,8 +65,8 @@ _loading = threading.Lock()
 
 
 def media_path(filename: str) -> str:
-    """Path to a bundled donor in the module-adjacent 'media' folder."""
-    return str(Path(__file__).resolve().parent / "media" / filename)
+    """Path to a bundled donor in the module-adjacent '_bundled' folder."""
+    return str(Path(__file__).resolve().parent / "_bundled" / filename)
 
 
 def _donor(filename: str, open_document: Callable[[str], _Donor]) -> _Donor:

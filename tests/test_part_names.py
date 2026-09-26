@@ -15,7 +15,7 @@ import zipfile
 
 import pytest
 
-from vsdxkit import media
+from vsdxkit import _media
 from vsdxkit.document import Document
 from vsdxkit.errors import MalformedPackageError
 from vsdxkit.partnames import relationships_part_name
@@ -106,8 +106,8 @@ def test_the_connector_master_is_imported_from_the_donor_not_the_target(vsdx_cop
     page = vis.pages[0]
     shapes = list(page.children)
     page.connect(shapes[0], shapes[1])
-    donor = media._donor(media.MEDIA, Document.open)
-    master_page_id = media._sentinel(media.MEDIA, media.STRAIGHT_CONNECTOR, Document.open).master_page_ID
+    donor = _media._donor(_media.MEDIA, Document.open)
+    master_page_id = _media._sentinel(_media.MEDIA, _media.STRAIGHT_CONNECTOR, Document.open).master_page_ID
     assert master_page_id is not None
     connector_master = donor._master_page_by_id(master_page_id)
     assert connector_master is not None

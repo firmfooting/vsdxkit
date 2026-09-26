@@ -17,10 +17,10 @@ from vsdxkit import (
     r_namespace,
     vt_namespace,
 )
+from vsdxkit._logging_support import get_logger
+from vsdxkit._masters import MasterCatalog
+from vsdxkit._media import MEDIA, _connector_shape, _kind_shape, _style_copy
 from vsdxkit.errors import InvalidOperationError, MalformedPackageError, MissingPartError
-from vsdxkit.logging_support import get_logger
-from vsdxkit.masters import MasterCatalog
-from vsdxkit.media import MEDIA, _connector_shape, _kind_shape, _style_copy
 from vsdxkit.package import PackageLimits, PackageStore, XmlPart, check_relationship_target
 from vsdxkit.pages import Page, PageCollection, _DocumentSeam, _PagePosition
 from vsdxkit.partnames import (
@@ -475,7 +475,7 @@ class Document:
         return self._style_sheets().find(f"{namespace}StyleSheet[@ID = '{ID}']")
 
     def _kind_source(self, kind: ShapeKind) -> Shape:
-        """The bundled shape `kind` is copied from; see :mod:`vsdxkit.media`."""
+        """The bundled shape `kind` is copied from, one of the donors `vsdxkit._media` loads."""
         return _kind_shape(kind, Document.open)
 
     def _copy_connector(self, page: Page) -> Connector:

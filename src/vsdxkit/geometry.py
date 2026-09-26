@@ -12,10 +12,10 @@ if sys.version_info >= (3, 12):
 else:
     from typing_extensions import override
 
+from vsdxkit._inheritance import InheritedRow
+from vsdxkit._logging_support import get_logger
+from vsdxkit._shape_part import AttachedShape, ShapePart
 from vsdxkit.errors import InvalidOperationError
-from vsdxkit.inheritance import InheritedRow
-from vsdxkit.logging_support import get_logger
-from vsdxkit.shape_part import AttachedShape, ShapePart
 from vsdxkit.xmlio import make_cell_element, pretty_print_element, to_float, xml_value
 
 logger: Logger = get_logger(__name__)
@@ -58,7 +58,7 @@ class Geometry(ShapePart):
     of the same name rather than replacing it.
 
     An inherited row reads the master's cells but is marked
-    :attr:`~vsdxkit.inheritance.InheritedRow.inherited`. The first write to it,
+    :attr:`GeometryRow.inherited`. The first write to it,
     through :attr:`GeometryRow.x`, :meth:`move`, :meth:`set_move_to` or
     :meth:`set_line_to`, materialises an override row on this shape and leaves
     the master alone.
