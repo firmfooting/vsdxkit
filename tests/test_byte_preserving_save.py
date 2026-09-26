@@ -81,31 +81,6 @@ def test_save_as_then_save_writes_the_original(vsdx_copy, tmp_path):
     assert vis.pages[0].shapes.by_text("In place") is None
 
 
-def test_reassigning_filename_redirects_an_in_place_save(vsdx_copy, tmp_path):
-    """Fails if an in-place save writes to the path the store was opened from when `vis.filename` has changed since.
-
-    Before the store, `save()` with no argument wrote to `self.filename`,
-    so assigning it was how a caller pointed the next plain save somewhere
-    else. The store remembers the absolute path it was opened from, which is
-    what an unchanged `filename` means; a changed one is still the caller's
-    destination. The source must be left as it was.
-    """
-    source = vsdx_copy("test8_simple_connector.vsdx")
-    with open(source, "rb") as handle:
-        original = handle.read()
-    other = str(tmp_path / "other.vsdx")
-    vis = Document.open(source)
-    shape = vis.pages[0].shapes.by_text("Shape A")
-    assert shape is not None
-    shape.text = "Redirected"
-    vis.filename = other
-    vis.save()
-    vis = Document.open(other)
-    assert vis.pages[0].shapes.by_text("Redirected") is not None
-    with open(source, "rb") as handle:
-        assert handle.read() == original
-
-
 def test_a_canonically_equal_replacement_tree_saves_the_original_bytes(vsdx_copy, tmp_path):
     """Fails if assigning a new tree to a parsed part drops the baseline the part arrived with.
 

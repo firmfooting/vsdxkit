@@ -786,20 +786,6 @@ class Shape:
             self._geometry = Geometry(xml=self._geometry_xml, shape=self)
         return self._geometry
 
-    @geometry.setter
-    def geometry(self, value: Geometry | None) -> None:
-        """Give the shape a Geometry, or ``None`` to report none at all.
-
-        Here because this was a plain attribute before it was built on demand,
-        and assigning it worked. It writes nothing to the shape's XML, so the
-        two part company until the shape is read again.
-        """
-        # guarded although it writes no XML: it points the Shape at geometry
-        # that the document it belongs to can no longer be saved with
-        self._require_attached("replacing a shape's geometry")
-        self._geometry = value
-        self._geometry_xml = value.xml if value is not None else None
-
     @property
     def is_master_shape(self) -> bool:
         """Returns True if the shape is a master or False if the shape inherits from a master shape or has no master"""

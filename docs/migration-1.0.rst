@@ -840,3 +840,17 @@ open an issue asking for an API.
 ``page.page_id``, ``page.rel_id``, ``page.master_unique_id``
    Internal in 1.0; no public replacement. A page is known by ``page.name``
    and by its place in ``document.pages``.
+
+Two 0.x holdovers go
+--------------------
+
+``vis.filename = path``
+   Read-only. ``document.filename`` is the path the document was opened
+   from, and ``save()`` with no target writes back over it. Assigning it used
+   to send the next plain save somewhere else; that is
+   ``document.save(path)`` now, and the assignment raises ``AttributeError``.
+
+``shape.geometry = geometry``
+   Read-only. The assignment wrote nothing to the shape's XML, so the shape
+   and its file disagreed. Change the geometry through the rows and cells
+   of ``shape.geometry``.

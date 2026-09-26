@@ -75,13 +75,11 @@ class Document:
 
     def __init__(self, package: PackageStore, filename: str) -> None:
         """Wrap a package already read into memory. Use :meth:`open` to open a file."""
-        self.filename = filename
+        self._filename = filename
         # the raw part XML (`_pages_xml`, `_app_xml` and the rest) is a set of
         # store-backed properties, defined below -- there is nothing to
         # initialise here, since the store itself is the state.
         self._package = package
-        # `filename` as the store was opened from it; see save
-        self._opened_filename = filename
         self._pages: list[Page] = []
         self._load_pages()
         self._masters = MasterCatalog(self._package, self._master_page)
@@ -113,6 +111,15 @@ class Document:
         if limits_path is not None:
             limits = PackageLimits.from_json_file(os.fspath(limits_path))
         return cls(PackageStore.open(filename, limits=limits if limits is not None else PackageLimits()), filename)
+
+    @property
+    def filename(self) -> str:
+        """The path this document was opened from, as it was given to :meth:`open`.
+
+        Read-only: ``save()`` with no target writes back over this file. To
+        write somewhere else, name the destination: ``document.save(target)``.
+        """
+        return self._filename
 
     @staticmethod
     def _part_root(tree: PartTree | None, description: str) -> ET.Element:
@@ -1007,46 +1014,31 @@ class Document:
             return new_filename
         return new_filename + (".vsdm" if self.is_macro_enabled else ".vsdx")
 
-    def _in_place_filename(self) -> str:
-        """The source path, checked against the package kind but never renamed.
-
-        A save with no destination keeps the name it was opened under, so the
-        check can only refuse -- silently rewriting the caller's path would be
-        a worse surprise than the mismatch itself. The constructor already
-        rejects anything but a .vsdx or .vsdm name, so there is never a missing
-        extension to append here.
-        """
-        self._check_destination_kind(self.filename)
-        return self.filename
-
     def save(self, target: str | os.PathLike[str] | None = None) -> Path:
         """Write the document, and return the absolute path it was written to.
 
         :param target: where to write. A ``.vsdx`` or ``.vsdm`` extension must
             match the package's own kind; any other name gets the matching
-            extension appended. Omit it to save over the source file, or over
-            ``filename`` if that has been reassigned since the document was
-            opened; that name is checked the same way but never renamed.
+            extension appended. Omit it to save over the file the document
+            was opened from; that name is checked the same way but never renamed.
         :raises InvalidOperationError: if the extension contradicts the package kind
         """
         if not self._package.names():
             raise InvalidOperationError("cannot save an empty package")
 
-        new_filename = None if target is None else os.fspath(target)
+        if target is None:
+            # the name it was opened under can only be refused, never rewritten:
+            # silently renaming the caller's file would be a worse surprise than
+            # the mismatch. `open` already refused anything but .vsdx or .vsdm.
+            self._check_destination_kind(self._filename)
+            # every change is already in the store -- the trees this document
+            # edits are the store's own -- so saving is writing it, member by
+            # member. In place, that is over the absolute path the store
+            # captured at open: `filename` may be relative, and resolve against
+            # another working directory by the time this runs.
+            return self._package.save()
         # resolve the destination first, so a refused extension writes nothing
-        destination = self._in_place_filename() if new_filename is None else self._destination_filename(new_filename)
-
-        # every change is already in the store -- the trees this document edits
-        # are the store's own -- so saving is writing it, once, member by member.
-        # An in-place save writes back over the absolute source `PackageStore`
-        # captured at open, not over `self.filename`, which may be relative and
-        # resolve against a different working directory by the time this runs.
-        # The exception is a `filename` the caller has reassigned since open:
-        # a plain save went to `self.filename` before the store existed, so a
-        # new one is where the caller means the save to go. It goes there as an
-        # explicit target, which leaves the store's source where it was.
-        redirected = new_filename is None and self.filename != self._opened_filename
-        return self._package.save(destination if new_filename is not None or redirected else None)
+        return self._package.save(self._destination_filename(os.fspath(target)))
 
     def render(self, context: Mapping[str, object]) -> None:
         """Render the document as a Jinja template, in place.

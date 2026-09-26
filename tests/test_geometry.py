@@ -595,6 +595,15 @@ def test_reprs_identify_the_element_they_describe():
     assert "('PolylineTo', '2', 1.5, 2.0)" in repr(geometry)
 
 
+def test_a_shapes_geometry_cannot_be_assigned():
+    """Fails if the 0.x setter comes back: it wrote no XML, so the model and the file disagreed (#116)."""
+    vis = Document.open(TEST9)
+    shape = vis.pages[0].shapes.by_text("Line A")
+    assert shape is not None
+    with pytest.raises(AttributeError):
+        shape.geometry = None  # type: ignore[misc]
+
+
 # --- when the Geometry is built ---------------------------------------------
 
 
