@@ -9,10 +9,11 @@ Standards (Python logging HOWTO, library authorship):
 - lazy %-style message formatting (args passed to the logger, interpolated
   only when the level is enabled)
 
-Usage in a vsdx module:
+Usage in a vsdxkit module:
 
-    from .logging_support import get_logger
-    logger = get_logger(__name__)
+    from vsdxkit._logging_support import get_logger
+
+    _logger = get_logger(__name__)
 """
 
 import logging
