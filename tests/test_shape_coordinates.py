@@ -10,8 +10,6 @@ from vsdxkit.document import Document
         "y",
         "loc_x",
         "loc_y",
-        "line_to_x",
-        "line_to_y",
         "begin_x",
         "begin_y",
         "end_x",

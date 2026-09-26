@@ -48,7 +48,6 @@ _EDGE_TOLERANCE = 1e-9
 
 # User-section row names written by Visio on lane shapes
 ROW_HEADING_TEXT = "visHeadingText"
-ROW_SWIMLANE_GUID = "SwimlaneListGUID"
 
 _CONTAINER_NAME = "CFF Container"
 _SWIMLANE_LIST_NAME = "Swimlane List"

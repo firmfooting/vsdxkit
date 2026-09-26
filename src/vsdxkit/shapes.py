@@ -1344,22 +1344,6 @@ class Shape:
         self.set_cell_value("LocPinY", _coordinate_value(value))
 
     @property
-    def line_to_x(self) -> float | None:
-        return to_float(self.cell_value("Geometry/LineTo/X"), cell="Geometry/LineTo/X")
-
-    @line_to_x.setter
-    def line_to_x(self, value: float | str) -> None:
-        self.set_cell_value("Geometry/LineTo/X", _coordinate_value(value))
-
-    @property
-    def line_to_y(self) -> float | None:
-        return to_float(self.cell_value("Geometry/LineTo/Y"), cell="Geometry/LineTo/Y")
-
-    @line_to_y.setter
-    def line_to_y(self, value: float | str) -> None:
-        self.set_cell_value("Geometry/LineTo/Y", _coordinate_value(value))
-
-    @property
     def begin_x(self) -> float | None:
         return to_float(self.cell_value("BeginX"), cell="BeginX")
 

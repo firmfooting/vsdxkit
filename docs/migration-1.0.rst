@@ -762,8 +762,8 @@ which is gone along with its module. Membership is still geometric.
    As in 0.x, a row that is absent is not created.
 
 ``vsdx.containers.LANE_PITCH_INCHES``, ``containers.ROW_HEADING_TEXT``, ``containers.ROW_SWIMLANE_GUID``
-   ``vsdxkit.swimlanes.LANE_PITCH_INCHES``, ``ROW_HEADING_TEXT`` and
-   ``ROW_SWIMLANE_GUID``.
+   ``vsdxkit.swimlanes.LANE_PITCH_INCHES`` and ``ROW_HEADING_TEXT``.
+   ``ROW_SWIMLANE_GUID`` is gone, with no replacement: nothing read it.
 
 A shape on the edge two lanes share is now in the upper lane only. It used to
 count as a member of both.
@@ -820,6 +820,12 @@ These had no caller in the library, repeated a 1.0 name, or did nothing.
 
 ``page.master_base_id``
    Gone, with no replacement: nothing read it.
+
+``shape.line_to_x``, ``shape.line_to_y``
+   Gone. They read the last ``LineTo`` row of the shape's geometry, and
+   wrote a cell outside the geometry when the shape had no such row. Read
+   and write the rows through ``shape.geometry.rows``, or move a line's end
+   with ``shape.geometry.set_line_to(x, y)``.
 
 The page allocates shape IDs
 ----------------------------

@@ -22,7 +22,7 @@ import vsdxkit.shapes
 import vsdxkit.swimlanes
 import vsdxkit.templating
 from vsdxkit.geometry import GeometryCell, GeometryRow
-from vsdxkit.shapes import DataProperty
+from vsdxkit.shapes import DataProperty, Shape
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src" / "vsdxkit"
@@ -171,3 +171,12 @@ def test_an_internal_name_in_a_public_module_is_private(owner, name):
     """Fails if an internal of a public module or class loses its leading underscore."""
     assert not _has(owner, name)
     assert _has(owner, f"_{name}")
+
+
+@pytest.mark.parametrize(
+    ("owner", "name"), [(Shape, "line_to_x"), (Shape, "line_to_y"), (vsdxkit.swimlanes, "ROW_SWIMLANE_GUID")]
+)
+def test_a_dead_name_is_gone(owner, name):
+    """Fails if a name Phase 7 deleted as dead comes back, public or private."""
+    assert not _has(owner, name)
+    assert not _has(owner, f"_{name}")
