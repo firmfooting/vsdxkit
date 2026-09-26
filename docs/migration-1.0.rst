@@ -773,7 +773,8 @@ These had no caller in the library, repeated a 1.0 name, or did nothing.
    ``shape.xml.get(name)``, the attribute it read.
 
 ``shape.text_raw``
-   ``shape.text``.
+   ``shape.text``, which leaves out the formatting-run markup and the
+   trailing newline ``text_raw`` also showed.
 
 ``shape.loc_x_f``, ``shape.loc_y_f``
    ``shape.cell_formula("LocPinX")`` and ``shape.cell_formula("LocPinY")``.
@@ -781,7 +782,7 @@ These had no caller in the library, repeated a 1.0 name, or did nothing.
 ``shape.get_max_id()``
    Gone. The page allocates shape IDs itself. For the highest ID in a shape
    and the shapes inside it, use
-   ``max(int(s.ID) for s in (shape, *shape.descendants) if s.ID)``.
+   ``max((int(s.ID) for s in (shape, *shape.descendants) if s.ID), default=0)``.
 
 ``shapes.shape_type_names``
    Gone, with no replacement: nothing read it. ``isinstance(shape, Connector)``
