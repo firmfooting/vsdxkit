@@ -439,7 +439,11 @@ def _write_text(
 
 
 class Cell(ShapePart):
-    """Represents a Cell element in a vsdx xml file"""
+    """One of a shape's ShapeSheet cells: a name, a value and, sometimes, a formula.
+
+    Reach a cell through :attr:`Shape.cells` or a shape's cell writers,
+    rather than constructing one.
+    """
 
     xml: Element
     """The ``<Cell>`` element this reads and writes."""
@@ -749,7 +753,13 @@ def _as_shape(end: object) -> Shape:
 
 
 class Shape:
-    """Represents a single shape, or a group shape containing other shapes"""
+    """One shape on a page, or a group holding other shapes.
+
+    Reach a shape through ``page.shapes`` (every shape, at any depth) or
+    ``page.children`` (a page's or a group's top-level shapes), rather than
+    constructing one; ``page.create_shape(...)`` and :meth:`copy` make new
+    ones.
+    """
 
     xml: Element
     """The shape's ``<Shape>`` element, which this object is a view onto: reads come from it and writes go to it."""

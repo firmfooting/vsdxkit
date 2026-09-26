@@ -327,7 +327,9 @@ class Page:
 
         Setting it writes the new name as both the page's name and its
         universal name, in the document's page list and its ``app.xml``
-        titles. A name another page already has is not refused. On a master
+        titles. A name another page already has is not refused here, though
+        :meth:`vsdxkit.pages.PageCollection.by_name` then raises
+        :class:`vsdxkit.errors.PackageError` for that name. On a master
         page, or one removed from its document, it raises
         :class:`vsdxkit.errors.InvalidOperationError`.
         """
@@ -379,7 +381,7 @@ class Page:
 
     @property
     def is_master_page(self) -> bool:
-        """Return True if this page has a master unique id and there is a match in masters xml"""
+        """Whether this is one of the document's master pages rather than a drawing page."""
         if self._document._masters_xml is not None and self._master_unique_id:
             master_match = f'{namespace}Master[@UniqueID="{self._master_unique_id}"]'
             master_element = self._document._masters_xml.find(master_match)
@@ -411,7 +413,9 @@ class Page:
 
         Setting it takes a positive number, or a string that reads as one;
         anything else raises :class:`ValueError`, and ``None`` raises
-        :class:`TypeError`.
+        :class:`TypeError`. On a master page whose ID a drawing page also
+        has, this reads that drawing page's sheet instead of the master's
+        own.
 
         :raises MissingPartError: if the page sheet has no ``PageWidth`` cell
         :raises MalformedPackageError: if the ``PageWidth`` value is not a number
@@ -426,7 +430,9 @@ class Page:
     def height(self) -> float:
         """The page's height, in inches, from its page sheet's ``PageHeight`` cell; ``0.0`` for a cell with no value.
 
-        Setting it takes what :attr:`width` takes, and refuses what it refuses.
+        Setting it takes what :attr:`width` takes, and refuses what it
+        refuses; a master page whose ID a drawing page shares reads that
+        drawing page's sheet here too.
 
         :raises MissingPartError: if the page sheet has no ``PageHeight`` cell
         :raises MalformedPackageError: if the ``PageHeight`` value is not a number
@@ -1067,7 +1073,12 @@ class PageCollection(Sequence[Page]):
         return matches[0] if matches else None
 
     def require_name(self, name: str) -> Page:
-        """The page called `name`."""
+        """The page called `name`.
+
+        :raises NotFoundError: if the document has no page called `name`
+        :raises PackageError: if the document has two pages called `name`,
+            which comes through :meth:`by_name`
+        """
         page = self.by_name(name)
         if page is None:
             raise NotFoundError(f"the document has no page called {name!r}")

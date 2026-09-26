@@ -231,9 +231,11 @@ class Geometry(ShapePart):
 
 
 class GeometryRow(InheritedRow, ShapePart):
-    """A row with type(T) and index(IX), each containing its Cells by name"""
+    """One row of the path a Geometry section draws, such as a ``MoveTo`` or a ``LineTo``, holding its cells by name.
 
-    """See: https://docs.microsoft.com/en-us/office/client-developer/visio/row-element-geometry-sectionvisio-xml """
+    Reach a row through :attr:`Geometry.rows`, rather than constructing one.
+    See: https://docs.microsoft.com/en-us/office/client-developer/visio/row-element-geometry-sectionvisio-xml
+    """
 
     geometry: Geometry
     """The :class:`Geometry` the row is in: for a row inherited from a master, the instance's, not the master's."""
@@ -360,7 +362,10 @@ class GeometryRow(InheritedRow, ShapePart):
         """The row's IX attribute.
 
         :attr:`Geometry.rows` is keyed when the section is read, so setting
-        this afterwards leaves the row filed under its old index.
+        this afterwards leaves the row filed under its old index. Setting it
+        writes ``str(value)`` to :attr:`xml` as it stands, so on an inherited
+        row it changes the master's row. A write to a detached shape's row
+        raises :class:`~vsdxkit.errors.InvalidOperationError`.
         """
         return self.xml.attrib.get("IX")
 
@@ -417,7 +422,10 @@ class GeometryRow(InheritedRow, ShapePart):
         """The Del attribute: whether a row inherited from a master is deleted.
 
         Assigning a falsy value removes the attribute, and raises ``KeyError``
-        if it was not set to begin with.
+        if it was not set to begin with. Setting it writes to :attr:`xml` as
+        it stands, so on an inherited row it changes the master's row. A
+        write to a detached shape's row raises
+        :class:`~vsdxkit.errors.InvalidOperationError`.
         """
         return self.xml.attrib.get("Del")
 
@@ -436,7 +444,11 @@ class GeometryRow(InheritedRow, ShapePart):
 
 
 class GeometryCell(ShapePart):
-    """class to represent a Cell element, a name value pair. This may be a child of Geometry or of GeometryRow"""
+    """One cell of a Geometry section or one of its rows: a name and a value, such as ``X`` or ``Y``.
+
+    Reach a cell through :attr:`Geometry.cells` or :attr:`GeometryRow.cells`,
+    rather than constructing one.
+    """
 
     parent: GeometryRow | Geometry
     """The :class:`GeometryRow` or :class:`Geometry` the cell is in: for a cell inherited from a master, the master's."""

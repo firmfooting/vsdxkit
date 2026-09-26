@@ -48,6 +48,12 @@ class ConnectorOptions:
     ``from_point`` and ``to_point`` are 0-based rows of each shape's
     ``Connection`` section, and are read only when ``glue`` is
     :attr:`Glue.POINT`.
+
+    :raises TypeError: for a ``glue`` that is not a :class:`Glue`, or a
+        ``routing`` that is not a :class:`Routing`
+    :raises vsdxkit.errors.InvalidOperationError: for a ``from_point`` or
+        ``to_point`` that is negative or not an ``int`` (a ``bool`` does not
+        count as one)
     """
 
     glue: Glue = Glue.DYNAMIC
@@ -60,13 +66,7 @@ class ConnectorOptions:
     """The 0-based row of the target shape's ``Connection`` section the connector's end glues to, under :attr:`Glue.POINT`."""
 
     def __post_init__(self) -> None:
-        """Refuse options that cannot be written.
-
-        A ``glue`` that is not a :class:`Glue`, or a ``routing`` that is not a
-        :class:`Routing`, raises :class:`TypeError`; a point that is negative,
-        or not an ``int`` (a ``bool`` does not count as one), raises
-        :class:`vsdxkit.errors.InvalidOperationError`.
-        """
+        """Refuse options that cannot be written; see the class docstring for what is raised."""
         if not isinstance(self.glue, Glue):
             raise TypeError(f"glue must be a Glue, not {self.glue!r}")
         if not isinstance(self.routing, Routing):
