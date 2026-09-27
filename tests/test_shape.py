@@ -138,7 +138,8 @@ def test_shape_locations(filename: str, expected_locations: str, basedir):
     [
         ("test1.vsdx", "1", (1.332677148526936, 10.65551182326173)),
         ("test2.vsdx", "2", (1.082677148526936, 0.7874015625650443)),  # center of a group shape
-        ("test2.vsdx", "16", (1.6903102768832179, 8.188976116607332)),  # test center of a line
+        # a diagonal line: the midpoint of its ends, which is its pin
+        ("test2.vsdx", "16", (1.6074001034343522, 8.57966663637889)),
     ],
 )
 def test_shape_center(filename: str, shape_id: str, expected_center: str, basedir):
@@ -147,7 +148,50 @@ def test_shape_center(filename: str, shape_id: str, expected_center: str, basedi
     page = vis.pages[0]  # type: Page
     shape = page.shapes.require_id(shape_id)
 
-    assert shape.center_x_y == expected_center
+    assert shape.center_x_y == pytest.approx(expected_center)
+
+
+@pytest.fixture
+def line_a(vsdx_copy):
+    """test9's 'Line A', a plain line drawn in Visio: its Width is its length, and its Angle turns it."""
+    return Document.open(vsdx_copy("test9_rect_and_line.vsdx")).pages[0].shapes.by_text("Line A")
+
+
+def _midpoint(shape) -> tuple[float, float]:
+    return (shape.begin_x + shape.end_x) / 2, (shape.begin_y + shape.end_y) / 2
+
+
+def test_the_centre_of_a_diagonal_plain_line_is_the_midpoint_of_its_ends(line_a):
+    """Width is the line's length and its Height 0, so ``begin + (width/2, height/2)`` overshot x and kept the begin's y (#436)."""
+    assert line_a.height == 0.0 and line_a.begin_y != line_a.end_y
+
+    assert line_a.center_x_y == pytest.approx(_midpoint(line_a))
+
+
+def test_the_centre_of_a_plain_line_placed_right_to_left_is_the_midpoint_of_its_ends(line_a):
+    """Placed from (4, 7) to (1, 7), the line's Width is 3, not -3, and its centre is (2.5, 7), not (5.5, 7)."""
+    line_a.set_start_and_finish((4.0, 7.0), (1.0, 7.0))
+    assert line_a.width == pytest.approx(3.0)
+
+    assert line_a.center_x_y == pytest.approx((2.5, 7.0))
+
+
+def test_a_dynamic_connectors_centre_is_as_it_was(vsdx_copy):
+    """A dynamic connector's Width and Height are its spans, so its begin plus half of each is already its midpoint."""
+    connector = Document.open(vsdx_copy("test9_rect_and_line.vsdx")).pages[0].shapes.by_text("Conn A")
+    as_it_was = (connector.begin_x + connector.width / 2, connector.begin_y + connector.height / 2)
+
+    assert connector.center_x_y == pytest.approx(as_it_was)
+    assert connector.center_x_y == pytest.approx(_midpoint(connector))
+
+
+def test_connect_to_a_line_placed_right_to_left_glues_at_its_midpoint(line_a):
+    """The glue engine writes the end at the target's `center_x_y` before Visio recalculates it."""
+    line_a.set_start_and_finish((4.0, 7.0), (1.0, 7.0))
+    page = line_a.page
+    connector = page.connect(page.shapes.by_text("Rect A"), line_a)
+
+    assert (connector.end_x, connector.end_y) == pytest.approx((2.5, 7.0))
 
 
 @pytest.mark.parametrize("filename", ["test2.vsdx", "test3_house.vsdx"])

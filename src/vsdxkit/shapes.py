@@ -1984,16 +1984,15 @@ class Shape:
         """A centre for the shape as ``(x, y)``, in inches in its parent's coordinates.
 
         For a 2-D shape it is the pin, either half ``None`` where that cell
-        is missing. For a 1-D shape it is the begin point plus half the
-        width and half the height, a missing cell counting as 0.
+        is missing. For a 1-D shape, a line or a connector, it is the
+        midpoint of its ends, as :attr:`bounds` gives them, whichever way it
+        points: a line's ``Width`` is its length, so half of it added to the
+        begin point is the midpoint only of a line drawn left to right.
         """
-        if self.begin_x is not None:
-            x = self.begin_x + ((self.width or 0.0) / 2)
-            y = (self.begin_y or 0.0) + ((self.height or 0.0) / 2)
-        else:
-            x = self.x
-            y = self.y
-        return x, y
+        if _is_connector(self):
+            begin_x, begin_y, end_x, end_y = self.bounds
+            return (begin_x + end_x) / 2, (begin_y + end_y) / 2
+        return self.x, self.y
 
     def set_start_and_finish(
         self, start: tuple[float | None, float | None], finish: tuple[float | None, float | None]
