@@ -208,21 +208,19 @@ def _started_process_id(path: Path) -> int | None:
     return int(text) if text.isdigit() else None
 
 
-def _stop_visio_command(process_id: int) -> str:
-    """PowerShell that kills process `process_id` if it is a Visio: an ID a Visio has let go of can be another program's."""
-    return f"Get-Process -Id {process_id} -ErrorAction SilentlyContinue | Where-Object ProcessName -eq 'VISIO' | Stop-Process -Force"
+_LIST_VISIO = "Get-Process -Name VISIO -ErrorAction SilentlyContinue"
+"""PowerShell listing every VISIO process, piped on to pick and print IDs."""
 
 
-def _visio_ids() -> set[int]:
-    """The IDs of the VISIO processes running now."""
+def _visio_ids(*, invisible_only: bool = False) -> set[int]:
+    """The IDs of the VISIO processes running now; with `invisible_only`, of those with no visible main window.
+
+    A Visio a script starts is a `Visio.InvisibleApp`, whose process has no
+    visible main window (``MainWindowHandle`` 0); one a developer opens has.
+    """
+    pick = " | Where-Object { $_.MainWindowHandle -eq 0 }" if invisible_only else ""
     result = subprocess.run(
-        [
-            _shell(),
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            "Get-Process -Name VISIO -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }",
-        ],
+        [_shell(), "-NoProfile", "-NonInteractive", "-Command", f"{_LIST_VISIO}{pick} | ForEach-Object {{ $_.Id }}"],
         capture_output=True,
         text=True,
         timeout=60,
@@ -236,34 +234,43 @@ def _stop_started_visio(process_id_file: Path, before: set[int]) -> str:
     Killing PowerShell does not kill Visio: `New-Object -ComObject` starts
     VISIO.EXE out of process, so the script's own cleanup never runs and an
     invisible Visio is left holding the staged files. Only that one is
-    killed, not every Visio started since the run began: a developer's,
-    opened while a long run was under way, is theirs, with their unsaved
-    work in it (#463).
+    killed, never a developer's, which is theirs, with their unsaved work in
+    it (#463).
 
     The script names its Visio in `process_id_file` as soon as it has one.
-    One killed before then, while COM activation hung with VISIO.EXE
-    already started, named none: where one Visio has started since
-    `before`, the IDs running when the script was started, that is the
-    one; where more have, which is the script's is not known, and none is
-    killed.
+    One killed before then, while COM activation hung, named none; its
+    Visio is then the one VISIO process with no visible window that was not
+    running when the script was started, `before`. Where there is no such
+    process, or more than one, none is killed, and they are named. A kill
+    is reported only once the process is seen to be gone, and it is made by
+    ID only while the process is still a VISIO: an ID a Visio has let go of
+    can be another program's.
     """
     process_id = _started_process_id(process_id_file)
     if process_id is None:
-        started = sorted(_visio_ids() - before)
-        if not started:
+        candidates = sorted(_visio_ids(invisible_only=True) - before)
+        if not candidates:
             return "; it had not started Visio"
-        if len(started) > 1:
+        if len(candidates) > 1:
             return (
-                f"; Visio processes {', '.join(map(str, started))} started while it ran and it named none as its own,"
-                " so none was killed"
+                f"; invisible Visio processes {', '.join(map(str, candidates))} started while it ran and it named none"
+                " as its own, so none was killed; end the ones that are not yours"
             )
-        [process_id] = started
+        [process_id] = candidates
     subprocess.run(
-        [_shell(), "-NoProfile", "-NonInteractive", "-Command", _stop_visio_command(process_id)],
+        [
+            _shell(),
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            f"Get-Process -Id {process_id} -ErrorAction SilentlyContinue | Where-Object ProcessName -eq 'VISIO' | Stop-Process -Force",
+        ],
         capture_output=True,
         text=True,
         timeout=60,
     )
+    if process_id in _visio_ids():
+        return f"; the Visio it started, process {process_id}, could not be killed: end it before the next run"
     return f"; so was the Visio it started, process {process_id}"
 
 

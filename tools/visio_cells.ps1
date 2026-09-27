@@ -73,13 +73,6 @@ function Write-Refusal {
     exit $Code
 }
 
-function Get-VisioProcessIds {
-    # @() at the call site: PowerShell unrolls an array on `return`, so an
-    # empty result would otherwise arrive as $null, and $null.Count throws
-    # under Set-StrictMode.
-    return @(Get-Process -Name VISIO -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
-}
-
 # CellExistsU's second argument: 0 asks "does this shape have this cell at all",
 # counting one inherited from a master. 1 would ask only about cells stated
 # locally, and a stencil instance states almost none of them. Kept in step
@@ -169,9 +162,6 @@ $ownProcessId = $null
 $out = @()
 try {
     $app = New-Object -ComObject Visio.InvisibleApp
-    # The one process this script may kill if Quit leaves it running. Not
-    # "any Visio started during the run": a Visio the developer opens while
-    # a long run is under way is theirs, with their unsaved work in it (#463).
     $ownProcessId = Register-OwnVisio -App $app -ProcessIdFile $ProcessIdFile
     # Answer every modal dialog with "no" instead of waiting for a click: an
     # unattended run that puts up a dialog does not fail, it hangs.
@@ -218,9 +208,11 @@ finally {
     [System.GC]::WaitForPendingFinalizers()
 
     # Quit is a request, not a guarantee: a document Visio believes is dirty
-    # keeps the process alive holding the file. Only the Visio this script
-    # started is killed, so one the developer had open, or opened while this
-    # ran, is never taken from them.
+    # keeps the process alive holding the file.
+    if ($null -eq $ownProcessId) {
+        # New-Object can start VISIO.EXE and fail before this script could name it
+        $ownProcessId = Find-StrandedVisio -Preexisting $preexisting
+    }
     if ($null -ne $ownProcessId) {
         [void](Stop-OwnVisio -ProcessId $ownProcessId)
     }

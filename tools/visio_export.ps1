@@ -65,10 +65,6 @@ function Write-Refusal {
     exit $Code
 }
 
-function Get-VisioProcessIds {
-    return @(Get-Process -Name VISIO -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
-}
-
 # CellExistsU's second argument: 0 counts a cell inherited from a master, as
 # tools/visio_cells.ps1's $visExistsAnywhere does.
 $visExistsAnywhere = 0
@@ -106,9 +102,6 @@ $out = @()
 $visio = [ordered]@{}
 try {
     $app = New-Object -ComObject Visio.InvisibleApp
-    # The one process this script may kill if Quit leaves it running. Not
-    # "any Visio started during the run": a Visio the developer opens while
-    # a long export is under way is theirs, with their unsaved work in it.
     $ownProcessId = Register-OwnVisio -App $app -ProcessIdFile $ProcessIdFile
     $app.AlertResponse = 7
     $visio.version = [string]$app.Version
@@ -156,6 +149,10 @@ finally {
     [System.GC]::Collect()
     [System.GC]::WaitForPendingFinalizers()
 
+    if ($null -eq $ownProcessId) {
+        # New-Object can start VISIO.EXE and fail before this script could name it
+        $ownProcessId = Find-StrandedVisio -Preexisting $preexisting
+    }
     if ($null -ne $ownProcessId) {
         [void](Stop-OwnVisio -ProcessId $ownProcessId)
     }

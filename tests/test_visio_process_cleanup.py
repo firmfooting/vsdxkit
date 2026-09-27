@@ -17,7 +17,6 @@ import pytest
 
 TOOLS = Path(__file__).resolve().parent.parent / "tools"
 SCRIPTS = ("visio_cells.ps1", "visio_observe.ps1", "visio_export.ps1")
-LIST_VISIO = "Get-Process -Name VISIO -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }"
 
 
 def _load(name: str):
@@ -37,30 +36,43 @@ def verify(monkeypatch):
     return module
 
 
-class _Powershell:
-    """Stands in for `subprocess.run`.
+KILL = "Get-Process -Id {} -ErrorAction SilentlyContinue | Where-Object ProcessName -eq 'VISIO' | Stop-Process -Force"
 
-    The script times out, having named Visio `process_id` in its file, or
-    none; listing the VISIO processes gives each of `running` in turn, before
-    the script and after it; every kill is kept.
+
+class _Powershell:
+    """Stands in for `subprocess.run`, over the VISIO processes Windows would have.
+
+    `visio` maps each running Visio's ID to whether it has a visible window.
+    The script starts invisible Visio `spawned`, names it in its file only if
+    `named`, and times out. A listing reads `visio`; a kill removes its Visio
+    unless it is `unkillable`, and is kept.
     """
 
-    def __init__(self, process_id_file: Path, process_id: int | None, running: tuple[set[int], ...] = (set(), set())):
+    def __init__(self, process_id_file: Path, visio: dict[int, bool], spawned: int | None = None, *, named: bool = True):
         self.process_id_file = process_id_file
-        self.process_id = process_id
-        self.running = list(running)
+        self.visio = dict(visio)
+        self.spawned = spawned
+        self.named = named
+        self.unkillable: set[int] = set()
         self.kills: list[str] = []
 
     def __call__(self, command, **kwargs):
         expression = command[-1]
         if "-ProcessIdFile" in expression:
             assert f"-ProcessIdFile '{self.process_id_file}'" in expression
-            if self.process_id is not None:
-                self.process_id_file.write_text(f"{self.process_id}\r\n", encoding="ascii")
+            if self.spawned is not None:
+                self.visio[self.spawned] = False
+                if self.named:
+                    self.process_id_file.write_text(f"{self.spawned}\r\n", encoding="ascii")
             raise subprocess.TimeoutExpired(command, kwargs.get("timeout", 0))
-        if expression == LIST_VISIO:
-            return subprocess.CompletedProcess(command, 0, "\n".join(map(str, self.running.pop(0))), "")
+        if expression.startswith("Get-Process -Name VISIO"):
+            invisible_only = "MainWindowHandle -eq 0" in expression
+            ids = [pid for pid, visible in self.visio.items() if not (invisible_only and visible)]
+            return subprocess.CompletedProcess(command, 0, "\n".join(map(str, ids)), "")
         self.kills.append(expression)
+        killed = int(expression.split()[2])
+        if killed not in self.unkillable:
+            self.visio.pop(killed, None)
         return subprocess.CompletedProcess(command, 0, "", "")
 
 
@@ -73,71 +85,79 @@ def test_the_visio_a_script_started_is_read_from_the_file_it_wrote(verify, tmp_p
     assert verify._started_process_id(written) == 4242
 
 
-def test_stopping_kills_the_recorded_visio_and_no_other(verify, tmp_path, monkeypatch):
+def test_stopping_kills_the_named_visio_and_no_other(verify, tmp_path, monkeypatch):
     written = tmp_path / "visio.pid"
     written.write_text("4242", encoding="ascii")
-    powershell = _Powershell(written, None, running=({7}, {7, 4242, 5151}))
+    powershell = _Powershell(written, {7: True, 4242: False, 5151: True})
     monkeypatch.setattr(verify.subprocess, "run", powershell)
 
     assert verify._stop_started_visio(written, {7}) == "; so was the Visio it started, process 4242"
-    assert powershell.kills == [verify._stop_visio_command(4242)]
+    assert powershell.kills == [KILL.format(4242)]
+    assert set(powershell.visio) == {7, 5151}
 
 
-def test_stopping_before_the_script_named_its_visio_kills_the_one_that_started(verify, tmp_path, monkeypatch):
-    """COM activation can hang with VISIO.EXE started and the file not yet written; that Visio is the script's."""
-    powershell = _Powershell(tmp_path / "visio.pid", None, running=({7, 4242},))
+def test_a_kill_that_did_not_take_is_not_reported_as_one(verify, tmp_path, monkeypatch):
+    written = tmp_path / "visio.pid"
+    written.write_text("4242", encoding="ascii")
+    powershell = _Powershell(written, {4242: False})
+    powershell.unkillable = {4242}
+    monkeypatch.setattr(verify.subprocess, "run", powershell)
+
+    assert "process 4242, could not be killed" in verify._stop_started_visio(written, set())
+
+
+def test_stopping_before_the_script_named_its_visio_kills_the_one_invisible_visio_that_started(verify, tmp_path, monkeypatch):
+    """COM activation can hang with VISIO.EXE started and the file not yet written; the script's Visio has no window."""
+    powershell = _Powershell(tmp_path / "visio.pid", {7: True, 4242: False, 5151: True})
     monkeypatch.setattr(verify.subprocess, "run", powershell)
 
     assert verify._stop_started_visio(tmp_path / "visio.pid", {7}) == "; so was the Visio it started, process 4242"
-    assert powershell.kills == [verify._stop_visio_command(4242)]
+    assert powershell.kills == [KILL.format(4242)]
 
 
-def test_stopping_before_the_script_named_its_visio_kills_none_of_several_that_started(verify, tmp_path, monkeypatch):
-    """Which is the script's is not known, and one may be a developer's: none is killed, and both are named."""
-    powershell = _Powershell(tmp_path / "visio.pid", None, running=({7, 4242, 5151},))
-    monkeypatch.setattr(verify.subprocess, "run", powershell)
-
-    message = verify._stop_started_visio(tmp_path / "visio.pid", {7})
-
-    assert message.startswith("; Visio processes 4242, 5151 started while it ran")
-    assert powershell.kills == []
-
-
-def test_stopping_a_script_that_started_no_visio_kills_nothing(verify, tmp_path, monkeypatch):
-    powershell = _Powershell(tmp_path / "visio.pid", None, running=({7},))
+def test_a_visio_the_developer_opened_is_never_taken_for_an_unnamed_one(verify, tmp_path, monkeypatch):
+    """The only new Visio is not proof it is the script's: a developer's has a window, and is left alone (#464)."""
+    powershell = _Powershell(tmp_path / "visio.pid", {7: True, 5151: True})
     monkeypatch.setattr(verify.subprocess, "run", powershell)
 
     assert verify._stop_started_visio(tmp_path / "visio.pid", {7}) == "; it had not started Visio"
     assert powershell.kills == []
 
 
+def test_stopping_before_the_script_named_its_visio_kills_none_of_several_invisible_ones(verify, tmp_path, monkeypatch):
+    """Which is the script's is not known: none is killed, and each is named."""
+    powershell = _Powershell(tmp_path / "visio.pid", {7: True, 4242: False, 5151: False})
+    monkeypatch.setattr(verify.subprocess, "run", powershell)
+
+    message = verify._stop_started_visio(tmp_path / "visio.pid", {7})
+
+    assert message.startswith("; invisible Visio processes 4242, 5151 started while it ran")
+    assert powershell.kills == []
+
+
 def test_an_observation_that_times_out_kills_only_the_visio_it_started(verify, tmp_path, monkeypatch):
     """It killed every Visio not running when it began, a developer's opened meanwhile included."""
-    powershell = _Powershell(tmp_path / "visio.pid", 4242, running=({7},))
+    powershell = _Powershell(tmp_path / "visio.pid", {7: True}, spawned=4242)
     monkeypatch.setattr(verify.subprocess, "run", powershell)
 
     with pytest.raises(verify.VisioUnavailable, match="process 4242"):
         verify._observe_directory(str(tmp_path), timeout=1, allow_running=False)
 
-    assert powershell.kills == [verify._stop_visio_command(4242)]
+    assert powershell.kills == [KILL.format(4242)]
+    assert set(powershell.visio) == {7}
 
 
-def test_a_cell_check_that_times_out_kills_only_the_visio_it_started(verify, tmp_path, monkeypatch):
+def test_a_cell_check_that_times_out_before_naming_its_visio_kills_only_that_one(verify, tmp_path, monkeypatch):
     tool = _load("writes_land_cases")
-    powershell = _Powershell(tmp_path / "visio.pid", 4242, running=({7},))
+    powershell = _Powershell(tmp_path / "visio.pid", {7: True}, spawned=4242, named=False)
     monkeypatch.setattr(verify.subprocess, "run", powershell)
     monkeypatch.setattr(verify, "_staged", lambda paths: contextlib.nullcontext((str(tmp_path), {})))
 
     with pytest.raises(verify.VisioUnavailable, match="process 4242"):
         tool._ask_visio(TOOLS, [], {}, verify)
 
-    assert powershell.kills == [verify._stop_visio_command(4242)]
-
-
-def test_the_kill_stops_a_process_only_while_it_is_a_visio(verify):
-    assert verify._stop_visio_command(4242) == (
-        "Get-Process -Id 4242 -ErrorAction SilentlyContinue | Where-Object ProcessName -eq 'VISIO' | Stop-Process -Force"
-    )
+    assert powershell.kills == [KILL.format(4242)]
+    assert set(powershell.visio) == {7}
 
 
 @pytest.mark.parametrize("script", SCRIPTS)
@@ -148,6 +168,9 @@ def test_each_script_kills_only_the_visio_its_own_com_object_runs_in(script):
     assert "$ownProcessId = Register-OwnVisio -App $app -ProcessIdFile $ProcessIdFile" in text
     assert "[string]$ProcessIdFile" in text
     assert "Stop-OwnVisio -ProcessId $ownProcessId" in text
+    # New-Object can start VISIO.EXE and throw before the script could name it (#464)
+    assert "$ownProcessId = Find-StrandedVisio -Preexisting $preexisting" in text
+    assert "function Get-VisioProcessIds" not in text, "one definition, in visio_process.ps1"
     assert "$app.ProcessID" not in text
     assert "StartTime" not in text
     assert "Stop-Process" not in text
@@ -165,6 +188,8 @@ def test_a_visio_is_named_by_the_process_that_owns_its_window():
     assert "$App.WindowHandle32" in text
     assert "$process.ProcessName -ne 'VISIO'" in text
     assert "$leftover | Stop-Process -Force" in text
+    # an unnamed Visio is taken only if it has no visible window, as a developer's has
+    assert "$_.MainWindowHandle -eq 0" in text
 
 
 def test_the_helper_type_is_added_once_per_powershell_session():

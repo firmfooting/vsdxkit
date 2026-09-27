@@ -119,10 +119,6 @@ function Get-TargetFiles {
     return $files
 }
 
-function Get-VisioProcessIds {
-    return @(Get-Process -Name VISIO -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
-}
-
 function Get-CellRecords {
     <#
       Both halves of every placement cell: the formula and the evaluated result.
@@ -317,9 +313,6 @@ $viewer = @{ product = ''; version = '' }
 $documents = @()
 try {
     $app = New-Object -ComObject Visio.InvisibleApp
-    # The one process this script may kill if Quit leaves it running. Not
-    # "any Visio started during the run": a Visio the developer opens while
-    # a long run is under way is theirs, with their unsaved work in it (#463).
     $ownProcessId = Register-OwnVisio -App $app -ProcessIdFile $ProcessIdFile
     # Answer every modal dialog with "no" instead of waiting for a click: an
     # unattended run that puts up a dialog does not fail, it hangs.
@@ -344,9 +337,11 @@ finally {
     [System.GC]::WaitForPendingFinalizers()
 
     # Quit is a request, not a guarantee: a document Visio believes is dirty, or
-    # a hung add-on, keeps the process alive holding the file. Only the Visio
-    # this script started is killed, so one the user had open, or opened while
-    # this ran, is never taken away from them.
+    # a hung add-on, keeps the process alive holding the file.
+    if ($null -eq $ownProcessId) {
+        # New-Object can start VISIO.EXE and fail before this script could name it
+        $ownProcessId = Find-StrandedVisio -Preexisting $preexisting
+    }
     if ($null -ne $ownProcessId -and (Stop-OwnVisio -ProcessId $ownProcessId)) {
         Write-Warning "Visio process $ownProcessId outlived Quit(); killed it so the next run can open these files"
     }
