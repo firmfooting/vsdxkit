@@ -319,9 +319,36 @@ def test_a_case_checking_cells_on_two_pages_is_exported_page_by_page(tmp_path):
     (tmp_path / "expected.json").write_text(json.dumps(expected), encoding="utf-8")
     triggers = ((1, 5, "PinX"), (2, 9, "PinX"))
     assert [(c.stem, c.file_stem, c.page, c.triggers) for c in tool._read_cases(tmp_path)] == [
-        ("07_pages page 1", "07_pages", 1, triggers),
-        ("07_pages page 2", "07_pages", 2, triggers),
+        ("07_pages/page 1", "07_pages", 1, triggers),
+        ("07_pages/page 2", "07_pages", 2, triggers),
     ]
+
+
+def test_a_page_a_case_checks_glue_on_is_exported_too(tmp_path):
+    """A glue check on a page no cell check names was never photographed (#462)."""
+    tool = _tool()
+    expected = {
+        "03_glue": {"line": "g", "cells": [[1, 5, "PinX", 1.0]], "glue": [[2, 6, [[6, "BeginX", 2, "PinX"]]]]},
+        "04_only_glue": {"line": "o", "cells": [], "glue": [[3, 6, []]]},
+    }
+    (tmp_path / "expected.json").write_text(json.dumps(expected), encoding="utf-8")
+    assert [(c.stem, c.file_stem, c.page) for c in tool._read_cases(tmp_path)] == [
+        ("03_glue/page 1", "03_glue", 1),
+        ("03_glue/page 2", "03_glue", 2),
+        ("04_only_glue", "04_only_glue", 3),
+    ]
+
+
+def test_a_page_of_a_case_is_never_named_as_another_case_is(tmp_path):
+    """A case's stem names a file in one folder, so it holds no ``/``; "x page 2" was free for a builder to use (#462)."""
+    tool = _tool()
+    expected = {
+        "x": {"line": "pages", "cells": [[1, 5, "PinX", 1.0], [2, 5, "PinX", 1.0]], "glue": []},
+        "x page 2": {"line": "a stem of its own", "cells": [[1, 5, "PinX", 1.0]], "glue": []},
+    }
+    (tmp_path / "expected.json").write_text(json.dumps(expected), encoding="utf-8")
+    stems = [case.stem for case in tool._read_cases(tmp_path)]
+    assert len(set(stems)) == len(stems) == 3
 
 
 _FAKE_BUILDER = """
