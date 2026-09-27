@@ -15,6 +15,7 @@ import pytest
 import vsdxkit.shapes
 from vsdxkit import namespace
 from vsdxkit.document import Document
+from vsdxkit.errors import InvalidOperationError
 from vsdxkit.geometry import Geometry, GeometryCell, GeometryRow
 from vsdxkit.shapes import Shape
 
@@ -571,6 +572,109 @@ def test_a_new_cell_joins_its_row_under_its_name():
 
     assert row.cells["A"] is cell
     assert row.xml.find(f'{namespace}Cell[@N="A"]') is cell.xml
+
+
+def _conn_a_over_a_master_formula() -> Shape:
+    """`Conn A`, rebuilt after its master's MoveTo X (row 1, which it inherits) is given ``F="Width*0"``."""
+    vis = Document.open(TEST9)
+    connector = vis.pages[0].shapes.by_text("Conn A")
+    master_x = row_element(connector.master_shape, "1").find(f'{namespace}Cell[@N="X"]')
+    master_x.attrib["F"] = "Width*0"
+    return reparse(connector)
+
+
+def test_a_value_written_to_an_inherited_rows_cell_lands_on_the_instance():
+    """The master's cell keeps its value and formula, so no other instance of the master changes."""
+    connector = _conn_a_over_a_master_formula()
+    row = connector.geometry.rows["1"]
+    cell = row.cells["X"]
+
+    cell.value = 9
+
+    master_x = row_element(connector.master_shape, "1").find(f'{namespace}Cell[@N="X"]')
+    assert master_x.attrib == {"N": "X", "V": "0", "F": "Width*0"}
+    assert cell_values(row_element(connector, "1")) == {"X": "9"}
+    assert row_element(connector, "1").find(f'{namespace}Cell[@N="X"]').attrib == {"N": "X", "V": "9"}
+    assert (cell.value, cell.formula) == ("9", None)
+    assert (row.inherited, row.x, row.y) == (False, 9.0, 0.0)
+
+
+def test_a_formula_written_to_an_inherited_rows_cell_lands_on_the_instance():
+    connector = _conn_a_over_a_master_formula()
+    cell = connector.geometry.rows["1"].cells["X"]
+
+    cell.formula = "Width*2"
+
+    master_x = row_element(connector.master_shape, "1").find(f'{namespace}Cell[@N="X"]')
+    assert master_x.attrib == {"N": "X", "V": "0", "F": "Width*0"}
+    own_x = row_element(connector, "1").find(f'{namespace}Cell[@N="X"]')
+    assert own_x.attrib == {"N": "X", "V": "0", "F": "Width*2"}
+    assert cell.xml is own_x
+
+
+def test_a_value_written_to_an_inherited_section_cell_lands_on_the_instance():
+    """`NoFill` is a cell of the master's section; the write gives the instance's section a `NoFill` of its own."""
+    vis = Document.open(TEST9)
+    connector = vis.pages[0].shapes.by_text("Conn A")
+    no_fill = connector.geometry.cells[0]
+    assert (no_fill.name, no_fill.value) == ("NoFill", "1")
+
+    no_fill.value = 0
+
+    master_section = geometry_xml(connector.master_shape)
+    assert master_section.find(f'{namespace}Cell[@N="NoFill"]').attrib == {"N": "NoFill", "V": "1"}
+    own = geometry_xml(connector).findall(f'{namespace}Cell[@N="NoFill"]')
+    assert [cell.attrib for cell in own] == [{"N": "NoFill", "V": "0"}]
+    # a section is Cell*, Trigger*, Row*: the new cell goes ahead of the rows
+    assert [child.tag.rpartition("}")[2] for child in geometry_xml(connector)] == ["Cell", "Row", "Row"]
+    assert no_fill.value == "0"
+
+
+def test_a_write_to_a_section_cell_the_instance_also_has_reuses_the_instances_cell():
+    """`Geometry.cells` lists the master's `NoFill` and the instance's; writing the master's entry adds no second one."""
+    vis = Document.open(TEST9)
+    connector = vis.pages[0].shapes.by_text("Conn A")
+    geometry_xml(connector).insert(0, ET.fromstring(f'<Cell xmlns="{namespace[1:-1]}" N="NoFill" V="1"/>'))
+    connector = reparse(connector)
+
+    connector.geometry.cells[0].value = 0
+
+    own = geometry_xml(connector).findall(f'{namespace}Cell[@N="NoFill"]')
+    assert [cell.attrib for cell in own] == [{"N": "NoFill", "V": "0"}]
+    assert geometry_xml(connector.master_shape).find(f'{namespace}Cell[@N="NoFill"]').attrib["V"] == "1"
+
+
+def test_renaming_an_inherited_rows_cell_leaves_the_masters_cell_alone():
+    connector = _conn_a_over_a_master_formula()
+
+    connector.geometry.rows["1"].cells["X"].name = "Y"
+
+    master_x = row_element(connector.master_shape, "1").find(f'{namespace}Cell[@N="X"]')
+    assert master_x.attrib == {"N": "X", "V": "0", "F": "Width*0"}
+    assert [cell.attrib.get("N") for cell in row_element(connector, "1")] == ["Y"]
+
+
+def test_a_write_to_an_inherited_cell_of_a_deleted_shape_leaves_no_row_behind():
+    vis = Document.open(TEST9)
+    connector = vis.pages[0].shapes.by_text("Conn A")
+    cell = connector.geometry.rows["1"].cells["X"]
+    connector.delete()
+
+    with pytest.raises(InvalidOperationError):
+        cell.value = 9
+
+    assert row_indexes(connector) == ["2", "3"]
+
+
+def test_a_none_written_to_an_inherited_cell_leaves_no_row_behind():
+    vis = Document.open(TEST9)
+    connector = vis.pages[0].shapes.by_text("Conn A")
+
+    with pytest.raises(TypeError):
+        connector.geometry.rows["1"].cells["X"].value = None
+
+    assert row_indexes(connector) == ["2", "3"]
+    assert connector.geometry.rows["1"].inherited
 
 
 def test_formula_reads_and_writes_the_f_attribute():

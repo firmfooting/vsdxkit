@@ -73,17 +73,19 @@ class Geometry(ShapePart):
 
     An inherited row reads the master's cells but is marked
     :attr:`GeometryRow.inherited`. The first write to it,
-    through :attr:`GeometryRow.x`, :meth:`move`, :meth:`set_move_to` or
-    :meth:`set_line_to`, materialises an override row on this shape and leaves
-    the master alone.
+    through :attr:`GeometryRow.x`, :meth:`move`, :meth:`set_move_to`,
+    :meth:`set_line_to` or one of its cells' setters, materialises an
+    override row on this shape and leaves the master alone. A write to a
+    section cell this shape inherits gives this shape's section a cell of
+    its own, in the same way.
 
     The merge copies the master's :attr:`cells` list and :attr:`rows` dict
     rather than taking them by reference, so an instance applying a ``Del``
     row, or gaining a row of its own, does not change what the master
-    Geometry sees. That holds however long the master object lives. The
-    copies are shallow: an inherited :class:`GeometryCell` is still the
-    master's until a setter replaces it, so writing a cell's value without
-    going through the row still edits the master.
+    Geometry sees. That holds however long the master object lives. Each
+    inherited :class:`GeometryCell` is this shape's view of the master's
+    element: it reads the master's value until a setter writes it, and the
+    write lands on a cell of this shape's own.
     """
 
     xml: Element
@@ -122,8 +124,9 @@ class Geometry(ShapePart):
 
         if master_geometry is not None:
             # copy the list rather than alias it, so what this instance merges,
-            # deletes or adds stays out of the master Geometry's view
-            self.cells = list(master_geometry.cells)
+            # deletes or adds stays out of the master Geometry's view; each
+            # cell is seen from this section, so a write to it lands here
+            self.cells = [cell._seen_from(self) for cell in master_geometry.cells]
 
         for cell in self.xml.findall(f"{namespace}Cell"):
             self.cells.append(GeometryCell(parent=self, xml=cell))
@@ -240,12 +243,13 @@ class GeometryRow(InheritedRow, ShapePart):
     geometry: Geometry
     """The :class:`Geometry` the row is in: for a row inherited from a master, the instance's, not the master's."""
     xml: Element
-    """The row's ``<Row>`` element: for an inherited row, the master's, until :meth:`make_local`, or a write through :attr:`x` or :attr:`y`, gives this shape a row of its own."""
+    """The row's ``<Row>`` element: for an inherited row, the master's, until :meth:`make_local`, a write through :attr:`x` or :attr:`y`, or a write to one of its :attr:`cells`, gives this shape a row of its own."""
     cells: dict[str, GeometryCell]
     """The row's cells by name, such as ``X`` and ``Y``: the master row's, with this row's own over them.
 
-    An inherited cell is still the master's until a setter on the row
-    replaces it.
+    An inherited cell reads the master's element until a setter, on the row
+    or on the cell, writes it, and the write lands on a cell of this
+    shape's own.
     """
 
     def __init__(
@@ -266,7 +270,9 @@ class GeometryRow(InheritedRow, ShapePart):
         self.xml = xml if type(xml) is Element else self._create_row_xml(T or "", str(IX))
         # Create a dictionary of each Cell element, indexed by name
         # a row's cells are keyed by name (unlike Geometry.cells, a list)
-        self.cells: dict[str, GeometryCell] = dict(master_geometry_row.cells) if master_geometry_row else {}
+        self.cells: dict[str, GeometryCell] = (
+            {name: cell._seen_from(self) for name, cell in master_geometry_row.cells.items()} if master_geometry_row else {}
+        )
         # add/overwrite cells values with master as basis id present
         for cell in self.xml.findall(f"{namespace}Cell"):
             g_cell = GeometryCell(parent=self, xml=cell)
@@ -283,12 +289,12 @@ class GeometryRow(InheritedRow, ShapePart):
         """This row as an instance's Geometry sees it, marked inherited.
 
         The copy reads the master's Row element and the master's cells; the
-        first write to it calls :meth:`make_local`, which gives the instance a
-        Row of its own to hold the change.
+        first write to it, or to one of its cells, calls :meth:`make_local`,
+        which gives the instance a Row of its own to hold the change.
         """
         row = copy.copy(self)
         row.geometry = geometry
-        row.cells = dict(self.cells)
+        row.cells = {name: cell._seen_from(row) for name, cell in self.cells.items()}
         row.inherited = True
         return row
 
@@ -398,12 +404,13 @@ class GeometryRow(InheritedRow, ShapePart):
         # ahead of make_local(): a refused write must not leave an empty
         # override row behind on the shape
         self._require_attached(f"writing a geometry row's {name} coordinate")
-        self.make_local()  # an inherited row gets one of its own before it is written
-        cell_value = xml_value(value)
+        cell_value = xml_value(value)  # ahead of any write: None raises TypeError and leaves no cell behind
         cell = self.cells.get(name)
-        if cell is None or cell.parent is not self:
-            # create new cell if none exists, or if the existing one is the master's
-            cell = GeometryCell(parent=self, xml=None, name=name, value=cell_value)
+        if cell is None:
+            self.make_local()  # an inherited row gets one of its own before it is written
+            cell = GeometryCell(parent=self, xml=None, name=name)
+        else:
+            cell._make_local()  # the row, and then a cell that is still the master's
         cell._set_value(cell_value, keep_formula=keep_formula)
 
     @property
@@ -440,11 +447,11 @@ class GeometryCell(ShapePart):
     """
 
     parent: GeometryRow | Geometry
-    """The :class:`GeometryRow` or :class:`Geometry` the cell is in: for a cell inherited from a master, the master's."""
+    """The :class:`GeometryRow` or :class:`Geometry` the cell is in: for a cell inherited from a master, the instance's, which a write goes to."""
     _parent_xml: Element
-    """The parent's element when the cell was made, which a new cell's ``<Cell>`` is appended to."""
+    """The parent's element the cell's ``<Cell>`` was last put in: where a new cell is appended, or an inherited cell copied down."""
     xml: Element
-    """The ``<Cell>`` element this reads and writes."""
+    """The ``<Cell>`` element this reads and writes: for a cell inherited from a master, the master's, until a setter gives this shape one of its own."""
 
     def __init__(
         self,
@@ -473,6 +480,10 @@ class GeometryCell(ShapePart):
         # also the first write of GeometryCell.__init__, so constructing a cell
         # on a detached shape refuses before it appends anything
         self._require_attached("creating a geometry cell")
+        if isinstance(self.parent, GeometryRow):
+            # a cell added to an inherited row goes on the instance's own row
+            self.parent.make_local()
+            self._parent_xml = self.parent.xml
         cell = make_cell_element(name)
         self._parent_xml.append(cell)
         if isinstance(self.parent, GeometryRow):
@@ -481,25 +492,70 @@ class GeometryCell(ShapePart):
             self.parent.cells.append(self)
         return cell
 
+    def _seen_from(self, parent: GeometryRow | Geometry) -> GeometryCell:
+        """This cell as `parent`, an instance's row or section, sees it: the same element, but written through `parent`."""
+        cell = copy.copy(self)
+        cell.parent = parent
+        return cell
+
+    def _make_local(self) -> None:
+        """Give the cell to this shape if it is still the master's, so a write to it leaves the master alone.
+
+        A cell of an inherited row calls the row's :meth:`GeometryRow.make_local`
+        first. A cell whose element is not among its parent's own is then given
+        one of its own there: the instance's cell of that name where the
+        parent already has one, which only a section can, or else a new cell
+        carrying the master's value but not its formula, as a coordinate
+        setter writes it. Visio matches the two by name, and the master's
+        cell, with every other instance, is left as it was.
+        """
+        parent = self.parent
+        if isinstance(parent, GeometryRow):
+            parent.make_local()
+        home = parent.xml
+        own_cells = home.findall(f"{namespace}Cell")
+        if any(own is self.xml for own in own_cells):
+            return
+        name = self.name or ""
+        own = next((cell for cell in own_cells if cell.attrib.get("N") == name), None)
+        if own is None:
+            own = make_cell_element(name)
+            master_value = self.xml.attrib.get("V")
+            if master_value is not None:
+                own.attrib["V"] = master_value
+            # a section is Cell*, Trigger*, Row*, so a section cell goes after
+            # the section's last cell rather than after its rows
+            home.insert(list(home).index(own_cells[-1]) + 1 if own_cells else 0, own)
+        self.xml = own
+        self._parent_xml = home
+
     @property
     def value(self) -> str | None:
         """The cell's value, its ``V`` attribute, as the text the file holds; ``None`` when it has none.
 
         Setting it writes ``str(value)`` to ``V`` and removes the formula, as
         typing a number into the ShapeSheet cell does in Visio, so the value
-        is the one Visio shows; on a cell inherited from a master, the write
-        goes to the master's cell. ``None`` raises :class:`TypeError`, and a
-        write to a detached shape's cell raises
+        is the one Visio shows. A cell this shape inherits from its master
+        is copied onto this shape first, with its row where the row is
+        inherited too, and the write lands on the copy: the master keeps
+        its cell, value and formula, and so does every other shape drawn
+        from it. ``None`` raises :class:`TypeError`, and a write to a
+        detached shape's cell raises
         :class:`~vsdxkit.errors.InvalidOperationError`.
         """
         return self.xml.attrib.get("V")
 
     @value.setter
     def value(self, value: float | str) -> None:
-        self._set_value(value, keep_formula=False)
+        # ahead of _make_local(): a refused write must not leave an empty
+        # override row behind on the shape
+        self._require_attached(f"writing the value of geometry cell {self.name!r}")
+        text = xml_value(value)
+        self._make_local()
+        self._set_value(text, keep_formula=False)
 
     def _set_value(self, value: float | str, *, keep_formula: bool) -> None:
-        """Write `value` to ``V``, and without `keep_formula` remove ``F``, as :meth:`vsdxkit.shapes.Cell._set_value` does."""
+        """Write `value` to ``V`` of the element as it stands, and without `keep_formula` remove ``F``, as :meth:`vsdxkit.shapes.Cell._set_value` does."""
         self._require_attached(f"writing the value of geometry cell {self.name!r}")
         text = xml_value(value)
         self.xml.attrib["V"] = text
@@ -511,30 +567,37 @@ class GeometryCell(ShapePart):
         """The cell's formula, its ``F`` attribute, or ``None`` when it has none.
 
         Setting it writes the text to ``F`` and leaves the value as it was:
-        nothing here evaluates the formula. It refuses what :attr:`value`
-        refuses.
+        nothing here evaluates the formula. A cell this shape inherits is
+        copied onto this shape first, as :attr:`value` copies it. It refuses
+        what :attr:`value` refuses.
         """
         return self.xml.attrib.get("F")
 
     @formula.setter
     def formula(self, value: str) -> None:
         self._require_attached(f"writing the formula of geometry cell {self.name!r}")
-        self.xml.attrib["F"] = xml_value(value)
+        text = xml_value(value)
+        self._make_local()
+        self.xml.attrib["F"] = text
 
     @property
     def name(self) -> str | None:
         """The cell's name, its ``N`` attribute, such as ``X``; ``None`` for a cell without one.
 
         Setting it writes the text to ``N`` and refuses what :attr:`value`
-        refuses. A row's :attr:`GeometryRow.cells` keeps the cell under the
-        name it had when it was filed.
+        refuses. A cell this shape inherits is copied onto this shape first,
+        as :attr:`value` copies it, so the master's cell keeps its name. A
+        row's :attr:`GeometryRow.cells` keeps the cell under the name it had
+        when it was filed.
         """
         return self.xml.attrib.get("N")
 
     @name.setter
     def name(self, value: str) -> None:
         self._require_attached("writing a geometry cell's name")
-        self.xml.attrib["N"] = xml_value(value)
+        text = xml_value(value)
+        self._make_local()
+        self.xml.attrib["N"] = text
 
     def __repr__(self) -> str:
         """Shows the cell as ``name=value``, and its formula where it has one."""

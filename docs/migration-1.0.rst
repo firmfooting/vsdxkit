@@ -696,6 +696,12 @@ Setting a cell's value, through a setter such as ``shape.line_color`` or ``shape
 ``shape.text_color``
    Replaces the colour cell's formula, as the other colour setters do.
 
+A geometry cell's ``value``, ``formula`` or ``name``, on a cell the shape inherits from its master
+   Writes a cell of the shape's own, copying an inherited row onto the
+   shape first; the master's cell keeps its value and formula. 0.8 wrote
+   the master's cell, which changed every other shape drawn from the
+   master.
+
 ``shape.set_cell_value("Control/TextPosition/X", ...)`` and other names holding ``/``
    Write the cell in its section row where the shape has it, and raise
    :class:`vsdxkit.errors.InvalidOperationError` where it does not. 0.8
