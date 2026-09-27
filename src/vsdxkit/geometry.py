@@ -404,9 +404,7 @@ class GeometryRow(InheritedRow, ShapePart):
         holder = self.geometry.rows.get(new_ix)
         # a row of this shape's own carrying Del is left out of `rows`, but
         # its index is still taken: a second Row at it is a duplicate IX
-        own_holder = any(
-            row is not self.xml and row.attrib.get("IX") == new_ix for row in section.findall(f"{namespace}Row")
-        )
+        own_holder = any(row is not self.xml and row.attrib.get("IX") == new_ix for row in section.findall(f"{namespace}Row"))
         if (holder is not None and holder is not self) or own_holder:
             raise InvalidOperationError(
                 f"shape ID={self.geometry.shape.ID} already has a geometry row at IX={new_ix}; choose a free index"
