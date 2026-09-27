@@ -1821,13 +1821,17 @@ class Shape:
         shape lacks is taken as 0, and written. A 1-D shape moves by its two
         ends, which frees an end that was glued; its pin, width and angle are
         formulas of its ends, and follow them. The geometry is in the shape's
-        own coordinates, so it is not touched.
+        own coordinates, so it is not touched. A move by zero in both
+        directions changes nothing: a glued end stays glued, and a pin
+        formula stays.
 
         :raises InvalidOperationError: if the shape is detached, or it is a
-            1-D shape missing one of its ends; place such a shape by its ends
-            with :meth:`set_start_and_finish`
+            1-D shape missing one of its ends, moved by more than zero; place
+            such a shape by its ends with :meth:`set_start_and_finish`
         """
         self._require_attached("Shape.move()")
+        if x_delta == 0 and y_delta == 0:
+            return  # moving by nothing must not free glue or replace formulas
         if not _is_connector(self):
             self.x = (self.x or 0.0) + x_delta
             self.y = (self.y or 0.0) + y_delta

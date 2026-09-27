@@ -5,6 +5,8 @@ the shape moves. A 2-D shape moves by its pin; a 1-D shape by its two ends,
 from which its pin, width and angle follow.
 """
 
+import xml.etree.ElementTree as ET
+
 import pytest
 
 from vsdxkit import namespace
@@ -72,14 +74,43 @@ def test_moving_a_glued_connector_frees_both_ends(vsdx_copy):
     assert (connector.source, connector.target) == (None, None)
 
 
+def _connector_state(connector):
+    """Everything a move can change on a glued connector: its element, cells and formulas included, and its records."""
+    records = sorted((c.from_id, c.from_rel, c.to_id, c.to_rel) for c in connector._page._connects())
+    return ET.tostring(connector.xml), records
+
+
+def test_a_zero_move_of_a_glued_connector_changes_nothing(vsdx_copy):
+    """Moving by nothing wrote all four ends, which freed both glued ends and dropped their formulas."""
+    connector = Document.open(vsdx_copy("test4_connectors.vsdx")).pages[0].shapes.by_id("6")
+    before = _connector_state(connector)
+
+    connector.move(0, 0.0)
+
+    assert _connector_state(connector) == before
+    assert (connector.source.ID, connector.target.ID) == ("1", "2")
+
+
+def test_a_zero_move_of_a_2d_shape_keeps_its_pin_formula(vsdx_copy):
+    shape = Document.open(vsdx_copy("test1.vsdx")).pages[0].shapes.require_id("1")
+    shape.set_cell_formula("PinX", "GUARD(1)")
+    before = ET.tostring(shape.xml)
+
+    shape.move(0.0, 0)
+
+    assert shape.cells["PinX"].formula == "GUARD(1)"
+    assert ET.tostring(shape.xml) == before
+
+
+@pytest.mark.parametrize("delta", [(1.0, 1.0), (0.0, 0.0)])
 @pytest.mark.parametrize("text", ["Rect A", "Conn A"])
-def test_moving_a_deleted_shape_is_refused_as_a_move(vsdx_copy, text):
+def test_moving_a_deleted_shape_is_refused_as_a_move(vsdx_copy, text, delta):
     """It was refused only by the first cell it read, so the message spoke of reading cell BeginX."""
     shape = Document.open(vsdx_copy("test9_rect_and_line.vsdx")).pages[0].shapes.by_text(text)
     shape.delete()
 
     with pytest.raises(InvalidOperationError, match=r"^Shape\.move\(\) refused"):
-        shape.move(1.0, 1.0)
+        shape.move(*delta)
 
 
 def _cell_element(shape, name):

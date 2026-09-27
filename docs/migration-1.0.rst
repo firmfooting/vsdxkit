@@ -788,7 +788,8 @@ Moving a shape moves the shape
    Moves a 2-D shape's pin, replacing a formula it had, and a 1-D shape's two
    ends, freeing a glued end. It never shifts the geometry's rows, which are
    in the shape's own coordinates. 0.8 shifted them, drawing the outline off
-   the shape, and left a 1-D shape's end behind.
+   the shape, and left a 1-D shape's end behind. A move by zero in both
+   directions changes nothing.
 
 ``shape.set_start_and_finish`` on a 2-D shape
    Raises :class:`vsdxkit.errors.InvalidOperationError`. 0.8 did nothing.
