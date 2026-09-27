@@ -277,6 +277,18 @@ def _is_connector(shape: Shape) -> bool:
     return _is_one_d(shape.xml, shape._parent, shape._page)
 
 
+def _is_name_or_copy(name: str | None, base: str) -> bool:
+    """Whether `name` is `base`, or a numbered copy of it: Visio names the second one `base.12`.
+
+    Only a number follows the last dot. A shape its author named
+    `base.backup` is not a copy Visio made.
+    """
+    if name == base:
+        return True
+    stem, dot, suffix = (name or "").rpartition(".")
+    return bool(dot) and stem == base and suffix.isdigit()
+
+
 def _is_one_d(xml: Element, parent: _PageSeam | Shape, page: _PageSeam) -> bool:
     """The one test of whether a shape element is 1-D, before or after it has a wrapper.
 
@@ -2013,8 +2025,10 @@ class Shape:
                 f"shape ID {self.ID}: start and finish coordinates cannot be None; give a number for each of the four"
             )
         # lines/connectors are defined in different ways
-        # Check whether shape is a connector based on name in known languages
-        is_connector = self.universal_name == "Dynamic connector"
+        # Check whether shape is a connector based on name in known languages,
+        # a second connector on the page included: Visio names it
+        # `Dynamic connector.58`
+        is_connector = _is_name_or_copy(self.universal_name, "Dynamic connector")
         # worked out before anything is written, so a coordinate that is
         # not a number is refused with the shape, and its glue, as it was
         span_x, span_y = finish_x - start_x, finish_y - start_y

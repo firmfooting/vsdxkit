@@ -11,6 +11,7 @@ import pytest
 
 from vsdxkit.document import Document
 from vsdxkit.errors import InvalidOperationError
+from vsdxkit.shapes import _is_name_or_copy
 
 
 @pytest.fixture
@@ -220,3 +221,51 @@ def test_a_plain_lines_text_pin_follows_the_width_its_formula_gives(vsdx_copy):
     assert _placed(line) == pytest.approx(
         {"Width": 5.0, "Height": 0.0, "Angle": math.atan2(4.0, 3.0), "PinX": 2.5, "PinY": 3.0, "TxtPinX": 2.5, "TxtPinY": 0.0}
     )
+
+
+S05 = "fixtures/com_reference/s05_swimlanes_cfflow.vsdx"
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("Dynamic connector", True),
+        ("Dynamic connector.58", True),
+        ("Dynamic connector.", False),
+        ("Dynamic connector.backup", False),
+        ("Dynamic connector.5.8", False),
+        ("Dynamic connectors.58", False),
+        ("Dynamic", False),
+        (None, False),
+    ],
+)
+def test_a_numbered_copy_of_a_name_has_only_digits_after_the_dot(name, expected):
+    assert _is_name_or_copy(name, "Dynamic connector") is expected
+
+
+def test_a_connector_with_a_suffixed_name_is_placed_as_a_connector(vsdx_copy):
+    """s05 shape 58 is `Dynamic connector.58`, Visio's name for a second connector; with its Angle formula gone it was turned as a plain line.
+
+    Its ends 3 across and 2 up make a connector 3 wide and 2 high, with no
+    angle, where the plain-line branch made a line 3.6 long turned by
+    ATAN2(2, 3).
+    """
+    connector = Document.open(vsdx_copy(S05)).pages[0].shapes.require_id("58")
+    assert connector.universal_name == "Dynamic connector.58"
+    connector.set_cell_value("Angle", 0)
+    assert connector.cell_formula("Angle") is None
+
+    connector.set_start_and_finish((1.0, 1.0), (4.0, 3.0))
+
+    assert (connector.width, connector.height, connector.angle) == (3.0, 2.0, 0.0)
+    assert (connector.geometry.rows["2"].x, connector.geometry.rows["2"].y) == (3.0, 2.0)
+
+
+def test_a_connector_with_a_suffixed_name_keeps_its_height(vsdx_copy):
+    """With its inherited GUARD(0DA) in place it was not turned, but it took a plain line's height of 0."""
+    connector = Document.open(vsdx_copy(S05)).pages[0].shapes.require_id("58")
+
+    connector.set_start_and_finish((1.0, 1.0), (4.0, 3.0))
+
+    assert (connector.width, connector.height) == (3.0, 2.0)
+    assert (connector.geometry.rows["2"].x, connector.geometry.rows["2"].y) == (3.0, 2.0)
