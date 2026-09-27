@@ -307,6 +307,15 @@ def test_a_row_moves_onto_an_index_another_wrapper_freed(conn_a):
     assert second.rows["2"] is moved
 
 
+def test_an_index_written_with_a_leading_zero_is_the_index_it_names(conn_a):
+    """``"01"`` is IX 1, as Visio orders rows by number; compared as text it looked free, and gave two rows at one index (#454)."""
+    with pytest.raises(InvalidOperationError, match="IX=1;"):
+        conn_a.geometry.rows["2"].index = "01"
+
+    conn_a.geometry.rows["2"].index = "07"
+    assert conn_a.geometry.rows["7"].xml.get("IX") == "7"
+
+
 def test_a_row_does_not_move_onto_an_index_another_wrapper_filled(conn_a):
     """A row another Shape object moved to an index holds it, though this one's `rows` has never seen it there."""
     other = conn_a.page.shapes.by_text("Conn A")
@@ -501,6 +510,18 @@ def test_a_held_property_reads_an_override_a_nearer_master_made_since(vsdx_copy)
 
     assert (held.value, held.label) == ("middle", "Relabelled")
     assert shape.data_properties["Relabelled"].value == "middle"
+
+
+def test_a_held_property_its_master_no_longer_has_reads_nothing(house_7):
+    """A named row is found by its ``N`` up the chain as it stands; the row handed out is not read once no master has it (#454)."""
+    held = house_7.data_properties["ShapeClass"]
+    master_row = held.xml
+    master_section = house_7.master_shape.xml.find(f'{namespace}Section[@N="Property"]')
+    master_section.remove(master_row)
+
+    assert (held.label, held.value) == (None, None)
+    assert held.set_attribute("Label", "V", "Renamed") is False
+    assert _property_rows(house_7, "ShapeClass") == []
 
 
 def test_writing_an_unnamed_inherited_property_keeps_its_other_fields(house_7):

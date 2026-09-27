@@ -251,7 +251,8 @@ def make_cell_element(name: str, v: object | None = None, f: object | None = Non
 
 def row_index_key(index: str) -> tuple[int, int, str]:
     """Order a section row's ``IX`` as a number, with an index that is not a whole number after every one that is."""
-    return (0, int(index), "") if index.isdigit() else (1, 0, index)
+    # isascii and isdecimal, not isdigit: "²" is a digit int() cannot read
+    return (0, int(index), "") if index.isascii() and index.isdecimal() else (1, 0, index)
 
 
 def insert_row_in_index_order(section: ET.Element, row: ET.Element) -> None:
