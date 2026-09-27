@@ -339,6 +339,21 @@ def test_a_page_a_case_checks_glue_on_is_exported_too(tmp_path):
     ]
 
 
+def test_a_glue_check_recalculates_its_connectors_ends(tmp_path):
+    """A case checking glue alone asked for no recalculation, so its two exports agreed whatever was stale (#462)."""
+    tool = _tool()
+    expected = {
+        "04_only_glue": {"line": "o", "cells": [], "glue": [[3, 6, []]]},
+        "05_both": {"line": "b", "cells": [[1, 6, "BeginX", 1.0]], "glue": [[1, 6, []]]},
+    }
+    (tmp_path / "expected.json").write_text(json.dumps(expected), encoding="utf-8")
+    ends = ("BeginX", "BeginY", "EndX", "EndY")
+    assert [(c.stem, c.triggers) for c in tool._read_cases(tmp_path)] == [
+        ("04_only_glue", tuple((3, 6, cell) for cell in ends)),
+        ("05_both", tuple((1, 6, cell) for cell in ends)),
+    ]
+
+
 def test_a_page_of_a_case_is_never_named_as_another_case_is(tmp_path):
     """A case's stem names a file in one folder, so it holds no ``/``; "x page 2" was free for a builder to use (#462)."""
     tool = _tool()
@@ -396,6 +411,24 @@ def test_a_case_the_library_cannot_build_is_recorded_and_the_rest_still_build(tm
     assert json.loads((out / "expected.json").read_text(encoding="utf-8")) == {
         "01_good": {"line": "01_good: fine", "cells": [], "glue": []}
     }
+
+
+def test_a_run_whose_every_case_fails_to_build_is_recorded_as_a_failed_run(tmp_path, capsys):
+    """It exited 2, as if it could not run, and recorded nothing: a regression breaking every case left no trace (#462)."""
+    tool = _tool()
+    builder = tmp_path / "cases.py"
+    builder.write_text(_FAKE_BUILDER.replace("CASES = (good, bad)", "CASES = (bad,)"), encoding="utf-8")
+    store = tmp_path / "store"
+
+    assert tool._command_run(builder, None, store, 150) == 1
+
+    [run] = (store / "runs").iterdir()
+    manifest = json.loads((run / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["cases"] == {}
+    assert tool._failures(manifest) == [
+        "the candidate could not build bad: AttributeError: 'Shape' object has no attribute 'require_id'"
+    ]
+    assert "Visio not asked" in (run / "summary.md").read_text(encoding="utf-8")
 
 
 def test_a_build_that_would_import_another_copy_of_the_library_is_refused(tmp_path):
