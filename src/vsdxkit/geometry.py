@@ -176,6 +176,9 @@ class Geometry(ShapePart):
     def move(self, x_delta: float, y_delta: float) -> None:
         """Shift the rows that hold absolute coordinates.
 
+        It shifts the outline within the shape, which is not moving the
+        shape; to move the shape, use :meth:`vsdxkit.shapes.Shape.move`.
+
         Only MoveTo and LineTo rows are shifted; relative rows are offsets
         from the previous point and stay as they are. A coordinate the row
         does not define is left undefined rather than treated as zero.
