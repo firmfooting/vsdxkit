@@ -540,65 +540,54 @@ class DataProperty(InheritedRow, ShapePart):
     """
     name: str | None
     """The row's ``N`` attribute, which an override row shares with its master's row; ``None`` for a row without one."""
-    value_type: str | None
-    """The ``Type`` cell's value, as Visio numbers property types (``"0"`` text, ``"2"`` number, ``"5"`` date, and so on); ``None`` where there is none."""
-    label: str | None
-    """The label Visio shows the property under, which :attr:`Shape.data_properties` keys by; ``None`` where there is none.
-
-    It is read once, when the property is built, as are :attr:`value_type`,
-    :attr:`prompt` and :attr:`sort_key`. A row with no ``Label`` cell, which
-    is how an override of a master's property is written, takes all four from
-    the master's property of the same name, and leaves them ``None`` where
-    the master has none.
-    """
-    prompt: str | None
-    """The ``Prompt`` cell's value, the description Visio gives the property; ``None`` where there is none."""
-    sort_key: str | None
-    """The ``SortKey`` cell's value, which orders the properties in Visio's Shape Data window; ``None`` where there is none."""
 
     def __init__(self, *, xml: Element, shape: Shape):
         """init a DataProperty from a property xml element in a Shape object"""
-        name = xml.attrib.get("N")
-        # the row's cells by name, first of each, in one pass: a property is
-        # read whenever data_properties is, so four searches of the row apiece
-        # added up
-        cells: dict[str, Element] = {}
-        for cell in xml.iterfind(f"{namespace}Cell"):
-            cells.setdefault(cell.get("N", ""), cell)
-        label_cell = cells.get("Label")
-
-        # initialise empty DataProperty properties
         self.shape = shape  # reference back to Shape object
         self.xml = xml  # reference to xml used to create DataProperty
-        self.name = name
-        self.value_type = None
-        self.label = None
-        self.prompt = None
-        self.sort_key = None
+        self.name = xml.attrib.get("N")
 
-        if isinstance(label_cell, Element):
-            value_type_cell = cells.get("Type")
-            prompt_cell = cells.get("Prompt")
-            sort_key_cell = cells.get("SortKey")
+    @property
+    def label(self) -> str | None:
+        """The label Visio shows the property under, which :attr:`Shape.data_properties` keys by; ``None`` where there is none.
 
-            # get values from each Cell Element
-            self.value_type = value_type_cell.attrib.get("V") if isinstance(value_type_cell, Element) else None
-            self.label = label_cell.attrib.get("V") if isinstance(label_cell, Element) else None
-            self.prompt = prompt_cell.attrib.get("V") if isinstance(prompt_cell, Element) else None
-            self.sort_key = sort_key_cell.attrib.get("V") if isinstance(sort_key_cell, Element) else None
-        else:
-            # over-ridden master shape properties have no label - only a name and value
-            master_shape = shape.master_shape
-            master_props: list[DataProperty] = (
-                [p for p in master_shape.data_properties.values() if p.name == name] if master_shape is not None else []
-            )
-            if master_props:
-                # get first match 0 - there should always be one item
-                master_prop = master_props[0]  # type: DataProperty
-                self.label = master_prop.label
-                self.value_type = master_prop.value_type
-                self.prompt = master_prop.prompt
-                self.sort_key = master_prop.sort_key
+        It is read from the row on every access, as are :attr:`value_type`,
+        :attr:`prompt` and :attr:`sort_key`. A row with no ``Label`` cell, which
+        is how an override of a master's property is written, takes all four
+        from the master's property of the same name, and gives ``None`` where
+        the master has none.
+        """
+        return self._field("Label")
+
+    @property
+    def value_type(self) -> str | None:
+        """The ``Type`` cell's value, as Visio numbers property types (``"0"`` text, ``"2"`` number, ``"5"`` date, and so on); ``None`` where there is none."""
+        return self._field("Type")
+
+    @property
+    def prompt(self) -> str | None:
+        """The ``Prompt`` cell's value, the description Visio gives the property; ``None`` where there is none."""
+        return self._field("Prompt")
+
+    @property
+    def sort_key(self) -> str | None:
+        """The ``SortKey`` cell's value, which orders the properties in Visio's Shape Data window; ``None`` where there is none."""
+        return self._field("SortKey")
+
+    def _field(self, cell: str) -> str | None:
+        """Cell `cell`'s value from this row, or from the master's property of the same name where this row is an override with no ``Label``."""
+        if self.xml.find(f'{namespace}Cell[@N="Label"]') is None:
+            master = self._master_property()
+            return None if master is None else master._field(cell)
+        element = self.xml.find(f'{namespace}Cell[@N="{cell}"]')
+        return None if element is None else element.attrib.get("V")
+
+    def _master_property(self) -> DataProperty | None:
+        """The property of this one's name on the master shape, or ``None``."""
+        master_shape = self.shape.master_shape
+        if master_shape is None:
+            return None
+        return next((prop for prop in master_shape.data_properties.values() if prop.name == self.name), None)
 
     @property
     @override
@@ -2382,11 +2371,10 @@ class ShapeCollection:
 def _has_property(shape: Shape, label: str, value: str | None) -> bool:
     """Whether `shape` has a property labelled `label` and, where `value` is given, whose value as text is `value`.
 
-    A property with no value reads as ``"None"`` here, so it matches a
-    `value` of ``"None"``.
+    A property with no value matches no `value`.
     """
     found = shape.data_properties.get(label)
-    return found is not None and (value is None or str(found.value) == value)
+    return found is not None and (value is None or found.value == value)
 
 
 def _describe_property(label: str, value: str | None) -> str:
