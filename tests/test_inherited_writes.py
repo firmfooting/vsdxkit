@@ -139,6 +139,48 @@ def test_a_row_moved_to_a_new_index_reloads_as_it_reads(vsdx_copy, moved):
     assert _rows_view(reloaded) == written
 
 
+S05 = "fixtures/com_reference/s05_swimlanes_cfflow.vsdx"
+
+
+def _cell_attributes(row) -> dict[str, tuple[str | None, str | None]]:
+    return {name: (cell.value, cell.formula) for name, cell in row.cells.items()}
+
+
+def test_a_moved_rows_inh_cells_take_the_formula_of_the_masters_row_they_left(vsdx_copy):
+    """s05 shape 36's own row 3 holds X and Y as ``F="Inh"``: at a new index they would inherit from another row, or none.
+
+    The master's row 3 computes them as ``Width*1`` and ``Height*1``, so the
+    moved row carries those, with the values it read, and Visio recalculates
+    the same coordinates.
+    """
+    path = vsdx_copy(S05)
+    document = Document.open(path)
+    shape = document.pages[0].shapes.require_id("36")
+    row = shape.geometry.rows["3"]
+    assert {name: cell.formula for name, cell in row.cells.items()} == {"X": "Inh", "Y": "Inh"}
+    assert "9" not in shape.geometry.rows
+
+    row.index = 9
+    document.save(path)
+
+    moved = Document.open(path).pages[0].shapes.require_id("36").geometry.rows["9"]
+    assert _cell_attributes(moved) == {"X": ("10.90551181102363", "Width*1"), "Y": ("4.133858267716532", "Height*1")}
+
+
+def test_a_moved_rows_inh_cell_over_a_master_value_keeps_the_value_alone(vsdx_copy):
+    """Where the master's cell at the old index holds a value and no formula, the moved cell holds its value and no formula."""
+    path = vsdx_copy(S05)
+    document = Document.open(path)
+    shape = document.pages[0].shapes.require_id("36")
+    shape.master_shape.geometry.rows["3"].cells["X"].xml.attrib.pop("F")
+
+    shape.geometry.rows["3"].index = 9
+    document.save(path)
+
+    moved = Document.open(path).pages[0].shapes.require_id("36").geometry.rows["9"]
+    assert _cell_attributes(moved) == {"X": ("10.90551181102363", None), "Y": ("4.133858267716532", "Height*1")}
+
+
 def test_moving_a_row_onto_an_index_a_deleted_row_holds_raises(conn_a):
     """Conn A's own row IX 3 carries Del="1": hidden from `rows`, but the index is still taken (#273)."""
     geometry = conn_a.geometry

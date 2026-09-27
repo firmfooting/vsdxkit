@@ -383,7 +383,10 @@ class GeometryRow(InheritedRow, ShapePart):
         the old index, the moved row takes a copy of every cell it read from
         it, and a row carrying ``Del="1"`` is left at the old index, as Visio
         deletes an inherited row, so the master's row does not come back
-        there when the file is read again. Setting it to the index the row
+        there when the file is read again. A cell of the row's own whose
+        formula is ``Inh`` would inherit from the master's row at the new
+        index, so it takes the formula of the master's cell at the old one,
+        or none where that cell has none, and keeps its value. Setting it to the index the row
         already has is a no-op, and setting it to an index another row of
         this geometry already holds, a deleted one of the shape's own
         included, raises :class:`~vsdxkit.errors.InvalidOperationError`
@@ -413,6 +416,7 @@ class GeometryRow(InheritedRow, ShapePart):
         self.make_local()
         if master_row is not None:
             self._own_every_cell()
+        self._settle_inh_formulas(master_row)
         # Visio reads a section's rows in document order, so the row moves to
         # its new index's place rather than keeping its old one
         section.remove(self.xml)
@@ -434,6 +438,25 @@ class GeometryRow(InheritedRow, ShapePart):
         if master_geometry is None or index is None:
             return None
         return master_geometry.rows.get(index)
+
+    def _settle_inh_formulas(self, master_row: GeometryRow | None) -> None:
+        """Give each cell of this row's own whose formula is ``Inh`` the formula of `master_row`'s cell of its name, or none, keeping its value.
+
+        ``Inh`` inherits from the master's row at this row's index, so a row
+        about to move to another index would inherit from a different row,
+        or from none. `master_row` is the master's row at the old index, where
+        there is one; without it, or without a formula in its cell, the cell
+        keeps the value alone, which is what it held.
+        """
+        for cell in self.xml.findall(f"{namespace}Cell"):
+            if cell.attrib.get("F") != "Inh":
+                continue
+            master_cell = master_row.cells.get(cell.attrib.get("N", "")) if master_row is not None else None
+            master_formula = master_cell.formula if master_cell is not None else None
+            if master_formula is None:
+                del cell.attrib["F"]
+            else:
+                cell.attrib["F"] = master_formula
 
     def _own_every_cell(self) -> None:
         """Give this row, already the shape's own, a copy of each cell it still reads from the master, value and formula both.
