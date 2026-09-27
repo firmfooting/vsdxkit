@@ -587,7 +587,8 @@ class DataProperty(InheritedRow, ShapePart):
         from the nearest row up that chain that has it; each gives ``None``
         where no row has it. A property read from the master reads the
         shape's own row as well, once another object for it has written one,
-        as :attr:`value` does. The four are read-only:
+        and a nearer master's, once that master has written one, as
+        :attr:`value` does. The four are read-only:
         :meth:`set_attribute` writes them.
         """
         return self._field("Label")
@@ -619,26 +620,28 @@ class DataProperty(InheritedRow, ShapePart):
         Visio inherits each cell on its own down the whole chain, as
         :attr:`Shape.data_properties` lists the properties it inherits.
 
-        A property still marked inherited looks first in the instance's own
-        row of its ``N``, where another object for the property has written
-        one since this one was read: Visio reads that row over the master's.
+        A property still marked inherited reads the rows of its ``N`` as they
+        stand now, not the row it was handed: the instance's own, where
+        another object for the property has written one since this one was
+        read, and then each master's up the chain, where a nearer master has
+        written one over the farther master's row it was handed. Visio reads
+        the nearest. The row it was handed comes last, for a row without an
+        ``N``, which has no name to find it by.
         """
-        rows = [self.xml]
+        own = self._row_in(self.shape.xml) if self.inherited else self.xml
+        rows = [own] if own is not None else []
+        master_shape = self.shape.master_shape
+        while master_shape is not None:
+            row = self._row_in(master_shape.xml)
+            if row is not None:
+                rows.append(row)
+            master_shape = master_shape.master_shape
         if self.inherited:
-            own = self._row_in(self.shape.xml)
-            if own is not None:
-                rows.insert(0, own)
+            rows.append(self.xml)
         for row in rows:
             element = row.find(f'{namespace}Cell[@N="{cell}"]')
             if element is not None:
                 return element
-        master_shape = self.shape.master_shape
-        while master_shape is not None:
-            row = self._row_in(master_shape.xml)
-            element = None if row is None else row.find(f'{namespace}Cell[@N="{cell}"]')
-            if element is not None:
-                return element
-            master_shape = master_shape.master_shape
         return None
 
     def _row_in(self, shape_xml: Element) -> Element | None:
@@ -681,7 +684,9 @@ class DataProperty(InheritedRow, ShapePart):
         attribute, and reads label, type and prompt from the master, so the
         new row needs nothing but that name; the caller is about to write the
         ``Value`` cell. A master row with no name has nothing to match on, so
-        the label is carried down to keep the property addressable.
+        the new row carries a copy of each of its cells, which it could not
+        otherwise read, and the property keeps its label, type, prompt and
+        sort key.
 
         Where the instance already has a row of that name, written through
         another object for this property, that row is reused: Visio reads
@@ -703,9 +708,7 @@ class DataProperty(InheritedRow, ShapePart):
         if self.name is not None:
             row.attrib["N"] = self.name
         else:
-            label_cell = self.xml.find(f'{namespace}Cell[@N="Label"]')
-            if label_cell is not None:
-                row.append(copy.deepcopy(label_cell))
+            row.extend(copy.deepcopy(cell) for cell in self.xml.findall(f"{namespace}Cell"))
         section.append(row)
         self.xml = row
         _logger.debug("materialised inherited data property %r on shape %s", self.label, self.shape.ID)
