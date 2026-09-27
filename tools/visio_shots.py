@@ -15,8 +15,9 @@ the rest still run.
 
 A Windows Visio (``tools/visio_export.ps1``) exports each case's page as PNG
 and SVG as it opens, then again after ``Cell.Trigger()`` recalculates every
-cell the case checks. It does this for the candidate, the ref and the
-untouched fixture (``<case>.before.vsdx``). The SVG names each shape by its
+cell the case checks and the ends of each connector whose glue it checks.
+It does this for the candidate, the ref and the untouched fixture
+(``<case>.before.vsdx``). The SVG names each shape by its
 Visio ID and carries its position, path, text and style, so two exports are
 compared shape by shape, exactly. No pixels are compared and no text is
 recognised.
@@ -417,19 +418,29 @@ class _Case:
         return self.file or self.stem
 
 
+_CONNECTOR_ENDS = ("BeginX", "BeginY", "EndX", "EndY")
+"""The cells a glued connector's glue formulas drive."""
+
+
 def _read_cases(folder: Path) -> list[_Case]:
     """The cases `folder`'s `expected.json` names, in its order: one for each page a case checks cells or glue on.
 
     A case checking more than one page is named ``{stem}/page {n}`` for
     each. A stem names a ``.vsdx`` in one folder, so it holds no ``/``, and
     the name cannot be another case's.
+
+    A glue check recalculates its connector's ends, the cells a glue formula
+    drives, as a cell check recalculates its cell: without them a case
+    checking glue alone would be exported twice with nothing between.
     """
     expected = json.loads((folder / "expected.json").read_text(encoding="utf-8"))
     cases = []
     for stem, data in expected.items():
-        triggers = tuple((int(page), int(shape), str(cell)) for page, shape, cell, _want in data["cells"])
-        glued = {int(page) for page, _connector, _records in data.get("glue", [])}
-        pages = sorted({page for page, _shape, _cell in triggers} | glued) or [1]
+        checked = [(int(page), int(shape), str(cell)) for page, shape, cell, _want in data["cells"]]
+        glued = [(int(page), int(connector)) for page, connector, _records in data.get("glue", [])]
+        ends = [(page, connector, cell) for page, connector in glued for cell in _CONNECTOR_ENDS]
+        triggers = tuple(dict.fromkeys(checked + ends))
+        pages = sorted({page for page, _shape, _cell in triggers}) or [1]
         if len(pages) == 1:
             cases.append(_Case(stem, data["line"], pages[0], triggers))
         else:
@@ -704,12 +715,13 @@ def _summary(manifest: dict) -> str:
     ref = f"`{against['ref']}` ({against['commit'][:7]})" if against else "no ref"
     builder = manifest.get("builder")
     built = f"cases from `{builder['path']}` ({builder['sha256'][:7]}); " if builder else ""
+    visio = manifest["visio"]
+    seen_by = f"Visio {visio.get('version', '?')} build {visio.get('build', '?')}" if visio else "Visio not asked"
     lines = [
         f"# Visio shots {manifest['run']}",
         "",
         f"Candidate {manifest['commit'][:7]} on `{manifest['branch']}`{' with uncommitted changes' if manifest['dirty'] else ''}; "
-        f"{built}against {ref}; Visio {manifest['visio'].get('version', '?')} build {manifest['visio'].get('build', '?')}; "
-        f"{manifest['dpi']} dpi.",
+        f"{built}against {ref}; {seen_by}; {manifest['dpi']} dpi.",
         "",
         "| Case | Candidate on open vs after recalc | Ref vs candidate | Before vs candidate |",
         "|---|---|---|---|",
@@ -937,14 +949,19 @@ def _command_run(builder: Path, against: str | None, store: Path, dpi: int) -> i
             ref_info = {"ref": against, "commit": commit}
             ref_cases = {case.stem: case for case in _read_cases(work / "ref")}
         cases = _read_cases(candidate)
-        if not cases:
-            print(f"{builder.name} built no cases: {errors['candidate']}", file=sys.stderr)
+        if not cases and not errors["candidate"]:
+            print(f"{builder.name} defines no cases", file=sys.stderr)
             return 2
-        try:
-            visio, shots = _shoot(_jobs(candidate, cases, work / "ref", ref_cases), dpi, work / "shots")
-        except visio_verify.VisioUnavailable as error:
-            print(f"Visio is not usable from here: {error}", file=sys.stderr)
-            return 2
+        # a candidate that built no case because every one failed is a
+        # failed run, recorded as one, with nothing for Visio to export
+        visio: dict = {}
+        shots: dict[str, dict[str, dict]] = {variant: {} for variant in _VARIANTS}
+        if cases:
+            try:
+                visio, shots = _shoot(_jobs(candidate, cases, work / "ref", ref_cases), dpi, work / "shots")
+            except visio_verify.VisioUnavailable as error:
+                print(f"Visio is not usable from here: {error}", file=sys.stderr)
+                return 2
     run_id = f"{now:%Y%m%dT%H%M%SZ}_{source['commit'][:7]}"
     identity = {"run": run_id, "created": now.isoformat(timespec="seconds"), **source}
     identity |= {"against": ref_info, "visio": visio, "dpi": dpi}
