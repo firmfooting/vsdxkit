@@ -805,6 +805,13 @@ Moving a shape moves the shape
    0.8 gave it the x distance between its ends as its width, no angle, and
    its start as its pin, so a diagonal line was drawn short and flat.
 
+``shape.center_x_y`` on a 1-D shape
+   The midpoint of its two ends. 0.8 gave its begin point plus half its width
+   and height, which is off the line for a line not drawn left to right, and
+   for any line whose width is its length rather than its x span. The glue
+   engine reads this centre, so a connector glued to such a line now meets it
+   at its middle. A 2-D shape's centre is its pin, as before.
+
 A swimlane diagram replaces the container
 -----------------------------------------
 

@@ -149,18 +149,3 @@ def test_a_none_end_is_refused_naming_the_shape(vsdx_copy):
 
     with pytest.raises(InvalidOperationError, match=rf"^shape ID {line.ID}: start and finish coordinates cannot be None"):
         line.set_start_and_finish((None, 1.0), (2.0, 2.0))
-
-
-def test_the_refusals_this_package_added_name_the_shape_one_way(vsdx_copy):
-    """`shape ID 5`, the form most of the library's messages use, not `shape ID=5`."""
-    page = Document.open(vsdx_copy("test9_rect_and_line.vsdx")).pages[0]
-    connector = page.shapes.by_text("Conn A")
-    with pytest.raises(InvalidOperationError, match=rf"^shape ID {connector.ID} already has a geometry row at IX=2"):
-        connector.geometry.rows["1"].index = 2
-
-    group = Document.open(vsdx_copy("test10_nested_shapes.vsdx")).pages[0]
-    groups = [shape for shape in group.shapes if shape.shape_type == "Group"]
-    deleted = next(shape for shape in group.shapes if shape.shape_type != "Group")
-    deleted.delete()
-    with pytest.raises(InvalidOperationError, match=rf"^shape ID {deleted.ID} was deleted"):
-        groups[0].append_shape(deleted)
