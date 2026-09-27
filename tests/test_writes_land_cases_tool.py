@@ -25,17 +25,22 @@ def _case_files(out: Path) -> list[Path]:
     return sorted(path for path in out.glob("*.vsdx") if not path.name.endswith(".before.vsdx"))
 
 
-_FROM_TEST5_MASTER = ("05_plain_line_text.vsdx", "05_plain_line_text.before.vsdx")
-"""The files the tool writes from `test5_master.vsdx`, a case and its `.before` baseline; see `test_every_case_writes_a_file_that_opens`."""
+_FROM_TEST5_MASTER = (
+    "05_plain_line_text.vsdx",
+    "05_plain_line_text.before.vsdx",
+    "05b_diagonal_line_text.vsdx",
+    "05b_diagonal_line_text.before.vsdx",
+)
+"""The files the tool writes from `test5_master.vsdx`, cases 5 and 5b and their `.before` baselines; see `test_every_case_writes_a_file_that_opens`."""
 
 
 @pytest.mark.allow_invalid_package("missing-part", files=_FROM_TEST5_MASTER)
 def test_every_case_writes_a_file_that_opens(tmp_path):
-    """`05_plain_line_text.vsdx` comes from `test5_master.vsdx`, which ships with seven `missing-part`
+    """Cases 5 and 5b come from `test5_master.vsdx`, which ships with seven `missing-part`
     defects of its own (KNOWN_NON_CONFORMANT in test_package_validator.py); conftest's provenance
-    match goes by filename, and case 5 is named for the brief, not for its fixture, so the known
+    match goes by filename, and each case is named for the brief, not for its fixture, so the known
     defects need excusing here rather than being mistaken for ones this test introduced, as they
-    do in its `.before` baseline, the fixture copied untouched. `files` keeps the exemption to
+    do in each `.before` baseline, the fixture copied untouched. `files` keeps the exemption to
     those files, so a real `missing-part` regression in any other case would still be seen.
     """
     tool = _tool()
@@ -86,7 +91,7 @@ def test_check_sends_visio_only_the_cases_and_judges_only_them(tmp_path, monkeyp
 
 @pytest.mark.allow_invalid_package("missing-part", files=_FROM_TEST5_MASTER)
 def test_the_cases_are_in_file_name_order(tmp_path):
-    """Also writes `05_plain_line_text.vsdx`; see the marker's rationale on `test_every_case_writes_a_file_that_opens`."""
+    """Also writes cases 5 and 5b; see the marker's rationale on `test_every_case_writes_a_file_that_opens`."""
     tool = _tool()
     tool.main([str(tmp_path)])
 
@@ -117,6 +122,19 @@ def test_the_instance_geometry_case_writes_the_instance_and_leaves_the_master(tm
     assert (written.geometry.rows["1"].x, written.geometry.rows["1"].inherited) == (0.25, False)
     assert (sibling.geometry.rows["1"].x, sibling.geometry.rows["1"].inherited) == (0.0, True)
     assert written.master_shape.geometry.rows["1"].cells["X"].value == "0"
+
+
+@pytest.mark.allow_invalid_package("missing-part", files=_FROM_TEST5_MASTER)
+def test_the_diagonal_line_case_holds_what_it_asks_visio_to_show(tmp_path):
+    """What 05b asks Visio to confirm, checked in the file first: every cell it names holds the value it wants."""
+    tool = _tool()
+    case = tool.diagonal_line_text(tmp_path)
+
+    line = Document.open(tmp_path / "05b_diagonal_line_text.vsdx").pages[0].shapes.require_id("5")
+
+    assert {check.cell: float(line.cell_value(check.cell)) for check in case.cells} == pytest.approx(
+        {check.cell: check.want for check in case.cells}
+    )
 
 
 def _payload(stem, cells, connects=()):
@@ -229,7 +247,7 @@ def test_judge_handles_a_single_document_collapsed_to_a_bare_dict():
 def test_every_case_says_what_visio_must_show(tmp_path):
     """A case with no checks is a case the check cannot fail on.
 
-    Also writes `05_plain_line_text.vsdx`; see the marker's rationale on
+    Also writes cases 5 and 5b; see the marker's rationale on
     `test_every_case_writes_a_file_that_opens`.
     """
     tool = _tool()

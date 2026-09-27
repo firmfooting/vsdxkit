@@ -262,6 +262,31 @@ def plain_line_text(out: Path) -> Case:
     )
 
 
+def diagonal_line_text(out: Path) -> Case:
+    """Case 5b: the plain line of case 5 placed on a diagonal; it must be as long as its ends are apart, with its text at its middle."""
+    document, path = _copy("test5_master.vsdx", out, "05b_diagonal_line_text")
+    line = document.pages[0].shapes.require_id("5")
+    line.set_start_and_finish((1.0, 7.0), (4.0, 11.0))
+    document.save(path)
+    line_id = int(line.ID)
+    return Case(
+        "05b_diagonal_line_text: shape 5 runs from (1, 7) to (4, 11), 5 in long, with its pin and its text at its middle",
+        (
+            CellCheck(1, line_id, "BeginX", 1.0),
+            CellCheck(1, line_id, "BeginY", 7.0),
+            CellCheck(1, line_id, "EndX", 4.0),
+            CellCheck(1, line_id, "EndY", 11.0),
+            CellCheck(1, line_id, "Width", 5.0),
+            CellCheck(1, line_id, "Angle", math.atan2(4.0, 3.0)),
+            CellCheck(1, line_id, "PinX", 2.5),
+            CellCheck(1, line_id, "PinY", 9.0),
+            CellCheck(1, line_id, "TxtPinX", 2.5),
+            CellCheck(1, line_id, "TxtPinY", 0.0),
+        ),
+        stem=path.stem,
+    )
+
+
 def diagonals(out: Path) -> Case:
     """Case 6: a connector and a plain line placed on a diagonal."""
     document, path = _copy("test9_rect_and_line.vsdx", out, "06_diagonals")
@@ -300,6 +325,7 @@ CASES: tuple[Callable[[Path], Case], ...] = (
     instance_property,
     moved_instance,
     plain_line_text,
+    diagonal_line_text,
     diagonals,
 )
 """Every case, in the order its file is numbered."""
