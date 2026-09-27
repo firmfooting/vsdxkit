@@ -1,0 +1,623 @@
+{
+  "run": "20260927T155128Z_1a3f4d9",
+  "created": "2026-09-27T15:51:28+00:00",
+  "commit": "1a3f4d9c1fb63f8fad9daba7bc6819e9749f7fbd",
+  "branch": "test/visio-shots",
+  "dirty": false,
+  "builder": {
+    "path": "tools/writes_land_cases.py",
+    "sha256": "acda876583967d232223b034184762285201fea14afbb385712aaface42bcf15"
+  },
+  "against": {
+    "ref": "e7ad0aa50221d48c32a37dad3dd1a1d810f6f365",
+    "commit": "e7ad0aa50221d48c32a37dad3dd1a1d810f6f365"
+  },
+  "visio": {
+    "version": "16.0",
+    "build": "20326"
+  },
+  "dpi": 150,
+  "build_errors": {
+    "candidate": {},
+    "ref": {}
+  },
+  "cases": {
+    "01_colours": {
+      "line": "01_colours: shape 37, the title bar, has a red line, a green fill and blue text",
+      "shots": {
+        "before": {
+          "open": {
+            "svg": "2b85937aa0328c10dfc92c32143d0e7593dbcbe5d3b42ec21733fbd1595c4826",
+            "png": "7d18dc69464ef4be272b59b7b3782d710521aafcfb6fc58e6de1b10605e2102b"
+          },
+          "recalc": {
+            "svg": "2b85937aa0328c10dfc92c32143d0e7593dbcbe5d3b42ec21733fbd1595c4826",
+            "png": "7d18dc69464ef4be272b59b7b3782d710521aafcfb6fc58e6de1b10605e2102b"
+          },
+          "triggered": 3,
+          "asked": 3
+        },
+        "ref": {
+          "open": {
+            "svg": "7ea84b4df3c1207dc85e282d1b2db7d7fc248e1825e23cc73ce5de0178da083d",
+            "png": "264676169b673613ac73d3ca8f2622ee8ae16df9b1ade2aa58cf651f925879d5"
+          },
+          "recalc": {
+            "svg": "e7cdb1e2d89ed8d1f0b7f5cfae084bebb2605b1235071c97384e9ee6460523cc",
+            "png": "8fe32aadc578470cc21f72b52a78fa3289c3364a49829d7416006dfd00dea243"
+          },
+          "triggered": 3,
+          "asked": 3
+        },
+        "candidate": {
+          "open": {
+            "svg": "ad9c1435bbe6e63b88e5b94143827b8b1513411e6b82d1bff189f9d97d0b73de",
+            "png": "264676169b673613ac73d3ca8f2622ee8ae16df9b1ade2aa58cf651f925879d5"
+          },
+          "recalc": {
+            "svg": "d9136e91caee1dd2cc9d5d920a8becfb92cfac81d336ef4fa7a16a31f6a07a2f",
+            "png": "264676169b673613ac73d3ca8f2622ee8ae16df9b1ade2aa58cf651f925879d5"
+          },
+          "triggered": 3,
+          "asked": 3
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [
+          "shape 37 drawn differently: path style={fill:#00ff00;stroke:#ff0000;stroke-linecap:butt;stroke-width:1.25} d=M0 595.28 L785.2 595.28 L785.2 566.93 L0 566.93 L0 595.28 Z -> path style={fill:#fff9f1;stroke:#d49f00;stroke-linecap:butt;stroke-width:1.25} d=M0 595.28 L785.2 595.28 L785.2 566.93 L0 566.93 L0 595.28 Z"
+        ],
+        "ref -> candidate, after recalc": [
+          "shape 37 drawn differently: path style={fill:#fff9f1;stroke:#d49f00;stroke-linecap:butt;stroke-width:1.25} d=M0 595.28 L785.2 595.28 L785.2 566.93 L0 566.93 L0 595.28 Z -> path style={fill:#00ff00;stroke:#ff0000;stroke-linecap:butt;stroke-width:1.25} d=M0 595.28 L785.2 595.28 L785.2 566.93 L0 566.93 L0 595.28 Z"
+        ],
+        "before -> candidate, after recalc": [
+          "shape 37 drawn differently: path style={fill:#fff9f1;stroke:#d49f00;stroke-linecap:butt;stroke-width:1.25} d=M0 595.28 L785.2 595.28 L785.2 566.93 L0 566.93 L0 595.28 Z -> path style={fill:#00ff00;stroke:#ff0000;stroke-linecap:butt;stroke-width:1.25} d=M0 595.28 L785.2 595.28 L785.2 566.93 L0 566.93 L0 595.28 Z; text style={fill:#000000;font-family:Calibri;font-size:1.33333em} x=4 y=585.9 \"Cross-Functional Flowchart\" -> text style={fill:#0000ff;font-family:Calibri;font-size:1.33333em} x=4 y=585.9 \"Cross-Functional Flowchart\""
+        ]
+      },
+      "stale_on_open": false
+    },
+    "01b_text_colour": {
+      "line": "01b_text_colour: shape 2's text is blue",
+      "shots": {
+        "before": {
+          "open": {
+            "svg": "ac22b9e2804586c463765d6b7e9a1f570204aaea7911c296e1817bac67f1c093",
+            "png": "da84cf064982bb7b3b1ea3fffee24808f62a51ad71f52f5be3ae405d16ffdb6f"
+          },
+          "recalc": {
+            "svg": "ac22b9e2804586c463765d6b7e9a1f570204aaea7911c296e1817bac67f1c093",
+            "png": "da84cf064982bb7b3b1ea3fffee24808f62a51ad71f52f5be3ae405d16ffdb6f"
+          },
+          "triggered": 1,
+          "asked": 1
+        },
+        "ref": {
+          "open": {
+            "svg": "6a90f30de15394340b16fa223718b747b17de2f7a937ed77d411823614000c32",
+            "png": "3cee399c0171861187a5c320a248456a24425cdce912d340e11203ae7e9be22d"
+          },
+          "recalc": {
+            "svg": "ac22b9e2804586c463765d6b7e9a1f570204aaea7911c296e1817bac67f1c093",
+            "png": "da84cf064982bb7b3b1ea3fffee24808f62a51ad71f52f5be3ae405d16ffdb6f"
+          },
+          "triggered": 1,
+          "asked": 1
+        },
+        "candidate": {
+          "open": {
+            "svg": "6a90f30de15394340b16fa223718b747b17de2f7a937ed77d411823614000c32",
+            "png": "3cee399c0171861187a5c320a248456a24425cdce912d340e11203ae7e9be22d"
+          },
+          "recalc": {
+            "svg": "6a90f30de15394340b16fa223718b747b17de2f7a937ed77d411823614000c32",
+            "png": "3cee399c0171861187a5c320a248456a24425cdce912d340e11203ae7e9be22d"
+          },
+          "triggered": 1,
+          "asked": 1
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [
+          "shape 2 drawn differently: text style={fill:#0000ff;font-family:Calibri;font-size:1.00001em} x=53.08 y=788.8 \"Text Color\" -> text style={fill:#ff0000;font-family:Calibri;font-size:1.00001em} x=53.08 y=788.8 \"Text Color\""
+        ],
+        "ref -> candidate, after recalc": [
+          "shape 2 drawn differently: text style={fill:#ff0000;font-family:Calibri;font-size:1.00001em} x=53.08 y=788.8 \"Text Color\" -> text style={fill:#0000ff;font-family:Calibri;font-size:1.00001em} x=53.08 y=788.8 \"Text Color\""
+        ],
+        "before -> candidate, after recalc": [
+          "shape 2 drawn differently: text style={fill:#ff0000;font-family:Calibri;font-size:1.00001em} x=53.08 y=788.8 \"Text Color\" -> text style={fill:#0000ff;font-family:Calibri;font-size:1.00001em} x=53.08 y=788.8 \"Text Color\""
+        ]
+      },
+      "stale_on_open": false
+    },
+    "02_guarded": {
+      "line": "02_guarded: shape 1 is 2.5 in wide with its pin at x = 3.0 in",
+      "shots": {
+        "before": {
+          "open": {
+            "svg": "ab88968cda8fa12c60a4d54b7050466e28c6cefd7292c695ae3715a42f71db95",
+            "png": "cc31803d24cf2136a3f1582ef55b0bdc85aef02a481ad02df06fe224b2b0030d"
+          },
+          "recalc": {
+            "svg": "ab88968cda8fa12c60a4d54b7050466e28c6cefd7292c695ae3715a42f71db95",
+            "png": "cc31803d24cf2136a3f1582ef55b0bdc85aef02a481ad02df06fe224b2b0030d"
+          },
+          "triggered": 2,
+          "asked": 2
+        },
+        "ref": {
+          "open": {
+            "svg": "b4d97934f77406b27c4966f32e242cf59d3ff9d4be2d885fa2d6e521ffa475d1",
+            "png": "48bb183d87399f2f8ced96a3b84ddcbe6ebee0d10b6cfa86dad47e977189af3f"
+          },
+          "recalc": {
+            "svg": "f93c6a48862b1a371c6acc6a5fc129de60330717da1901ed23b1b0108a74ff45",
+            "png": "72e259f4d9046e388a4ec9ce3c45295536b4289cb0d954d2c8f7db39249e3071"
+          },
+          "triggered": 2,
+          "asked": 2
+        },
+        "candidate": {
+          "open": {
+            "svg": "b4d97934f77406b27c4966f32e242cf59d3ff9d4be2d885fa2d6e521ffa475d1",
+            "png": "48bb183d87399f2f8ced96a3b84ddcbe6ebee0d10b6cfa86dad47e977189af3f"
+          },
+          "recalc": {
+            "svg": "8694abe86cd854ededdf99e8767ae079cce13b639f799a4e9cb0723553616216",
+            "png": "fffd776b809937af53d02d4b295b11a340bfc589224a4c0297de4422cebdc942"
+          },
+          "triggered": 2,
+          "asked": 2
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [
+          "shape 1 moved (-0.167 in, +0.000 in): translate(138.047,-710.504) -> translate(126,-710.504)"
+        ],
+        "ref on open -> after recalc": [
+          "shape 1 moved (-1.417 in, +0.000 in): translate(138.047,-710.504) -> translate(36,-710.504)",
+          "shape 1 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=113.386 width=180 x=0 y=728.504 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=113.386 width=72 x=0 y=728.504; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.2 y=788.8 \"Shape Text\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=9.2 y=788.8 \"Shape Text\""
+        ],
+        "ref -> candidate, after recalc": [
+          "shape 1 moved (+1.250 in, +0.000 in): translate(36,-710.504) -> translate(126,-710.504)",
+          "shape 1 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=113.386 width=72 x=0 y=728.504 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=113.386 width=180 x=0 y=728.504; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=9.2 y=788.8 \"Shape Text\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.2 y=788.8 \"Shape Text\""
+        ],
+        "before -> candidate, after recalc": [
+          "shape 1 moved (+1.500 in, +0.000 in): translate(18,-710.504) -> translate(126,-710.504)",
+          "shape 1 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=113.386 width=155.906 x=0 y=728.504 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=113.386 width=180 x=0 y=728.504; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=51.16 y=788.8 \"Shape Text\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.2 y=788.8 \"Shape Text\""
+        ]
+      },
+      "stale_on_open": true
+    },
+    "02b_prop_over_formula": {
+      "line": "02b_prop_over_formula: shape 54's Function property reads Sales, not its swimlane's heading",
+      "shots": {
+        "before": {
+          "open": {
+            "svg": "8fc141cc98e506141e6ea9754e13a42be0ba871ad806e927848ba89c8b30b436",
+            "png": "7d18dc69464ef4be272b59b7b3782d710521aafcfb6fc58e6de1b10605e2102b"
+          },
+          "recalc": {
+            "svg": "2b85937aa0328c10dfc92c32143d0e7593dbcbe5d3b42ec21733fbd1595c4826",
+            "png": "7d18dc69464ef4be272b59b7b3782d710521aafcfb6fc58e6de1b10605e2102b"
+          },
+          "triggered": 1,
+          "asked": 1
+        },
+        "ref": {
+          "open": {
+            "svg": "2b85937aa0328c10dfc92c32143d0e7593dbcbe5d3b42ec21733fbd1595c4826",
+            "png": "7d18dc69464ef4be272b59b7b3782d710521aafcfb6fc58e6de1b10605e2102b"
+          },
+          "recalc": {
+            "svg": "2b85937aa0328c10dfc92c32143d0e7593dbcbe5d3b42ec21733fbd1595c4826",
+            "png": "7d18dc69464ef4be272b59b7b3782d710521aafcfb6fc58e6de1b10605e2102b"
+          },
+          "triggered": 1,
+          "asked": 1
+        },
+        "candidate": {
+          "open": {
+            "svg": "783bc54cf03af785b37f746af6a8f779d93c95a983773ea8b4ddc4e4d3c6b82c",
+            "png": "7d18dc69464ef4be272b59b7b3782d710521aafcfb6fc58e6de1b10605e2102b"
+          },
+          "recalc": {
+            "svg": "653a5615e7ceeb6af715a2e50d1ffa2e8978105ebc1a78e04e7625e596087cf4",
+            "png": "7d18dc69464ef4be272b59b7b3782d710521aafcfb6fc58e6de1b10605e2102b"
+          },
+          "triggered": 1,
+          "asked": 1
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": []
+      },
+      "stale_on_open": false
+    },
+    "02c_instance_geometry": {
+      "line": "02c_instance_geometry: 'Conn A' starts its path at x = 0.25 in; its copy, the same master's instance, still at 0",
+      "shots": {
+        "before": {
+          "open": {
+            "svg": "d4dac7888eabd44931fa272c4024c021c332beef608eefe3bf72e0178c63d068",
+            "png": "96426436e99ee570b795956888e11111f832e7c71ede6f8d5556c2cd44870114"
+          },
+          "recalc": {
+            "svg": "1887766e4f1f7778359b6f0a89735e5e8204c4beae2fec05dfc8fdf562f3419d",
+            "png": "96426436e99ee570b795956888e11111f832e7c71ede6f8d5556c2cd44870114"
+          },
+          "triggered": 1,
+          "asked": 2
+        },
+        "ref": {
+          "open": {
+            "svg": "790c99ef2dd653226eb597fbd618216348d0f28aeb8bdc163ee332ba8fa1756a",
+            "png": "2f9c4871d33f0c4e6791e35dc04ab712db8a9c6dbf8488b88b437af906de3078"
+          },
+          "recalc": {
+            "svg": "884a157df2899767d6985813b160b3ccc015e969c528ab811385521edfb9ee28",
+            "png": "2f9c4871d33f0c4e6791e35dc04ab712db8a9c6dbf8488b88b437af906de3078"
+          },
+          "triggered": 2,
+          "asked": 2
+        },
+        "candidate": {
+          "open": {
+            "svg": "fcaede149c9a7b1de4cf681ab850cfca05e0b6968afd535f8f08ef949d08b417",
+            "png": "09b13ab4a3c1a51bd2b83b100af4d29206f859a5adfde4d22b9bb0bb9c36b2e6"
+          },
+          "recalc": {
+            "svg": "4a7b0958c41c90624fb09c128c4c9926add732beacfed77f0a721b7eedb18a17",
+            "png": "09b13ab4a3c1a51bd2b83b100af4d29206f859a5adfde4d22b9bb0bb9c36b2e6"
+          },
+          "triggered": 2,
+          "asked": 2
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [
+          "shape 4 drawn differently: path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M18 841.89 L255.12 785.2 -> path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 841.89 L255.12 785.2"
+        ],
+        "before -> candidate, after recalc": [
+          "shape 3 drawn differently: path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 841.89 L255.12 785.2 -> path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M18 841.89 L255.12 785.2",
+          "shape 4 only in the second drawing"
+        ]
+      },
+      "stale_on_open": false
+    },
+    "03_glued_end": {
+      "line": "03_glued_end: connector 6's begin is free, 1 in left of where it was; its end is still glued to shape 2",
+      "shots": {
+        "before": {
+          "open": {
+            "svg": "e3fe88c0094ce8f645b522d10a00f2c41c9340e1e9ed3b4538cc6c5e1cca5d67",
+            "png": "7145014671c8f3c3659fa2f63169224d30a2da3e4e5bb0fbc41d1a8f5104e7e6"
+          },
+          "recalc": {
+            "svg": "e3fe88c0094ce8f645b522d10a00f2c41c9340e1e9ed3b4538cc6c5e1cca5d67",
+            "png": "7145014671c8f3c3659fa2f63169224d30a2da3e4e5bb0fbc41d1a8f5104e7e6"
+          },
+          "triggered": 4,
+          "asked": 4
+        },
+        "ref": {
+          "open": {
+            "svg": "e3fe88c0094ce8f645b522d10a00f2c41c9340e1e9ed3b4538cc6c5e1cca5d67",
+            "png": "7145014671c8f3c3659fa2f63169224d30a2da3e4e5bb0fbc41d1a8f5104e7e6"
+          },
+          "recalc": {
+            "svg": "e3fe88c0094ce8f645b522d10a00f2c41c9340e1e9ed3b4538cc6c5e1cca5d67",
+            "png": "7145014671c8f3c3659fa2f63169224d30a2da3e4e5bb0fbc41d1a8f5104e7e6"
+          },
+          "triggered": 4,
+          "asked": 4
+        },
+        "candidate": {
+          "open": {
+            "svg": "e3fe88c0094ce8f645b522d10a00f2c41c9340e1e9ed3b4538cc6c5e1cca5d67",
+            "png": "7145014671c8f3c3659fa2f63169224d30a2da3e4e5bb0fbc41d1a8f5104e7e6"
+          },
+          "recalc": {
+            "svg": "152f60f41f2cc658b6d83e02a7e8f31048a220fa394a8e4d1eb3e2e595ba4132",
+            "png": "ee17340f113abdaaf6bb9d7feb7b9472dfb773e37fd7051faf117e7e80e68eb8"
+          },
+          "triggered": 4,
+          "asked": 4
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [
+          "shape 6 moved (-1.000 in, +0.000 in): translate(173.906,-760.11) -> translate(101.906,-760.11)",
+          "shape 6 drawn differently: path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 834.8 L45.78 834.8 -> path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 834.8 L117.78 834.8"
+        ],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [
+          "shape 6 moved (-1.000 in, +0.000 in): translate(173.906,-760.11) -> translate(101.906,-760.11)",
+          "shape 6 drawn differently: path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 834.8 L45.78 834.8 -> path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 834.8 L117.78 834.8"
+        ],
+        "before -> candidate, after recalc": [
+          "shape 6 moved (-1.000 in, +0.000 in): translate(173.906,-760.11) -> translate(101.906,-760.11)",
+          "shape 6 drawn differently: path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 834.8 L45.78 834.8 -> path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 834.8 L117.78 834.8"
+        ]
+      },
+      "stale_on_open": true
+    },
+    "03b_instance_property": {
+      "line": "03b_instance_property: shape 7's ShapeClass reads Changed; its copy, the same master's instance, still reads Location",
+      "shots": {
+        "before": {
+          "open": {
+            "svg": "e40caba1139b4b05fc67afff2bcafecbc0d56cb22460564443eb4864b4c51078",
+            "png": "b2f540b5c3d1857cce755f61d09d0fd7cfb273f2030d502abe7e582b0997806c"
+          },
+          "recalc": {
+            "svg": "e40caba1139b4b05fc67afff2bcafecbc0d56cb22460564443eb4864b4c51078",
+            "png": "b2f540b5c3d1857cce755f61d09d0fd7cfb273f2030d502abe7e582b0997806c"
+          },
+          "triggered": 1,
+          "asked": 2
+        },
+        "ref": {
+          "open": {
+            "svg": "ced54eec227dae49e582578dae1957238fe38d5575024fcd6a1e5002ecc0688b",
+            "png": "c4a1bd9676f850a20044d2ad5e4da9e06024cdeb6fbddd17b91466a2291b6be0"
+          },
+          "recalc": {
+            "svg": "ced54eec227dae49e582578dae1957238fe38d5575024fcd6a1e5002ecc0688b",
+            "png": "c4a1bd9676f850a20044d2ad5e4da9e06024cdeb6fbddd17b91466a2291b6be0"
+          },
+          "triggered": 2,
+          "asked": 2
+        },
+        "candidate": {
+          "open": {
+            "svg": "b6a2603f1746ff3943dd35815d298bd4f92f843c86acb348a79e2b6285ef4d8a",
+            "png": "c4a1bd9676f850a20044d2ad5e4da9e06024cdeb6fbddd17b91466a2291b6be0"
+          },
+          "recalc": {
+            "svg": "b6a2603f1746ff3943dd35815d298bd4f92f843c86acb348a79e2b6285ef4d8a",
+            "png": "c4a1bd9676f850a20044d2ad5e4da9e06024cdeb6fbddd17b91466a2291b6be0"
+          },
+          "triggered": 2,
+          "asked": 2
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": [
+          "shape 15 only in the second drawing",
+          "shape 16 only in the second drawing",
+          "shape 17 only in the second drawing",
+          "shape 18 only in the second drawing"
+        ]
+      },
+      "stale_on_open": false
+    },
+    "04_moved_instance": {
+      "line": "04_moved_instance: 'Conn A' is drawn between its two ends, 1 in right of and 1 in above where it was",
+      "shots": {
+        "before": {
+          "open": {
+            "svg": "d4dac7888eabd44931fa272c4024c021c332beef608eefe3bf72e0178c63d068",
+            "png": "96426436e99ee570b795956888e11111f832e7c71ede6f8d5556c2cd44870114"
+          },
+          "recalc": {
+            "svg": "d4dac7888eabd44931fa272c4024c021c332beef608eefe3bf72e0178c63d068",
+            "png": "96426436e99ee570b795956888e11111f832e7c71ede6f8d5556c2cd44870114"
+          },
+          "triggered": 6,
+          "asked": 6
+        },
+        "ref": {
+          "open": {
+            "svg": "80e696f5b158a4858e06b112ae7537dce7409707adc35ded5e3d75694644575c",
+            "png": "de335534cfa4c18647784a006045e6c8371e3d34d7ec4b43f1c6dce623969763"
+          },
+          "recalc": {
+            "svg": "e2ca33dc735371bc4c294171496967a9512de4b6c18af8da678b524c33f9067b",
+            "png": "c38bafc6765e2b5eb94f23cb6fff4561c4634504f84a0bce2cb2f90f7d32b20e"
+          },
+          "triggered": 6,
+          "asked": 6
+        },
+        "candidate": {
+          "open": {
+            "svg": "afd86b30394dc6ce57565cd83e3a36b05bfef7c4f304877ecd8f9e1e4105129b",
+            "png": "fa3ceaffff1ca57eb5e52964957749097e6c8b36aeb25336df86c5432b520803"
+          },
+          "recalc": {
+            "svg": "ffc84ab93c19bf73f1578e79058af0318b25a782cf8e1dbe3a646bb55e9c0f5c",
+            "png": "fa3ceaffff1ca57eb5e52964957749097e6c8b36aeb25336df86c5432b520803"
+          },
+          "triggered": 6,
+          "asked": 6
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [
+          "shape 3 drawn differently: path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M72 769.89 L327.12 713.2 -> path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 841.89 L72 769.89 L327.12 713.2 L183.12 857.2; rect style={fill:#ffffff;stroke:none} height=9.59985 width=23.3281 x=115.895 y=808.744 -> rect style={fill:#ffffff;stroke:none} height=9.59985 width=23.3281 x=95.645 y=807.091; text style={fill:#000000;font-family:Calibri;font-size:0.666664em} x=115.89 y=815.94 \"Conn A\" -> text style={fill:#000000;font-family:Calibri;font-size:0.666664em} x=95.64 y=814.29 \"Conn A\""
+        ],
+        "ref -> candidate, after recalc": [
+          "shape 3 drawn differently: path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 841.89 L72 769.89 L327.12 713.2 L183.12 857.2 -> path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 841.89 L255.12 785.2; rect style={fill:#ffffff;stroke:none} height=9.59985 width=23.3281 x=95.645 y=807.091 -> rect style={fill:#ffffff;stroke:none} height=9.59985 width=23.3281 x=115.895 y=808.744; text style={fill:#000000;font-family:Calibri;font-size:0.666664em} x=95.64 y=814.29 \"Conn A\" -> text style={fill:#000000;font-family:Calibri;font-size:0.666664em} x=115.89 y=815.94 \"Conn A\""
+        ],
+        "before -> candidate, after recalc": [
+          "shape 3 moved (+1.000 in, +1.000 in): translate(28.3465,-623.622) -> translate(100.346,-695.622)"
+        ]
+      },
+      "stale_on_open": false
+    },
+    "05_plain_line_text": {
+      "line": "05_plain_line_text: shape 5 runs from (1, 7) to (3, 7) with its text at its middle",
+      "shots": {
+        "before": {
+          "open": {
+            "svg": "b394106915a208e016ade9d41b8bc4b0d451e0fe0cf07842788c5eb3d07c8d1a",
+            "png": "4d11f69fe5dae3413a458a9e3eb7235bd35367990dd64708b8690d47183126d3"
+          },
+          "recalc": {
+            "svg": "e8cabd989d79c9e6b6eefa57c388c1bd3a2df98eeb3d178a45fff065f5f4a4be",
+            "png": "4d11f69fe5dae3413a458a9e3eb7235bd35367990dd64708b8690d47183126d3"
+          },
+          "triggered": 7,
+          "asked": 7
+        },
+        "ref": {
+          "open": {
+            "svg": "ceabad65c190b6af9f880e12819a5ce544a6d78ae93e61c89fc81df05d978e0a",
+            "png": "a41d503602c8c27b289db2ce67684be97847b2e8c56a09eb7fa92ec0ae5d7e57"
+          },
+          "recalc": {
+            "svg": "af0de3b806008b363a6fd9901f275c899f45326f132f75ae162a1376ae4189e9",
+            "png": "837079966276ad6691d9929318d3e1db6a41df96a6ff26bcb466ab59b1834b64"
+          },
+          "triggered": 7,
+          "asked": 7
+        },
+        "candidate": {
+          "open": {
+            "svg": "029b9e36f673c13a6896b36ab3df7b07c445ffa73597b42f00fdef1797de95d6",
+            "png": "4dc2c136ab456f081c200f55a8ec6064bd95b2e2b0149909249523605c9a20e1"
+          },
+          "recalc": {
+            "svg": "93e5b115a372706cf615390c7677c5914d9f7a44e26a1430bafa3a1049bd4918",
+            "png": "4dc2c136ab456f081c200f55a8ec6064bd95b2e2b0149909249523605c9a20e1"
+          },
+          "triggered": 7,
+          "asked": 7
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [
+          "shape 5 moved (-0.072 in, +0.000 in): translate(5.1768,-504) -> translate(0.00387868,-504)"
+        ],
+        "ref -> candidate, after recalc": [
+          "shape 5 moved (+1.000 in, +0.000 in): translate(0.00387868,-504) -> translate(72.0039,-504)",
+          "shape 5 drawn differently: rect style={fill:#ffffff;stroke:none} height=8.20596 width=23.1169 x=132.441 y=103.797 -> rect style={fill:#ffffff;stroke:none} height=8.20596 width=23.1169 x=60.4414 y=607.797; text style={fill:#333333;font-family:Arial;font-size:0.666664em;font-weight:bold} x=132.44 y=110 \"Line 1\" -> text style={fill:#333333;font-family:Arial;font-size:0.666664em;font-weight:bold} x=60.44 y=614 \"Line 1\""
+        ],
+        "before -> candidate, after recalc": [
+          "shape 5 moved (-0.759 in, -0.500 in): translate(126.677,-540) -> translate(72.0039,-504)",
+          "shape 5 drawn differently: path style={marker-end:url({marker style={fill:#5e5e5e;fill-opacity:1;stroke:#5e5e5e;stroke-opacity:1;stroke-width:0.26315789473684} markerUnits=strokeWidth orient=auto overflow=visible refX=-7.6 use transform=scale(-3.8,-3.8)  xlink:hre... -> path style={marker-end:url({marker style={fill:#5e5e5e;fill-opacity:1;stroke:#5e5e5e;stroke-opacity:1;stroke-width:0.26315789473684} markerUnits=strokeWidth orient=auto overflow=visible refX=-7.6 use transform=scale(-3.8,-3.8)  xlink:hre...; rect style={fill:#ffffff;stroke:none} height=8.20596 width=23.1169 x=63.9694 y=607.797 -> rect style={fill:#ffffff;stroke:none} height=8.20596 width=23.1169 x=60.4414 y=607.797; text style={fill:#333333;font-family:Arial;font-size:0.666664em;font-weight:bold} x=63.97 y=614 \"Line 1\" -> text style={fill:#333333;font-family:Arial;font-size:0.666664em;font-weight:bold} x=60.44 y=614 \"Line 1\""
+        ]
+      },
+      "stale_on_open": false
+    },
+    "05b_diagonal_line_text": {
+      "line": "05b_diagonal_line_text: shape 5 runs from (1, 7) to (4, 11), 5 in long, with its pin and its text at its middle",
+      "shots": {
+        "before": {
+          "open": {
+            "svg": "b394106915a208e016ade9d41b8bc4b0d451e0fe0cf07842788c5eb3d07c8d1a",
+            "png": "4d11f69fe5dae3413a458a9e3eb7235bd35367990dd64708b8690d47183126d3"
+          },
+          "recalc": {
+            "svg": "efaa2b5c22cae39d7f845b8ae04dce9c0331d3b4305aa83c294e91c51009d6b5",
+            "png": "4d11f69fe5dae3413a458a9e3eb7235bd35367990dd64708b8690d47183126d3"
+          },
+          "triggered": 10,
+          "asked": 10
+        },
+        "ref": {
+          "open": {
+            "svg": "d26a6f173a294a7b398d7e2450654d2f5947abc52e48709b2c8d54557b544b27",
+            "png": "878241fb39adc31b7a13bfaee11a517d1eefbb56c48df8e36b72bedb6475e2c5"
+          },
+          "recalc": {
+            "svg": "86195bcd0154d06713a70ed4a9f2720a98c543db89a477b3673a1235c79ed5a8",
+            "png": "442d77015b5b3ddf11224922c04d3c101a75c9f9b2d2e1c5bb307321f9475ed7"
+          },
+          "triggered": 10,
+          "asked": 10
+        },
+        "candidate": {
+          "open": {
+            "svg": "a21b51c72c64d8e784fd0204bcb2b9f897e69d1caae265d4b626f558feeca667",
+            "png": "a8e8dc809ad4427ecfbb3f145cf735120bc042a2454e78d696b604bd499ac93a"
+          },
+          "recalc": {
+            "svg": "357a3a4739fb2a2c390dd0eed5cbe5083cfdf9bb4e042977b56438dc13bddedf",
+            "png": "a8e8dc809ad4427ecfbb3f145cf735120bc042a2454e78d696b604bd499ac93a"
+          },
+          "triggered": 10,
+          "asked": 10
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [
+          "shape 5 moved (-0.572 in, +0.000 in): translate(5.1768,-504) -> translate(-35.9942,-504)"
+        ],
+        "ref -> candidate, after recalc": [
+          "shape 5 moved (-5.300 in, -3.400 in): translate(-35.9942,-504) -> translate(-417.594,-259.208) rotate(-53.1301)",
+          "shape 5 drawn differently: path style={marker-end:url({marker style={fill:#5e5e5e;fill-opacity:1;stroke:#5e5e5e;stroke-opacity:1;stroke-width:0.26315789473684} markerUnits=strokeWidth orient=auto overflow=visible refX=-7.6 use transform=scale(-3.8,-3.8)  xlink:hre... -> path style={marker-end:url({marker style={fill:#5e5e5e;fill-opacity:1;stroke:#5e5e5e;stroke-opacity:1;stroke-width:0.26315789473684} markerUnits=strokeWidth orient=auto overflow=visible refX=-7.6 use transform=scale(-3.8,-3.8)  xlink:hre...; rect style={fill:#ffffff;stroke:none} height=8.20596 width=23.1169 x=168.441 y=103.797 -> rect style={fill:#ffffff;stroke:none} height=8.20596 width=23.1169 x=168.441 y=607.797; text style={fill:#333333;font-family:Arial;font-size:0.666664em;font-weight:bold} x=168.44 y=110 \"Line 1\" -> text style={fill:#333333;font-family:Arial;font-size:0.666664em;font-weight:bold} x=168.44 y=614 \"Line 1\""
+        ],
+        "before -> candidate, after recalc": [
+          "shape 5 moved (-7.559 in, -3.900 in): translate(126.677,-540) -> translate(-417.594,-259.208) rotate(-53.1301)",
+          "shape 5 drawn differently: path style={marker-end:url({marker style={fill:#5e5e5e;fill-opacity:1;stroke:#5e5e5e;stroke-opacity:1;stroke-width:0.26315789473684} markerUnits=strokeWidth orient=auto overflow=visible refX=-7.6 use transform=scale(-3.8,-3.8)  xlink:hre... -> path style={marker-end:url({marker style={fill:#5e5e5e;fill-opacity:1;stroke:#5e5e5e;stroke-opacity:1;stroke-width:0.26315789473684} markerUnits=strokeWidth orient=auto overflow=visible refX=-7.6 use transform=scale(-3.8,-3.8)  xlink:hre...; rect style={fill:#ffffff;stroke:none} height=8.20596 width=23.1169 x=63.9694 y=607.797 -> rect style={fill:#ffffff;stroke:none} height=8.20596 width=23.1169 x=168.441 y=607.797; text style={fill:#333333;font-family:Arial;font-size:0.666664em;font-weight:bold} x=63.97 y=614 \"Line 1\" -> text style={fill:#333333;font-family:Arial;font-size:0.666664em;font-weight:bold} x=168.44 y=614 \"Line 1\""
+        ]
+      },
+      "stale_on_open": false
+    },
+    "06_diagonals": {
+      "line": "06_diagonals: 'Conn A' runs from (1, 1) to (3, 2) and 'Line A' from (4, 1) to (5, 3), each drawn between its ends",
+      "shots": {
+        "before": {
+          "open": {
+            "svg": "d4dac7888eabd44931fa272c4024c021c332beef608eefe3bf72e0178c63d068",
+            "png": "96426436e99ee570b795956888e11111f832e7c71ede6f8d5556c2cd44870114"
+          },
+          "recalc": {
+            "svg": "1eb1f841294ed57212f2a6aa256043acb768fa7b0229169bc16eb6febb0ef840",
+            "png": "96426436e99ee570b795956888e11111f832e7c71ede6f8d5556c2cd44870114"
+          },
+          "triggered": 10,
+          "asked": 10
+        },
+        "ref": {
+          "open": {
+            "svg": "4de1fed22ecd43bb5ee40938d181c9ebda32994f79bf7d89847dc3b70bbb5b44",
+            "png": "970a6ac7f7a5fde65cc8a361340cc4e8d395d36b759b4f6e8a5d405670457059"
+          },
+          "recalc": {
+            "svg": "4de1fed22ecd43bb5ee40938d181c9ebda32994f79bf7d89847dc3b70bbb5b44",
+            "png": "970a6ac7f7a5fde65cc8a361340cc4e8d395d36b759b4f6e8a5d405670457059"
+          },
+          "triggered": 10,
+          "asked": 10
+        },
+        "candidate": {
+          "open": {
+            "svg": "4de1fed22ecd43bb5ee40938d181c9ebda32994f79bf7d89847dc3b70bbb5b44",
+            "png": "970a6ac7f7a5fde65cc8a361340cc4e8d395d36b759b4f6e8a5d405670457059"
+          },
+          "recalc": {
+            "svg": "4de1fed22ecd43bb5ee40938d181c9ebda32994f79bf7d89847dc3b70bbb5b44",
+            "png": "970a6ac7f7a5fde65cc8a361340cc4e8d395d36b759b4f6e8a5d405670457059"
+          },
+          "triggered": 10,
+          "asked": 10
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": [
+          "shape 2 moved (-4.316 in, -14.634 in): translate(-154.285,-660.267) rotate(-12.5288) -> translate(-465.009,393.385) rotate(-63.4349)",
+          "shape 2 drawn differently: path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 841.89 L261.34 841.89 -> path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 841.89 L161 841.89; rect style={fill:#ffffff;stroke:none} height=14.4001 width=29.7307 x=115.806 y=834.69 -> rect style={fill:#ffffff;stroke:none} height=14.4001 width=29.7307 x=65.6331 y=834.69; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=115.81 y=845.49 \"Line A\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=65.63 y=845.49 \"Line A\"",
+          "shape 3 moved (+0.606 in, -7.661 in): translate(28.3465,-623.622) -> translate(72,-72)",
+          "shape 3 drawn differently: path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 841.89 L255.12 785.2 -> path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 841.89 L144 769.89; rect style={fill:#ffffff;stroke:none} height=9.59985 width=23.3281 x=115.895 y=808.744 -> rect style={fill:#ffffff;stroke:none} height=9.59985 width=23.3281 x=60.3359 y=801.09; text style={fill:#000000;font-family:Calibri;font-size:0.666664em} x=115.89 y=815.94 \"Conn A\" -> text style={fill:#000000;font-family:Calibri;font-size:0.666664em} x=60.34 y=808.29 \"Conn A\""
+        ]
+      },
+      "stale_on_open": false
+    }
+  }
+}
