@@ -128,3 +128,46 @@ def test_a_formula_with_an_unknown_input_has_no_value(formula, metric):
 
     assert known is not None, "the fully known shape must evaluate, or this proves nothing"
     assert unknown is None, f"{formula} gave {unknown!r} without {metric}"
+
+
+@pytest.mark.parametrize(
+    ("formula", "expected"),
+    [
+        ("Width*0.499973064698594", 2.0 * 0.499973064698594),
+        ("Height*0.25", 0.25),
+        ("Width*2", 4.0),
+        ("Width*-0.5", -1.0),
+        ("Height*+1.5", 1.5),
+        ("Width*.5", 1.0),
+        ("Width*3.", 6.0),
+    ],
+)
+def test_a_width_or_height_times_a_number_is_evaluated(formula, expected):
+    """Visio writes a local pin as a fraction of the size, such as test5_master shape 5's `Width*0.499973064698594`."""
+    assert calc_value(_Metrics(), formula) == pytest.approx(expected)
+
+
+@pytest.mark.parametrize(
+    "formula",
+    [
+        "Width*0.5+1",
+        "Width * 0.5",
+        "Width*",
+        "Width*1e3",
+        "Width*0.5DL",
+        "Width*--1",
+        "Width*Height",
+        "PinX*0.5",
+        "0.5*Width",
+        "GUARD(Width*0.3)",
+        "width*0.3",
+    ],
+)
+def test_the_fallback_refuses_anything_but_a_width_or_height_times_a_decimal(formula):
+    assert calc_value(_Metrics(), formula) is None
+
+
+@pytest.mark.parametrize(("formula", "metric"), [("Width*0.3", "width"), ("Height*0.3", "height")])
+def test_the_fallback_has_no_value_without_its_metric(formula, metric):
+    assert calc_value(_Metrics(), formula) is not None
+    assert calc_value(_Metrics(**{metric: None}), formula) is None

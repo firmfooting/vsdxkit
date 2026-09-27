@@ -179,6 +179,21 @@ def test_a_diagonal_plain_line_is_as_long_as_its_ends_are_apart_with_its_text_at
     assert float(line.cells["Control/TextPosition/X"].value) == pytest.approx(2.5)
 
 
+def test_a_diagonal_plain_lines_local_pin_follows_its_width(vsdx_copy):
+    """Case 05b: shape 5's LocPinX is `Width*0.499973064698594`, which kept its old width's value, 0.9281.
+
+    Visio 16 recomputes it to 2.49986 on open for the 5-inch line; the value
+    beside the formula is what other consumers read.
+    """
+    line = Document.open(vsdx_copy("test5_master.vsdx")).pages[0].shapes.by_id("5")
+    assert line.cell_formula("LocPinX") == "Width*0.499973064698594"
+
+    line.set_start_and_finish((1.0, 7.0), (4.0, 11.0))
+
+    assert float(line.cell_value("LocPinX")) == pytest.approx(5.0 * 0.499973064698594)
+    assert float(line.cell_value("LocPinX")) == pytest.approx(2.49987, abs=1e-5)
+
+
 def test_a_plain_line_placed_right_to_left_points_left(vsdx_copy):
     line = Document.open(vsdx_copy("test5_master.vsdx")).pages[0].shapes.by_id("5")
 
