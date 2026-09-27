@@ -164,6 +164,37 @@ def test_setting_a_value_clears_no_formula_on_an_inner_text_row(vsdx_copy):
     assert "F" not in cell.attrib
 
 
+def test_setting_a_value_replaces_a_real_formula(vsdx_copy):
+    """The value wins (#300): Visio recalculates a formula on open, so one left beside the value would replace it.
+
+    s05's shape 54 carries its own `Function` row, whose Value is
+    ``IFERROR(CONTAINERSHEETREF(1,"Swimlane")!User.VISHEADINGTEXT,"")``.
+    """
+    vis = Document.open(vsdx_copy("fixtures/com_reference/s05_swimlanes_cfflow.vsdx"))
+    prop = vis.pages[0].shapes.require_id("54").data_properties["Function"]
+    cell = prop.xml.find(f'{namespace}Cell[@N="Value"]')
+    assert cell.attrib["F"].startswith("IFERROR(CONTAINERSHEETREF(")
+
+    prop.value = "Sales"
+
+    assert cell.attrib == {"N": "Value", "V": "Sales", "U": "STR"}
+    assert prop.value == "Sales"
+
+
+def test_setting_a_value_replaces_a_guard_formula_on_an_inner_text_row(vsdx_copy):
+    vis = Document.open(vsdx_copy("test6_shape_properties.vsdx"))
+    shape = next(iter(vis.pages[0].shapes.matching_property("my_property_label")), None)
+    prop, cell = _value_cell(shape, "my_property_label")
+    del cell.attrib["V"]
+    cell.attrib["F"] = 'GUARD("old")'
+    cell.text = "old"
+
+    prop.value = "new"
+
+    assert prop.value == "new"
+    assert "F" not in cell.attrib
+
+
 def test_creating_a_value_cell_does_not_assert_a_unit(vsdx_copy):
     """A cell created for a numeric property must not be declared a string."""
     vis = Document.open(vsdx_copy("test6_shape_properties.vsdx"))
