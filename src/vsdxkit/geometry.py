@@ -470,8 +470,7 @@ class GeometryRow(InheritedRow, ShapePart):
                 continue
             copied = copy.deepcopy(cell.xml)
             self.xml.append(copied)
-            cell.xml = copied
-            cell._parent_xml = self.xml
+            cell._repoint(copied, self.xml)
 
     @property
     def x(self) -> float | None:
@@ -564,8 +563,10 @@ class GeometryCell(ShapePart):
     ):
         """Wrap `xml`, a cell of `parent`, or without it add a cell named `name` to `parent`; then write `name` and `value` where given."""
         self.parent = parent
-        self._parent_xml = parent.xml
-        self.xml = xml if type(xml) is Element else self._create_cell_xml(name or "")
+        if type(xml) is Element:
+            self._repoint(xml, parent.xml)
+        else:
+            self._create_cell_xml(name or "")
         if name:
             self.name = name
         if value is not None:
@@ -577,22 +578,27 @@ class GeometryCell(ShapePart):
         """The shape the detached-shape guard asks: the one the cell's parent belongs to."""
         return self.parent._shape
 
-    def _create_cell_xml(self, name: str) -> Element:
-        """Append a ``<Cell>`` named `name` to the parent's element, file this cell in the parent's `cells`, and return the element."""
+    def _create_cell_xml(self, name: str) -> None:
+        """Append a ``<Cell>`` named `name` to the parent's element, point this cell at it, and file this cell in the parent's `cells`."""
         # also the first write of GeometryCell.__init__, so constructing a cell
         # on a detached shape refuses before it appends anything
         self._require_attached("creating a geometry cell")
         if isinstance(self.parent, GeometryRow):
             # a cell added to an inherited row goes on the instance's own row
             self.parent.make_local()
-            self._parent_xml = self.parent.xml
+        home = self.parent.xml
         cell = make_cell_element(name)
-        self._parent_xml.append(cell)
+        home.append(cell)
+        self._repoint(cell, home)
         if isinstance(self.parent, GeometryRow):
             self.parent.cells[name] = self
         else:
             self.parent.cells.append(self)
-        return cell
+
+    def _repoint(self, xml: Element, parent_xml: Element) -> None:
+        """Point this cell at `xml`, a ``<Cell>`` in `parent_xml`, which is where the cell now lives: the one place the two are set, so they never disagree."""
+        self.xml = xml
+        self._parent_xml = parent_xml
 
     def _seen_from(self, parent: GeometryRow | Geometry) -> GeometryCell:
         """This cell as `parent`, an instance's row or section, sees it: the same element, but written through `parent`."""
@@ -627,8 +633,7 @@ class GeometryCell(ShapePart):
             # a section is Cell*, Trigger*, Row*, so a section cell goes after
             # the section's last cell rather than after its rows
             home.insert(list(home).index(own_cells[-1]) + 1 if own_cells else 0, own)
-        self.xml = own
-        self._parent_xml = home
+        self._repoint(own, home)
 
     @property
     def value(self) -> str | None:
