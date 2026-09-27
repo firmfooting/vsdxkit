@@ -764,6 +764,9 @@ A deleted shape stays deleted
    Raises :class:`vsdxkit.errors.InvalidOperationError`, as every other write
    to a deleted shape does.
 
+Moving a shape moves the shape
+------------------------------
+
 ``shape.move(dx, dy)``
    Moves a 2-D shape's pin, replacing a formula it had, and a 1-D shape's two
    ends, freeing a glued end. It never shifts the geometry's rows, which are
