@@ -413,7 +413,8 @@ class GeometryRow(InheritedRow, ShapePart):
     def index(self) -> str | None:
         """The row's IX attribute.
 
-        Setting it writes ``str(value)`` to :attr:`xml`, moves the row to its
+        Setting it writes ``str(value)`` to :attr:`xml`, a decimal as the number it
+        names (``"01"`` is ``1``, as Visio orders rows by number), moves the row to its
         new index's place among the section's rows, which Visio reads in
         order, and re-files it in :attr:`Geometry.rows` under the new key. On
         a row inherited from a master, the row is copied onto this shape
@@ -444,6 +445,8 @@ class GeometryRow(InheritedRow, ShapePart):
     def index(self, value: str | int) -> None:
         self._require_attached("writing a geometry row's index")
         new_ix = str(value)
+        if new_ix.isascii() and new_ix.isdecimal():
+            new_ix = str(int(new_ix))  # "01" is IX 1: Visio orders rows by number
         old = self.xml.attrib.get("IX")
         if new_ix == old:
             return  # already at this index: a no-op
