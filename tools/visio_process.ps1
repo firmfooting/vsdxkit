@@ -142,8 +142,9 @@ function Write-StrandedVisio {
 function Stop-OwnVisio {
     <#
       Give $Visio, the Visio this script started and has asked to Quit, 15
-      seconds to go, then kill it; $true if it had to be killed, and was. A
-      kill that fails is warned of, and gives $false.
+      seconds to go, then kill it. A kill is reported on stderr, as the event
+      that tells a file left locked from a Visio crash, and so is a kill that
+      fails.
     #>
     param($Visio)
 
@@ -152,14 +153,20 @@ function Stop-OwnVisio {
         Start-Sleep -Milliseconds 250
     }
     $leftover = Get-RunningVisio -Visio $Visio
-    if ($null -eq $leftover) { return $false }
+    if ($null -eq $leftover) { return }
     try {
         $leftover | Stop-Process -Force -ErrorAction Stop
-        return $true
     }
     catch {
         Write-Diagnostic "Visio process $($Visio.Id) outlived Quit() and could not be killed: $($_.Exception.Message)"
-        return $false
+        return
+    }
+    # Stop-Process returns before Windows has ended the process
+    if ($leftover.WaitForExit(10000)) {
+        Write-Diagnostic "Visio process $($Visio.Id) outlived Quit(); killed it so the next run can open these files"
+    }
+    else {
+        Write-Diagnostic "Visio process $($Visio.Id) outlived Quit() and was still running 10 seconds after it was killed"
     }
 }
 

@@ -253,8 +253,8 @@ def test_each_script_kills_only_the_visio_its_own_com_object_runs_in(script):
     # by ID and start time: a Visio that was running can go, and this script's get its ID (#464)
     assert "$preexisting = @(Get-VisioIdentities)" in text
     # a forced kill is the event that tells a locked file from a Visio crash
-    assert "elseif (Stop-OwnVisio -Visio $ownVisio) {" in text
-    assert 'Write-Diagnostic "Visio process $($ownVisio.Id) outlived Quit(); killed it' in text
+    assert "    else {\n        Stop-OwnVisio -Visio $ownVisio\n    }" in text
+    assert "outlived Quit" not in text, "Stop-OwnVisio reports its own kill"
     assert "function Get-VisioIdentities" not in text, "one definition, in visio_process.ps1"
     assert "$app.ProcessID" not in text
     assert "StartTime" not in text
@@ -275,6 +275,8 @@ def test_a_visio_is_named_by_the_process_that_owns_its_window():
     assert "$App.WindowHandle32" in text
     assert "$process.ProcessName -ne 'VISIO'" in text
     assert "$leftover | Stop-Process -Force" in text
+    # a forced kill is the event that tells a locked file from a Visio crash
+    assert 'Write-Diagnostic "Visio process $($Visio.Id) outlived Quit(); killed it' in text
     # and by the time it started: a later process can have the ID it let go of
     assert "$Process.StartTime.ToUniversalTime().Ticks" in text
     assert "(Get-StartTicks -Process $process) -ne $Visio.StartTicks" in text

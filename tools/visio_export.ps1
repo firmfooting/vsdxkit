@@ -155,8 +155,8 @@ finally {
         # it; which Visio that is cannot be proven, so they are named, not ended
         Write-StrandedVisio -Preexisting $preexisting
     }
-    elseif (Stop-OwnVisio -Visio $ownVisio) {
-        Write-Diagnostic "Visio process $($ownVisio.Id) outlived Quit(); killed it so the next run can open these files"
+    else {
+        Stop-OwnVisio -Visio $ownVisio
     }
 }
 
