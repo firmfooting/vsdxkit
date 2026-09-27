@@ -201,6 +201,42 @@ def test_a_shape_taken_out_of_its_group_is_a_difference():
     assert tool._diff_svgs(inside, outside) == ["shape 4 regrouped: in shape 3 -> on the page"]
 
 
+def test_what_visio_records_about_an_element_but_does_not_draw_is_no_difference():
+    """`v:langID` is the language Visio spell-checks a label in; no renderer reads it."""
+    tool = _tool()
+    first = _svg("a", _box(1).replace('<text x="20"', '<text v:langID="1033" x="20"'))
+    second = _svg("b", _box(1).replace('<text x="20"', '<text v:langID="2057" x="20"'))
+    assert tool._diff_svgs(first, second) == []
+
+
+def test_the_spaces_inside_a_style_value_are_part_of_it():
+    tool = _tool()
+
+    def with_font(family: str) -> str:
+        return _svg("x", _box(1), styles=f".st1 {{fill:#ffffff}}\n.st2 {{font-family:{family};  stroke-dasharray : 1 2 }}")
+
+    assert len(tool._diff_svgs(with_font("Segoe UI"), with_font("SegoeUI"))) == 1
+    assert (
+        tool._diff_svgs(
+            with_font("Segoe UI"), with_font("Segoe UI").replace("stroke-dasharray : 1 2", "stroke-dasharray:1  2")
+        )
+        == []
+    )
+
+
+def test_a_style_the_whole_page_inherits_is_compared():
+    """Visio's export sets `font-size:12px` on the root; a label's `em` size is relative to it."""
+    tool = _tool()
+
+    def page(size: str) -> str:
+        styles = f".st1 {{fill:#ffffff}}\n.st2 {{font-size:1.33em}}\n.st6 {{font-size:{size}}}"
+        return _svg("x", _box(1), styles=styles).replace(' viewBox="', ' class="st6" viewBox="')
+
+    [finding] = tool._diff_svgs(page("12px"), page("24px"))
+    assert finding.startswith("the page drawn differently: ")
+    assert "font-size:24px" in finding
+
+
 def test_a_shape_only_one_drawing_has_is_reported():
     tool = _tool()
     assert tool._diff_svgs(_svg("a", _box(1)), _svg("b", _box(1), _box(7))) == ["shape 7 only in the second drawing"]
@@ -504,6 +540,30 @@ def test_the_refs_cases_are_photographed_with_the_refs_own_shape_ids(tmp_path):
         ("ref", ((1, 8, "Prop.ShapeClass"),)),
         ("candidate", ((1, 9, "Prop.ShapeClass"),)),
     ]
+
+
+def test_two_runs_given_one_id_are_recorded_apart(tmp_path):
+    """Two runs of one commit started in the same second must not write into one record."""
+    tool = _tool()
+    drawing = _svg("x", _box(1))
+    shots = {"candidate": {"01_a": _shots(drawing, drawing)}}
+    first = tool._record_run(tmp_path, _identity("r1"), {"01_a": "a"}, shots, build_errors={})
+    second = tool._record_run(tmp_path, _identity("r1"), {"01_a": "a"}, shots, build_errors={})
+    assert (first["run"], second["run"]) == ("r1", "r1-2")
+    assert (tmp_path / "runs" / "r1-2" / "manifest.json").exists()
+    runs = [json.loads(line)["run"] for line in (tmp_path / "index.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert runs == ["r1", "r1-2"]
+
+
+def test_the_visio_an_export_started_is_read_from_the_file_it_wrote(tmp_path):
+    """On a timeout only the Visio the export started may be killed; its ID is in the file the script wrote."""
+    tool = _tool()
+    written = tmp_path / "visio.pid"
+    assert tool._exporter_process_id(written) is None
+    written.write_text("", encoding="utf-8")
+    assert tool._exporter_process_id(written) is None
+    written.write_text("4242\r\n", encoding="utf-8")
+    assert tool._exporter_process_id(written) == 4242
 
 
 def test_the_report_carries_its_images_inside_it(tmp_path):

@@ -24,6 +24,11 @@
     "triggers": [ { "page": 1, "shape": 35, "cell": "LineColor" } ] } ] }.
     "cell" is a Visio universal cell name: PinX, LineColor, Geometry1.X2, ...
 
+.PARAMETER ProcessIdFile
+    Where to write the ID of the Visio process this script starts, as soon
+    as it has one. A caller that has to give up on the script kills that
+    process, and no other.
+
 .PARAMETER AllowRunningVisio
     Proceed even if Visio is already running. Off by default, for the reasons
     tools/visio_cells.ps1 gives.
@@ -39,6 +44,8 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$Request,
+
+    [string]$ProcessIdFile,
 
     [switch]$AllowRunningVisio
 )
@@ -105,6 +112,7 @@ try {
     # "any Visio started during the run": a Visio the developer opens while
     # a long export is under way is theirs, with their unsaved work in it.
     $ownProcessId = [int]$app.ProcessID
+    if ($ProcessIdFile) { Set-Content -Path $ProcessIdFile -Value $ownProcessId -Encoding ascii }
     $app.AlertResponse = 7
     $visio.version = [string]$app.Version
     $visio.build = [string]$app.Build
