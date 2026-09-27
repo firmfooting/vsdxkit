@@ -735,15 +735,12 @@ class GeometryCell(ShapePart):
     def _master_has_cell(self, name: str) -> bool:
         """Whether the master's counterpart of this cell's parent, its row at the same index or its section, has a cell named `name`."""
         parent = self.parent
-        geometry = parent.geometry if isinstance(parent, GeometryRow) else parent
-        master_shape = geometry.shape.master_shape
-        master_geometry = master_shape.geometry if master_shape is not None else None
-        if master_geometry is None:
-            return False
         if isinstance(parent, GeometryRow):
-            master_row = master_geometry.rows.get(parent.index) if parent.index is not None else None
+            master_row = parent._master_row_at(parent.index)
             return master_row is not None and name in master_row.cells
-        return any(cell.name == name for cell in master_geometry.cells)
+        master_shape = parent.shape.master_shape
+        master_geometry = master_shape.geometry if master_shape is not None else None
+        return master_geometry is not None and any(cell.name == name for cell in master_geometry.cells)
 
     def __repr__(self) -> str:
         """Shows the cell as ``name=value``, and its formula where it has one."""
