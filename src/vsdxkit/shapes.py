@@ -632,6 +632,15 @@ class DataProperty(InheritedRow, ShapePart):
                 return element
         return None
 
+    def _in_master_chain(self) -> bool:
+        """Whether a master up the shape's chain, as it stands now, has a row of this property's ``N``."""
+        master_shape = self.shape.master_shape
+        while master_shape is not None:
+            if self._row_in(master_shape.xml) is not None:
+                return True
+            master_shape = master_shape.master_shape
+        return False
+
     def _row_in(self, shape_xml: Element) -> Element | None:
         """The row of this property's ``N`` in the Property section of `shape_xml`, a shape's element, or ``None``.
 
@@ -687,6 +696,12 @@ class DataProperty(InheritedRow, ShapePart):
         if existing is not None:
             self.xml = existing
             return
+        if self.name is not None and not self._in_master_chain():
+            # an override of a row no master has would bring back a property
+            # the shape no longer has, as a fresh data_properties shows
+            raise InvalidOperationError(
+                f"shape ID {self.shape.ID} no longer inherits data property {self.name!r}: no master in its chain has it"
+            )
         section = self.shape.xml.find(f'{namespace}Section[@N="Property"]')
         if section is None:
             section = ET.fromstring(f'<Section xmlns="{namespace[1:-1]}" N="Property"/>')
@@ -736,7 +751,10 @@ class DataProperty(InheritedRow, ShapePart):
 
         A property inherited from a master is given an override row on this
         shape first, so the master's value is left as it was, and with it every
-        other shape drawn from that master.
+        other shape drawn from that master. One read while it was inherited,
+        whose row no master in the shape's chain has any longer, is no longer
+        the shape's property: writing it raises
+        :class:`~vsdxkit.errors.InvalidOperationError` rather than bring it back.
         """
         # ahead of make_local(), which materialises an override row: a refused
         # write must not leave an empty property behind on the shape

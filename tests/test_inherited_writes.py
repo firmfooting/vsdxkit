@@ -334,6 +334,24 @@ def test_a_row_moved_down_is_listed_where_the_section_reads_it(vsdx_copy):
     assert list(Document.open(path).pages[0].shapes.by_text("Line A").geometry.rows) == ["0", "1"]
 
 
+def test_rows_are_listed_in_index_order_where_a_shape_has_a_master(vsdx_copy):
+    """A fresh read listed the master's rows first and the shape's own after; a move listed them by index (#454).
+
+    Conn A inherits row 1 and owns row 2; moved to 0, its row came first
+    before a save and last after one, so position-based writers addressed
+    different rows. Visio reads a section's rows by index.
+    """
+    path = vsdx_copy("test9_rect_and_line.vsdx")
+    document = Document.open(path)
+    connector = document.pages[0].shapes.by_text("Conn A")
+
+    connector.geometry.rows["2"].index = 0
+
+    assert list(connector.geometry.rows) == ["0", "1"]
+    document.save(path)
+    assert list(Document.open(path).pages[0].shapes.by_text("Conn A").geometry.rows) == ["0", "1"]
+
+
 def test_a_row_does_not_move_onto_an_index_another_wrapper_filled(conn_a):
     """A row another Shape object moved to an index holds it, though this one's `rows` has never seen it there."""
     other = conn_a.page.shapes.by_text("Conn A")
@@ -539,6 +557,18 @@ def test_a_held_property_its_master_no_longer_has_reads_nothing(house_7):
 
     assert (held.label, held.value) == (None, None)
     assert held.set_attribute("Label", "V", "Renamed") is False
+    assert _property_rows(house_7, "ShapeClass") == []
+
+
+def test_a_value_written_through_a_property_its_master_no_longer_has_is_refused(house_7):
+    """Reads give nothing and `set_attribute` refuses; a value write made a row of the obsolete ``N`` all the same (#454)."""
+    held = house_7.data_properties["ShapeClass"]
+    master_section = house_7.master_shape.xml.find(f'{namespace}Section[@N="Property"]')
+    master_section.remove(held.xml)
+
+    with pytest.raises(InvalidOperationError, match="ShapeClass"):
+        held.value = "Written"
+
     assert _property_rows(house_7, "ShapeClass") == []
 
 

@@ -108,8 +108,9 @@ class Geometry(ShapePart):
     rows: dict[str, GeometryRow]
     """The path's rows, keyed by their ``IX`` attribute as a string.
 
-    The master's rows come first, marked :attr:`GeometryRow.inherited`, and
-    this shape's own replace them by index. A row of this shape's that
+    The master's rows, marked :attr:`GeometryRow.inherited`, and this
+    shape's own, which replace them by index, are listed by index, the
+    order Visio reads the section in. A row of this shape's that
     carries a ``Del`` attribute of any value is left out, with the master's
     row at its index; a row without an ``IX`` is not read.
     """
@@ -154,6 +155,7 @@ class Geometry(ShapePart):
             self.rows[index] = g_row
             if g_row.del_bool:  # remove if master row over-ridden with a  deleted item
                 del self.rows[index]
+        _put_in_index_order(self.rows)
 
     @property
     @override
@@ -254,6 +256,18 @@ def _is_tombstone(row: Element) -> bool:
     row, leaves behind.
     """
     return row.attrib.get("Del") == "1" and row.find(f"{namespace}Cell") is None
+
+
+def _put_in_index_order(rows: dict[str, GeometryRow]) -> None:
+    """Reorder `rows`, keyed by ``IX``, in place, into the order Visio reads a section in: by index.
+
+    A shape's own rows and the ones it inherits interleave by index, so
+    position-based callers, such as :meth:`Geometry.start_pos` and
+    :meth:`Geometry.set_move_to`, address the same row before a save as after.
+    """
+    ordered = sorted(rows.items(), key=lambda item: row_index_key(item[0]))
+    rows.clear()
+    rows.update(ordered)
 
 
 class GeometryRow(InheritedRow, ShapePart):
@@ -495,11 +509,7 @@ class GeometryRow(InheritedRow, ShapePart):
         if old is not None and rows.get(old) is self:
             del rows[old]
         rows[new_ix] = self
-        # in the order Visio reads the section, as a fresh read lists them:
-        # start_pos and set_move_to go by position
-        ordered = sorted(rows.items(), key=lambda item: row_index_key(item[0]))
-        rows.clear()
-        rows.update(ordered)
+        _put_in_index_order(rows)
         self._inherit_cells_at(new_ix)
 
     def _inherit_cells_at(self, index: str) -> None:
