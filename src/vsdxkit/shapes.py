@@ -1969,13 +1969,17 @@ class Shape:
         """Recompute the value held beside each formula this shape's cells carry, as Visio would on open.
 
         A formula this library cannot evaluate keeps the value it had.
+        A cell the shape only inherits is left alone: it is the master's, and Visio recomputes it for this shape on open.
         """
         cells: list[Cell | GeometryCell] = list(self.cells.values())
         if self.geometry is not None:
             cells.extend(self.geometry.cells)
             for r in self.geometry.rows.values():
                 cells.extend(r.cells.values())
+        own = set(self.xml.iter(f"{namespace}Cell"))
         for c in cells:
+            if c.xml not in own:
+                continue  # a cell only inherited is the master's; Visio recomputes it for this instance on open
             formula = c.formula
             if formula and c.name is not None:
                 master = self.master_shape

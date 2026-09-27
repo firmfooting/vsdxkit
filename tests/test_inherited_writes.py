@@ -124,3 +124,15 @@ def test_set_attribute_on_an_inherited_property_writes_the_instance_and_lands(vs
 
     assert master_value.get("V") == "Location"
     assert shape.data_properties["ShapeClass"].value == "Changed"
+
+
+def test_the_formula_cache_leaves_an_inherited_geometry_cell_alone(vsdx_copy):
+    """#273 part 3: the refresh wrote the value it computed into the master's cell, which every other instance reads."""
+    connector = Document.open(vsdx_copy("test9_rect_and_line.vsdx")).pages[0].shapes.by_text("Conn A")
+    master_x = _master_row(connector, "1").find(f'{namespace}Cell[@N="X"]')
+    master_x.set("F", "Width*1")
+    master_x.set("V", "0")
+
+    connector._refresh_formula_values()
+
+    assert master_x.get("V") == "0"
