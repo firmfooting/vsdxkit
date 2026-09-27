@@ -703,8 +703,9 @@ Setting a cell's value, through a setter such as ``shape.line_color`` or ``shape
    carries, did not show.
 
 A geometry cell's ``value``, ``formula`` or ``name``, on a cell the shape inherits from its master
-   Writes a cell of the shape's own, copying an inherited row onto the
-   shape first; the master's cell keeps its value and formula. 0.8 wrote
+   Writes a cell of the shape's own, a copy of the master's with its unit,
+   copying an inherited row onto the shape first; the master's cell keeps
+   its value and formula. 0.8 wrote
    the master's cell, which changed every other shape drawn from the
    master.
 

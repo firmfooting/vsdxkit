@@ -204,10 +204,10 @@ class Geometry(ShapePart):
         Nothing happens if the shape has no MoveTo row at that position.
 
         An inherited row is copied down onto this shape first, so the master is
-        left alone; the copy carries the value but not the master cell's ``F``
-        formula. A cell this shape already owns loses its formula, as typing
-        a number into the ShapeSheet does in Visio, so the value is the one
-        Visio shows.
+        left alone. The copied cell, like a cell this shape already owns,
+        loses its ``F`` formula, as typing a number into the ShapeSheet does
+        in Visio, so the value is the one Visio shows; its other attributes,
+        such as its unit, are kept.
         """
         self._set_point("moveto", "Geometry.set_move_to()", x, y, move_to_index, keep_formula=False)
 
@@ -504,10 +504,12 @@ class GeometryCell(ShapePart):
         A cell of an inherited row calls the row's :meth:`GeometryRow.make_local`
         first. A cell whose element is not among its parent's own is then given
         one of its own there: the instance's cell of that name where the
-        parent already has one, which only a section can, or else a new cell
-        carrying the master's value but not its formula, as a coordinate
-        setter writes it. Visio matches the two by name, and the master's
-        cell, with every other instance, is left as it was.
+        parent already has one, which only a section can, or else a copy of
+        the master's cell, whole, with its unit and its formula. The write
+        that follows applies its own rule to the copy: a value write drops
+        the formula, and a library write that keeps it leaves it. Visio
+        matches the two by name, and the master's cell, with every other
+        instance, is left as it was.
         """
         parent = self.parent
         if isinstance(parent, GeometryRow):
@@ -519,10 +521,7 @@ class GeometryCell(ShapePart):
         name = self.name or ""
         own = next((cell for cell in own_cells if cell.attrib.get("N") == name), None)
         if own is None:
-            own = make_cell_element(name)
-            master_value = self.xml.attrib.get("V")
-            if master_value is not None:
-                own.attrib["V"] = master_value
+            own = copy.deepcopy(self.xml)
             # a section is Cell*, Trigger*, Row*, so a section cell goes after
             # the section's last cell rather than after its rows
             home.insert(list(home).index(own_cells[-1]) + 1 if own_cells else 0, own)
