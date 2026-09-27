@@ -1789,14 +1789,23 @@ class Shape:
         formulas of its ends, and follow them. The geometry is in the shape's
         own coordinates, so it is not touched.
 
-        :raises InvalidOperationError: if the shape is detached
+        :raises InvalidOperationError: if the shape is detached, or it is a
+            1-D shape missing one of its ends; place such a shape by its ends
+            with :meth:`set_start_and_finish`
         """
         self._require_attached("Shape.move()")
-        begin_x, begin_y, end_x, end_y = self.begin_x, self.begin_y, self.end_x, self.end_y
-        if begin_x is None or begin_y is None or end_x is None or end_y is None:
+        if not _is_connector(self):
             self.x = (self.x or 0.0) + x_delta
             self.y = (self.y or 0.0) + y_delta
             return
+        begin_x, begin_y, end_x, end_y = self.begin_x, self.begin_y, self.end_x, self.end_y
+        if begin_x is None or begin_y is None or end_x is None or end_y is None:
+            ends = {"BeginX": begin_x, "BeginY": begin_y, "EndX": end_x, "EndY": end_y}
+            missing = ", ".join(name for name, value in ends.items() if value is None)
+            raise InvalidOperationError(
+                f"shape ID {self.ID} is 1-D but has no {missing} value to move; "
+                "place it by its ends with set_start_and_finish()"
+            )
         self.begin_x, self.begin_y = begin_x + x_delta, begin_y + y_delta
         self.end_x, self.end_y = end_x + x_delta, end_y + y_delta
         # derived from the ends: written as the library writes them, so a
@@ -1950,7 +1959,7 @@ class Shape:
         formulas and records in place. Without it, the end setters write the
         ends, and free a glued one.
         """
-        if self.begin_x is None:
+        if not _is_connector(self):
             raise InvalidOperationError(
                 f"shape ID {self.ID} is 2-D, so it has no start and finish; move it with move(), or x and y"
             )

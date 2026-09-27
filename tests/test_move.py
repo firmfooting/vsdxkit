@@ -82,6 +82,37 @@ def test_moving_a_deleted_shape_is_refused_as_a_move(vsdx_copy, text):
         shape.move(1.0, 1.0)
 
 
+def _cell_element(shape, name):
+    return shape.xml.find(f'{namespace}Cell[@N="{name}"]')
+
+
+def test_a_1d_shape_missing_an_end_is_refused_rather_than_moved_by_its_pin(vsdx_copy):
+    """`Line A` is 1-D, by the one test of that, `_is_one_d`; with no EndX it has no end to move.
+
+    move used to decide by whether all four ends read, so it took this line for
+    2-D and moved its pin, which Visio derives from the ends and puts back.
+    """
+    line = Document.open(vsdx_copy("test9_rect_and_line.vsdx")).pages[0].shapes.by_text("Line A")
+    line.xml.remove(_cell_element(line, "EndX"))
+    pin = (line.x, line.y)
+
+    with pytest.raises(InvalidOperationError, match=rf"shape ID {line.ID} .*EndX.*set_start_and_finish"):
+        line.move(1.0, 1.0)
+
+    assert (line.x, line.y) == pin
+
+
+def test_set_start_and_finish_places_a_1d_shape_whose_begin_has_no_value(vsdx_copy):
+    """`_is_one_d` says 1-D where a BeginX cell exists; `_place_ends` refused it as 2-D because the cell read None."""
+    line = Document.open(vsdx_copy("test9_rect_and_line.vsdx")).pages[0].shapes.by_text("Line A")
+    del _cell_element(line, "BeginX").attrib["V"]
+    assert line.begin_x is None
+
+    line.set_start_and_finish((1.0, 2.0), (3.0, 2.0))
+
+    assert (line.begin_x, line.begin_y, line.end_x, line.end_y) == (1.0, 2.0, 3.0, 2.0)
+
+
 def test_a_none_end_is_refused_naming_the_shape(vsdx_copy):
     line = Document.open(vsdx_copy("test9_rect_and_line.vsdx")).pages[0].shapes.by_text("Line A")
 
