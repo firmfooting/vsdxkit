@@ -36,6 +36,11 @@ class _GeometryOwner(Protocol):
     """What a Geometry reads from the shape it belongs to."""
 
     @property
+    def ID(self) -> str | None:
+        """The shape's ID, named in a refusal so it is clear which shape's geometry rejected the write."""
+        ...
+
+    @property
     def x(self) -> float | None:
         """The x of the shape's pin, in inches, which `Geometry.start_pos` answers for a path that opens with ``RelMoveTo``."""
         ...
@@ -366,20 +371,31 @@ class GeometryRow(InheritedRow, ShapePart):
         Setting it writes ``str(value)`` to :attr:`xml` and re-files the row
         in :attr:`Geometry.rows` under the new key. On a row inherited from a
         master, the row is copied onto this shape first, and the master keeps
-        its own. A write to a detached shape's row raises
-        :class:`~vsdxkit.errors.InvalidOperationError`.
+        its own. Setting it to the index the row already has is a no-op, and
+        setting it to an index another row of this geometry already holds
+        raises :class:`~vsdxkit.errors.InvalidOperationError` rather than
+        leaving two rows at the same index. A write to a detached shape's row
+        raises :class:`~vsdxkit.errors.InvalidOperationError`.
         """
         return self.xml.attrib.get("IX")
 
     @index.setter
     def index(self, value: str | int) -> None:
         self._require_attached("writing a geometry row's index")
-        self.make_local()
+        new_ix = str(value)
         old = self.xml.attrib.get("IX")
-        self.xml.attrib["IX"] = str(value)
+        if new_ix == old:
+            return  # already at this index: a no-op
+        holder = self.geometry.rows.get(new_ix)
+        if holder is not None and holder is not self:
+            raise InvalidOperationError(
+                f"shape ID={self.geometry.shape.ID} already has a geometry row at IX={new_ix}; choose a free index"
+            )
+        self.make_local()
+        self.xml.attrib["IX"] = new_ix
         if old is not None and self.geometry.rows.get(old) is self:
             del self.geometry.rows[old]
-        self.geometry.rows[str(value)] = self
+        self.geometry.rows[new_ix] = self
 
     @property
     def x(self) -> float | None:
@@ -435,11 +451,13 @@ class GeometryRow(InheritedRow, ShapePart):
     @del_bool.setter
     def del_bool(self, value: object) -> None:
         self._require_attached("writing a geometry row's Del flag")
+        if not value and self.del_bool is None:
+            return  # nothing set, own or inherited: no write, so an inherited row stays inherited
         self.make_local()
         if value:
             self.xml.attrib["Del"] = "1"  # set to 1 if truthy
         else:
-            self.xml.attrib.pop("Del", None)  # remove attribute if falsy, a no-op if absent
+            self.xml.attrib.pop("Del", None)  # remove attribute if falsy
 
     def __repr__(self) -> str:
         """Shows the row's index, its ``Del`` attribute, its type and its cells."""
