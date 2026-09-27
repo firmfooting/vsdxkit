@@ -353,6 +353,11 @@ class GeometryRow(InheritedRow, ShapePart):
                     self.cells[name] = GeometryCell(parent=self, xml=element)
         _logger.debug("materialised inherited row on the instance: %s", self)
 
+    def _row_in_force(self) -> Element:
+        """The Row element Visio reads for this row: this shape's own at its index, where another object for this inherited row has written one, or else :attr:`xml`."""
+        own = self._own_row_at(self.index) if self.inherited else None
+        return self.xml if own is None else own
+
     def _own_row_at(self, index: str | None) -> Element | None:
         """The Row element of this shape's own section at `index`, which another object for this row may have written; ``None`` where there is none."""
         return next((row for row in self.geometry.xml.findall(f"{namespace}Row") if row.attrib.get("IX") == index), None)
@@ -392,8 +397,12 @@ class GeometryRow(InheritedRow, ShapePart):
         from a master, the row is copied onto this shape first, and the
         master keeps its own. A write to a detached shape's row raises
         :class:`~vsdxkit.errors.InvalidOperationError`.
+
+        Read through a row still inherited, it is the type of the row this
+        shape has at the index, where another object for the row has written
+        one, as :attr:`del_bool` and the row's :attr:`cells` read too.
         """
-        return self.xml.attrib.get("T")
+        return self._row_in_force().attrib.get("T")
 
     @row_type.setter
     def row_type(self, value: str | int) -> None:
@@ -598,17 +607,17 @@ class GeometryRow(InheritedRow, ShapePart):
         this shape already has a row at the index, written through another
         object for the row, that row is the one set or cleared. A write
         to a detached shape's row raises
-        :class:`~vsdxkit.errors.InvalidOperationError`.
+        :class:`~vsdxkit.errors.InvalidOperationError`, and reading it reads
+        that row too.
         """
-        return self.xml.attrib.get("Del")
+        return self._row_in_force().attrib.get("Del")
 
     @del_bool.setter
     def del_bool(self, value: object) -> None:
         self._require_attached("writing a geometry row's Del flag")
         # another object for this inherited row may have given the instance a
         # row at this index and deleted it there; that row's Del is the one in force
-        own = self._own_row_at(self.index) if self.inherited else None
-        if not value and (self.xml if own is None else own).attrib.get("Del") is None:
+        if not value and self.del_bool is None:
             return  # nothing set, own or inherited: no write, so an inherited row stays inherited
         self.make_local()  # reuses that row, where there is one
         if value:
@@ -682,6 +691,15 @@ class GeometryCell(ShapePart):
         self.xml = xml
         self._parent_xml = parent_xml
 
+    def _in_force(self) -> Element:
+        """The ``<Cell>`` Visio reads for this cell: of the name in the row this shape has at the index, where another object for this cell's inherited row has written one there, or else :attr:`xml`."""
+        parent = self.parent
+        if isinstance(parent, GeometryRow) and parent.inherited:
+            own = parent._row_in_force().find(f'{namespace}Cell[@N="{self.name}"]')
+            if own is not None:
+                return own
+        return self.xml
+
     def _seen_from(self, parent: GeometryRow | Geometry) -> GeometryCell:
         """This cell as `parent`, an instance's row or section, sees it: the same element, but written through `parent`."""
         cell = copy.copy(self)
@@ -730,9 +748,12 @@ class GeometryCell(ShapePart):
         its cell, value and formula, and so does every other shape drawn
         from it. ``None`` raises :class:`TypeError`, and a write to a
         detached shape's cell raises
-        :class:`~vsdxkit.errors.InvalidOperationError`.
+        :class:`~vsdxkit.errors.InvalidOperationError`. A cell of a row still
+        inherited reads the cell of its name that another object for the row
+        has written to this shape's row at the index, where there is one, as
+        :attr:`formula` does.
         """
-        return self.xml.attrib.get("V")
+        return self._in_force().attrib.get("V")
 
     @value.setter
     def value(self, value: float | str) -> None:
@@ -760,7 +781,7 @@ class GeometryCell(ShapePart):
         copied onto this shape first, as :attr:`value` copies it. It refuses
         what :attr:`value` refuses.
         """
-        return self.xml.attrib.get("F")
+        return self._in_force().attrib.get("F")
 
     @formula.setter
     def formula(self, value: str) -> None:
