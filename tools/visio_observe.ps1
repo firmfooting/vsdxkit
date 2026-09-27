@@ -22,9 +22,10 @@
     One or more .vsdx files, or directories to scan for them.
 
 .PARAMETER ProcessIdFile
-    A file to write the ID of the Visio process this script starts to, as
-    soon as it has one. A caller whose run times out kills that process, and
-    no other: killing PowerShell leaves the out-of-process Visio running.
+    A file to write the Visio process this script starts to, as soon as it
+    has one: its ID and start time, "ID ticks", since Windows reuses IDs. A
+    caller whose run times out kills that process, and no other: killing
+    PowerShell leaves the out-of-process Visio running.
 
 .PARAMETER AllowRunningVisio
     Proceed even if Visio is already running. Off by default: a pre-existing
@@ -308,12 +309,12 @@ if ($preexisting.Count -gt 0 -and -not $AllowRunningVisio) {
 # --- run --------------------------------------------------------------------
 
 $app = $null
-$ownProcessId = $null
+$ownVisio = $null
 $viewer = @{ product = ''; version = '' }
 $documents = @()
 try {
     $app = New-Object -ComObject Visio.InvisibleApp
-    $ownProcessId = Register-OwnVisio -App $app -ProcessIdFile $ProcessIdFile
+    $ownVisio = Register-OwnVisio -App $app -ProcessIdFile $ProcessIdFile
     # Answer every modal dialog with "no" instead of waiting for a click: an
     # unattended run that puts up a dialog does not fail, it hangs.
     $app.AlertResponse = 7
@@ -338,12 +339,12 @@ finally {
 
     # Quit is a request, not a guarantee: a document Visio believes is dirty, or
     # a hung add-on, keeps the process alive holding the file.
-    if ($null -eq $ownProcessId) {
+    if ($null -eq $ownVisio) {
         # New-Object can start VISIO.EXE and fail before this script could name it
-        $ownProcessId = Find-StrandedVisio -Preexisting $preexisting
+        $ownVisio = Find-StrandedVisio -Preexisting $preexisting
     }
-    if ($null -ne $ownProcessId -and (Stop-OwnVisio -ProcessId $ownProcessId)) {
-        Write-Warning "Visio process $ownProcessId outlived Quit(); killed it so the next run can open these files"
+    if ($null -ne $ownVisio -and (Stop-OwnVisio -Visio $ownVisio)) {
+        Write-Diagnostic "Visio process $($ownVisio.Id) outlived Quit(); killed it so the next run can open these files"
     }
 }
 

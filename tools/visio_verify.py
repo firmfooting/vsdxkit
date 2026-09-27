@@ -23,6 +23,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import NamedTuple
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tests"))
 
@@ -199,36 +200,63 @@ PROCESS_ID_FILE = "visio.pid"
 """The name each script's `-ProcessIdFile` is given in its staging directory: the ID of the Visio it started, once it has one."""
 
 
-def _started_process_id(path: Path) -> int | None:
-    """The ID of the Visio process a script started, from the `-ProcessIdFile` it writes as soon as it has one; None before that."""
+class _Visio(NamedTuple):
+    """A VISIO process: its ID, and when it started, in UTC .NET ticks.
+
+    The ID alone does not name it. Windows reuses IDs, so once a Visio has
+    gone its ID can be a later process's, another Visio's among them.
+    """
+
+    id: int
+    started: int
+
+
+def _parse_visio(line: str) -> _Visio | None:
+    """A `_Visio` from the "ID ticks" a listing prints, and a `-ProcessIdFile` holds; None for anything else."""
+    fields = line.split()
+    if len(fields) != 2 or not all(field.isdigit() for field in fields):
+        return None
+    return _Visio(int(fields[0]), int(fields[1]))
+
+
+def _started_visio(path: Path) -> _Visio | None:
+    """The Visio process a script started, from the `-ProcessIdFile` it writes as soon as it has one; None before that."""
     try:
-        text = path.read_text(encoding="utf-8").strip()
+        return _parse_visio(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return None
-    return int(text) if text.isdigit() else None
 
+
+_START_TICKS = "$_.StartTime.ToUniversalTime().Ticks"
+"""PowerShell for when the process `$_` started, as `_Visio.started` holds it; tools/visio_process.ps1 writes the same."""
 
 _LIST_VISIO = "Get-Process -Name VISIO -ErrorAction SilentlyContinue"
-"""PowerShell listing every VISIO process, piped on to pick and print IDs."""
+"""PowerShell listing every VISIO process, piped on to pick and print them."""
 
 
-def _visio_ids(*, invisible_only: bool = False) -> set[int]:
-    """The IDs of the VISIO processes running now; with `invisible_only`, of those with no visible main window.
+def _visio_processes(*, invisible_only: bool = False) -> set[_Visio]:
+    """The VISIO processes running now; with `invisible_only`, those with no visible main window.
 
     A Visio a script starts is a `Visio.InvisibleApp`, whose process has no
     visible main window (``MainWindowHandle`` 0); one a developer opens has.
     """
     pick = " | Where-Object { $_.MainWindowHandle -eq 0 }" if invisible_only else ""
     result = subprocess.run(
-        [_shell(), "-NoProfile", "-NonInteractive", "-Command", f"{_LIST_VISIO}{pick} | ForEach-Object {{ $_.Id }}"],
+        [
+            _shell(),
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            f'{_LIST_VISIO}{pick} | ForEach-Object {{ "$($_.Id) $({_START_TICKS})" }}',
+        ],
         capture_output=True,
         text=True,
         timeout=60,
     )
-    return {int(line) for line in result.stdout.split() if line.strip().isdigit()}
+    return {visio for line in result.stdout.splitlines() if (visio := _parse_visio(line)) is not None}
 
 
-def _stop_started_visio(process_id_file: Path, before: set[int]) -> str:
+def _stop_started_visio(process_id_file: Path, before: set[_Visio]) -> str:
     """Kill the Visio a timed-out script started, and no other; what was done, as a clause to end the caller's message.
 
     Killing PowerShell does not kill Visio: `New-Object -ComObject` starts
@@ -241,37 +269,42 @@ def _stop_started_visio(process_id_file: Path, before: set[int]) -> str:
     One killed before then, while COM activation hung, named none; its
     Visio is then the one VISIO process with no visible window that was not
     running when the script was started, `before`. Where there is no such
-    process, or more than one, none is killed, and they are named. A kill
-    is reported only once the process is seen to be gone, and it is made by
-    ID only while the process is still a VISIO: an ID a Visio has let go of
-    can be another program's.
+    process, or more than one, none is killed, and they are named.
+
+    A process is taken for the script's only while it is a VISIO with the
+    ID and start time the script's had: an ID a Visio has let go of can be
+    another program's, or a later Visio's. A kill is reported only once the
+    process is seen to be gone.
     """
-    process_id = _started_process_id(process_id_file)
-    if process_id is None:
-        candidates = sorted(_visio_ids(invisible_only=True) - before)
+    visio = _started_visio(process_id_file)
+    if visio is None:
+        candidates = sorted(_visio_processes(invisible_only=True) - before)
         if not candidates:
             return "; it had not started Visio"
         if len(candidates) > 1:
             return (
-                f"; invisible Visio processes {', '.join(map(str, candidates))} started while it ran and it named none"
-                " as its own, so none was killed; end the ones that are not yours"
+                f"; invisible Visio processes {', '.join(str(candidate.id) for candidate in candidates)} started while"
+                " it ran and it named none as its own, so none was killed; end the ones that are not yours"
             )
-        [process_id] = candidates
+        [visio] = candidates
+    elif visio not in _visio_processes():
+        return f"; the Visio it started, process {visio.id}, had already ended"
     subprocess.run(
         [
             _shell(),
             "-NoProfile",
             "-NonInteractive",
             "-Command",
-            f"Get-Process -Id {process_id} -ErrorAction SilentlyContinue | Where-Object ProcessName -eq 'VISIO' | Stop-Process -Force",
+            f"Get-Process -Id {visio.id} -ErrorAction SilentlyContinue | Where-Object {{ $_.ProcessName -eq 'VISIO' -and "
+            f"{_START_TICKS} -eq {visio.started} }} | Stop-Process -Force",
         ],
         capture_output=True,
         text=True,
         timeout=60,
     )
-    if process_id in _visio_ids():
-        return f"; the Visio it started, process {process_id}, could not be killed: end it before the next run"
-    return f"; so was the Visio it started, process {process_id}"
+    if visio in _visio_processes():
+        return f"; the Visio it started, process {visio.id}, could not be killed: end it before the next run"
+    return f"; so was the Visio it started, process {visio.id}"
 
 
 def _observe_directory(root: str, *, timeout: int, allow_running: bool) -> dict:
@@ -295,7 +328,7 @@ def _observe_directory(root: str, *, timeout: int, allow_running: bool) -> dict:
         f"-ProcessIdFile {_quote(_windows_path(str(process_id_file)))}; exit $LASTEXITCODE"
     )
     command = [_shell(), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", expression]
-    before = _visio_ids()
+    before = _visio_processes()
     try:
         result = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired as expired:

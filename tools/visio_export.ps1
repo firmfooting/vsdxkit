@@ -25,9 +25,10 @@
     "cell" is a Visio universal cell name: PinX, LineColor, Geometry1.X2, ...
 
 .PARAMETER ProcessIdFile
-    Where to write the ID of the Visio process this script starts, as soon
-    as it has one. A caller that has to give up on the script kills that
-    process, and no other.
+    Where to write the Visio process this script starts, as soon as it has
+    one: its ID and start time, "ID ticks", since Windows reuses IDs. A
+    caller that has to give up on the script kills that process, and no
+    other.
 
 .PARAMETER AllowRunningVisio
     Proceed even if Visio is already running. Off by default, for the reasons
@@ -97,12 +98,12 @@ $visRasterPixelsPerInch = 0
 # --- run --------------------------------------------------------------------
 
 $app = $null
-$ownProcessId = $null
+$ownVisio = $null
 $out = @()
 $visio = [ordered]@{}
 try {
     $app = New-Object -ComObject Visio.InvisibleApp
-    $ownProcessId = Register-OwnVisio -App $app -ProcessIdFile $ProcessIdFile
+    $ownVisio = Register-OwnVisio -App $app -ProcessIdFile $ProcessIdFile
     $app.AlertResponse = 7
     $visio.version = [string]$app.Version
     $visio.build = [string]$app.Build
@@ -149,12 +150,12 @@ finally {
     [System.GC]::Collect()
     [System.GC]::WaitForPendingFinalizers()
 
-    if ($null -eq $ownProcessId) {
+    if ($null -eq $ownVisio) {
         # New-Object can start VISIO.EXE and fail before this script could name it
-        $ownProcessId = Find-StrandedVisio -Preexisting $preexisting
+        $ownVisio = Find-StrandedVisio -Preexisting $preexisting
     }
-    if ($null -ne $ownProcessId) {
-        [void](Stop-OwnVisio -ProcessId $ownProcessId)
+    if ($null -ne $ownVisio) {
+        [void](Stop-OwnVisio -Visio $ownVisio)
     }
 }
 

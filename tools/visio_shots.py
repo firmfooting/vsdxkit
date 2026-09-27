@@ -590,7 +590,7 @@ def _shoot(jobs: list[tuple[str, _Case, Path]], dpi: int, work: Path) -> tuple[d
             expression,
         ]
         timeout = 60 + 30 * len(jobs)
-        before = visio_verify._visio_ids()
+        before = visio_verify._visio_processes()
         try:
             result = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
         except subprocess.TimeoutExpired as expired:

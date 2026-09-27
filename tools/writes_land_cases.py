@@ -503,7 +503,7 @@ def _ask_visio(tools_dir: Path, paths: list[str], expected: dict[str, Case], vis
         shell = visio_verify._shell()
         command = [shell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", expression]
         timeout = 60 + 20 * len(paths)
-        before = visio_verify._visio_ids()
+        before = visio_verify._visio_processes()
         try:
             result = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
         except subprocess.TimeoutExpired as expired:
