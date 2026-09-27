@@ -643,3 +643,16 @@ def test_an_unknown_command_is_a_usage_error(capsys):
     with pytest.raises(SystemExit) as exit_info:
         tool.main(["photograph"])
     assert exit_info.value.code == 2
+
+
+def test_the_exporter_names_its_visio_by_the_process_that_owns_its_window():
+    """Visio 16's `Application.ProcessID` names no process: 199300 against a VISIO.EXE of 39524.
+
+    Killing by it missed the exporter's own Visio, and could kill whatever
+    process had that ID. The owner of `WindowHandle32` is the VISIO.EXE, and
+    is trusted only once it is seen to be one.
+    """
+    script = (TOOL.parent / "visio_export.ps1").read_text(encoding="utf-8")
+    assert "$app.ProcessID" not in script
+    assert "GetWindowThreadProcessId" in script
+    assert "$process.ProcessName -ne 'VISIO'" in script

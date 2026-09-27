@@ -65,10 +65,37 @@ function Get-VisioProcessIds {
     return @(Get-Process -Name VISIO -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
 }
 
-function Test-ProcessRunning {
+Add-Type -Namespace VsdxKit -Name Window -MemberDefinition @'
+[DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(System.IntPtr hWnd, out uint processId);
+'@
+
+function Get-VisioProcess {
+    # The Visio with ID $ProcessId, or $null: an ID a Visio has let go of can
+    # be another program's by the time it is looked at.
     param([int]$ProcessId)
 
-    return $null -ne (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue)
+    $process = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+    if ($null -eq $process -or $process.ProcessName -ne 'VISIO') { return $null }
+    return $process
+}
+
+function Get-OwnProcessId {
+    <#
+      The ID of the Windows process $App runs in, or $null where it cannot be
+      told: the owner of Visio's main window, WindowHandle32, once it is seen
+      to be a Visio.
+
+      Not $App.ProcessID. On Visio 16 that names no process at all (199300,
+      against a VISIO.EXE of 39524), so killing by it would miss this Visio
+      and could kill whatever process had that ID.
+    #>
+    param($App)
+
+    [uint32]$owner = 0
+    [void][VsdxKit.Window]::GetWindowThreadProcessId([System.IntPtr][int64]$App.WindowHandle32, [ref]$owner)
+    $process = Get-Process -Id ([int]$owner) -ErrorAction SilentlyContinue
+    if ($owner -eq 0 -or $null -eq $process -or $process.ProcessName -ne 'VISIO') { return $null }
+    return [int]$owner
 }
 
 # CellExistsU's second argument: 0 counts a cell inherited from a master, as
@@ -111,8 +138,10 @@ try {
     # The one process this script may kill if Quit leaves it running. Not
     # "any Visio started during the run": a Visio the developer opens while
     # a long export is under way is theirs, with their unsaved work in it.
-    $ownProcessId = [int]$app.ProcessID
-    if ($ProcessIdFile) { Set-Content -Path $ProcessIdFile -Value $ownProcessId -Encoding ascii }
+    $ownProcessId = Get-OwnProcessId -App $app
+    if ($ProcessIdFile -and $null -ne $ownProcessId) {
+        Set-Content -Path $ProcessIdFile -Value $ownProcessId -Encoding ascii
+    }
     $app.AlertResponse = 7
     $visio.version = [string]$app.Version
     $visio.build = [string]$app.Build
@@ -161,11 +190,12 @@ finally {
 
     if ($null -ne $ownProcessId) {
         $deadline = (Get-Date).AddSeconds(15)
-        while ((Get-Date) -lt $deadline -and (Test-ProcessRunning -ProcessId $ownProcessId)) {
+        while ((Get-Date) -lt $deadline -and $null -ne (Get-VisioProcess -ProcessId $ownProcessId)) {
             Start-Sleep -Milliseconds 250
         }
-        if (Test-ProcessRunning -ProcessId $ownProcessId) {
-            try { Stop-Process -Id $ownProcessId -Force -ErrorAction Stop } catch { }
+        $leftover = Get-VisioProcess -ProcessId $ownProcessId
+        if ($null -ne $leftover) {
+            try { $leftover | Stop-Process -Force -ErrorAction Stop } catch { }
         }
     }
 }
