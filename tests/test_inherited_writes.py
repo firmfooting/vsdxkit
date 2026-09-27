@@ -72,6 +72,25 @@ def test_clearing_del_bool_where_there_is_none_on_an_own_row_is_also_a_no_op(con
     assert row.del_bool is None
 
 
+def test_two_wrappers_of_one_inherited_row_write_one_override_row(conn_a):
+    """Each Shape wrapper resolves the row as inherited; the second write reuses the row the first made."""
+    other = conn_a.page.shapes.by_text("Conn A")
+    assert other is not conn_a
+    first, second = conn_a.geometry.rows["1"], other.geometry.rows["1"]
+    assert first.inherited and second.inherited
+
+    first.row_type = "LineTo"
+    first.x = 5.0
+    second.del_bool = True
+
+    own = [row for row in conn_a.geometry.xml.findall(f"{namespace}Row") if row.get("IX") == "1"]
+    assert [dict(row.attrib) for row in own] == [{"T": "LineTo", "IX": "1", "Del": "1"}]
+    assert first.xml is second.xml is own[0]
+    # the cell the first wrote is read through the second, and the master's Y still inherited
+    assert (second.x, second.y) == (5.0, 0.0)
+    assert _master_row(conn_a, "1").attrib == {"T": "MoveTo", "IX": "1"}
+
+
 def test_index_on_an_inherited_row_leaves_the_master_alone_and_refiles_the_row(conn_a):
     geometry = conn_a.geometry
     row = geometry.rows["1"]

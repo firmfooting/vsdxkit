@@ -319,12 +319,28 @@ class GeometryRow(InheritedRow, ShapePart):
         XML changes, from the master's Row element to a new, empty one on the
         instance. The cells stay the master's until a setter replaces one, so
         a coordinate the caller does not write is still inherited.
+
+        Where the instance already has a row at this index, made through
+        another object for this row, that row is reused rather than a second
+        one added, and each cell it holds is read from there: Visio reads one
+        row per index.
         """
         # make_local() is public and reaches here directly, not only through
         # the guarded x/y setters, and this is the only materialisation path
         self._require_attached("materialising an inherited geometry row")
-        row_type, index = self.row_type, self.index
-        self.xml = self._create_row_xml(row_type or "", str(index))
+        row_type, index = self.row_type, str(self.index)
+        existing = next((row for row in self.geometry.xml.findall(f"{namespace}Row") if row.attrib.get("IX") == index), None)
+        if existing is None:
+            self.xml = self._create_row_xml(row_type or "", index)
+        else:
+            self.xml = existing
+            for element in existing.findall(f"{namespace}Cell"):
+                name = element.attrib.get("N")
+                cell = self.cells.get(name) if name is not None else None
+                if cell is not None:
+                    cell._repoint(element, existing)
+                elif name is not None:
+                    self.cells[name] = GeometryCell(parent=self, xml=element)
         _logger.debug("materialised inherited row on the instance: %s", self)
 
     def _create_row_xml(self, T: str, IX: str) -> Element:
@@ -612,7 +628,8 @@ class GeometryCell(ShapePart):
         A cell of an inherited row calls the row's :meth:`GeometryRow.make_local`
         first. A cell whose element is not among its parent's own is then given
         one of its own there: the instance's cell of that name where the
-        parent already has one, which only a section can, or else a copy of
+        parent already has one, as a section can, or a row another object
+        for it wrote, or else a copy of
         the master's cell, whole, with its unit and its formula. The write
         that follows applies its own rule to the copy: a value write drops
         the formula, and a library write that keeps it leaves it. Visio
