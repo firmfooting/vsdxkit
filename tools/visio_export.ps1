@@ -53,6 +53,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Get-OwnProcessId and Stop-OwnVisio: which Visio this script started, and
+# how it is ended.
+. (Join-Path $PSScriptRoot 'visio_process.ps1')
+
 function Write-Refusal {
     # Not Write-Error, for the reason tools/visio_cells.ps1's Write-Refusal gives.
     param([string]$Message, [int]$Code)
@@ -63,12 +67,6 @@ function Write-Refusal {
 
 function Get-VisioProcessIds {
     return @(Get-Process -Name VISIO -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
-}
-
-function Test-ProcessRunning {
-    param([int]$ProcessId)
-
-    return $null -ne (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue)
 }
 
 # CellExistsU's second argument: 0 counts a cell inherited from a master, as
@@ -111,8 +109,10 @@ try {
     # The one process this script may kill if Quit leaves it running. Not
     # "any Visio started during the run": a Visio the developer opens while
     # a long export is under way is theirs, with their unsaved work in it.
-    $ownProcessId = [int]$app.ProcessID
-    if ($ProcessIdFile) { Set-Content -Path $ProcessIdFile -Value $ownProcessId -Encoding ascii }
+    $ownProcessId = Get-OwnProcessId -App $app
+    if ($ProcessIdFile -and $null -ne $ownProcessId) {
+        Set-Content -Path $ProcessIdFile -Value $ownProcessId -Encoding ascii
+    }
     $app.AlertResponse = 7
     $visio.version = [string]$app.Version
     $visio.build = [string]$app.Build
@@ -160,13 +160,7 @@ finally {
     [System.GC]::WaitForPendingFinalizers()
 
     if ($null -ne $ownProcessId) {
-        $deadline = (Get-Date).AddSeconds(15)
-        while ((Get-Date) -lt $deadline -and (Test-ProcessRunning -ProcessId $ownProcessId)) {
-            Start-Sleep -Milliseconds 250
-        }
-        if (Test-ProcessRunning -ProcessId $ownProcessId) {
-            try { Stop-Process -Id $ownProcessId -Force -ErrorAction Stop } catch { }
-        }
+        [void](Stop-OwnVisio -ProcessId $ownProcessId)
     }
 }
 

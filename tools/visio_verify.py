@@ -208,6 +208,11 @@ def _started_process_id(path: Path) -> int | None:
     return int(text) if text.isdigit() else None
 
 
+def _stop_visio_command(process_id: int) -> str:
+    """PowerShell that kills process `process_id` if it is a Visio: an ID a Visio has let go of can be another program's."""
+    return f"Get-Process -Id {process_id} -ErrorAction SilentlyContinue | Where-Object ProcessName -eq 'VISIO' | Stop-Process -Force"
+
+
 def _stop_started_visio(process_id_file: Path) -> int | None:
     """Kill the Visio a timed-out script recorded in `process_id_file`, and no other; its ID, or None where it recorded none.
 
@@ -222,7 +227,7 @@ def _stop_started_visio(process_id_file: Path) -> int | None:
     process_id = _started_process_id(process_id_file)
     if process_id is not None:
         subprocess.run(
-            [_shell(), "-NoProfile", "-NonInteractive", "-Command", f"Stop-Process -Id {process_id} -Force"],
+            [_shell(), "-NoProfile", "-NonInteractive", "-Command", _stop_visio_command(process_id)],
             capture_output=True,
             text=True,
             timeout=60,

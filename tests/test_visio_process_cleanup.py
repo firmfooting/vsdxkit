@@ -71,7 +71,7 @@ def test_stopping_kills_the_recorded_visio_and_no_other(verify, tmp_path, monkey
     monkeypatch.setattr(verify.subprocess, "run", powershell)
 
     assert verify._stop_started_visio(written) == 4242
-    assert powershell.commands == ["Stop-Process -Id 4242 -Force"]
+    assert powershell.commands == [verify._stop_visio_command(4242)]
 
 
 def test_stopping_before_the_script_recorded_a_visio_kills_nothing(verify, tmp_path, monkeypatch):
@@ -91,7 +91,7 @@ def test_an_observation_that_times_out_kills_only_the_visio_it_started(verify, t
     with pytest.raises(verify.VisioUnavailable, match="process 4242"):
         verify._observe_directory(str(tmp_path), timeout=1, allow_running=False)
 
-    assert powershell.commands == ["Stop-Process -Id 4242 -Force"]
+    assert powershell.commands == [verify._stop_visio_command(4242)]
 
 
 def test_a_cell_check_that_times_out_kills_only_the_visio_it_started(verify, tmp_path, monkeypatch):
@@ -103,15 +103,37 @@ def test_a_cell_check_that_times_out_kills_only_the_visio_it_started(verify, tmp
     with pytest.raises(verify.VisioUnavailable, match="process 4242"):
         tool._ask_visio(TOOLS, [], {}, verify)
 
-    assert powershell.commands == ["Stop-Process -Id 4242 -Force"]
+    assert powershell.commands == [verify._stop_visio_command(4242)]
+
+
+def test_the_kill_stops_a_process_only_while_it_is_a_visio(verify):
+    assert verify._stop_visio_command(4242) == (
+        "Get-Process -Id 4242 -ErrorAction SilentlyContinue | Where-Object ProcessName -eq 'VISIO' | Stop-Process -Force"
+    )
 
 
 @pytest.mark.parametrize("script", SCRIPTS)
 def test_each_script_kills_only_the_visio_its_own_com_object_runs_in(script):
     """Not every Visio that started after the script did: the start-time rule took a developer's Visio too."""
     text = (TOOLS / script).read_text(encoding="utf-8")
-    assert "$ownProcessId = [int]$app.ProcessID" in text
+    assert ". (Join-Path $PSScriptRoot 'visio_process.ps1')" in text
+    assert "$ownProcessId = Get-OwnProcessId -App $app" in text
     assert "[string]$ProcessIdFile" in text
-    assert "Stop-Process -Id $ownProcessId" in text
+    assert "Stop-OwnVisio -ProcessId $ownProcessId" in text
+    assert "$app.ProcessID" not in text
     assert "StartTime" not in text
-    assert "Get-LeakedProcessIds" not in text
+    assert "Stop-Process" not in text
+
+
+def test_a_visio_is_named_by_the_process_that_owns_its_window():
+    """Visio 16's `Application.ProcessID` names no process: 199300 against a VISIO.EXE of 39524.
+
+    Killing by it missed the script's own Visio, and could kill whatever
+    process had that ID. The owner of `WindowHandle32` is the VISIO.EXE, and
+    is trusted, and killed, only while it is seen to be one.
+    """
+    text = (TOOLS / "visio_process.ps1").read_text(encoding="utf-8")
+    assert "GetWindowThreadProcessId" in text
+    assert "$App.WindowHandle32" in text
+    assert "$process.ProcessName -ne 'VISIO'" in text
+    assert "$leftover | Stop-Process -Force" in text

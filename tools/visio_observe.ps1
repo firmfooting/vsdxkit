@@ -52,6 +52,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Get-OwnProcessId and Stop-OwnVisio: which Visio this script started, and
+# how it is ended.
+. (Join-Path $PSScriptRoot 'visio_process.ps1')
+
 $SchemaVersion = 2
 
 # The cells that decide where a shape is, how big it is and which way round it
@@ -117,12 +121,6 @@ function Get-TargetFiles {
 
 function Get-VisioProcessIds {
     return @(Get-Process -Name VISIO -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
-}
-
-function Test-ProcessRunning {
-    param([int]$ProcessId)
-
-    return $null -ne (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue)
 }
 
 function Get-CellRecords {
@@ -322,8 +320,10 @@ try {
     # The one process this script may kill if Quit leaves it running. Not
     # "any Visio started during the run": a Visio the developer opens while
     # a long run is under way is theirs, with their unsaved work in it (#463).
-    $ownProcessId = [int]$app.ProcessID
-    if ($ProcessIdFile) { Set-Content -Path $ProcessIdFile -Value $ownProcessId -Encoding ascii }
+    $ownProcessId = Get-OwnProcessId -App $app
+    if ($ProcessIdFile -and $null -ne $ownProcessId) {
+        Set-Content -Path $ProcessIdFile -Value $ownProcessId -Encoding ascii
+    }
     # Answer every modal dialog with "no" instead of waiting for a click: an
     # unattended run that puts up a dialog does not fail, it hangs.
     $app.AlertResponse = 7
@@ -350,15 +350,8 @@ finally {
     # a hung add-on, keeps the process alive holding the file. Only the Visio
     # this script started is killed, so one the user had open, or opened while
     # this ran, is never taken away from them.
-    if ($null -ne $ownProcessId) {
-        $deadline = (Get-Date).AddSeconds(15)
-        while ((Get-Date) -lt $deadline -and (Test-ProcessRunning -ProcessId $ownProcessId)) {
-            Start-Sleep -Milliseconds 250
-        }
-        if (Test-ProcessRunning -ProcessId $ownProcessId) {
-            Write-Warning "Visio process $ownProcessId outlived Quit(); killing it so the next run can open these files"
-            try { Stop-Process -Id $ownProcessId -Force -ErrorAction Stop } catch { }
-        }
+    if ($null -ne $ownProcessId -and (Stop-OwnVisio -ProcessId $ownProcessId)) {
+        Write-Warning "Visio process $ownProcessId outlived Quit(); killed it so the next run can open these files"
     }
 }
 
