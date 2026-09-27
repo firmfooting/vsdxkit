@@ -448,15 +448,18 @@ class GeometryRow(InheritedRow, ShapePart):
         if new_ix == old:
             return  # already at this index: a no-op
         section = self.geometry.xml
-        holder = self.geometry.rows.get(new_ix)
-        # a row of this shape's own carrying Del is left out of `rows`; one
-        # with cells is a row the user deleted, and holds its index, but a
-        # bare one only hides the master's row there, and gives way
+        # the section as it stands says who holds the index, not `rows`, which
+        # another Shape object for this shape may have made stale by moving a
+        # row since. A row of this shape's own carrying Del with cells is a
+        # row the user deleted, and holds its index, but a bare one only
+        # hides the master's row there, and gives way; with no row of its own
+        # there, the shape holds the index where it inherits the master's row
         occupants = [
             row for row in section.findall(f"{namespace}Row") if row is not self.xml and row.attrib.get("IX") == new_ix
         ]
         tombstones = [row for row in occupants if _is_tombstone(row)]
-        if (holder is not None and holder is not self) or len(tombstones) < len(occupants):
+        inherited_there = not occupants and self._master_row_at(new_ix) is not None
+        if inherited_there or len(tombstones) < len(occupants):
             raise InvalidOperationError(
                 f"shape ID {self.geometry.shape.ID} already has a geometry row at IX={new_ix}; choose a free index"
             )
@@ -532,14 +535,23 @@ class GeometryRow(InheritedRow, ShapePart):
         first cell that is not ``Inh``. That cell's formula is the answer,
         ``None`` where it holds a value alone, as it is where no master has
         the cell.
+
+        A master's section already holds what it inherits, so the walk goes
+        past a master only on its cell's ``Inh``, or where it has no Geometry
+        section at all and inherits the whole of its own master's. A master
+        whose section lacks the row, one that deletes it included, ends the
+        walk with ``None``: there is no row there to inherit from.
         """
         master_shape = self.geometry.shape.master_shape
         while master_shape is not None and index is not None:
             master_geometry = master_shape.geometry
-            row = master_geometry.rows.get(index) if master_geometry is not None else None
-            cell = row.cells.get(name) if row is not None else None
-            if cell is not None and cell.formula != "Inh":
-                return cell.formula
+            if master_geometry is not None:
+                row = master_geometry.rows.get(index)
+                cell = row.cells.get(name) if row is not None else None
+                if cell is None:
+                    return None
+                if cell.formula != "Inh":
+                    return cell.formula
             master_shape = master_shape.master_shape
         return None
 
