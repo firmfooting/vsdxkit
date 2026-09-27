@@ -141,16 +141,8 @@ def _inherited_by(filename: str, request) -> frozenset:
 def _excused_kinds(filename: str, marker) -> frozenset | None:
     """The defect kinds `marker` excuses for `filename`: empty with no marker, and ``None`` for every kind.
 
-    A marker naming no kinds excuses every kind, and the file is not
-    validated at all: a test writing a synthetic archive may give the
-    validator nothing it can read. A marker naming kinds excuses only those.
-
-    A marker's `files` keyword narrows either to the packages named there,
-    by basename, so one file's exemption cannot mask a defect in another
-    file the same test wrote - the reasoning `_inherited_by` above already
-    gives: "An exemption that cannot say which input it is excusing excuses
-    everything." A marker with no `files` excuses for every package the
-    test writes, as before `files` existed.
+    A marker naming no kinds excuses every kind; naming kinds excuses only
+    those; `files` narrows either to the named basenames.
     """
     if marker is None:
         return frozenset()
@@ -188,8 +180,9 @@ def _packages_written_are_structurally_sound(request, tmp_path):
     reaches one known shortfall wants: a bare marker on such a test switches off
     every other rule for it too, and the next defect it writes goes unreported.
     `files` narrows a marker, bare or naming kinds, to the listed basenames,
-    for a test that writes more than one package and only one of them
-    carries the known defect; see `_excused_kinds`.
+    wherever the test writes them, for a test that writes more than one
+    package and only one of them carries the known defect; see
+    `_excused_kinds`.
     """
     # `tmp_path` is taken as an argument rather than looked up on demand: pytest
     # finalises fixtures in reverse dependency order, and a fixture that merely
