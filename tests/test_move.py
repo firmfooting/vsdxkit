@@ -9,6 +9,7 @@ import pytest
 
 from vsdxkit import namespace
 from vsdxkit.document import Document
+from vsdxkit.errors import InvalidOperationError
 from vsdxkit.shape_kind import ShapeKind
 
 
@@ -69,3 +70,35 @@ def test_moving_a_glued_connector_frees_both_ends(vsdx_copy):
     connector.move(0.5, 0.5)
 
     assert (connector.source, connector.target) == (None, None)
+
+
+@pytest.mark.parametrize("text", ["Rect A", "Conn A"])
+def test_moving_a_deleted_shape_is_refused_as_a_move(vsdx_copy, text):
+    """It was refused only by the first cell it read, so the message spoke of reading cell BeginX."""
+    shape = Document.open(vsdx_copy("test9_rect_and_line.vsdx")).pages[0].shapes.by_text(text)
+    shape.delete()
+
+    with pytest.raises(InvalidOperationError, match=r"^Shape\.move\(\) refused"):
+        shape.move(1.0, 1.0)
+
+
+def test_a_none_end_is_refused_naming_the_shape(vsdx_copy):
+    line = Document.open(vsdx_copy("test9_rect_and_line.vsdx")).pages[0].shapes.by_text("Line A")
+
+    with pytest.raises(InvalidOperationError, match=rf"^shape ID {line.ID}: start and finish coordinates cannot be None"):
+        line.set_start_and_finish((None, 1.0), (2.0, 2.0))
+
+
+def test_the_refusals_this_package_added_name_the_shape_one_way(vsdx_copy):
+    """`shape ID 5`, the form most of the library's messages use, not `shape ID=5`."""
+    page = Document.open(vsdx_copy("test9_rect_and_line.vsdx")).pages[0]
+    connector = page.shapes.by_text("Conn A")
+    with pytest.raises(InvalidOperationError, match=rf"^shape ID {connector.ID} already has a geometry row at IX=2"):
+        connector.geometry.rows["1"].index = 2
+
+    group = Document.open(vsdx_copy("test10_nested_shapes.vsdx")).pages[0]
+    groups = [shape for shape in group.shapes if shape.shape_type == "Group"]
+    deleted = next(shape for shape in group.shapes if shape.shape_type != "Group")
+    deleted.delete()
+    with pytest.raises(InvalidOperationError, match=rf"^shape ID {deleted.ID} was deleted"):
+        groups[0].append_shape(deleted)

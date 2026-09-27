@@ -1791,6 +1791,7 @@ class Shape:
 
         :raises InvalidOperationError: if the shape is detached
         """
+        self._require_attached("Shape.move()")
         begin_x, begin_y, end_x, end_y = self.begin_x, self.begin_y, self.end_x, self.end_y
         if begin_x is None or begin_y is None or end_x is None or end_y is None:
             self.x = (self.x or 0.0) + x_delta
@@ -1956,7 +1957,9 @@ class Shape:
         start_x, start_y = start
         finish_x, finish_y = finish
         if start_x is None or start_y is None or finish_x is None or finish_y is None:
-            raise InvalidOperationError("connector start and finish coordinates cannot be None")
+            raise InvalidOperationError(
+                f"shape ID {self.ID}: start and finish coordinates cannot be None; give a number for each of the four"
+            )
         self._write_cell("PinX", v=xml_value(start_x), keep_formula=True)
         self._write_cell("PinY", v=xml_value(start_y), keep_formula=True)
         # lines/connectors are defined in different ways
@@ -2149,7 +2152,7 @@ class Shape:
         self._require_attached("Shape.append_shape()")
         if not append_shape.is_attached:
             raise InvalidOperationError(
-                f"shape ID={append_shape.ID} was deleted, or is on a removed page, so it cannot be placed; "
+                f"shape ID {append_shape.ID} was deleted, or is on a removed page, so it cannot be placed; "
                 "a deleted shape stays deleted"
             )
         if self.shape_type != "Group":

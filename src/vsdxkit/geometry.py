@@ -392,7 +392,7 @@ class GeometryRow(InheritedRow, ShapePart):
         holder = self.geometry.rows.get(new_ix)
         if holder is not None and holder is not self:
             raise InvalidOperationError(
-                f"shape ID={self.geometry.shape.ID} already has a geometry row at IX={new_ix}; choose a free index"
+                f"shape ID {self.geometry.shape.ID} already has a geometry row at IX={new_ix}; choose a free index"
             )
         self.make_local()
         self.xml.attrib["IX"] = new_ix
