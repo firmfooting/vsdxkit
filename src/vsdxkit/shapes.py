@@ -554,8 +554,10 @@ class DataProperty(InheritedRow, ShapePart):
         It is read from the row on every access, as are :attr:`value_type`,
         :attr:`prompt` and :attr:`sort_key`. Visio inherits each cell on its
         own, so a cell the row lacks, as an override of a master's property
-        lacks most of them, is read from the master's row of the same name;
-        each gives ``None`` where neither row has it. The four are read-only:
+        lacks most of them, is read from the master's row of the same name,
+        or, where a master's shape is itself an instance of another master,
+        from the nearest row up that chain that has it; each gives ``None``
+        where no row has it. The four are read-only:
         :meth:`set_attribute` writes them.
         """
         return self._field("Label")
@@ -576,31 +578,37 @@ class DataProperty(InheritedRow, ShapePart):
         return self._field("SortKey")
 
     def _field(self, cell: str) -> str | None:
-        """Cell `cell`'s value from this row, or from the master's row of the same ``N`` where this row lacks the cell, as Visio inherits each cell on its own."""
+        """Cell `cell`'s value, as `_cell_or_masters` finds the cell: this row's, or a master's row of the same ``N`` up the chain."""
         element = self._cell_or_masters(cell)
         return None if element is None else element.attrib.get("V")
 
     def _cell_or_masters(self, cell: str) -> Element | None:
-        """Cell `cell` of this row, or else of the master's row of the same ``N``; ``None`` where neither has it."""
+        """Cell `cell` of this row, or else of the nearest master's row of the same ``N`` that has it; ``None`` where none does.
+
+        A master's shape can itself be an instance of another master, and
+        Visio inherits each cell on its own down the whole chain, as
+        :attr:`Shape.data_properties` lists the properties it inherits.
+        """
         element = self.xml.find(f'{namespace}Cell[@N="{cell}"]')
         if element is not None:
             return element
-        master_row = self._master_row()
-        return None if master_row is None else master_row.find(f'{namespace}Cell[@N="{cell}"]')
-
-    def _master_row(self) -> Element | None:
-        """The row of this property's ``N`` in the master shape's Property section, or ``None``; looked up directly, not through the master's properties."""
         master_shape = self.shape.master_shape
-        if self.name is None or master_shape is None:
-            return None
-        section = master_shape.xml.find(f'{namespace}Section[@N="Property"]')
-        if section is None:
-            return None
-        return next((row for row in section.iterfind(f"{namespace}Row") if row.get("N") == self.name), None)
+        while master_shape is not None:
+            row = self._row_in(master_shape.xml)
+            element = None if row is None else row.find(f'{namespace}Cell[@N="{cell}"]')
+            if element is not None:
+                return element
+            master_shape = master_shape.master_shape
+        return None
 
-    def _own_row(self) -> Element | None:
-        """The row of this property's ``N`` in the instance's own Property section, or ``None``: the override a write goes to."""
-        section = self.shape.xml.find(f'{namespace}Section[@N="Property"]')
+    def _row_in(self, shape_xml: Element) -> Element | None:
+        """The row of this property's ``N`` in the Property section of `shape_xml`, a shape's element, or ``None``.
+
+        Looked up directly, not through that shape's properties, which would
+        rebuild them on every read. On the instance's own element it is the
+        override a write goes to; on a master's, the row it reads over.
+        """
+        section = shape_xml.find(f'{namespace}Section[@N="Property"]')
         if self.name is None or section is None:
             return None
         return next((row for row in section.iterfind(f"{namespace}Row") if row.get("N") == self.name), None)
@@ -642,7 +650,7 @@ class DataProperty(InheritedRow, ShapePart):
         # make_local() is public and reaches here directly, not only through
         # the guarded value setter, and this is the only materialisation path
         self._require_attached("materialising an inherited data property")
-        existing = self._own_row()
+        existing = self._row_in(self.shape.xml)
         if existing is not None:
             self.xml = existing
             return
@@ -730,6 +738,12 @@ class DataProperty(InheritedRow, ShapePart):
         or the one the instance already has for it, and a cell the row lacks
         is copied down from the master's row of the same name, so the master
         is left as it was.
+
+        Writing ``V`` removes the cell's formula, whether the cell was copied
+        down or was this row's own, as :attr:`value` does: the value wins, as
+        typing into the ShapeSheet does in Visio, which would otherwise
+        recalculate the formula over it on open. Any other attribute leaves
+        the formula as it is.
         """
         self._require_attached("DataProperty.set_attribute()")
         source = self._cell_or_masters(name)
@@ -741,6 +755,8 @@ class DataProperty(InheritedRow, ShapePart):
             element = copy.deepcopy(source)
             self.xml.append(element)
         element.attrib[attrib] = value
+        if attrib == "V":
+            element.attrib.pop("F", None)  # the value wins, as in Visio (#300)
         return True
 
     def _get_element(self, name: str) -> Element | None:
@@ -1771,13 +1787,18 @@ class Shape:
         self._write_end("EndY", value)
 
     def _write_end(self, name: str, value: float | str) -> None:
-        """Write end coordinate `name`, freeing that end first if it is glued, as dragging a glued end away does in Visio."""
+        """Write end coordinate `name`, freeing that end first if it is glued, as dragging a glued end away does in Visio.
+
+        The value is converted before the end is freed, so a value refused
+        leaves the end glued, as it was.
+        """
         self._require_attached(f"writing shape cell {name!r}")
+        coordinate = _coordinate_value(value)
         begin = name.startswith("Begin")
         end_cell = "BeginX" if begin else "EndX"
         if any(record.from_id == self.ID and record.from_rel == end_cell for record in self._page._connects()):
             _float_end(self, begin=begin)
-        self.set_cell_value(name, _coordinate_value(value))
+        self.set_cell_value(name, coordinate)
 
     def move(self, x_delta: float, y_delta: float) -> None:
         """Move the shape by ``x_delta`` and ``y_delta`` inches.
@@ -1969,11 +1990,16 @@ class Shape:
             raise InvalidOperationError(
                 f"shape ID {self.ID}: start and finish coordinates cannot be None; give a number for each of the four"
             )
-        self._write_cell("PinX", v=xml_value(start_x), keep_formula=True)
-        self._write_cell("PinY", v=xml_value(start_y), keep_formula=True)
         # lines/connectors are defined in different ways
         # Check whether shape is a connector based on name in known languages
         is_connector = self.universal_name == "Dynamic connector"
+        # worked out before anything is written, so a coordinate that is
+        # not a number is refused with the shape, and its glue, as it was
+        width = finish_x - start_x
+        # a dynamic connector's height is its y span; a plain line's is 0, its slope carried by its geometry
+        height = finish_y - start_y if is_connector else 0.0
+        self._write_cell("PinX", v=xml_value(start_x), keep_formula=True)
+        self._write_cell("PinY", v=xml_value(start_y), keep_formula=True)
 
         if keep_glue:
             for name, value in (("BeginX", start_x), ("BeginY", start_y), ("EndX", finish_x), ("EndY", finish_y)):
@@ -1981,9 +2007,6 @@ class Shape:
         else:
             self.begin_x, self.begin_y = start_x, start_y
             self.end_x, self.end_y = finish_x, finish_y
-        width = finish_x - start_x
-        # a dynamic connector's height is its y span; a plain line's is 0, its slope carried by its geometry
-        height = finish_y - start_y if is_connector else 0.0
         self._write_cell("Width", v=xml_value(width), keep_formula=True)
         self._write_cell("Height", v=xml_value(height), keep_formula=True)
         self._write_cell("PinX", v=xml_value(start_x), keep_formula=True)

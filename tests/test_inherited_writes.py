@@ -102,6 +102,56 @@ def test_reindexing_onto_an_occupied_ix_raises_and_leaves_everything_alone(conn_
     assert _instance_row_count(conn_a) == rows_before
 
 
+def _rows_view(connector) -> dict[str, tuple[str | None, dict[str, tuple[str | None, str | None]]]]:
+    """Each row Conn A shows, by index: its type, and each cell's value and formula."""
+    return {
+        ix: (row.row_type, {name: (cell.value, cell.formula) for name, cell in row.cells.items()})
+        for ix, row in connector.geometry.rows.items()
+    }
+
+
+@pytest.mark.parametrize(
+    "moved",
+    [
+        pytest.param("1", id="an inherited row"),
+        pytest.param("2", id="an own row over the master's"),
+    ],
+)
+def test_a_row_moved_to_a_new_index_reloads_as_it_reads(vsdx_copy, moved):
+    """The master's row at the old index is hidden, and the moved row keeps every cell it read (#273).
+
+    Before, only the override moved: after a save the master's row came
+    back at the old index, and the moved row lost the cells it had read from
+    the master (test9 Conn A's row 1 moved to 7 reloaded as rows 1, 2 and 7).
+    """
+    path = vsdx_copy("test9_rect_and_line.vsdx")
+    document = Document.open(path)
+    connector = document.pages[0].shapes.by_text("Conn A")
+    read = _rows_view(connector)["1" if moved == "1" else "2"]
+
+    connector.geometry.rows[moved].index = 7
+    written = _rows_view(connector)
+    document.save(path)
+
+    reloaded = Document.open(path).pages[0].shapes.by_text("Conn A")
+    assert sorted(written) == sorted({"1", "2"} - {moved} | {"7"})
+    assert written["7"] == read
+    assert _rows_view(reloaded) == written
+
+
+def test_moving_a_row_onto_an_index_a_deleted_row_holds_raises(conn_a):
+    """Conn A's own row IX 3 carries Del="1": hidden from `rows`, but the index is still taken (#273)."""
+    geometry = conn_a.geometry
+    assert "3" not in geometry.rows
+    rows_before = [dict(row.attrib) for row in geometry.xml.findall(f"{namespace}Row")]
+
+    with pytest.raises(InvalidOperationError):
+        geometry.rows["2"].index = 3
+
+    assert [dict(row.attrib) for row in geometry.xml.findall(f"{namespace}Row")] == rows_before
+    assert geometry.rows["2"].index == "2"
+
+
 def test_reindexing_a_row_onto_its_own_index_is_a_no_op(conn_a):
     row = conn_a.geometry.rows["1"]
     rows_before = _instance_row_count(conn_a)
@@ -225,3 +275,59 @@ def test_the_formula_cache_leaves_an_inherited_geometry_cell_alone(vsdx_copy):
     connector._refresh_formula_values()
 
     assert master_x.get("V") == "0"
+
+
+def test_an_override_rows_fields_read_through_every_master_up_the_chain(vsdx_copy):
+    """A master's shape can itself be an instance of another master; a cell the chain's nearer rows lack is read from a farther one.
+
+    No fixture has such a chain, so one is made: test6 page 3's shape 4, whose
+    own Row_1 holds only a Value, is pointed at master 6, which has no
+    Property section, and master 6's shape at master 2, which has Row_1 in
+    full. The fields read only the nearest master's section, so they gave
+    None and the property was listed under "".
+    """
+    shape = Document.open(vsdx_copy("test6_shape_properties.vsdx")).pages[2].shapes.require_id("4")
+    shape.xml.set("Master", "6")
+    middle = shape.master_shape
+    assert middle.xml.find(f'{namespace}Section[@N="Property"]') is None
+    middle.xml.set("Master", "2")
+    assert middle.master_shape is not None
+
+    properties = shape.data_properties
+
+    assert list(properties) == ["master_Prop"]
+    prop = properties["master_Prop"]
+    assert (prop.label, prop.value_type, prop.prompt, prop.sort_key, prop.value) == ("master_Prop", "0", "", "", "override")
+
+
+def test_set_attribute_writing_v_removes_the_formula_of_a_cell_it_copies_down(house_7):
+    """The value wins (#300): a master's formula copied down with the cell would be recalculated over the value on open."""
+    prop = house_7.data_properties["ShapeClass"]
+    master_value = prop.xml.find(f'{namespace}Cell[@N="Value"]')
+    master_value.set("F", 'GUARD("Location")')
+
+    prop.set_attribute("Value", "V", "Changed")
+
+    assert (prop.get_attribute("Value", "V"), prop.get_attribute("Value", "F")) == ("Changed", None)
+    assert master_value.get("F") == 'GUARD("Location")'
+
+
+def test_set_attribute_writing_v_removes_the_formula_of_a_cell_the_shape_owns(vsdx_copy):
+    """s05 shape 54's own Function value is IFERROR(CONTAINERSHEETREF(...)), which Visio would put back on open."""
+    shape = Document.open(vsdx_copy("fixtures/com_reference/s05_swimlanes_cfflow.vsdx")).pages[0].shapes.require_id("54")
+    prop = shape.data_properties["Function"]
+    assert not prop.inherited and prop.get_attribute("Value", "F")
+
+    prop.set_attribute("Value", "V", "Sales")
+
+    assert (prop.get_attribute("Value", "V"), prop.get_attribute("Value", "F")) == ("Sales", None)
+
+
+def test_set_attribute_writing_another_attribute_leaves_the_formula(vsdx_copy):
+    shape = Document.open(vsdx_copy("fixtures/com_reference/s05_swimlanes_cfflow.vsdx")).pages[0].shapes.require_id("54")
+    prop = shape.data_properties["Function"]
+    formula = prop.get_attribute("Value", "F")
+
+    prop.set_attribute("Value", "U", "STR")
+
+    assert prop.get_attribute("Value", "F") == formula

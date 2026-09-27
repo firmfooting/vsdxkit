@@ -374,14 +374,21 @@ class GeometryRow(InheritedRow, ShapePart):
     def index(self) -> str | None:
         """The row's IX attribute.
 
-        Setting it writes ``str(value)`` to :attr:`xml` and re-files the row
-        in :attr:`Geometry.rows` under the new key. On a row inherited from a
-        master, the row is copied onto this shape first, and the master keeps
-        its own. Setting it to the index the row already has is a no-op, and
-        setting it to an index another row of this geometry already holds
-        raises :class:`~vsdxkit.errors.InvalidOperationError` rather than
-        leaving two rows at the same index. A write to a detached shape's row
-        raises :class:`~vsdxkit.errors.InvalidOperationError`.
+        Setting it writes ``str(value)`` to :attr:`xml`, moves the row to its
+        new index's place among the section's rows, which Visio reads in
+        order, and re-files it in :attr:`Geometry.rows` under the new key. On
+        a row inherited from a master, the row is copied onto this shape
+        first, and the master keeps its own. Where the master has a row at
+        the old index, the moved row takes a copy of every cell it read from
+        it, and a row carrying ``Del="1"`` is left at the old index, as Visio
+        deletes an inherited row, so the master's row does not come back
+        there when the file is read again. Setting it to the index the row
+        already has is a no-op, and setting it to an index another row of
+        this geometry already holds, a deleted one of the shape's own
+        included, raises :class:`~vsdxkit.errors.InvalidOperationError`
+        rather than leaving two rows at the same index. A write to a
+        detached shape's row raises
+        :class:`~vsdxkit.errors.InvalidOperationError`.
         """
         return self.xml.attrib.get("IX")
 
@@ -392,16 +399,55 @@ class GeometryRow(InheritedRow, ShapePart):
         old = self.xml.attrib.get("IX")
         if new_ix == old:
             return  # already at this index: a no-op
+        section = self.geometry.xml
         holder = self.geometry.rows.get(new_ix)
-        if holder is not None and holder is not self:
+        # a row of this shape's own carrying Del is left out of `rows`, but
+        # its index is still taken: a second Row at it is a duplicate IX
+        own_holder = any(row is not self.xml and row.attrib.get("IX") == new_ix for row in section.findall(f"{namespace}Row"))
+        if (holder is not None and holder is not self) or own_holder:
             raise InvalidOperationError(
                 f"shape ID {self.geometry.shape.ID} already has a geometry row at IX={new_ix}; choose a free index"
             )
+        master_row = self._master_row_at(old)
         self.make_local()
+        if master_row is not None:
+            self._own_every_cell()
+        # Visio reads a section's rows in document order, so the row moves to
+        # its new index's place rather than keeping its old one
+        section.remove(self.xml)
         self.xml.attrib["IX"] = new_ix
+        insert_row_in_index_order(section, self.xml)
+        if master_row is not None:
+            # without this the master's row comes back at the old index once
+            # the file is read again; Visio deletes an inherited row the same way
+            hidden = ET.Element(f"{namespace}Row", {"T": master_row.row_type or "", "IX": str(old), "Del": "1"})
+            insert_row_in_index_order(section, hidden)
         if old is not None and self.geometry.rows.get(old) is self:
             del self.geometry.rows[old]
         self.geometry.rows[new_ix] = self
+
+    def _master_row_at(self, index: str | None) -> GeometryRow | None:
+        """The row at `index` in the master's geometry, which this shape's row there reads over; ``None`` where there is none."""
+        master_shape = self.geometry.shape.master_shape
+        master_geometry = master_shape.geometry if master_shape is not None else None
+        if master_geometry is None or index is None:
+            return None
+        return master_geometry.rows.get(index)
+
+    def _own_every_cell(self) -> None:
+        """Give this row, already the shape's own, a copy of each cell it still reads from the master, value and formula both.
+
+        A row moved to another index no longer lines up with the master's
+        row it read these from, so without the copies it would lose them.
+        """
+        own_cells = self.xml.findall(f"{namespace}Cell")
+        for cell in self.cells.values():
+            if any(own is cell.xml for own in own_cells):
+                continue
+            copied = copy.deepcopy(cell.xml)
+            self.xml.append(copied)
+            cell.xml = copied
+            cell._parent_xml = self.xml
 
     @property
     def x(self) -> float | None:

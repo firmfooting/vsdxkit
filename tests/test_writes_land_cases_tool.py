@@ -20,28 +20,71 @@ def _tool():
     return module
 
 
-@pytest.mark.allow_invalid_package("missing-part", files=("05_plain_line_text.vsdx",))
+def _case_files(out: Path) -> list[Path]:
+    """The case files in `out`, leaving out each one's `.before` baseline."""
+    return sorted(path for path in out.glob("*.vsdx") if not path.name.endswith(".before.vsdx"))
+
+
+_FROM_TEST5_MASTER = ("05_plain_line_text.vsdx", "05_plain_line_text.before.vsdx")
+"""The files the tool writes from `test5_master.vsdx`, a case and its `.before` baseline; see `test_every_case_writes_a_file_that_opens`."""
+
+
+@pytest.mark.allow_invalid_package("missing-part", files=_FROM_TEST5_MASTER)
 def test_every_case_writes_a_file_that_opens(tmp_path):
     """`05_plain_line_text.vsdx` comes from `test5_master.vsdx`, which ships with seven `missing-part`
     defects of its own (KNOWN_NON_CONFORMANT in test_package_validator.py); conftest's provenance
     match goes by filename, and case 5 is named for the brief, not for its fixture, so the known
-    defects need excusing here rather than being mistaken for ones this test introduced. `files`
-    keeps the exemption to that one case, so a real `missing-part` regression in any of the other
-    seven would still be seen.
+    defects need excusing here rather than being mistaken for ones this test introduced, as they
+    do in its `.before` baseline, the fixture copied untouched. `files` keeps the exemption to
+    those files, so a real `missing-part` regression in any other case would still be seen.
     """
     tool = _tool()
 
     assert tool.main([str(tmp_path)]) == 0
 
-    files = sorted(tmp_path.glob("*.vsdx"))
+    files = _case_files(tmp_path)
     assert len(files) == len(tool.CASES)
     for path in files:
         Document.open(path)
-    expected = (tmp_path / "EXPECTED.txt").read_text(encoding="utf-8").splitlines()
-    assert len(expected) == len(tool.CASES)
+        Document.open(path.with_name(f"{path.stem}.before.vsdx"))
+    header, blank, *lines = (tmp_path / "EXPECTED.txt").read_text(encoding="utf-8").splitlines()
+    assert ".before.vsdx" in header and "baseline" in header
+    assert blank == ""
+    assert len(lines) == len(tool.CASES)
 
 
-@pytest.mark.allow_invalid_package("missing-part", files=("05_plain_line_text.vsdx",))
+def test_a_case_s_before_file_is_its_fixture_untouched(tmp_path):
+    tool = _tool()
+
+    tool.colours(tmp_path)
+
+    fixture = TOOL.parent.parent / "tests" / "fixtures" / "com_reference" / "s05_swimlanes_cfflow.vsdx"
+    assert (tmp_path / "01_colours.before.vsdx").read_bytes() == fixture.read_bytes()
+    assert (tmp_path / "01_colours.vsdx").read_bytes() != fixture.read_bytes()
+
+
+@pytest.mark.allow_invalid_package("missing-part", files=_FROM_TEST5_MASTER)
+def test_check_sends_visio_only_the_cases_and_judges_only_them(tmp_path, monkeypatch):
+    """The `.before` files sit in the same folder, but they are baselines for a person, not writes to check."""
+    tool = _tool()
+    tool.main([str(tmp_path)])
+    expected = json.loads((tmp_path / "expected.json").read_text(encoding="utf-8"))
+    asked = {}
+
+    def ask_visio(_tools_dir, paths, cases, _visio_verify):
+        asked["paths"], asked["stems"] = paths, list(cases)
+        return []
+
+    monkeypatch.setattr(tool, "_ask_visio", ask_visio)
+
+    assert tool._check(tmp_path) == 1  # Visio reported nothing, so every case fails
+
+    assert asked["stems"] == list(expected)
+    assert [Path(path).name for path in asked["paths"]] == [f"{stem}.vsdx" for stem in expected]
+    assert not any(".before" in stem for stem in expected)
+
+
+@pytest.mark.allow_invalid_package("missing-part", files=_FROM_TEST5_MASTER)
 def test_the_cases_are_in_file_name_order(tmp_path):
     """Also writes `05_plain_line_text.vsdx`; see the marker's rationale on `test_every_case_writes_a_file_that_opens`."""
     tool = _tool()
@@ -50,7 +93,7 @@ def test_the_cases_are_in_file_name_order(tmp_path):
     stems = list(json.loads((tmp_path / "expected.json").read_text(encoding="utf-8")))
 
     assert stems == sorted(stems)
-    assert stems == sorted(path.stem for path in tmp_path.glob("*.vsdx"))
+    assert stems == [path.stem for path in _case_files(tmp_path)]
 
 
 def test_the_prop_over_formula_case_writes_the_value_without_the_formula(tmp_path):
@@ -182,7 +225,7 @@ def test_judge_handles_a_single_document_collapsed_to_a_bare_dict():
     assert tool.judge(expected, tool._documents(payload)) == []
 
 
-@pytest.mark.allow_invalid_package("missing-part", files=("05_plain_line_text.vsdx",))
+@pytest.mark.allow_invalid_package("missing-part", files=_FROM_TEST5_MASTER)
 def test_every_case_says_what_visio_must_show(tmp_path):
     """A case with no checks is a case the check cannot fail on.
 

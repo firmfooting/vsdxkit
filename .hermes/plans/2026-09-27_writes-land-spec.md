@@ -129,20 +129,27 @@ These rulings are mine, not the maintainer's. Each follows from a decision, and 
 
 ## The Visio check
 
-A script, `tools/writes_land_cases.py`, writes one `.vsdx` per case to a folder it is given. Each case holds the shape before and after the write, side by side, and records the value it expects in the file's `Title`.
+A script, `tools/writes_land_cases.py`, writes one `.vsdx` per case to a folder it is given. Beside each case it writes the untouched fixture as `<stem>.before.vsdx`. That pair is the before and after: two files side by side, not two shapes on one page. The script records what each case expects in two files in the same folder: `EXPECTED.txt`, one line per case for a person to read, and `expected.json`, the same expectations as data for the check to judge.
 
-1. `line_color`, `fill_color` and `text_color` set on master instances with `THEMEGUARD`/`THEMEVAL` (from s05, test12 and test3). Visio must show the written colour.
-2. `x`, `y` and `width` set on a shape whose cells hold `GUARD(...)`. Visio must keep the written values.
+1. `line_color`, `fill_color` and `text_color` set on a master instance with `THEMEGUARD`/`THEMEVAL` (s05 shape 35). Visio must show the written colour.
+   - 1b. `text_color` written over a Character colour formula (test12 shape 2).
+2. `x` and `width` set on a shape whose cells hold `GUARD(...)`. Visio must keep the written values.
+   - 2b. A Shape Data value written over the property's own formula (s05 shape 54). Visio must show the written value.
+   - 2c. A geometry cell written on an instance whose row is its master's (test9 Conn A). Visio must show the written value on that instance, and the master's value on a copy of it.
 3. `begin_x` set on a connector glued at both ends (test4). Visio must show that end free at the written x, and the other end still glued.
+   - 3b. A property an instance inherits, written on that instance (test3 shape 7). Visio must show the written value on it, and the master's value on a copy of it.
 4. `move` on a master instance with `MoveTo`/`LineTo` rows (test9). Visio must draw the outline on the shape.
 5. `set_start_and_finish` on the Lucidchart line (test5_master shape 5). Visio must place the text on the line.
+   - 5b. The same line placed on a diagonal, from (1, 7) to (4, 11). Visio must show it 5 in long with its text at its middle.
 6. `set_start_and_finish` to a diagonal on a connector, and on a plain line whose `Width` is `SQRT(...)`. Visio must draw each between the two points given, with its pin and width still following its ends.
 
 The PR body gives the commands:
 - `python tools/writes_land_cases.py out/`
-- `python tools/visio_verify.py check out/<case>.vsdx` for each case.
+- `python tools/writes_land_cases.py check out/`
 
-The maintainer's `AGREE`, and a look at cases 1, 3 and 4, gate the merge.
+`check` asks Visio for each written cell twice: as it opens the file, and after `Cell.Trigger()` makes it recalculate. A stale formula wins only when the cell recalculates, so the second reading is the one that catches it. It also reads each glued end's `Connect` records. It judges only the cases `expected.json` names, and never sends a `.before` file to Visio. `visio_verify check` is not the gate: it compares the package with what Visio opened, before anything recalculates, so it could not fail on these bugs.
+
+A clean `check`, and the maintainer's look at cases 1, 3 and 4 beside their `.before` files, gate the merge.
 
 ## What must not change
 
