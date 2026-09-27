@@ -112,8 +112,8 @@ These rulings are mine, not the maintainer's. Each follows from a decision, and 
 - **`move` never touches the geometry rows.**
   - On a 2-D shape it moves the pin, under the value-wins rule, as dragging a shape in Visio replaces a pin formula. A pin the shape lacks is still taken as 0 and written.
   - On a 1-D shape it moves both ends through their setters, which unglues a glued end, then refreshes the derived cells.
-- **A 1-D shape's text pin is set in its own coordinates,** to half the width and height just written, for every 1-D shape (by `_is_one_d`).
-  - The "Dynamic connector" name test stays only where it chooses the height: a dynamic connector's height is its y span, and a plain line's is 0.
+- **A 1-D shape's text pin is set in its own coordinates,** at half the width and height the shape has once its derived cells are refreshed, for every 1-D shape (by `_is_one_d`). The refresh therefore runs before the text pin and the geometry are written.
+  - A plain line, meaning a 1-D shape not named "Dynamic connector" and with no `Angle` formula, is turned to run from start to finish, as Visio draws one: its width is its length, `hypot(dx, dy)`, its height 0, its angle `atan2(dy, dx)`, and its pin the midpoint of its ends. Every other 1-D shape is written its spans as before (a dynamic connector's height is its y span, a plain line's 0), and its formulas, once refreshed, give the size it is drawn with. (Amended after the PR review of #455: a diagonal line's text pin had been set from `dx`, not its length.)
   - `set_start_and_finish` on a 2-D shape raises `InvalidOperationError`, rather than doing nothing.
 
 ### The migration guide and the docs
