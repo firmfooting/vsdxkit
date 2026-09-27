@@ -5,6 +5,8 @@ would have Visio pull it back on open, so the record and the end's trigger go
 with the formula, and only that end's.
 """
 
+from xml.etree import ElementTree as ET
+
 import pytest
 
 from vsdxkit.document import Document
@@ -85,6 +87,26 @@ def test_a_refused_set_start_and_finish_leaves_both_ends_glued(glued, start, fin
         glued.set_start_and_finish(start, finish)
 
     assert _state(glued) == before
+
+
+@pytest.mark.parametrize(
+    ("start", "finish"),
+    [((2.0, "bad"), (3.0, 8.0)), ((2.0, 7.0), (3.0, "bad"))],
+    ids=["start_y", "finish_y"],
+)
+@pytest.mark.parametrize("which", ["glued connector", "plain line"])
+def test_an_invalid_y_is_refused_before_anything_is_written(vsdx_copy, which, start, finish):
+    """A plain line never works out ``finish_y - start_y``, so its Y has to be checked before the first write."""
+    if which == "glued connector":
+        shape = Document.open(vsdx_copy("test4_connectors.vsdx")).pages[0].shapes.by_id("6")
+    else:
+        shape = Document.open(vsdx_copy("test9_rect_and_line.vsdx")).pages[0].shapes.by_text("Line A")
+    xml_before, records_before = ET.tostring(shape.xml), _records(shape)
+
+    with pytest.raises(TypeError):
+        shape.set_start_and_finish(start, finish)
+
+    assert (ET.tostring(shape.xml), _records(shape)) == (xml_before, records_before)
 
 
 def test_writing_end_y_frees_the_end(glued):
