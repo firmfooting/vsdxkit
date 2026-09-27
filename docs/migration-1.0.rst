@@ -746,9 +746,12 @@ Writing a geometry row's ``row_type``, ``index`` or ``del_bool``, or a data prop
    where the master has a row at the old index it leaves a ``Del="1"`` row
    there, as Visio deletes an inherited row, and the moved row keeps every
    cell it read from the master. It refuses a value another row of the same
-   geometry already holds, a deleted row of the shape's own included.
+   geometry already holds, a deleted row of the shape's own that keeps its
+   cells included; a bare ``Del="1"`` row gives way, and the moved row takes
+   its place, so a row moved away and back is one row again.
    Clearing ``del_bool`` where neither the row nor an inherited one has it
-   set writes nothing. A property relabelled on the instance is listed once
+   set writes nothing, and clearing it clears the shape's own row at the
+   index, whichever object for the row set it. A property relabelled on the instance is listed once
    in ``shape.data_properties``, under its new label, and keeps the type,
    prompt and sort key it inherits. ``set_attribute(name, "V", value)``
    removes that cell's formula, copied down or the shape's own, so the

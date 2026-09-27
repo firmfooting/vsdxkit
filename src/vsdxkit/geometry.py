@@ -239,6 +239,16 @@ class Geometry(ShapePart):
         return s
 
 
+def _is_tombstone(row: Element) -> bool:
+    """Whether `row` is a bare ``Del="1"`` row, with no cells, which only hides the master's row at its index.
+
+    A deleted row that keeps its cells is a row the user deleted, and holds
+    its index; a bare one is what a move, or Visio deleting an inherited
+    row, leaves behind.
+    """
+    return row.attrib.get("Del") == "1" and row.find(f"{namespace}Cell") is None
+
+
 class GeometryRow(InheritedRow, ShapePart):
     """One row of the path a Geometry section draws, such as a ``MoveTo`` or a ``LineTo``, holding its cells by name.
 
@@ -329,7 +339,7 @@ class GeometryRow(InheritedRow, ShapePart):
         # the guarded x/y setters, and this is the only materialisation path
         self._require_attached("materialising an inherited geometry row")
         row_type, index = self.row_type, str(self.index)
-        existing = next((row for row in self.geometry.xml.findall(f"{namespace}Row") if row.attrib.get("IX") == index), None)
+        existing = self._own_row_at(index)
         if existing is None:
             self.xml = self._create_row_xml(row_type or "", index)
         else:
@@ -342,6 +352,10 @@ class GeometryRow(InheritedRow, ShapePart):
                 elif name is not None:
                     self.cells[name] = GeometryCell(parent=self, xml=element)
         _logger.debug("materialised inherited row on the instance: %s", self)
+
+    def _own_row_at(self, index: str | None) -> Element | None:
+        """The Row element of this shape's own section at `index`, which another object for this row may have written; ``None`` where there is none."""
+        return next((row for row in self.geometry.xml.findall(f"{namespace}Row") if row.attrib.get("IX") == index), None)
 
     def _create_row_xml(self, T: str, IX: str) -> Element:
         """Add a Row element for this row to the parent Geometry section.
@@ -405,10 +419,15 @@ class GeometryRow(InheritedRow, ShapePart):
         resolves to, up the master's own masters where that cell is ``Inh``
         too, or none where it has none, and keeps its value. Setting it to the index the row
         already has is a no-op, and setting it to an index another row of
-        this geometry already holds, a deleted one of the shape's own
-        included, raises :class:`~vsdxkit.errors.InvalidOperationError`
-        rather than leaving two rows at the same index. A write to a
-        detached shape's row raises
+        this geometry already holds, a deleted one of the shape's own that
+        keeps its cells included, raises
+        :class:`~vsdxkit.errors.InvalidOperationError` rather than leaving
+        two rows at the same index. A ``Del="1"`` row with no cells, such as
+        the one a move leaves behind, only hides the master's row at its
+        index: the moved row takes its place there and becomes the override
+        of that master row, reading each cell of it that the moved row lacks.
+        So a row moved away and back again is one row at its index, with its
+        cells. A write to a detached shape's row raises
         :class:`~vsdxkit.errors.InvalidOperationError`.
         """
         return self.xml.attrib.get("IX")
@@ -422,10 +441,14 @@ class GeometryRow(InheritedRow, ShapePart):
             return  # already at this index: a no-op
         section = self.geometry.xml
         holder = self.geometry.rows.get(new_ix)
-        # a row of this shape's own carrying Del is left out of `rows`, but
-        # its index is still taken: a second Row at it is a duplicate IX
-        own_holder = any(row is not self.xml and row.attrib.get("IX") == new_ix for row in section.findall(f"{namespace}Row"))
-        if (holder is not None and holder is not self) or own_holder:
+        # a row of this shape's own carrying Del is left out of `rows`; one
+        # with cells is a row the user deleted, and holds its index, but a
+        # bare one only hides the master's row there, and gives way
+        occupants = [
+            row for row in section.findall(f"{namespace}Row") if row is not self.xml and row.attrib.get("IX") == new_ix
+        ]
+        tombstones = [row for row in occupants if _is_tombstone(row)]
+        if (holder is not None and holder is not self) or len(tombstones) < len(occupants):
             raise InvalidOperationError(
                 f"shape ID={self.geometry.shape.ID} already has a geometry row at IX={new_ix}; choose a free index"
             )
@@ -437,6 +460,8 @@ class GeometryRow(InheritedRow, ShapePart):
         # Visio reads a section's rows in document order, so the row moves to
         # its new index's place rather than keeping its old one
         section.remove(self.xml)
+        for tombstone in tombstones:
+            section.remove(tombstone)
         self.xml.attrib["IX"] = new_ix
         insert_row_in_index_order(section, self.xml)
         if master_row is not None:
@@ -447,6 +472,22 @@ class GeometryRow(InheritedRow, ShapePart):
         if old is not None and self.geometry.rows.get(old) is self:
             del self.geometry.rows[old]
         self.geometry.rows[new_ix] = self
+        self._inherit_cells_at(new_ix)
+
+    def _inherit_cells_at(self, index: str) -> None:
+        """Read each cell of the master's row at `index` that this row lacks, as Visio does for an override row.
+
+        Every cell this row keeps is its own by now, so a cell of the
+        master's of another name is one the row inherits at `index`. The
+        master has a row there only where a bare ``Del="1"`` row hid it,
+        which the move took the place of.
+        """
+        landing = self._master_row_at(index)
+        if landing is None:
+            return
+        for name, cell in landing.cells.items():
+            if name not in self.cells:
+                self.cells[name] = cell._seen_from(self)
 
     def _master_row_at(self, index: str | None) -> GeometryRow | None:
         """The row at `index` in the master's geometry, which this shape's row there reads over; ``None`` where there is none."""
@@ -553,7 +594,9 @@ class GeometryRow(InheritedRow, ShapePart):
 
         Assigning a falsy value removes the attribute, a no-op where it was
         not set to begin with. On a row inherited from a master, the row is
-        copied onto this shape first, and the master keeps its own. A write
+        copied onto this shape first, and the master keeps its own. Where
+        this shape already has a row at the index, written through another
+        object for the row, that row is the one set or cleared. A write
         to a detached shape's row raises
         :class:`~vsdxkit.errors.InvalidOperationError`.
         """
@@ -562,9 +605,12 @@ class GeometryRow(InheritedRow, ShapePart):
     @del_bool.setter
     def del_bool(self, value: object) -> None:
         self._require_attached("writing a geometry row's Del flag")
-        if not value and self.del_bool is None:
+        # another object for this inherited row may have given the instance a
+        # row at this index and deleted it there; that row's Del is the one in force
+        own = self._own_row_at(self.index) if self.inherited else None
+        if not value and (self.xml if own is None else own).attrib.get("Del") is None:
             return  # nothing set, own or inherited: no write, so an inherited row stays inherited
-        self.make_local()
+        self.make_local()  # reuses that row, where there is one
         if value:
             self.xml.attrib["Del"] = "1"  # set to 1 if truthy
         else:
