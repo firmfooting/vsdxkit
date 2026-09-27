@@ -2089,7 +2089,7 @@ class Shape:
         self._page._delete([self], {str(self.ID)} | {str(shape.ID) for shape in self._descendants()})
 
     def append_shape(self, append_shape: Shape) -> None:
-        """Place another shape inside this one, with IDs the page is not using.
+        """Place another shape on this page inside this one, keeping the IDs it already has.
 
         A group holds its children in a ``<Shapes>`` container, created here
         when the group has none. Appending to the group's own ``<Shape>``
@@ -2142,15 +2142,15 @@ class Shape:
                 "which is the shape itself or one of the shapes inside it"
             )
         current_parent = parent_of(self._page.xml.getroot(), append_shape.xml)
-        if current_parent is None:
-            # New to the page, so it needs ids; a move keeps the ones it has,
-            # or every Connect record naming the shape would be left dangling.
-            self._page._renumber_shape_ids(append_shape.xml)
-        else:
-            current_parent.remove(append_shape.xml)
-        # last, because it creates the <Shapes> element an empty group lacks:
-        # running it ahead of the id allocation left that element behind when
-        # the allocation refused the call
+        # append_shape.is_attached, checked above, and the page-identity check
+        # just passed both mean its element is reachable from this page's
+        # root by parent links; parent_of and is_attached both test that by
+        # identity, so it always finds a parent here. A move keeps the ids
+        # append_shape already has, or every Connect record naming it would
+        # be left dangling.
+        assert current_parent is not None
+        current_parent.remove(append_shape.xml)
+        # creates the <Shapes> element an empty group lacks
         container = find_or_create_shapes_tag(self.xml)
         container.append(append_shape.xml)
         # The ID follows the element on its own; the parent is the Shape
