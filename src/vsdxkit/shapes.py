@@ -1567,7 +1567,10 @@ class Shape:
 
     @property
     def text_color(self) -> str | None:
-        """Get text color of shape - the colour formatting the start of its text"""
+        """Get text color of shape - the colour formatting the start of its text.
+
+        Setting it writes the colour and removes the cell's formula, as :attr:`line_color` does.
+        """
         cell = self._character_color_cell()
         return cell.attrib.get("V") if cell is not None else None
 
@@ -1584,6 +1587,7 @@ class Shape:
         if cell is None:
             cell = self._create_character_color_cell()
         cell.attrib["V"] = text
+        cell.attrib.pop("F", None)  # the value is the one Visio shows (#300)
 
     @property
     def end_arrow(self) -> str | None:
