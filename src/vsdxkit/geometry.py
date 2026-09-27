@@ -584,10 +584,14 @@ class GeometryCell(ShapePart):
         """The cell's name, its ``N`` attribute, such as ``X``; ``None`` for a cell without one.
 
         Setting it writes the text to ``N`` and refuses what :attr:`value`
-        refuses. A cell this shape inherits is copied onto this shape first,
-        as :attr:`value` copies it, so the master's cell keeps its name. A
-        row's :attr:`GeometryRow.cells` keeps the cell under the name it had
-        when it was filed.
+        refuses. It also raises :class:`~vsdxkit.errors.InvalidOperationError`
+        where the master's row at this row's index, or the master's section
+        for a section cell, has a cell of the current name, whether this shape
+        inherits the cell or overrides it: Visio matches the two by name, so
+        the master's cell would come back under the old name. A cell only
+        this shape has is renamed in place. A row's
+        :attr:`GeometryRow.cells` keeps the cell under the name it had when
+        it was filed.
         """
         return self.xml.attrib.get("N")
 
@@ -595,8 +599,27 @@ class GeometryCell(ShapePart):
     def name(self, value: str) -> None:
         self._require_attached("writing a geometry cell's name")
         text = xml_value(value)
+        current = self.name
+        if current is not None and text != current and self._master_has_cell(current):
+            raise InvalidOperationError(
+                f"cannot rename geometry cell {current!r} to {text!r}: the master has a cell named {current!r} "
+                "here, so the master's cell would come back under the old name"
+            )
         self._make_local()
         self.xml.attrib["N"] = text
+
+    def _master_has_cell(self, name: str) -> bool:
+        """Whether the master's counterpart of this cell's parent, its row at the same index or its section, has a cell named `name`."""
+        parent = self.parent
+        geometry = parent.geometry if isinstance(parent, GeometryRow) else parent
+        master_shape = geometry.shape.master_shape
+        master_geometry = master_shape.geometry if master_shape is not None else None
+        if master_geometry is None:
+            return False
+        if isinstance(parent, GeometryRow):
+            master_row = master_geometry.rows.get(parent.index) if parent.index is not None else None
+            return master_row is not None and name in master_row.cells
+        return any(cell.name == name for cell in master_geometry.cells)
 
     def __repr__(self) -> str:
         """Shows the cell as ``name=value``, and its formula where it has one."""
