@@ -153,7 +153,9 @@ func_map: dict[str, Callable[[ShapeMetrics], float | None]] = {
 """Every formula text `calc_value` recognises, to the function that evaluates it."""
 
 
-_SIZE_TIMES_NUMBER = re.compile(r"(Width|Height)\*([+-]?(?:\d+\.?\d*|\.\d+))")
+# digits after a point only once there is a point: `\d+\.?\d*` could split a
+# run of digits two ways and try each, quadratic in a formula a package supplies
+_SIZE_TIMES_NUMBER = re.compile(r"(Width|Height)\*([+-]?(?:\d+(?:\.\d*)?|\.\d+))")
 """``Width*<number>`` or ``Height*<number>``, the number a decimal literal, optionally signed: how Visio writes a local pin as a fraction of the size."""
 
 
@@ -173,4 +175,9 @@ def calc_value(shape: ShapeMetrics, func_text: str) -> float | None:
         _logger.debug("calc_value(func_text='%s') no method found", func_text)
         return None
     metric = shape.width if match.group(1) == "Width" else shape.height
-    return None if metric is None else metric * float(match.group(2))
+    if metric is None:
+        return None
+    value = metric * float(match.group(2))
+    # a multiplier too long for a float is infinite, and zero times it NaN:
+    # neither is a value Visio could hold, so the cell keeps the one it had
+    return value if math.isfinite(value) else None
