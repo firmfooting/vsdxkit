@@ -340,10 +340,11 @@ finally {
     # Quit is a request, not a guarantee: a document Visio believes is dirty, or
     # a hung add-on, keeps the process alive holding the file.
     if ($null -eq $ownVisio) {
-        # New-Object can start VISIO.EXE and fail before this script could name it
-        $ownVisio = Find-StrandedVisio -Preexisting $preexisting
+        # New-Object can start VISIO.EXE and fail before this script could name
+        # it; which Visio that is cannot be proven, so they are named, not ended
+        Write-StrandedVisio -Preexisting $preexisting
     }
-    if ($null -ne $ownVisio -and (Stop-OwnVisio -Visio $ownVisio)) {
+    elseif (Stop-OwnVisio -Visio $ownVisio) {
         Write-Diagnostic "Visio process $($ownVisio.Id) outlived Quit(); killed it so the next run can open these files"
     }
 }
