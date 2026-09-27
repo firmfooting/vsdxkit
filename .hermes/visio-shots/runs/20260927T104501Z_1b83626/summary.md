@@ -1,6 +1,6 @@
-# Visio shots 20260927T102836Z_f3ddf5b
+# Visio shots 20260927T104501Z_1b83626
 
-Candidate f3ddf5b on `test/visio-shots`; cases from `tools/writes_land_cases.py` (acda876); against `main` (e7ad0aa); Visio 16.0 build 20326; 150 dpi.
+Candidate 1b83626 on `test/visio-shots`; cases from `tools/writes_land_cases.py` (acda876); against `main` (e7ad0aa); Visio 16.0 build 20326; 150 dpi.
 
 | Case | Candidate on open vs after recalc | Ref vs candidate | Before vs candidate |
 |---|---|---|---|
