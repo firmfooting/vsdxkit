@@ -59,7 +59,8 @@ class _Powershell:
     each started at `_started` of its ID unless `started` says otherwise.
     The script starts invisible Visio `spawned`, names it in its file only if
     `named`, and times out. A listing reads `visio`; a kill removes the Visio
-    with its ID and start time unless it is `unkillable`, and is kept.
+    with its ID and start time unless it is `unkillable`, and is kept. While
+    `hung`, every call after the script's times out as well.
     """
 
     def __init__(self, process_id_file: Path, visio: dict[int, bool], spawned: int | None = None, *, named: bool = True):
@@ -69,17 +70,22 @@ class _Powershell:
         self.spawned = spawned
         self.named = named
         self.unkillable: set[int] = set()
+        self.hung = False
+        self.script_ran = False
         self.kills: list[str] = []
 
     def __call__(self, command, **kwargs):
         expression = command[-1]
         if "-ProcessIdFile" in expression:
             assert f"-ProcessIdFile '{self.process_id_file}'" in expression
+            self.script_ran = True
             if self.spawned is not None:
                 self.visio[self.spawned] = False
                 self.started[self.spawned] = _started(self.spawned)
                 if self.named:
                     self.process_id_file.write_text(f"{self.spawned} {_started(self.spawned)}\r\n", encoding="ascii")
+            raise subprocess.TimeoutExpired(command, kwargs.get("timeout", 0))
+        if self.hung and self.script_ran:
             raise subprocess.TimeoutExpired(command, kwargs.get("timeout", 0))
         if expression.startswith("Get-Process -Name VISIO"):
             invisible_only = "MainWindowHandle -eq 0" in expression
@@ -197,6 +203,33 @@ def test_a_cell_check_that_times_out_before_naming_its_visio_kills_only_that_one
 
     assert powershell.kills == [KILL.format(4242, 4242000)]
     assert set(powershell.visio) == {7}
+
+
+def test_an_export_that_times_out_kills_only_the_visio_it_started(verify, tmp_path, monkeypatch, vsdx_copy):
+    shots = _load("visio_shots")
+    powershell = _Powershell(tmp_path / "staged" / "visio.pid", {7: True}, spawned=4242)
+    monkeypatch.setattr(verify.subprocess, "run", powershell)
+    (tmp_path / "staged").mkdir()
+    monkeypatch.setattr(verify, "_staged", lambda paths: contextlib.nullcontext((str(tmp_path / "staged"), {})))
+    job = ("candidate", shots._Case(stem="case", line="", page=1, triggers=()), vsdx_copy("test1.vsdx"))
+
+    with pytest.raises(verify.VisioUnavailable, match=r"visio_export\.ps1 did not answer .* process 4242"):
+        shots._shoot([job], 96, tmp_path / "work")
+
+    assert powershell.kills == [KILL.format(4242, 4242000)]
+    assert set(powershell.visio) == {7}
+
+
+def test_a_cleanup_powershell_does_not_answer_still_gives_the_callers_message(verify, tmp_path, monkeypatch):
+    """A machine wedged enough for the script to time out can hang the cleanup's own PowerShell too (#464)."""
+    powershell = _Powershell(tmp_path / "visio.pid", {7: True}, spawned=4242)
+    monkeypatch.setattr(verify.subprocess, "run", powershell)
+    powershell.hung = True
+
+    with pytest.raises(verify.VisioUnavailable, match=r"did not answer within 1s .* may still be running"):
+        verify._observe_directory(str(tmp_path), timeout=1, allow_running=False)
+
+    assert powershell.kills == []
 
 
 @pytest.mark.parametrize("script", SCRIPTS)

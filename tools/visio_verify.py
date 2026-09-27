@@ -275,7 +275,20 @@ def _stop_started_visio(process_id_file: Path, before: set[_Visio]) -> str:
     ID and start time the script's had: an ID a Visio has let go of can be
     another program's, or a later Visio's. A kill is reported only once the
     process is seen to be gone.
+
+    A machine wedged enough for the script to time out can leave these
+    PowerShell calls unanswered too; the clause then says the Visio may
+    still be running, so the caller's own message is not lost to a second
+    timeout.
     """
+    try:
+        return _end_started_visio(process_id_file, before)
+    except subprocess.TimeoutExpired:
+        return "; PowerShell did not answer while ending the Visio it started, which may still be running: end it before the next run"
+
+
+def _end_started_visio(process_id_file: Path, before: set[_Visio]) -> str:
+    """`_stop_started_visio`'s work, which can itself time out."""
     visio = _started_visio(process_id_file)
     if visio is None:
         candidates = sorted(_visio_processes(invisible_only=True) - before)
