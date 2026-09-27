@@ -25,7 +25,14 @@ from vsdxkit import namespace
 from vsdxkit._inheritance import InheritedRow
 from vsdxkit._logging_support import get_logger
 from vsdxkit._shape_part import AttachedShape, ShapePart
-from vsdxkit._xmlio import insert_row_in_index_order, make_cell_element, pretty_print_element, to_float, xml_value
+from vsdxkit._xmlio import (
+    insert_row_in_index_order,
+    make_cell_element,
+    pretty_print_element,
+    row_index_key,
+    to_float,
+    xml_value,
+)
 from vsdxkit.errors import InvalidOperationError
 
 _logger: Logger = get_logger(__name__)
@@ -483,9 +490,15 @@ class GeometryRow(InheritedRow, ShapePart):
             # the file is read again; Visio deletes an inherited row the same way
             hidden = ET.Element(f"{namespace}Row", {"T": master_row.row_type or "", "IX": str(old), "Del": "1"})
             insert_row_in_index_order(section, hidden)
-        if old is not None and self.geometry.rows.get(old) is self:
-            del self.geometry.rows[old]
-        self.geometry.rows[new_ix] = self
+        rows = self.geometry.rows
+        if old is not None and rows.get(old) is self:
+            del rows[old]
+        rows[new_ix] = self
+        # in the order Visio reads the section, as a fresh read lists them:
+        # start_pos and set_move_to go by position
+        ordered = sorted(rows.items(), key=lambda item: row_index_key(item[0]))
+        rows.clear()
+        rows.update(ordered)
         self._inherit_cells_at(new_ix)
 
     def _inherit_cells_at(self, index: str) -> None:
