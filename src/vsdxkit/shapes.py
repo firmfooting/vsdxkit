@@ -18,6 +18,7 @@ from __future__ import annotations
 import copy
 import html
 import math
+import numbers
 import sys
 import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterable, Iterator, Mapping
@@ -347,6 +348,20 @@ def _coordinate_value(value: float | str | None) -> str:
     if value is None:
         raise TypeError("coordinate value cannot be None")
     return xml_value(value)
+
+
+def _end_point_value(value: object) -> float:
+    """Return a coordinate handed to :meth:`Shape.set_start_and_finish` as a float.
+
+    Every coordinate is converted before the shape is written, so one that is
+    not a number is refused with the shape as it was, rather than by whichever
+    arithmetic, or later read of a cell already written, first trips on it.
+
+    :raises TypeError: if the value is not a real number
+    """
+    if not isinstance(value, numbers.Real):
+        raise TypeError(f"a line's end coordinate must be a number, not {value!r}")
+    return float(value)
 
 
 # Visio brackets a shape's text with character (`cp`) and paragraph (`pp`)
@@ -1996,6 +2011,7 @@ class Shape:
         its own coordinates.
 
         :raises InvalidOperationError: if the shape is detached, it is a 2-D shape, or a coordinate is ``None``
+        :raises TypeError: if a coordinate is not a number; the shape is left as it was
         """
         # nothing at all is written on a shape with no BeginX, so leaving this
         # to the coordinate setters below would make the refusal depend on the
@@ -2017,19 +2033,19 @@ class Shape:
             raise InvalidOperationError(
                 f"shape ID {self.ID} is 2-D, so it has no start and finish; move it with move(), or x and y"
             )
-        start_x, start_y = start
-        finish_x, finish_y = finish
-        if start_x is None or start_y is None or finish_x is None or finish_y is None:
+        if any(value is None for value in (*start, *finish)):
             raise InvalidOperationError(
                 f"shape ID {self.ID}: start and finish coordinates cannot be None; give a number for each of the four"
             )
+        # all four are converted before anything is written, so a coordinate
+        # that is not a number is refused with the shape, and its glue, as it was
+        start_x, start_y = (_end_point_value(value) for value in start)
+        finish_x, finish_y = (_end_point_value(value) for value in finish)
         # lines/connectors are defined in different ways
         # Check whether shape is a connector based on name in known languages,
         # a second connector on the page included: Visio names it
         # `Dynamic connector.58`
         is_connector = _is_name_or_copy(self.universal_name, "Dynamic connector")
-        # worked out before anything is written, so a coordinate that is
-        # not a number is refused with the shape, and its glue, as it was
         span_x, span_y = finish_x - start_x, finish_y - start_y
         # A plain line runs along its own x axis, turned by its Angle. Where
         # an Angle formula holds the angle, the formulas place the line: an

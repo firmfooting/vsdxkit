@@ -200,6 +200,29 @@ def test_a_moved_rows_inh_cell_over_a_master_value_keeps_the_value_alone(vsdx_co
     assert _cell_attributes(moved) == {"X": ("10.90551181102363", None), "Y": ("4.133858267716532", "Height*1")}
 
 
+def test_a_moved_rows_inh_cell_takes_the_formula_from_up_the_whole_master_chain(vsdx_copy):
+    """Where the master's cell at the old index is itself ``Inh``, the formula is the one the chain above it resolves to.
+
+    No fixture has such a chain, so one is made: shape 36's master shape, the
+    CFF Container's shape 6, is pointed at the Process master, whose shape's
+    row 3 computes X as ``Width*1``, and its own row 3 X becomes ``Inh``. Only
+    the nearest master was read, so the moved cell kept ``Inh``.
+    """
+    path = vsdx_copy(S05)
+    document = Document.open(path)
+    shape = document.pages[0].shapes.require_id("36")
+    middle = shape.master_shape
+    middle.xml.set("Master", document.master_index["Process"]._page_id)
+    assert middle.master_shape.geometry.rows["3"].cells["X"].formula == "Width*1"
+    middle.geometry.rows["3"].cells["X"].xml.set("F", "Inh")
+
+    shape.geometry.rows["3"].index = 9
+    document.save(path)
+
+    moved = Document.open(path).pages[0].shapes.require_id("36").geometry.rows["9"]
+    assert _cell_attributes(moved) == {"X": ("10.90551181102363", "Width*1"), "Y": ("4.133858267716532", "Height*1")}
+
+
 def test_moving_a_row_onto_an_index_a_deleted_row_holds_raises(conn_a):
     """Conn A's own row IX 3 carries Del="1": hidden from `rows`, but the index is still taken (#273)."""
     geometry = conn_a.geometry
