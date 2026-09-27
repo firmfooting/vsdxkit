@@ -101,7 +101,21 @@ def _styles(root: ElementTree.Element) -> dict[str, str]:
     stands for, never by its name.
     """
     sheet = "".join(element.text or "" for element in root.iter(f"{_SVG_NS}style"))
-    return {name: re.sub(r"\s+", "", body) for name, body in re.findall(r"\.([\w-]+)\s*\{([^}]*)\}", sheet)}
+    return {name: _normalise_rule(body) for name, body in re.findall(r"\.([\w-]+)\s*\{([^}]*)\}", sheet)}
+
+
+def _normalise_rule(body: str) -> str:
+    """A rule's declarations with the spacing around them taken out and the spacing inside each value kept, as one space.
+
+    A space inside a value is part of it: `font-family:Segoe UI` is not
+    `SegoeUI`, and `stroke-dasharray:1 2` is not `12`.
+    """
+    declarations = []
+    for declaration in body.split(";"):
+        prop, colon, value = declaration.partition(":")
+        if colon:
+            declarations.append(f"{prop.strip()}:{' '.join(value.split())}")
+    return ";".join(declarations)
 
 
 def _attribute_name(name: str) -> str:
@@ -183,13 +197,20 @@ def _resolved(value: str, definitions: dict[str, str], depth: int = 0) -> str:
     return _REFERENCE.sub(swap, value)
 
 
-def _describe(element: ElementTree.Element, styles: dict[str, str], definitions: dict[str, str]) -> str:
+def _describe(
+    element: ElementTree.Element, styles: dict[str, str], definitions: dict[str, str], skip: Iterable[str] = ()
+) -> str:
     """One drawn element as a line: its tag, its attributes with each class spelled out as its style
-    and each reference as what it names, and, for text, the characters it draws."""
+    and each reference as what it names, and, for text, the characters it draws.
+
+    Visio's own `v:` attributes (a label's spelling language, what a rect is
+    for) are left out: no renderer reads them. So is anything in `skip`,
+    which the caller compares another way.
+    """
     attributes = []
     for name, value in sorted(element.attrib.items()):
-        if name == "id":
-            continue  # Visio numbers these per export: shape6-10 in one, shape6-12 in the next
+        if name == "id" or name.startswith(_VISIO_NS) or name in skip:
+            continue  # Visio numbers ids per export: shape6-10 in one, shape6-12 in the next
         if name == "class":
             attributes.append("style={" + _drawn_style(styles.get(c, c) for c in value.split()) + "}")
         elif name.endswith("}href") and value.startswith("#"):
@@ -281,12 +302,19 @@ def _svg_page(text: str) -> _Page:
                     transforms[key], groups[key] = [], group
                 if child.get("transform"):
                     transforms[key].append(child.get("transform", ""))
-                walk(child, parts.setdefault(key, []), child_hidden, key)
+                own = parts.setdefault(key, [])
+                # a style the shape's group element carries is inherited by everything it draws
+                carried = _describe(child, styles, definitions, skip={"transform"})
+                if carried != "g":
+                    own.append(carried)
+                walk(child, own, child_hidden, key)
                 continue
             # an element that is not drawn is compared only as being there and not drawn
             into.append(f"{_attribute_name(child.tag)} (not drawn)" if child_hidden else _describe(child, styles, definitions))
             walk(child, into, child_hidden, group)
 
+    # the root's own style (Visio sets the font size every label's `em` is relative to) is inherited by the whole page
+    page_parts.append(_describe(root, styles, definitions, skip=_PAGE_SIZE))
     walk(root, page_parts, False, None)
     size = " ".join(f"{name}={root.get(name)}" for name in _PAGE_SIZE if root.get(name) is not None)
     shapes = {key: _Drawn(" ".join(transforms[key]), tuple(parts[key]), groups[key]) for key in transforms}
@@ -471,6 +499,15 @@ def _export_library(repo: Path, ref: str, dest: Path) -> tuple[Path, str]:
 # --- asking Visio ---------------------------------------------------------------
 
 
+def _exporter_process_id(path: Path) -> int | None:
+    """The ID of the Visio process `visio_export.ps1` started, from the file it writes as soon as it has one; None before that."""
+    try:
+        text = path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return None
+    return int(text) if text.isdigit() else None
+
+
 def _staged_names(jobs: list[tuple[str, _Case, Path]]) -> list[str]:
     """A file name for each job, unique by construction: its place in the list and its variant.
 
@@ -514,11 +551,13 @@ def _shoot(jobs: list[tuple[str, _Case, Path]], dpi: int, work: Path) -> tuple[d
         }
         request_file = staged / "request.json"
         request_file.write_text(json.dumps(request), encoding="utf-8")
+        process_id_file = staged / "visio.pid"
         # -Command, the ExecutionPolicy bypass and `; exit $LASTEXITCODE`, for
         # the reasons visio_verify._observe_directory gives.
         expression = (
             f"& {visio_verify._quote(visio_verify._windows_path(str(_TOOLS / 'visio_export.ps1')))} "
-            f"-Request {visio_verify._quote(visio_verify._windows_path(str(request_file)))}; exit $LASTEXITCODE"
+            f"-Request {visio_verify._quote(visio_verify._windows_path(str(request_file)))} "
+            f"-ProcessIdFile {visio_verify._quote(visio_verify._windows_path(str(process_id_file)))}; exit $LASTEXITCODE"
         )
         command = [
             visio_verify._shell(),
@@ -529,15 +568,32 @@ def _shoot(jobs: list[tuple[str, _Case, Path]], dpi: int, work: Path) -> tuple[d
             "-Command",
             expression,
         ]
-        before = visio_verify._visio_pids()
         timeout = 60 + 30 * len(jobs)
         try:
             result = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
         except subprocess.TimeoutExpired as expired:
-            killed = visio_verify._reap_visio(before)
+            # only the Visio the script started, never one opened meanwhile (#463)
+            process_id = _exporter_process_id(process_id_file)
+            if process_id is not None:
+                subprocess.run(
+                    [
+                        visio_verify._shell(),
+                        "-NoProfile",
+                        "-NonInteractive",
+                        "-Command",
+                        f"Stop-Process -Id {process_id} -Force",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                )
             raise visio_verify.VisioUnavailable(
                 f"visio_export.ps1 did not answer within {timeout}s and was killed"
-                + (f" (stranded process {', '.join(map(str, killed))} also killed)" if killed else "")
+                + (
+                    f"; so was the Visio it started, process {process_id}"
+                    if process_id is not None
+                    else "; it had not started Visio"
+                )
             ) from expired
         if result.returncode != 0 or not result.stdout.strip():
             raise visio_verify.VisioUnavailable(
@@ -701,6 +757,23 @@ def _report(manifest: dict, images: dict[str, dict[str, dict[str, bytes]]]) -> s
     return "".join(parts)
 
 
+def _new_run_dir(store: Path, run_id: str) -> Path:
+    """A folder for one run's record that no other run has: `run_id`, or `run_id-2`, `-3`, ... if it is taken.
+
+    Created exclusively, so two runs of one commit started in the same
+    second never write into one record.
+    """
+    (store / "runs").mkdir(parents=True, exist_ok=True)
+    for attempt in itertools.count(1):
+        run_dir = store / "runs" / (run_id if attempt == 1 else f"{run_id}-{attempt}")
+        try:
+            run_dir.mkdir()
+        except FileExistsError:
+            continue
+        return run_dir
+    raise AssertionError("unreachable: itertools.count never ends")
+
+
 def _record_run(
     store: Path,
     identity: dict,
@@ -731,10 +804,10 @@ def _record_run(
             images.setdefault(variant, {})[stem] = {state: shot[state]["png"] for state in _STATES}
         found = _findings(shots, stem)
         cases[stem] = {"line": line, "shots": stored, "findings": found, "stale_on_open": bool(found[_STALE])}
+    run_dir = _new_run_dir(store, identity["run"])
+    identity = identity | {"run": run_dir.name}
     manifest = {**identity, "build_errors": build_errors, "cases": cases}
 
-    run_dir = store / "runs" / identity["run"]
-    run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     (run_dir / "summary.md").write_text(_summary(manifest), encoding="utf-8")
     local = store / "local" / identity["run"]
@@ -869,7 +942,8 @@ def _command_run(builder: Path, against: str | None, store: Path, dpi: int) -> i
     identity |= {"against": ref_info, "visio": visio, "dpi": dpi}
     manifest = _record_run(store, identity, {case.stem: case.line for case in cases}, shots, build_errors=errors)
     print(_summary(manifest).split("\n## ")[0])
-    print(f"recorded {store / 'runs' / run_id}; images in {store / 'local' / run_id / 'report.html'}")
+    recorded = manifest["run"]
+    print(f"recorded {store / 'runs' / recorded}; images in {store / 'local' / recorded / 'report.html'}")
     return 1 if _failures(manifest) else 0
 
 
