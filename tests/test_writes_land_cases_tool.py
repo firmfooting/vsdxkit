@@ -18,17 +18,55 @@ def _tool():
     return module
 
 
+def _case_files(out: Path) -> list[Path]:
+    """The case files in `out`, leaving out each one's `.before` baseline."""
+    return sorted(path for path in out.glob("*.vsdx") if not path.name.endswith(".before.vsdx"))
+
+
 def test_every_case_writes_a_file_that_opens(tmp_path):
     tool = _tool()
 
     assert tool.main([str(tmp_path)]) == 0
 
-    files = sorted(tmp_path.glob("*.vsdx"))
+    files = _case_files(tmp_path)
     assert len(files) == len(tool.CASES)
     for path in files:
         Document.open(path)
-    expected = (tmp_path / "EXPECTED.txt").read_text(encoding="utf-8").splitlines()
-    assert len(expected) == len(tool.CASES)
+        Document.open(path.with_name(f"{path.stem}.before.vsdx"))
+    header, blank, *lines = (tmp_path / "EXPECTED.txt").read_text(encoding="utf-8").splitlines()
+    assert ".before.vsdx" in header and "baseline" in header
+    assert blank == ""
+    assert len(lines) == len(tool.CASES)
+
+
+def test_a_case_s_before_file_is_its_fixture_untouched(tmp_path):
+    tool = _tool()
+
+    tool.colours(tmp_path)
+
+    fixture = TOOL.parent.parent / "tests" / "fixtures" / "com_reference" / "s05_swimlanes_cfflow.vsdx"
+    assert (tmp_path / "01_colours.before.vsdx").read_bytes() == fixture.read_bytes()
+    assert (tmp_path / "01_colours.vsdx").read_bytes() != fixture.read_bytes()
+
+
+def test_check_sends_visio_only_the_cases_and_judges_only_them(tmp_path, monkeypatch):
+    """The `.before` files sit in the same folder, but they are baselines for a person, not writes to check."""
+    tool = _tool()
+    tool.main([str(tmp_path)])
+    expected = json.loads((tmp_path / "expected.json").read_text(encoding="utf-8"))
+    asked = {}
+
+    def ask_visio(_tools_dir, paths, cases, _visio_verify):
+        asked["paths"], asked["stems"] = paths, list(cases)
+        return []
+
+    monkeypatch.setattr(tool, "_ask_visio", ask_visio)
+
+    assert tool._check(tmp_path) == 1  # Visio reported nothing, so every case fails
+
+    assert asked["stems"] == list(expected)
+    assert [Path(path).name for path in asked["paths"]] == [f"{stem}.vsdx" for stem in expected]
+    assert not any(".before" in stem for stem in expected)
 
 
 def test_the_cases_are_in_file_name_order(tmp_path):
@@ -38,7 +76,7 @@ def test_the_cases_are_in_file_name_order(tmp_path):
     stems = list(json.loads((tmp_path / "expected.json").read_text(encoding="utf-8")))
 
     assert stems == sorted(stems)
-    assert stems == sorted(path.stem for path in tmp_path.glob("*.vsdx"))
+    assert stems == [path.stem for path in _case_files(tmp_path)]
 
 
 def test_the_prop_over_formula_case_writes_the_value_without_the_formula(tmp_path):

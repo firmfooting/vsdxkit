@@ -8,6 +8,7 @@ with the formula, and only that end's.
 import pytest
 
 from vsdxkit.document import Document
+from vsdxkit.errors import InvalidOperationError
 
 
 @pytest.fixture
@@ -32,6 +33,40 @@ def test_writing_begin_x_frees_the_begin_and_keeps_the_end_glued(glued):
     assert (glued.cells["BeginX"].value, glued.cells["BeginX"].formula) == ("1.0", None)
     assert glued.cells["EndX"].formula is not None
     assert "BegTrigger" not in glued.cells
+
+
+def _state(connector) -> tuple[set[tuple[str, str | None]], dict[str, str | None]]:
+    """The connector's glue records and every cell formula it holds, the two things freeing an end changes."""
+    return _records(connector), {name: cell.formula for name, cell in connector.cells.items()}
+
+
+@pytest.mark.parametrize("setter", ["begin_x", "begin_y", "end_x", "end_y"])
+def test_a_refused_end_write_leaves_the_end_glued(glued, setter):
+    """The value is refused before the end is freed, so the connector is as it was."""
+    before = _state(glued)
+    assert before[0] == {("6", "BeginX"), ("6", "EndX")}
+
+    with pytest.raises(TypeError):
+        setattr(glued, setter, None)
+
+    assert _state(glued) == before
+
+
+@pytest.mark.parametrize(
+    ("start", "finish", "error"),
+    [
+        ((None, 1.0), (2.0, 2.0), InvalidOperationError),
+        ((1.0, 1.0), (2.0, None), InvalidOperationError),
+        (("one", 1.0), (2.0, 2.0), TypeError),
+    ],
+)
+def test_a_refused_set_start_and_finish_leaves_both_ends_glued(glued, start, finish, error):
+    before = _state(glued)
+
+    with pytest.raises(error):
+        glued.set_start_and_finish(start, finish)
+
+    assert _state(glued) == before
 
 
 def test_writing_end_y_frees_the_end(glued):

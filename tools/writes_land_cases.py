@@ -4,10 +4,13 @@ Usage:
     python tools/writes_land_cases.py <out-dir>
     python tools/writes_land_cases.py check <out-dir>
 
-Each case is one ``.vsdx`` in <out-dir>. ``EXPECTED.txt`` there says, one line
-per case, what Visio must show, for a person to read; ``expected.json`` says
-the same thing as data, for ``check`` to judge without a person reading
-anything. ``check`` asks a Windows Visio what it shows for each written cell,
+Each case is one ``.vsdx`` in <out-dir>, with the fixture it started from
+beside it, untouched, as ``<case>.before.vsdx``: the baseline a person opens
+next to the case to see what the write changed. ``EXPECTED.txt`` there says,
+one line per case, what Visio must show, for a person to read;
+``expected.json`` says the same thing as data, for ``check`` to judge without
+a person reading anything. ``check`` judges only the cases ``expected.json``
+names, and never sends a ``.before`` file to Visio. ``check`` asks a Windows Visio what it shows for each written cell,
 both on open and after ``Cell.Trigger()`` forces it to recalculate: Visio shows
 the cached value it opened with until something recalculates a cell, and a
 stale formula left in place by a bug (a ``GUARD()``, a theme) wins only at
@@ -31,6 +34,12 @@ from vsdxkit.document import Document
 
 _TESTS = Path(__file__).resolve().parent.parent / "tests"
 """The fixtures the cases start from."""
+
+_BASELINE = (
+    "Beside each case, <case>.before.vsdx is the fixture it started from, untouched: "
+    "the baseline to open next to it and see what the write changed."
+)
+"""EXPECTED.txt's first line, saying what the `.before` files are for."""
 
 
 @dataclass(frozen=True)
@@ -74,9 +83,14 @@ class Case:
 
 
 def _copy(fixture: str, out: Path, case: str) -> tuple[Document, Path]:
-    """`fixture` copied into `out` as `case`.vsdx, and opened."""
+    """`fixture` copied into `out` as `case`.vsdx, and opened; also copied, untouched, as `case`.before.vsdx.
+
+    The `.before` file is the baseline a person opens beside the case to see
+    what the write changed. `check` never sends it to Visio.
+    """
     target = out / f"{case}.vsdx"
     shutil.copy(_TESTS / fixture, target)
+    shutil.copy(_TESTS / fixture, out / f"{case}.before.vsdx")
     return Document.open(target), target
 
 
@@ -452,8 +466,9 @@ def _check(out: Path) -> int:
 def main(argv: list[str] | None = None) -> int:
     """Write every case into `out`, or check what Visio shows for one already written; 2 for a usage error.
 
-    ``main([out])`` writes every case into `out`, as ``EXPECTED.txt`` for a
-    person and ``expected.json`` for ``check``. ``main(["check", out])`` asks a
+    ``main([out])`` writes every case into `out`, each beside its ``.before``
+    baseline, with ``EXPECTED.txt`` for a person and ``expected.json`` for
+    ``check``. ``main(["check", out])`` asks a
     Windows Visio what it shows for each cell `out`'s cases wrote and judges
     it; see the module docstring for why each cell is read twice.
     """
@@ -470,7 +485,7 @@ def main(argv: list[str] | None = None) -> int:
     out.mkdir(parents=True, exist_ok=True)
     cases = [case(out) for case in CASES]
     lines = [case.line for case in cases]
-    (out / "EXPECTED.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (out / "EXPECTED.txt").write_text(_BASELINE + "\n\n" + "\n".join(lines) + "\n", encoding="utf-8")
     (out / "expected.json").write_text(json.dumps(_as_json(cases), indent=2) + "\n", encoding="utf-8")
     print("\n".join(lines))
     return 0

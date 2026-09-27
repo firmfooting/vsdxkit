@@ -134,8 +134,10 @@ Windows runs the harness.
 
 For the writes-land package specifically (the coordinate, colour and glue
 writers), the check is `python tools/writes_land_cases.py out/` to write the
-cases, then `python tools/writes_land_cases.py check out/` to ask Visio about
-them. It fails when Visio shows anything but the written value for a cell, on
+cases, each beside the untouched fixture it started from as
+`<case>.before.vsdx` for a person to compare it with, then
+`python tools/writes_land_cases.py check out/` to ask Visio about the cases
+alone. It fails when Visio shows anything but the written value for a cell, on
 open or after it recalculates.
 
 ##### The harness
