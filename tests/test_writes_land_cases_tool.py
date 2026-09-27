@@ -41,7 +41,7 @@ def test_every_case_writes_a_file_that_opens(tmp_path):
     assert len(expected) == len(tool.CASES)
 
 
-@pytest.mark.allow_invalid_package("missing-part")
+@pytest.mark.allow_invalid_package("missing-part", files=("05_plain_line_text.vsdx",))
 def test_the_cases_are_in_file_name_order(tmp_path):
     """Also writes `05_plain_line_text.vsdx`; see the marker's rationale on `test_every_case_writes_a_file_that_opens`."""
     tool = _tool()
