@@ -185,6 +185,14 @@ def test_a_dynamic_connectors_centre_is_as_it_was(vsdx_copy):
     assert connector.center_x_y == pytest.approx(_midpoint(connector))
 
 
+@pytest.mark.parametrize("missing", ["BeginX", "EndY"])
+def test_the_centre_of_a_line_missing_an_end_value_is_its_pin(line_a, missing):
+    """With an end's value gone, `bounds` makes one up from the pin or the width, and a midpoint of that is off the line."""
+    del line_a.xml.find(f'{namespace}Cell[@N="{missing}"]').attrib["V"]
+
+    assert line_a.center_x_y == (line_a.x, line_a.y)
+
+
 def test_connect_to_a_line_placed_right_to_left_glues_at_its_midpoint(line_a):
     """The glue engine writes the end at the target's `center_x_y` before Visio recalculates it."""
     line_a.set_start_and_finish((4.0, 7.0), (1.0, 7.0))

@@ -212,7 +212,6 @@ def test_a_diagonal_plain_lines_local_pin_follows_its_width(vsdx_copy):
     line.set_start_and_finish((1.0, 7.0), (4.0, 11.0))
 
     assert float(line.cell_value("LocPinX")) == pytest.approx(5.0 * 0.499973064698594)
-    assert float(line.cell_value("LocPinX")) == pytest.approx(2.49987, abs=1e-5)
 
 
 def test_a_plain_line_placed_right_to_left_points_left(vsdx_copy):
@@ -239,6 +238,23 @@ def test_a_connector_named_otherwise_keeps_the_height_its_formula_gives(vsdx_cop
 
     assert (connector.height, connector.angle, connector.cell_formula("Angle")) == (4.0, 0.0, "GUARD(0DA)")
     assert (float(connector.cell_value("TxtPinX")), float(connector.cell_value("TxtPinY"))) == (1.5, 2.0)
+    assert (connector.geometry.rows["2"].x, connector.geometry.rows["2"].y) == (3.0, 4.0)
+
+
+def test_a_connector_named_otherwise_with_its_angle_written_is_not_turned(vsdx_copy):
+    """test4 shape 7 has no NameU; with a value written over its Angle it was turned as a plain line (#455 review).
+
+    Its Width and Height are still formulas, so it is not a line whose size
+    and angle only its placement decides: it keeps its spans, and no angle is
+    written, where the plain-line branch gave it a length of 5 and ATAN2(4, 3).
+    """
+    connector = Document.open(vsdx_copy("test4_connectors.vsdx")).pages[0].shapes.require_id("7")
+    connector.set_cell_value("Angle", 0)
+    assert connector.cell_formula("Angle") is None
+
+    connector.set_start_and_finish((1.0, 2.0), (4.0, 6.0))
+
+    assert (connector.width, connector.height, connector.angle) == (3.0, 4.0, 0.0)
     assert (connector.geometry.rows["2"].x, connector.geometry.rows["2"].y) == (3.0, 4.0)
 
 

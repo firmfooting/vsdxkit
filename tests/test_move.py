@@ -98,7 +98,6 @@ def test_a_zero_move_of_a_2d_shape_keeps_its_pin_formula(vsdx_copy):
 
     shape.move(0.0, 0)
 
-    assert shape.cells["PinX"].formula == "GUARD(1)"
     assert ET.tostring(shape.xml) == before
 
 

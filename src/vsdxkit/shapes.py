@@ -1985,13 +1985,16 @@ class Shape:
 
         For a 2-D shape it is the pin, either half ``None`` where that cell
         is missing. For a 1-D shape, a line or a connector, it is the
-        midpoint of its ends, as :attr:`bounds` gives them, whichever way it
-        points: a line's ``Width`` is its length, so half of it added to the
-        begin point is the midpoint only of a line drawn left to right.
+        midpoint of its ends, whichever way it points: a line's ``Width`` is
+        its length, so half of it added to the begin point is the midpoint
+        only of a line drawn left to right. A 1-D shape with an end that has
+        no value falls back to its pin, rather than to a midpoint of the end
+        :attr:`bounds` would make up.
         """
         if _is_connector(self):
-            begin_x, begin_y, end_x, end_y = self.bounds
-            return (begin_x + end_x) / 2, (begin_y + end_y) / 2
+            begin_x, begin_y, end_x, end_y = self.begin_x, self.begin_y, self.end_x, self.end_y
+            if begin_x is not None and begin_y is not None and end_x is not None and end_y is not None:
+                return (begin_x + end_x) / 2, (begin_y + end_y) / 2
         return self.x, self.y
 
     def set_start_and_finish(
@@ -2003,8 +2006,8 @@ class Shape:
         Visio; :meth:`Connector.retarget` glues an end to another shape. The
         pin, width, height and angle follow the ends: where they are formulas
         of the ends, the formulas stay, and their values are refreshed. A
-        plain line with no ``Angle`` formula is placed as Visio's own lines
-        are: as long as its ends are apart, with no height, turned to point
+        plain line with no ``Width``, ``Height`` or ``Angle`` formula is
+        placed as Visio's own lines are: as long as its ends are apart, with no height, turned to point
         from start to finish, and pinned at its middle. The text pin is at
         the middle of the width and height the shape is then drawn with, in
         its own coordinates.
@@ -2047,12 +2050,13 @@ class Shape:
         is_connector = _is_name_or_copy(self.universal_name, "Dynamic connector")
         span_x, span_y = finish_x - start_x, finish_y - start_y
         # A plain line runs along its own x axis, turned by its Angle. Where
-        # an Angle formula holds the angle, the formulas place the line: an
-        # ATAN2(...) turns it, as Visio's own lines do (test9 'Line A'), and
-        # a connector's GUARD(0DA) keeps it square, with its spans for its
-        # size; the values written below are refreshed from them. A line
-        # with no Angle formula, as a Lucidchart line has, is placed here.
-        turned = not is_connector and self.cell_formula("Angle") is None
+        # its Width, Height or Angle is a formula, the formulas place the
+        # shape: Visio's own lines hold SQRT(...) and ATAN2(...) (test9
+        # 'Line A'), and its connectors GUARD(...) spans and a GUARD(0DA)
+        # that keeps them square, whatever the connector is called; the
+        # values written below are refreshed from them. A line with none of
+        # the three, as a Lucidchart line has, is placed here.
+        turned = not is_connector and all(self.cell_formula(name) is None for name in ("Width", "Height", "Angle"))
         if turned:
             # as long as its ends are apart, with no height, pointing from
             # start to finish, and pinned at its middle: what Visio's SQRT(...),
