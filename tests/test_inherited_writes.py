@@ -298,3 +298,36 @@ def test_an_override_rows_fields_read_through_every_master_up_the_chain(vsdx_cop
     assert list(properties) == ["master_Prop"]
     prop = properties["master_Prop"]
     assert (prop.label, prop.value_type, prop.prompt, prop.sort_key, prop.value) == ("master_Prop", "0", "", "", "override")
+
+
+def test_set_attribute_writing_v_removes_the_formula_of_a_cell_it_copies_down(house_7):
+    """The value wins (#300): a master's formula copied down with the cell would be recalculated over the value on open."""
+    prop = house_7.data_properties["ShapeClass"]
+    master_value = prop.xml.find(f'{namespace}Cell[@N="Value"]')
+    master_value.set("F", 'GUARD("Location")')
+
+    prop.set_attribute("Value", "V", "Changed")
+
+    assert (prop.get_attribute("Value", "V"), prop.get_attribute("Value", "F")) == ("Changed", None)
+    assert master_value.get("F") == 'GUARD("Location")'
+
+
+def test_set_attribute_writing_v_removes_the_formula_of_a_cell_the_shape_owns(vsdx_copy):
+    """s05 shape 54's own Function value is IFERROR(CONTAINERSHEETREF(...)), which Visio would put back on open."""
+    shape = Document.open(vsdx_copy("fixtures/com_reference/s05_swimlanes_cfflow.vsdx")).pages[0].shapes.require_id("54")
+    prop = shape.data_properties["Function"]
+    assert not prop.inherited and prop.get_attribute("Value", "F")
+
+    prop.set_attribute("Value", "V", "Sales")
+
+    assert (prop.get_attribute("Value", "V"), prop.get_attribute("Value", "F")) == ("Sales", None)
+
+
+def test_set_attribute_writing_another_attribute_leaves_the_formula(vsdx_copy):
+    shape = Document.open(vsdx_copy("fixtures/com_reference/s05_swimlanes_cfflow.vsdx")).pages[0].shapes.require_id("54")
+    prop = shape.data_properties["Function"]
+    formula = prop.get_attribute("Value", "F")
+
+    prop.set_attribute("Value", "U", "STR")
+
+    assert prop.get_attribute("Value", "F") == formula

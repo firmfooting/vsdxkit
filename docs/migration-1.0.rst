@@ -740,7 +740,10 @@ Writing a geometry row's ``row_type``, ``index`` or ``del_bool``, or a data prop
    Clearing ``del_bool`` where neither the row nor an inherited one has it
    set writes nothing. A property relabelled on the instance is listed once
    in ``shape.data_properties``, under its new label, and keeps the type,
-   prompt and sort key it inherits. 0.8 wrote the master's row, and with it
+   prompt and sort key it inherits. ``set_attribute(name, "V", value)``
+   removes that cell's formula, copied down or the shape's own, so the
+   value wins as it does through ``DataProperty.value``; any other
+   attribute leaves the formula. 0.8 wrote the master's row, and with it
    every instance's.
 
 ``DataProperty.label``, ``DataProperty.value_type``, ``DataProperty.prompt``, ``DataProperty.sort_key``

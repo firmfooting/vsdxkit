@@ -738,6 +738,12 @@ class DataProperty(InheritedRow, ShapePart):
         or the one the instance already has for it, and a cell the row lacks
         is copied down from the master's row of the same name, so the master
         is left as it was.
+
+        Writing ``V`` removes the cell's formula, whether the cell was copied
+        down or was this row's own, as :attr:`value` does: the value wins, as
+        typing into the ShapeSheet does in Visio, which would otherwise
+        recalculate the formula over it on open. Any other attribute leaves
+        the formula as it is.
         """
         self._require_attached("DataProperty.set_attribute()")
         source = self._cell_or_masters(name)
@@ -749,6 +755,8 @@ class DataProperty(InheritedRow, ShapePart):
             element = copy.deepcopy(source)
             self.xml.append(element)
         element.attrib[attrib] = value
+        if attrib == "V":
+            element.attrib.pop("F", None)  # the value wins, as in Visio (#300)
         return True
 
     def _get_element(self, name: str) -> Element | None:
