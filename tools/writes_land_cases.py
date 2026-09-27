@@ -95,16 +95,21 @@ def _copy(fixture: str, out: Path, case: str) -> tuple[Document, Path]:
 
 
 def colours(out: Path) -> Case:
-    """Case 1: colours set on a master instance whose master's cells are theme formulas."""
+    """Case 1: colours set on a master instance whose master's cells are theme formulas.
+
+    Shape 37 is the flowchart's title bar, a member of the container group 35.
+    It is the shape written because it draws a line, a fill and text, so a
+    picture of the page shows the write; the container itself draws nothing.
+    """
     document, path = _copy("fixtures/com_reference/s05_swimlanes_cfflow.vsdx", out, "01_colours")
-    shape = document.pages[0].shapes.require_id("35")
+    shape = document.pages[0].shapes.require_id("37")
     shape.line_color = "#FF0000"
     shape.fill_color = "#00FF00"
     shape.text_color = "#0000FF"
     document.save(path)
     shape_id = int(shape.ID)
     return Case(
-        "01_colours: shape 35 has a red line, a green fill and blue text",
+        "01_colours: shape 37, the title bar, has a red line, a green fill and blue text",
         (
             CellCheck(1, shape_id, "LineColor", "RGB(255,0,0)"),
             CellCheck(1, shape_id, "FillForegnd", "RGB(0,255,0)"),
@@ -331,7 +336,7 @@ CASES: tuple[Callable[[Path], Case], ...] = (
 """Every case, in the order its file is numbered."""
 
 
-def _as_json(cases: list[Case]) -> dict[str, dict]:
+def as_json(cases: list[Case]) -> dict[str, dict]:
     """`expected.json`'s payload: each case's line and expectations, keyed by its stem."""
     return {
         case.stem: {
@@ -344,7 +349,7 @@ def _as_json(cases: list[Case]) -> dict[str, dict]:
 
 
 def _read_expected(path: Path) -> dict[str, Case]:
-    """The inverse of `_as_json`: rebuild the `Case`s `check` needs to judge Visio's answer."""
+    """The inverse of `as_json`: rebuild the `Case`s `check` needs to judge Visio's answer."""
     raw = json.loads(path.read_text(encoding="utf-8"))
     return {
         stem: Case(
@@ -587,7 +592,7 @@ def main(argv: list[str] | None = None) -> int:
     cases = [case(out) for case in CASES]
     lines = [case.line for case in cases]
     (out / "EXPECTED.txt").write_text(_BASELINE + "\n\n" + "\n".join(lines) + "\n", encoding="utf-8")
-    (out / "expected.json").write_text(json.dumps(_as_json(cases), indent=2) + "\n", encoding="utf-8")
+    (out / "expected.json").write_text(json.dumps(as_json(cases), indent=2) + "\n", encoding="utf-8")
     print("\n".join(lines))
     return 0
 
