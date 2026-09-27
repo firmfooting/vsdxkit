@@ -154,6 +154,53 @@ def test_the_width_of_a_stroke_that_is_drawn_is_a_difference():
     assert len(tool._diff_svgs(first, second)) == 1
 
 
+def _swimlane_frame(style_class: str, width: str = "785.197") -> str:
+    """A shape whose frame Visio exports with a class it has hidden, as it does for a swimlane's."""
+    return (
+        '<g id="shape5-1" v:mID="5" v:groupContext="shape" transform="translate(0,-504)"><title>Sheet.5</title>'
+        f'<rect x="0" y="340.157" width="{width}" height="255.118" class="{style_class}"/></g>'
+    )
+
+
+def test_how_a_hidden_element_would_be_drawn_is_no_difference():
+    tool = _tool()
+    styles = ".st5 {stroke:#d49f00;stroke-width:1.25;visibility:hidden}"
+    first = _svg("a", _swimlane_frame("st5", width="785.197"), styles=styles)
+    second = _svg("b", _swimlane_frame("st5", width="300"), styles=styles)
+    assert tool._diff_svgs(first, second) == []
+
+
+def test_an_element_hidden_in_one_drawing_and_shown_in_the_other_is_a_difference():
+    tool = _tool()
+    styles = ".st5 {stroke:#d49f00;visibility:hidden}\n.st6 {stroke:#d49f00}"
+    assert (
+        len(
+            tool._diff_svgs(_svg("a", _swimlane_frame("st5"), styles=styles), _svg("b", _swimlane_frame("st6"), styles=styles))
+        )
+        == 1
+    )
+
+
+def test_the_colour_of_a_fill_drawn_fully_transparent_is_no_difference():
+    tool = _tool()
+    first = _svg("a", _swimlane_frame("st4"), styles=".st4 {fill:#fff8f1;fill-opacity:0}")
+    second = _svg("b", _swimlane_frame("st4"), styles=".st4 {fill:#000000;fill-opacity:0}")
+    assert tool._diff_svgs(first, second) == []
+
+
+def test_a_shape_taken_out_of_its_group_is_a_difference():
+    """Its own transform is relative to the group: out of the group, the same transform draws it somewhere else."""
+    tool = _tool()
+    member = (
+        '<g id="shape4-1" v:mID="4" v:groupContext="shape" transform="translate(0,0)"><title>Sheet.4</title>'
+        '<path d="M0 0 L1 1" class="st1"/></g>'
+    )
+    group_open = '<g id="group3-1" v:mID="3" v:groupContext="group" transform="translate(100,0)"><title>Sheet.3</title>'
+    inside = _svg("a", group_open + member + "</g>")
+    outside = _svg("b", group_open + "</g>" + member)
+    assert tool._diff_svgs(inside, outside) == ["shape 4 regrouped: in shape 3 -> on the page"]
+
+
 def test_a_shape_only_one_drawing_has_is_reported():
     tool = _tool()
     assert tool._diff_svgs(_svg("a", _box(1)), _svg("b", _box(1), _box(7))) == ["shape 7 only in the second drawing"]
@@ -414,6 +461,37 @@ def test_a_run_fails_when_visio_could_not_export_a_candidate_case(tmp_path):
         tmp_path, _identity("r1"), {"01_a": "a"}, {"candidate": {"01_a": {"error": "file is corrupt"}}}, build_errors={}
     )
     assert tool._failures(manifest) == ["01_a was not judged: Visio could not export it: file is corrupt"]
+
+
+def test_a_run_fails_when_visio_recalculated_fewer_cells_than_the_case_checks(tmp_path):
+    """A shape Visio dropped has no cells to recalculate: its two exports agree only because nothing recalculated."""
+    tool = _tool()
+    drawing = _svg("x", _box(1))
+    shot = _shots(drawing, drawing) | {"triggered": 1, "asked": 3}
+    manifest = tool._record_run(tmp_path, _identity("r1"), {"01_a": "a"}, {"candidate": {"01_a": shot}}, build_errors={})
+    assert tool._failures(manifest) == ["01_a was not judged: Visio recalculated 1 of the 3 cells it checks"]
+
+
+def test_a_before_file_may_lack_the_shapes_its_case_creates(tmp_path):
+    tool = _tool()
+    drawing = _svg("x", _box(1))
+    shots = {
+        "before": {"01_a": _shots(drawing, drawing) | {"triggered": 1, "asked": 2}},
+        "candidate": {"01_a": _shots(drawing, drawing) | {"triggered": 2, "asked": 2}},
+    }
+    manifest = tool._record_run(tmp_path, _identity("r1"), {"01_a": "a"}, shots, build_errors={})
+    assert tool._failures(manifest) == []
+
+
+def test_every_staged_file_has_a_name_of_its_own():
+    """Stems that differ only in a space and an underscore are two cases, not one file."""
+    tool = _tool()
+    jobs = [
+        ("candidate", tool._Case("foo page 1", "a", 1, (), file="foo"), Path("foo.vsdx")),
+        ("candidate", tool._Case("foo_page_1", "b", 1, ()), Path("foo_page_1.vsdx")),
+    ]
+    names = tool._staged_names(jobs)
+    assert len(set(names)) == 2
 
 
 def test_the_refs_cases_are_photographed_with_the_refs_own_shape_ids(tmp_path):
