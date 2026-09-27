@@ -708,13 +708,24 @@ class DataProperty(InheritedRow, ShapePart):
             return element.attrib.get(attrib)
 
     def set_attribute(self, name: str, attrib: str, value: str) -> bool:
-        """Set the attribute value of the cell element"""
+        """Set attribute `attrib` of cell `name` of this property's row; ``False`` where neither the row nor its master's has that cell.
+
+        A property inherited from a master is given a row of its own first,
+        carrying a copy of the master's cell, so the master is left as it was.
+        """
         self._require_attached("DataProperty.set_attribute()")
         element = self._get_element(name)
-        if isinstance(element, Element):
-            element.attrib[attrib] = value
-            return True
-        return False
+        if element is None:
+            return False
+        if self.inherited:
+            self.make_local()
+            own = self._get_element(name)
+            if own is None:
+                own = copy.deepcopy(element)
+                self.xml.append(own)
+            element = own
+        element.attrib[attrib] = value
+        return True
 
     def _get_element(self, name: str) -> Element | None:
         """Get the value of the data property as an xml element"""

@@ -346,33 +346,40 @@ class GeometryRow(InheritedRow, ShapePart):
     def row_type(self) -> str | None:
         """The row's type, its ``T`` attribute, such as ``MoveTo``, ``LineTo`` or ``RelMoveTo``; ``None`` for a row without one.
 
-        Setting it writes ``str(value)`` to :attr:`xml` as it stands, so on an
-        inherited row it changes the master's row. A write to a detached
-        shape's row raises :class:`~vsdxkit.errors.InvalidOperationError`.
+        Setting it writes ``str(value)`` to :attr:`xml`. On a row inherited
+        from a master, the row is copied onto this shape first, and the
+        master keeps its own. A write to a detached shape's row raises
+        :class:`~vsdxkit.errors.InvalidOperationError`.
         """
         return self.xml.attrib.get("T")
 
     @row_type.setter
     def row_type(self, value: str | int) -> None:
         self._require_attached("writing a geometry row's type")
+        self.make_local()
         self.xml.attrib["T"] = str(value)
 
     @property
     def index(self) -> str | None:
         """The row's IX attribute.
 
-        :attr:`Geometry.rows` is keyed when the section is read, so setting
-        this afterwards leaves the row filed under its old index. Setting it
-        writes ``str(value)`` to :attr:`xml` as it stands, so on an inherited
-        row it changes the master's row. A write to a detached shape's row
-        raises :class:`~vsdxkit.errors.InvalidOperationError`.
+        Setting it writes ``str(value)`` to :attr:`xml` and re-files the row
+        in :attr:`Geometry.rows` under the new key. On a row inherited from a
+        master, the row is copied onto this shape first, and the master keeps
+        its own. A write to a detached shape's row raises
+        :class:`~vsdxkit.errors.InvalidOperationError`.
         """
         return self.xml.attrib.get("IX")
 
     @index.setter
     def index(self, value: str | int) -> None:
         self._require_attached("writing a geometry row's index")
+        self.make_local()
+        old = self.xml.attrib.get("IX")
         self.xml.attrib["IX"] = str(value)
+        if old is not None and self.geometry.rows.get(old) is self:
+            del self.geometry.rows[old]
+        self.geometry.rows[str(value)] = self
 
     @property
     def x(self) -> float | None:
@@ -417,10 +424,10 @@ class GeometryRow(InheritedRow, ShapePart):
     def del_bool(self) -> str | None:
         """The Del attribute: whether a row inherited from a master is deleted.
 
-        Assigning a falsy value removes the attribute, and raises ``KeyError``
-        if it was not set to begin with. Setting it writes to :attr:`xml` as
-        it stands, so on an inherited row it changes the master's row. A
-        write to a detached shape's row raises
+        Assigning a falsy value removes the attribute, a no-op where it was
+        not set to begin with. On a row inherited from a master, the row is
+        copied onto this shape first, and the master keeps its own. A write
+        to a detached shape's row raises
         :class:`~vsdxkit.errors.InvalidOperationError`.
         """
         return self.xml.attrib.get("Del")
@@ -428,10 +435,11 @@ class GeometryRow(InheritedRow, ShapePart):
     @del_bool.setter
     def del_bool(self, value: object) -> None:
         self._require_attached("writing a geometry row's Del flag")
+        self.make_local()
         if value:
             self.xml.attrib["Del"] = "1"  # set to 1 if truthy
         else:
-            del self.xml.attrib["Del"]  # remove attribute if falsy
+            self.xml.attrib.pop("Del", None)  # remove attribute if falsy, a no-op if absent
 
     def __repr__(self) -> str:
         """Shows the row's index, its ``Del`` attribute, its type and its cells."""
