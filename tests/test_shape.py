@@ -807,9 +807,8 @@ def test_append_shape_puts_the_shape_inside_the_group(vsdx_copy, tmp_path):
     assert group.shape_type == "Group"
     ids_before = [s.ID for s in page.shapes]
 
-    # a copy() lands on the page and is attached, so it exercises the "new to
-    # the group" path rather than the "new to the page" one a hand-built
-    # Shape used to; the placement it is testing is shared by both
+    # a copy() lands on the page and is attached, which is the only kind of
+    # shape append_shape takes: it moves the shape into the group
     source_text = page.shapes.require_id("6").text
     new_shape = page.shapes.require_id("6").copy()
     group.append_shape(new_shape)
@@ -843,8 +842,7 @@ def test_append_shape_creates_a_shapes_container_for_an_empty_group(vsdx_copy):
     group.xml.remove(group.xml.find(f"{namespace}Shapes"))
     assert list(group.children) == []
 
-    # a copy() lands on the page and is attached, so it exercises the "new to
-    # the group" path a hand-built Shape used to take through "new to the page"
+    # a copy() lands on the page and is attached, so append_shape moves it in
     new_shape = page.shapes.require_id("6").copy()
     group.append_shape(new_shape)
 
