@@ -72,6 +72,25 @@ def test_clearing_del_bool_where_there_is_none_on_an_own_row_is_also_a_no_op(con
     assert row.del_bool is None
 
 
+def test_two_wrappers_of_one_inherited_row_write_one_override_row(conn_a):
+    """Each Shape wrapper resolves the row as inherited; the second write reuses the row the first made."""
+    other = conn_a.page.shapes.by_text("Conn A")
+    assert other is not conn_a
+    first, second = conn_a.geometry.rows["1"], other.geometry.rows["1"]
+    assert first.inherited and second.inherited
+
+    first.row_type = "LineTo"
+    first.x = 5.0
+    second.del_bool = True
+
+    own = [row for row in conn_a.geometry.xml.findall(f"{namespace}Row") if row.get("IX") == "1"]
+    assert [dict(row.attrib) for row in own] == [{"T": "LineTo", "IX": "1", "Del": "1"}]
+    assert first.xml is second.xml is own[0]
+    # the cell the first wrote is read through the second, and the master's Y still inherited
+    assert (second.x, second.y) == (5.0, 0.0)
+    assert _master_row(conn_a, "1").attrib == {"T": "MoveTo", "IX": "1"}
+
+
 def test_index_on_an_inherited_row_leaves_the_master_alone_and_refiles_the_row(conn_a):
     geometry = conn_a.geometry
     row = geometry.rows["1"]
@@ -137,6 +156,48 @@ def test_a_row_moved_to_a_new_index_reloads_as_it_reads(vsdx_copy, moved):
     assert sorted(written) == sorted({"1", "2"} - {moved} | {"7"})
     assert written["7"] == read
     assert _rows_view(reloaded) == written
+
+
+S05 = "fixtures/com_reference/s05_swimlanes_cfflow.vsdx"
+
+
+def _cell_attributes(row) -> dict[str, tuple[str | None, str | None]]:
+    return {name: (cell.value, cell.formula) for name, cell in row.cells.items()}
+
+
+def test_a_moved_rows_inh_cells_take_the_formula_of_the_masters_row_they_left(vsdx_copy):
+    """s05 shape 36's own row 3 holds X and Y as ``F="Inh"``: at a new index they would inherit from another row, or none.
+
+    The master's row 3 computes them as ``Width*1`` and ``Height*1``, so the
+    moved row carries those, with the values it read, and Visio recalculates
+    the same coordinates.
+    """
+    path = vsdx_copy(S05)
+    document = Document.open(path)
+    shape = document.pages[0].shapes.require_id("36")
+    row = shape.geometry.rows["3"]
+    assert {name: cell.formula for name, cell in row.cells.items()} == {"X": "Inh", "Y": "Inh"}
+    assert "9" not in shape.geometry.rows
+
+    row.index = 9
+    document.save(path)
+
+    moved = Document.open(path).pages[0].shapes.require_id("36").geometry.rows["9"]
+    assert _cell_attributes(moved) == {"X": ("10.90551181102363", "Width*1"), "Y": ("4.133858267716532", "Height*1")}
+
+
+def test_a_moved_rows_inh_cell_over_a_master_value_keeps_the_value_alone(vsdx_copy):
+    """Where the master's cell at the old index holds a value and no formula, the moved cell holds its value and no formula."""
+    path = vsdx_copy(S05)
+    document = Document.open(path)
+    shape = document.pages[0].shapes.require_id("36")
+    shape.master_shape.geometry.rows["3"].cells["X"].xml.attrib.pop("F")
+
+    shape.geometry.rows["3"].index = 9
+    document.save(path)
+
+    moved = Document.open(path).pages[0].shapes.require_id("36").geometry.rows["9"]
+    assert _cell_attributes(moved) == {"X": ("10.90551181102363", None), "Y": ("4.133858267716532", "Height*1")}
 
 
 def test_moving_a_row_onto_an_index_a_deleted_row_holds_raises(conn_a):
@@ -221,6 +282,23 @@ def test_a_value_written_after_a_relabel_leaves_one_row(house_7):
     [row] = _property_rows(house_7, "ShapeClass")
     assert held.xml is row
     assert house_7.data_properties["Renamed"].value == "Again"
+
+
+def test_a_held_property_reads_the_override_another_handle_made(house_7):
+    """A handle taken while the property was inherited reads the row a second handle wrote, not the master's."""
+    held = house_7.data_properties["ShapeClass"]
+    other = house_7.data_properties["ShapeClass"]
+    assert held is not other and held.inherited
+
+    other.set_attribute("Label", "V", "Renamed")
+    other.value = "Written"
+
+    assert (held.label, held.value) == ("Renamed", "Written")
+    assert (held.value_type, held.prompt, held.sort_key) == ("0", "", "")
+    held.value = "Again"
+    [row] = _property_rows(house_7, "ShapeClass")
+    assert held.xml is other.xml is row
+    assert other.value == "Again"
 
 
 def test_set_attribute_twice_leaves_one_row(house_7):

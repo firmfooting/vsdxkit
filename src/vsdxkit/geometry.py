@@ -209,10 +209,10 @@ class Geometry(ShapePart):
         Nothing happens if the shape has no MoveTo row at that position.
 
         An inherited row is copied down onto this shape first, so the master is
-        left alone; the copy carries the value but not the master cell's ``F``
-        formula. A cell this shape already owns loses its formula, as typing
-        a number into the ShapeSheet does in Visio, so the value is the one
-        Visio shows.
+        left alone. The copied cell, like a cell this shape already owns,
+        loses its ``F`` formula, as typing a number into the ShapeSheet does
+        in Visio, so the value is the one Visio shows; its other attributes,
+        such as its unit, are kept.
         """
         self._set_point("moveto", "Geometry.set_move_to()", x, y, move_to_index, keep_formula=False)
 
@@ -318,12 +318,28 @@ class GeometryRow(InheritedRow, ShapePart):
         XML changes, from the master's Row element to a new, empty one on the
         instance. The cells stay the master's until a setter replaces one, so
         a coordinate the caller does not write is still inherited.
+
+        Where the instance already has a row at this index, made through
+        another object for this row, that row is reused rather than a second
+        one added, and each cell it holds is read from there: Visio reads one
+        row per index.
         """
         # make_local() is public and reaches here directly, not only through
         # the guarded x/y setters, and this is the only materialisation path
         self._require_attached("materialising an inherited geometry row")
-        row_type, index = self.row_type, self.index
-        self.xml = self._create_row_xml(row_type or "", str(index))
+        row_type, index = self.row_type, str(self.index)
+        existing = next((row for row in self.geometry.xml.findall(f"{namespace}Row") if row.attrib.get("IX") == index), None)
+        if existing is None:
+            self.xml = self._create_row_xml(row_type or "", index)
+        else:
+            self.xml = existing
+            for element in existing.findall(f"{namespace}Cell"):
+                name = element.attrib.get("N")
+                cell = self.cells.get(name) if name is not None else None
+                if cell is not None:
+                    cell._repoint(element, existing)
+                elif name is not None:
+                    self.cells[name] = GeometryCell(parent=self, xml=element)
         _logger.debug("materialised inherited row on the instance: %s", self)
 
     def _create_row_xml(self, T: str, IX: str) -> Element:
@@ -382,7 +398,10 @@ class GeometryRow(InheritedRow, ShapePart):
         the old index, the moved row takes a copy of every cell it read from
         it, and a row carrying ``Del="1"`` is left at the old index, as Visio
         deletes an inherited row, so the master's row does not come back
-        there when the file is read again. Setting it to the index the row
+        there when the file is read again. A cell of the row's own whose
+        formula is ``Inh`` would inherit from the master's row at the new
+        index, so it takes the formula of the master's cell at the old one,
+        or none where that cell has none, and keeps its value. Setting it to the index the row
         already has is a no-op, and setting it to an index another row of
         this geometry already holds, a deleted one of the shape's own
         included, raises :class:`~vsdxkit.errors.InvalidOperationError`
@@ -412,6 +431,7 @@ class GeometryRow(InheritedRow, ShapePart):
         self.make_local()
         if master_row is not None:
             self._own_every_cell()
+        self._settle_inh_formulas(master_row)
         # Visio reads a section's rows in document order, so the row moves to
         # its new index's place rather than keeping its old one
         section.remove(self.xml)
@@ -434,6 +454,25 @@ class GeometryRow(InheritedRow, ShapePart):
             return None
         return master_geometry.rows.get(index)
 
+    def _settle_inh_formulas(self, master_row: GeometryRow | None) -> None:
+        """Give each cell of this row's own whose formula is ``Inh`` the formula of `master_row`'s cell of its name, or none, keeping its value.
+
+        ``Inh`` inherits from the master's row at this row's index, so a row
+        about to move to another index would inherit from a different row,
+        or from none. `master_row` is the master's row at the old index, where
+        there is one; without it, or without a formula in its cell, the cell
+        keeps the value alone, which is what it held.
+        """
+        for cell in self.xml.findall(f"{namespace}Cell"):
+            if cell.attrib.get("F") != "Inh":
+                continue
+            master_cell = master_row.cells.get(cell.attrib.get("N", "")) if master_row is not None else None
+            master_formula = master_cell.formula if master_cell is not None else None
+            if master_formula is None:
+                del cell.attrib["F"]
+            else:
+                cell.attrib["F"] = master_formula
+
     def _own_every_cell(self) -> None:
         """Give this row, already the shape's own, a copy of each cell it still reads from the master, value and formula both.
 
@@ -446,8 +485,7 @@ class GeometryRow(InheritedRow, ShapePart):
                 continue
             copied = copy.deepcopy(cell.xml)
             self.xml.append(copied)
-            cell.xml = copied
-            cell._parent_xml = self.xml
+            cell._repoint(copied, self.xml)
 
     @property
     def x(self) -> float | None:
@@ -540,8 +578,10 @@ class GeometryCell(ShapePart):
     ):
         """Wrap `xml`, a cell of `parent`, or without it add a cell named `name` to `parent`; then write `name` and `value` where given."""
         self.parent = parent
-        self._parent_xml = parent.xml
-        self.xml = xml if type(xml) is Element else self._create_cell_xml(name or "")
+        if type(xml) is Element:
+            self._repoint(xml, parent.xml)
+        else:
+            self._create_cell_xml(name or "")
         if name:
             self.name = name
         if value is not None:
@@ -553,22 +593,27 @@ class GeometryCell(ShapePart):
         """The shape the detached-shape guard asks: the one the cell's parent belongs to."""
         return self.parent._shape
 
-    def _create_cell_xml(self, name: str) -> Element:
-        """Append a ``<Cell>`` named `name` to the parent's element, file this cell in the parent's `cells`, and return the element."""
+    def _create_cell_xml(self, name: str) -> None:
+        """Append a ``<Cell>`` named `name` to the parent's element, point this cell at it, and file this cell in the parent's `cells`."""
         # also the first write of GeometryCell.__init__, so constructing a cell
         # on a detached shape refuses before it appends anything
         self._require_attached("creating a geometry cell")
         if isinstance(self.parent, GeometryRow):
             # a cell added to an inherited row goes on the instance's own row
             self.parent.make_local()
-            self._parent_xml = self.parent.xml
+        home = self.parent.xml
         cell = make_cell_element(name)
-        self._parent_xml.append(cell)
+        home.append(cell)
+        self._repoint(cell, home)
         if isinstance(self.parent, GeometryRow):
             self.parent.cells[name] = self
         else:
             self.parent.cells.append(self)
-        return cell
+
+    def _repoint(self, xml: Element, parent_xml: Element) -> None:
+        """Point this cell at `xml`, a ``<Cell>`` in `parent_xml`, which is where the cell now lives: the one place the two are set, so they never disagree."""
+        self.xml = xml
+        self._parent_xml = parent_xml
 
     def _seen_from(self, parent: GeometryRow | Geometry) -> GeometryCell:
         """This cell as `parent`, an instance's row or section, sees it: the same element, but written through `parent`."""
@@ -582,10 +627,13 @@ class GeometryCell(ShapePart):
         A cell of an inherited row calls the row's :meth:`GeometryRow.make_local`
         first. A cell whose element is not among its parent's own is then given
         one of its own there: the instance's cell of that name where the
-        parent already has one, which only a section can, or else a new cell
-        carrying the master's value but not its formula, as a coordinate
-        setter writes it. Visio matches the two by name, and the master's
-        cell, with every other instance, is left as it was.
+        parent already has one, as a section can, or a row another object
+        for it wrote, or else a copy of
+        the master's cell, whole, with its unit and its formula. The write
+        that follows applies its own rule to the copy: a value write drops
+        the formula, and a library write that keeps it leaves it. Visio
+        matches the two by name, and the master's cell, with every other
+        instance, is left as it was.
         """
         parent = self.parent
         if isinstance(parent, GeometryRow):
@@ -597,15 +645,11 @@ class GeometryCell(ShapePart):
         name = self.name or ""
         own = next((cell for cell in own_cells if cell.attrib.get("N") == name), None)
         if own is None:
-            own = make_cell_element(name)
-            master_value = self.xml.attrib.get("V")
-            if master_value is not None:
-                own.attrib["V"] = master_value
+            own = copy.deepcopy(self.xml)
             # a section is Cell*, Trigger*, Row*, so a section cell goes after
             # the section's last cell rather than after its rows
             home.insert(list(home).index(own_cells[-1]) + 1 if own_cells else 0, own)
-        self.xml = own
-        self._parent_xml = home
+        self._repoint(own, home)
 
     @property
     def value(self) -> str | None:
@@ -663,10 +707,14 @@ class GeometryCell(ShapePart):
         """The cell's name, its ``N`` attribute, such as ``X``; ``None`` for a cell without one.
 
         Setting it writes the text to ``N`` and refuses what :attr:`value`
-        refuses. A cell this shape inherits is copied onto this shape first,
-        as :attr:`value` copies it, so the master's cell keeps its name. A
-        row's :attr:`GeometryRow.cells` keeps the cell under the name it had
-        when it was filed.
+        refuses. It also raises :class:`~vsdxkit.errors.InvalidOperationError`
+        where the master's row at this row's index, or the master's section
+        for a section cell, has a cell of the current name, whether this shape
+        inherits the cell or overrides it: Visio matches the two by name, so
+        the master's cell would come back under the old name. A cell only
+        this shape has is renamed in place. A row's
+        :attr:`GeometryRow.cells` keeps the cell under the name it had when
+        it was filed.
         """
         return self.xml.attrib.get("N")
 
@@ -674,8 +722,24 @@ class GeometryCell(ShapePart):
     def name(self, value: str) -> None:
         self._require_attached("writing a geometry cell's name")
         text = xml_value(value)
+        current = self.name
+        if current is not None and text != current and self._master_has_cell(current):
+            raise InvalidOperationError(
+                f"cannot rename geometry cell {current!r} to {text!r}: the master has a cell named {current!r} "
+                "here, so the master's cell would come back under the old name"
+            )
         self._make_local()
         self.xml.attrib["N"] = text
+
+    def _master_has_cell(self, name: str) -> bool:
+        """Whether the master's counterpart of this cell's parent, its row at the same index or its section, has a cell named `name`."""
+        parent = self.parent
+        if isinstance(parent, GeometryRow):
+            master_row = parent._master_row_at(parent.index)
+            return master_row is not None and name in master_row.cells
+        master_shape = parent.shape.master_shape
+        master_geometry = master_shape.geometry if master_shape is not None else None
+        return master_geometry is not None and any(cell.name == name for cell in master_geometry.cells)
 
     def __repr__(self) -> str:
         """Shows the cell as ``name=value``, and its formula where it has one."""

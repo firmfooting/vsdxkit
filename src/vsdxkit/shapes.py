@@ -558,7 +558,9 @@ class DataProperty(InheritedRow, ShapePart):
         lacks most of them, is read from the master's row of the same name,
         or, where a master's shape is itself an instance of another master,
         from the nearest row up that chain that has it; each gives ``None``
-        where no row has it. The four are read-only:
+        where no row has it. A property read from the master reads the
+        shape's own row as well, once another object for it has written one,
+        as :attr:`value` does. The four are read-only:
         :meth:`set_attribute` writes them.
         """
         return self._field("Label")
@@ -589,10 +591,20 @@ class DataProperty(InheritedRow, ShapePart):
         A master's shape can itself be an instance of another master, and
         Visio inherits each cell on its own down the whole chain, as
         :attr:`Shape.data_properties` lists the properties it inherits.
+
+        A property still marked inherited looks first in the instance's own
+        row of its ``N``, where another object for the property has written
+        one since this one was read: Visio reads that row over the master's.
         """
-        element = self.xml.find(f'{namespace}Cell[@N="{cell}"]')
-        if element is not None:
-            return element
+        rows = [self.xml]
+        if self.inherited:
+            own = self._row_in(self.shape.xml)
+            if own is not None:
+                rows.insert(0, own)
+        for row in rows:
+            element = row.find(f'{namespace}Cell[@N="{cell}"]')
+            if element is not None:
+                return element
         master_shape = self.shape.master_shape
         while master_shape is not None:
             row = self._row_in(master_shape.xml)
