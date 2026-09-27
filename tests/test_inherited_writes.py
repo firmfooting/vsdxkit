@@ -275,3 +275,26 @@ def test_the_formula_cache_leaves_an_inherited_geometry_cell_alone(vsdx_copy):
     connector._refresh_formula_values()
 
     assert master_x.get("V") == "0"
+
+
+def test_an_override_rows_fields_read_through_every_master_up_the_chain(vsdx_copy):
+    """A master's shape can itself be an instance of another master; a cell the chain's nearer rows lack is read from a farther one.
+
+    No fixture has such a chain, so one is made: test6 page 3's shape 4, whose
+    own Row_1 holds only a Value, is pointed at master 6, which has no
+    Property section, and master 6's shape at master 2, which has Row_1 in
+    full. The fields read only the nearest master's section, so they gave
+    None and the property was listed under "".
+    """
+    shape = Document.open(vsdx_copy("test6_shape_properties.vsdx")).pages[2].shapes.require_id("4")
+    shape.xml.set("Master", "6")
+    middle = shape.master_shape
+    assert middle.xml.find(f'{namespace}Section[@N="Property"]') is None
+    middle.xml.set("Master", "2")
+    assert middle.master_shape is not None
+
+    properties = shape.data_properties
+
+    assert list(properties) == ["master_Prop"]
+    prop = properties["master_Prop"]
+    assert (prop.label, prop.value_type, prop.prompt, prop.sort_key, prop.value) == ("master_Prop", "0", "", "", "override")
