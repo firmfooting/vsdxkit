@@ -132,6 +132,12 @@ You do not need Visio to contribute such a change. Open the PR, apply
 `needs-visio`, and say which files a checker should generate. A maintainer on
 Windows runs the harness.
 
+For the writes-land package specifically (the coordinate, colour and glue
+writers), the check is `python tools/writes_land_cases.py out/` to write the
+cases, then `python tools/writes_land_cases.py check out/` to ask Visio about
+them. It fails when Visio shows anything but the written value for a cell, on
+open or after it recalculates.
+
 ##### The harness
 
 `tools/visio_verify.py` compares two accounts of the same document: what the
