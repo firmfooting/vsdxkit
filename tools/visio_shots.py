@@ -108,23 +108,38 @@ def _attribute_name(name: str) -> str:
     return name.replace(_VISIO_NS, "v:").replace(_XLINK_NS, "xlink:").replace(_SVG_NS, "")
 
 
-def _drawn_style(rules: Iterable[str]) -> str:
+def _is_zero(value: str | None) -> bool:
+    try:
+        return value is not None and float(value) == 0
+    except ValueError:
+        return False
+
+
+def _declarations(rules: Iterable[str]) -> dict[str, str]:
     """The declarations `rules` add up to, later ones winning, less any that cannot change what is drawn.
 
-    With `stroke:none` no stroke is drawn, so how one would be drawn (its
-    width, caps, joins) is left out. Visio's export gives a text background
-    `stroke:none` with a stroke width on one export and without it on the
-    next, even for a shape nothing touched; counting it would report a
-    change that draws nothing.
+    A paint that is not drawn, `none` or fully transparent, is `none`, and
+    how it would be drawn (its colour, width, caps, joins) is left out.
+    Visio's export gives a text background `stroke:none` with a stroke width
+    on one export and without it on the next, even for a shape nothing
+    touched, and gives swimlane frames a coloured fill at `fill-opacity:0`;
+    counting either would report a change that draws nothing.
     """
     declarations: dict[str, str] = {}
     for rule in rules:
         for declaration in filter(None, rule.split(";")):
             prop, _, value = declaration.partition(":")
             declarations[prop] = value
-    if declarations.get("stroke") == "none":
-        declarations = {prop: value for prop, value in declarations.items() if not prop.startswith("stroke-")}
-    return ";".join(f"{prop}:{value}" for prop, value in declarations.items())
+    for paint in ("fill", "stroke"):
+        if declarations.get(paint) == "none" or _is_zero(declarations.get(f"{paint}-opacity")):
+            declarations = {prop: value for prop, value in declarations.items() if not prop.startswith(f"{paint}-")}
+            declarations[paint] = "none"
+    return declarations
+
+
+def _drawn_style(rules: Iterable[str]) -> str:
+    """`_declarations` as one line."""
+    return ";".join(f"{prop}:{value}" for prop, value in _declarations(rules).items())
 
 
 _TEXT = {f"{_SVG_NS}text", f"{_SVG_NS}tspan"}
@@ -193,6 +208,8 @@ class _Drawn:
 
     transform: str
     parts: tuple[str, ...]
+    group: int | None = None
+    """The ID of the group it is drawn in, whose transform its own is relative to; None on the page itself."""
 
 
 @dataclass(frozen=True)
@@ -243,11 +260,16 @@ def _svg_page(text: str) -> _Page:
     page_parts: list[str] = []
     transforms: dict[int, list[str]] = {}
     parts: dict[int, list[str]] = {}
+    groups: dict[int, int | None] = {}
 
-    def walk(element: ElementTree.Element, into: list[str]) -> None:
+    def walk(element: ElementTree.Element, into: list[str], hidden: bool, group: int | None) -> None:
         for child in element:
             if not child.tag.startswith(_SVG_NS) or child.tag in _NOT_DRAWN or child.tag in _COMPARED_ELSEWHERE:
                 continue
+            declared = _declarations(styles.get(c, c) for c in child.get("class", "").split())
+            visibility = declared.get("visibility", child.get("visibility", "inherit"))
+            # visibility is inherited, and a child may show itself again inside a hidden parent
+            child_hidden = hidden if visibility == "inherit" else visibility in ("hidden", "collapse")
             shape_id = child.get(f"{_VISIO_NS}mID")
             if (
                 child.tag == f"{_SVG_NS}g"
@@ -255,17 +277,19 @@ def _svg_page(text: str) -> _Page:
                 and child.get(f"{_VISIO_NS}groupContext") != "foregroundPage"
             ):
                 key = int(shape_id)
-                transforms.setdefault(key, [])
+                if key not in transforms:
+                    transforms[key], groups[key] = [], group
                 if child.get("transform"):
                     transforms[key].append(child.get("transform", ""))
-                walk(child, parts.setdefault(key, []))
+                walk(child, parts.setdefault(key, []), child_hidden, key)
                 continue
-            into.append(_describe(child, styles, definitions))
-            walk(child, into)
+            # an element that is not drawn is compared only as being there and not drawn
+            into.append(f"{_attribute_name(child.tag)} (not drawn)" if child_hidden else _describe(child, styles, definitions))
+            walk(child, into, child_hidden, group)
 
-    walk(root, page_parts)
+    walk(root, page_parts, False, None)
     size = " ".join(f"{name}={root.get(name)}" for name in _PAGE_SIZE if root.get(name) is not None)
-    shapes = {key: _Drawn(" ".join(transforms[key]), tuple(parts[key])) for key in transforms}
+    shapes = {key: _Drawn(" ".join(transforms[key]), tuple(parts[key]), groups[key]) for key in transforms}
     return _Page(size, tuple(page_parts), shapes, tuple(transforms))
 
 
@@ -319,6 +343,12 @@ def _diff_svgs(first: str, second: str) -> list[str]:
             findings.append(f"shape {shape_id} only in the second drawing")
             continue
         was, now = a[shape_id], b[shape_id]
+        if was.group != now.group:
+
+            def where(group: int | None) -> str:
+                return "on the page" if group is None else f"in shape {group}"
+
+            findings.append(f"shape {shape_id} regrouped: {where(was.group)} -> {where(now.group)}")
         if was.transform != now.transform:
             findings.append(
                 f"shape {shape_id} moved{_moved(was.transform, now.transform)}: {was.transform} -> {now.transform}"
@@ -441,6 +471,15 @@ def _export_library(repo: Path, ref: str, dest: Path) -> tuple[Path, str]:
 # --- asking Visio ---------------------------------------------------------------
 
 
+def _staged_names(jobs: list[tuple[str, _Case, Path]]) -> list[str]:
+    """A file name for each job, unique by construction: its place in the list and its variant.
+
+    Not derived from the case's stem: two stems a builder is free to choose,
+    `foo page 1` and `foo_page_1`, would otherwise share one file.
+    """
+    return [f"{index:03d}_{variant}" for index, (variant, _case, _path) in enumerate(jobs)]
+
+
 def _shoot(jobs: list[tuple[str, _Case, Path]], dpi: int, work: Path) -> tuple[dict, dict[str, dict[str, dict]]]:
     """Have Visio export each (variant, case, file) on open and after recalc; Visio's version, and the images by variant and stem.
 
@@ -450,11 +489,9 @@ def _shoot(jobs: list[tuple[str, _Case, Path]], dpi: int, work: Path) -> tuple[d
     import visio_verify
 
     work.mkdir(parents=True, exist_ok=True)
-    keys = []
-    for variant, case, path in jobs:
-        key = f"{variant}__{case.stem}".replace(" ", "_")
+    keys = _staged_names(jobs)
+    for key, (_variant, _case, path) in zip(keys, jobs, strict=True):
         shutil.copy2(path, work / f"{key}.vsdx")
-        keys.append(key)
     shots: dict[str, dict[str, dict]] = {variant: {} for variant in _VARIANTS}
     with visio_verify._staged([str(work / f"{key}.vsdx") for key in keys]) as (root, _by_name):
         staged = Path(root)
@@ -521,7 +558,7 @@ def _shoot(jobs: list[tuple[str, _Case, Path]], dpi: int, work: Path) -> tuple[d
                     "png": (staged / f"{key}.{state}.png").read_bytes(),
                 }
                 for state in _STATES
-            }
+            } | {"triggered": int(record["triggered"]), "asked": len(case.triggers)}
     return payload["visio"], shots
 
 
@@ -586,6 +623,12 @@ def _failures(manifest: dict) -> list[str]:
             failures.append(f"{stem} was not judged: Visio was not asked to export it")
         elif "error" in shot:
             failures.append(f"{stem} was not judged: Visio could not export it: {shot['error']}")
+        elif shot.get("triggered", 0) < shot.get("asked", 0):
+            # a shape or cell Visio no longer has recalculates nothing, so
+            # its two exports agree whether or not it was stale
+            failures.append(
+                f"{stem} was not judged: Visio recalculated {shot['triggered']} of the {shot['asked']} cells it checks"
+            )
         elif case["stale_on_open"]:
             failures.append(f"{stem} is stale on open")
     return failures
@@ -684,7 +727,7 @@ def _record_run(
                     "png": _put(store / "local" / "png", shot[state]["png"], ".png"),
                 }
                 for state in _STATES
-            }
+            } | {counted: shot[counted] for counted in ("triggered", "asked") if counted in shot}
             images.setdefault(variant, {})[stem] = {state: shot[state]["png"] for state in _STATES}
         found = _findings(shots, stem)
         cases[stem] = {"line": line, "shots": stored, "findings": found, "stale_on_open": bool(found[_STALE])}
@@ -764,18 +807,13 @@ def _builder_identity(builder: Path) -> dict[str, str]:
     return {"path": shown, "sha256": _sha256(path.read_bytes())}
 
 
-def _identity(run_id: str, created: str, builder: Path, against: dict | None, visio: dict, dpi: int) -> dict:
-    commit = _git(_REPO, "rev-parse", "HEAD")
+def _source_identity(builder: Path) -> dict:
+    """The code a run builds from: taken before the build, since the tree can change during a long export."""
     return {
-        "run": run_id,
-        "created": created,
-        "commit": commit,
+        "commit": _git(_REPO, "rev-parse", "HEAD"),
         "branch": _git(_REPO, "branch", "--show-current") or "(detached)",
         "dirty": bool(_git(_REPO, "status", "--porcelain", "--", "src", "tools", "tests")),
         "builder": _builder_identity(builder),
-        "against": against,
-        "visio": visio,
-        "dpi": dpi,
     }
 
 
@@ -806,6 +844,7 @@ def _command_run(builder: Path, against: str | None, store: Path, dpi: int) -> i
     import visio_verify
 
     now = datetime.datetime.now(datetime.timezone.utc)
+    source = _source_identity(builder)
     with tempfile.TemporaryDirectory(prefix="visio-shots-") as scratch:
         work = Path(scratch)
         candidate = work / "candidate"
@@ -825,8 +864,9 @@ def _command_run(builder: Path, against: str | None, store: Path, dpi: int) -> i
         except visio_verify.VisioUnavailable as error:
             print(f"Visio is not usable from here: {error}", file=sys.stderr)
             return 2
-    run_id = f"{now:%Y%m%dT%H%M%SZ}_{_git(_REPO, 'rev-parse', '--short=7', 'HEAD')}"
-    identity = _identity(run_id, now.isoformat(timespec="seconds"), builder, ref_info, visio, dpi)
+    run_id = f"{now:%Y%m%dT%H%M%SZ}_{source['commit'][:7]}"
+    identity = {"run": run_id, "created": now.isoformat(timespec="seconds"), **source}
+    identity |= {"against": ref_info, "visio": visio, "dpi": dpi}
     manifest = _record_run(store, identity, {case.stem: case.line for case in cases}, shots, build_errors=errors)
     print(_summary(manifest).split("\n## ")[0])
     print(f"recorded {store / 'runs' / run_id}; images in {store / 'local' / run_id / 'report.html'}")
