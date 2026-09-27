@@ -13,3 +13,5 @@ settings.json
 /.claude/worktrees/
 /.coverage
 /coverage.xml
+# Visio shots: the PNGs and the HTML report are regenerated; manifests and SVGs are committed.
+/.hermes/visio-shots/local/

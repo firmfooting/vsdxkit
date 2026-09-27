@@ -131,7 +131,7 @@ These rulings are mine, not the maintainer's. Each follows from a decision, and 
 
 A script, `tools/writes_land_cases.py`, writes one `.vsdx` per case to a folder it is given. Beside each case it writes the untouched fixture as `<stem>.before.vsdx`. That pair is the before and after: two files side by side, not two shapes on one page. The script records what each case expects in two files in the same folder: `EXPECTED.txt`, one line per case for a person to read, and `expected.json`, the same expectations as data for the check to judge.
 
-1. `line_color`, `fill_color` and `text_color` set on a master instance with `THEMEGUARD`/`THEMEVAL` (s05 shape 35). Visio must show the written colour.
+1. `line_color`, `fill_color` and `text_color` set on a master instance with `THEMEGUARD`/`THEMEVAL` (s05 shape 37, the title bar; its container, shape 35, draws nothing, so a picture of it could not show the write). Visio must show the written colour.
    - 1b. `text_color` written over a Character colour formula (test12 shape 2).
 2. `x` and `width` set on a shape whose cells hold `GUARD(...)`. Visio must keep the written values.
    - 2b. A Shape Data value written over the property's own formula (s05 shape 54). Visio must show the written value.
@@ -150,6 +150,8 @@ The PR body gives the commands:
 `check` asks Visio for each written cell twice: as it opens the file, and after `Cell.Trigger()` makes it recalculate. A stale formula wins only when the cell recalculates, so the second reading is the one that catches it. It also reads each glued end's `Connect` records. It judges only the cases `expected.json` names, and never sends a `.before` file to Visio. `visio_verify check` is not the gate: it compares the package with what Visio opened, before anything recalculates, so it could not fail on these bugs.
 
 A clean `check`, and the maintainer's look at cases 1, 3 and 4 beside their `.before` files, gate the merge.
+
+`tools/visio_shots.py run --against main` takes the pictures for that look. It has Visio export each case's page, and the `.before` file and `main`'s build of the case beside it, as PNG and SVG, on open and after the checked cells recalculate. It compares the SVGs shape by shape and records the run under `.hermes/visio-shots/`. A case drawn differently after recalculating was stale on open (#461).
 
 ## What must not change
 
