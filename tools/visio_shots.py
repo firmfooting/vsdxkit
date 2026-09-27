@@ -587,7 +587,9 @@ def _shoot(jobs: list[tuple[str, _Case, Path]], dpi: int, work: Path) -> tuple[d
                         "-NoProfile",
                         "-NonInteractive",
                         "-Command",
-                        f"Stop-Process -Id {process_id} -Force",
+                        # by name too: the ID may be another program's once this Visio let it go
+                        f"Get-Process -Id {process_id} -ErrorAction SilentlyContinue"
+                        " | Where-Object ProcessName -eq 'VISIO' | Stop-Process -Force",
                     ],
                     capture_output=True,
                     text=True,
