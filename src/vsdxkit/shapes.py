@@ -751,10 +751,9 @@ class DataProperty(InheritedRow, ShapePart):
         value_cell.attrib.pop("F", None)  # the value wins, as in Visio (#300)
 
     def get_attribute(self, name: str, attrib: str) -> str | None:
-        """Get the attribute value of the cell element"""
-        element = self._get_element(name)
-        if isinstance(element, Element):
-            return element.attrib.get(attrib)
+        """Attribute `attrib` of cell `name`, read as the fields are: from this row, or else from the master's row of the same ``N``; ``None`` where neither has it."""
+        element = self._cell_or_masters(name)
+        return None if element is None else element.attrib.get(attrib)
 
     def set_attribute(self, name: str, attrib: str, value: str) -> bool:
         """Set attribute `attrib` of cell `name` of this property's row; ``False`` where neither the row nor its master's has that cell.

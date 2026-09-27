@@ -301,6 +301,18 @@ def test_a_held_property_reads_the_override_another_handle_made(house_7):
     assert other.value == "Again"
 
 
+def test_get_attribute_reads_a_cell_as_the_fields_do(house_7):
+    """`get_attribute` reads the row a second handle wrote, and a cell the row lacks from the master's row."""
+    held = house_7.data_properties["ShapeClass"]
+    other = house_7.data_properties["ShapeClass"]
+
+    other.set_attribute("Label", "V", "Renamed")
+
+    assert held.get_attribute("Label", "V") == "Renamed"
+    assert other.get_attribute("Type", "V") == other.value_type == "0"
+    assert other.get_attribute("NoSuchCell", "V") is None
+
+
 def test_set_attribute_twice_leaves_one_row(house_7):
     prop = house_7.data_properties["ShapeClass"]
 
