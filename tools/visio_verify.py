@@ -268,8 +268,9 @@ def _stop_started_visio(process_id_file: Path, before: set[_Visio]) -> str:
     The script names its Visio in `process_id_file` as soon as it has one.
     One killed before then, while COM activation hung, named none; its
     Visio is then the one VISIO process with no visible window that was not
-    running when the script was started, `before`. Where there is no such
-    process, or more than one, none is killed, and they are named.
+    running when the script was started, `before`, and it is killed only
+    while it still has none. Where there is no such process, or more than
+    one, none is killed, and they are named.
 
     A process is taken for the script's only while it is a VISIO with the
     ID and start time the script's had: an ID a Visio has let go of can be
@@ -290,6 +291,7 @@ def _stop_started_visio(process_id_file: Path, before: set[_Visio]) -> str:
 def _end_started_visio(process_id_file: Path, before: set[_Visio]) -> str:
     """`_stop_started_visio`'s work, which can itself time out."""
     visio = _started_visio(process_id_file)
+    inferred = visio is None
     if visio is None:
         candidates = sorted(_visio_processes(invisible_only=True) - before)
         if not candidates:
@@ -302,6 +304,9 @@ def _end_started_visio(process_id_file: Path, before: set[_Visio]) -> str:
         [visio] = candidates
     elif visio not in _visio_processes():
         return f"; the Visio it started, process {visio.id}, had already ended"
+    # an unnamed Visio is the script's only while it has no window: a
+    # developer's starting up has none yet, so it is checked again as it is killed
+    windowless = " -and $_.MainWindowHandle -eq 0" if inferred else ""
     subprocess.run(
         [
             _shell(),
@@ -309,15 +314,20 @@ def _end_started_visio(process_id_file: Path, before: set[_Visio]) -> str:
             "-NonInteractive",
             "-Command",
             f"Get-Process -Id {visio.id} -ErrorAction SilentlyContinue | Where-Object {{ $_.ProcessName -eq 'VISIO' -and "
-            f"{_START_TICKS} -eq {visio.started} }} | Stop-Process -Force",
+            f"{_START_TICKS} -eq {visio.started}{windowless} }} | Stop-Process -Force",
         ],
         capture_output=True,
         text=True,
         timeout=60,
     )
-    if visio in _visio_processes():
-        return f"; the Visio it started, process {visio.id}, could not be killed: end it before the next run"
-    return f"; so was the Visio it started, process {visio.id}"
+    if visio not in _visio_processes():
+        return f"; so was the Visio it started, process {visio.id}"
+    if inferred and visio not in _visio_processes(invisible_only=True):
+        return (
+            f"; Visio process {visio.id}, taken for the one it started, showed a window before it could be killed,"
+            " so it was left running: end it if it is not yours"
+        )
+    return f"; the Visio it started, process {visio.id}, could not be killed: end it before the next run"
 
 
 def _observe_directory(root: str, *, timeout: int, allow_running: bool) -> dict:

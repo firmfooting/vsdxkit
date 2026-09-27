@@ -31,18 +31,17 @@ function Write-Diagnostic {
     [Console]::Error.WriteLine("WARNING: $Message")
 }
 
-function Get-VisioProcessIds {
-    # @() at the call site: PowerShell unrolls an array on `return`, so an
-    # empty result would otherwise arrive as $null, and $null.Count throws
-    # under Set-StrictMode.
-    return @(Get-Process -Name VISIO -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
-}
-
 function Get-StartTicks {
-    # When $Process started, in UTC ticks; tools/visio_verify.py reads the same.
+    <#
+      When $Process started, in UTC ticks, as tools/visio_verify.py reads it;
+      $null where Windows will not say, as for a process run as administrator
+      when this one is not. A process whose start cannot be read is never
+      taken for this script's.
+    #>
     param($Process)
 
-    return $Process.StartTime.ToUniversalTime().Ticks
+    try { return $Process.StartTime.ToUniversalTime().Ticks }
+    catch { return $null }
 }
 
 function ConvertTo-VisioIdentity {
@@ -50,10 +49,26 @@ function ConvertTo-VisioIdentity {
       What names the Visio process $Process: its ID and when it started.
       The ID alone does not. Windows reuses IDs, so once a Visio has gone its
       ID can be a later process's, another Visio's among them.
-    #>
-    param($Process)
 
-    return [pscustomobject]@{ Id = $Process.Id; StartTicks = (Get-StartTicks -Process $Process) }
+      -Inferred marks a Visio taken for this script's because it is the one
+      new Visio with no window, not because its COM object said so; it is
+      checked for a window again before it is killed.
+    #>
+    param($Process, [switch]$Inferred)
+
+    return [pscustomobject]@{
+        Id         = $Process.Id
+        StartTicks = (Get-StartTicks -Process $Process)
+        Inferred   = [bool]$Inferred
+    }
+}
+
+function Get-VisioIdentities {
+    # Every VISIO process running now, named as ConvertTo-VisioIdentity names
+    # one. @() at the call site: PowerShell unrolls an array on `return`, so an
+    # empty result would otherwise arrive as $null, and $null.Count throws
+    # under Set-StrictMode.
+    return @(Get-Process -Name VISIO -ErrorAction SilentlyContinue | ForEach-Object { ConvertTo-VisioIdentity -Process $_ })
 }
 
 function Get-VisioProcess {
@@ -71,6 +86,7 @@ function Get-RunningVisio {
     # later Visio can have its ID, and is not it.
     param($Visio)
 
+    if ($null -eq $Visio.StartTicks) { return $null }
     $process = Get-VisioProcess -ProcessId $Visio.Id
     if ($null -eq $process -or (Get-StartTicks -Process $process) -ne $Visio.StartTicks) { return $null }
     return $process
@@ -80,7 +96,7 @@ function Get-OwnVisio {
     <#
       The Visio process $App runs in, or $null where it cannot be told: the
       owner of Visio's main window, WindowHandle32, once it is seen to be a
-      Visio.
+      Visio whose start can be read.
 
       Not $App.ProcessID. On Visio 16 that names no process at all (199300,
       against a VISIO.EXE of 39524), so killing by it would miss this Visio
@@ -93,39 +109,53 @@ function Get-OwnVisio {
     if ($owner -eq 0) { return $null }
     $process = Get-VisioProcess -ProcessId ([int]$owner)
     if ($null -eq $process) { return $null }
-    return ConvertTo-VisioIdentity -Process $process
+    $visio = ConvertTo-VisioIdentity -Process $process
+    if ($null -eq $visio.StartTicks) { return $null }
+    return $visio
 }
 
 function Find-StrandedVisio {
     <#
       The Visio this script's COM activation started, when it never got as
       far as naming it: the one VISIO process with no visible main window
-      that is not among $Preexisting. $null where there is none, or more
-      than one, which are then warned of and left alone.
+      that is not among $Preexisting, the Visio processes running when the
+      script began. $null where there is none, or more than one, which are
+      then warned of and left alone.
 
       New-Object can start VISIO.EXE and still fail before it returns an
       application to ask. A script's Visio is an InvisibleApp, with no visible
-      window; a Visio the developer opens has one, so it is never taken.
+      window; a Visio the developer opens has one, so it is never taken. One
+      still starting has none yet, so Stop-OwnVisio looks again before it
+      kills. A Visio that was running is known by its start time as well as
+      its ID: it can have gone, and this script's have been given its ID.
     #>
-    param([int[]]$Preexisting)
+    param([object[]]$Preexisting)
 
     $stranded = @(
         Get-Process -Name VISIO -ErrorAction SilentlyContinue |
-            Where-Object { $Preexisting -notcontains $_.Id -and $_.MainWindowHandle -eq 0 }
+            Where-Object { $_.MainWindowHandle -eq 0 } |
+            ForEach-Object { ConvertTo-VisioIdentity -Process $_ -Inferred } |
+            Where-Object {
+                $candidate = $_
+                $null -ne $candidate.StartTicks -and -not @($Preexisting | Where-Object {
+                    $_.Id -eq $candidate.Id -and $_.StartTicks -eq $candidate.StartTicks
+                }).Count
+            }
     )
     if ($stranded.Count -gt 1) {
         Write-Diagnostic ("invisible Visio processes $(($stranded | ForEach-Object { $_.Id }) -join ', ') started " +
             "while this ran and none is known to be this script's, so none is ended; end the ones that are not yours")
     }
     if ($stranded.Count -ne 1) { return $null }
-    return ConvertTo-VisioIdentity -Process $stranded[0]
+    return $stranded[0]
 }
 
 function Stop-OwnVisio {
     <#
       Give $Visio, the Visio this script started and has asked to Quit, 15
       seconds to go, then kill it; $true if it had to be killed, and was. A
-      kill that fails is warned of, and gives $false.
+      kill that fails is warned of, and gives $false. An inferred Visio that
+      has shown a window by then is not this script's, and is left running.
     #>
     param($Visio)
 
@@ -135,6 +165,11 @@ function Stop-OwnVisio {
     }
     $leftover = Get-RunningVisio -Visio $Visio
     if ($null -eq $leftover) { return $false }
+    if ($Visio.Inferred -and $leftover.MainWindowHandle -ne 0) {
+        Write-Diagnostic ("Visio process $($Visio.Id), taken for this script's, has shown a window, so it is " +
+            "left running: end it if it is not yours")
+        return $false
+    }
     try {
         $leftover | Stop-Process -Force -ErrorAction Stop
         return $true

@@ -297,10 +297,10 @@ if ($files.Count -eq 0) {
 
 # @() at the call site because PowerShell unrolls an array on `return`: an empty
 # result arrives as $null, and $null.Count throws under Set-StrictMode.
-$preexisting = @(Get-VisioProcessIds)
+$preexisting = @(Get-VisioIdentities)
 if ($preexisting.Count -gt 0 -and -not $AllowRunningVisio) {
     Write-Refusal (
-        "Visio is already running (pid $($preexisting -join ', ')). It may hold a lock on the " +
+        "Visio is already running (pid $(($preexisting | ForEach-Object { $_.Id }) -join ', ')). It may hold a lock on the " +
         'files under test, and an orphan from an earlier crashed run reports as a corrupt file ' +
         'rather than as a busy one. Close it, or pass -AllowRunningVisio if it is wanted.'
     ) 3

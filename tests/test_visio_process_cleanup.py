@@ -45,6 +45,8 @@ KILL = (
     "Get-Process -Id {} -ErrorAction SilentlyContinue | Where-Object {{ $_.ProcessName -eq 'VISIO' -and "
     "$_.StartTime.ToUniversalTime().Ticks -eq {} }} | Stop-Process -Force"
 )
+KILL_UNNAMED = KILL.replace(" }} |", " -and $_.MainWindowHandle -eq 0 }} |")
+"""The kill of a Visio the script never named: taken for its own only while it still has no window."""
 
 
 def _started(process_id: int) -> int:
@@ -59,8 +61,10 @@ class _Powershell:
     each started at `_started` of its ID unless `started` says otherwise.
     The script starts invisible Visio `spawned`, names it in its file only if
     `named`, and times out. A listing reads `visio`; a kill removes the Visio
-    with its ID and start time unless it is `unkillable`, and is kept. While
-    `hung`, every call after the script's times out as well.
+    with its ID and start time unless it is `unkillable`, or has a window where
+    the kill asks for none, and is kept. Each Visio in `window_appears` shows
+    its window as soon as it has been listed. While `hung`, every call after
+    the script's times out as well.
     """
 
     def __init__(self, process_id_file: Path, visio: dict[int, bool], spawned: int | None = None, *, named: bool = True):
@@ -70,6 +74,7 @@ class _Powershell:
         self.spawned = spawned
         self.named = named
         self.unkillable: set[int] = set()
+        self.window_appears: set[int] = set()
         self.hung = False
         self.script_ran = False
         self.kills: list[str] = []
@@ -91,10 +96,17 @@ class _Powershell:
             invisible_only = "MainWindowHandle -eq 0" in expression
             assert "$_.StartTime.ToUniversalTime().Ticks" in expression
             listed = [f"{pid} {self.started[pid]}" for pid, visible in self.visio.items() if not (invisible_only and visible)]
+            for pid in self.window_appears & set(self.visio):
+                self.visio[pid] = True
             return subprocess.CompletedProcess(command, 0, "\n".join(listed), "")
         self.kills.append(expression)
-        process_id, started = map(int, re.search(r"-Id (\d+) .* -eq (\d+) ", expression).groups())
-        if self.started.get(process_id) == started and process_id not in self.unkillable:
+        process_id, started = map(int, re.search(r"-Id (\d+) .*\.Ticks -eq (\d+) ", expression).groups())
+        windowless_only = "MainWindowHandle -eq 0" in expression
+        if (
+            self.started.get(process_id) == started
+            and process_id not in self.unkillable
+            and not (windowless_only and self.visio.get(process_id))
+        ):
             self.visio.pop(process_id, None)
         return subprocess.CompletedProcess(command, 0, "", "")
 
@@ -157,7 +169,20 @@ def test_stopping_before_the_script_named_its_visio_kills_the_one_invisible_visi
         verify._stop_started_visio(tmp_path / "visio.pid", {_visio(verify, 7)})
         == "; so was the Visio it started, process 4242"
     )
-    assert powershell.kills == [KILL.format(4242, 4242000)]
+    assert powershell.kills == [KILL_UNNAMED.format(4242, 4242000)]
+
+
+def test_an_unnamed_visio_that_shows_a_window_before_the_kill_is_left_running(verify, tmp_path, monkeypatch):
+    """A developer's Visio can be listed while it starts, before its window shows: the kill checks again (#464)."""
+    powershell = _Powershell(tmp_path / "visio.pid", {7: True, 4242: False})
+    powershell.window_appears = {4242}
+    monkeypatch.setattr(verify.subprocess, "run", powershell)
+
+    message = verify._stop_started_visio(tmp_path / "visio.pid", {_visio(verify, 7)})
+
+    assert message.startswith("; Visio process 4242, taken for the one it started, showed a window")
+    assert powershell.kills == [KILL_UNNAMED.format(4242, 4242000)]
+    assert set(powershell.visio) == {7, 4242}
 
 
 def test_a_visio_the_developer_opened_is_never_taken_for_an_unnamed_one(verify, tmp_path, monkeypatch):
@@ -201,7 +226,7 @@ def test_a_cell_check_that_times_out_before_naming_its_visio_kills_only_that_one
     with pytest.raises(verify.VisioUnavailable, match="process 4242"):
         tool._ask_visio(TOOLS, [], {}, verify)
 
-    assert powershell.kills == [KILL.format(4242, 4242000)]
+    assert powershell.kills == [KILL_UNNAMED.format(4242, 4242000)]
     assert set(powershell.visio) == {7}
 
 
@@ -242,7 +267,12 @@ def test_each_script_kills_only_the_visio_its_own_com_object_runs_in(script):
     assert "Stop-OwnVisio -Visio $ownVisio" in text
     # New-Object can start VISIO.EXE and throw before the script could name it (#464)
     assert "$ownVisio = Find-StrandedVisio -Preexisting $preexisting" in text
-    assert "function Get-VisioProcessIds" not in text, "one definition, in visio_process.ps1"
+    # by ID and start time: a Visio that was running can go, and this script's get its ID (#464)
+    assert "$preexisting = @(Get-VisioIdentities)" in text
+    # a forced kill is the event that tells a locked file from a Visio crash
+    assert "if ($null -ne $ownVisio -and (Stop-OwnVisio -Visio $ownVisio)) {" in text
+    assert 'Write-Diagnostic "Visio process $($ownVisio.Id) outlived Quit(); killed it' in text
+    assert "function Get-VisioIdentities" not in text, "one definition, in visio_process.ps1"
     assert "$app.ProcessID" not in text
     assert "StartTime" not in text
     assert "Stop-Process" not in text
@@ -263,8 +293,12 @@ def test_a_visio_is_named_by_the_process_that_owns_its_window():
     # and by the time it started: a later process can have the ID it let go of
     assert "$Process.StartTime.ToUniversalTime().Ticks" in text
     assert "(Get-StartTicks -Process $process) -ne $Visio.StartTicks" in text
-    # an unnamed Visio is taken only if it has no visible window, as a developer's has
+    # an unnamed Visio is taken only if it has no visible window, as a developer's has,
+    # and is checked again when it comes to be killed (#464)
     assert "$_.MainWindowHandle -eq 0" in text
+    assert "$Visio.Inferred -and $leftover.MainWindowHandle -ne 0" in text
+    # a Visio that was running is known by its start time too
+    assert "$_.Id -eq $candidate.Id -and $_.StartTicks -eq $candidate.StartTicks" in text
 
 
 def test_the_helper_type_is_added_once_per_powershell_session():

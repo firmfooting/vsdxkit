@@ -132,10 +132,10 @@ function Get-ConnectRecords {
 
 # --- pre-flight -------------------------------------------------------------
 
-$preexisting = @(Get-VisioProcessIds)
+$preexisting = @(Get-VisioIdentities)
 if ($preexisting.Count -gt 0 -and -not $AllowRunningVisio) {
     Write-Refusal (
-        "Visio is already running (pid $($preexisting -join ', ')). It may hold a lock on the " +
+        "Visio is already running (pid $(($preexisting | ForEach-Object { $_.Id }) -join ', ')). It may hold a lock on the " +
         'files under test, and an orphan from an earlier crashed run reports as a corrupt file ' +
         'rather than as a busy one. Close it, or pass -AllowRunningVisio if it is wanted.'
     ) 3
@@ -214,8 +214,8 @@ finally {
         # New-Object can start VISIO.EXE and fail before this script could name it
         $ownVisio = Find-StrandedVisio -Preexisting $preexisting
     }
-    if ($null -ne $ownVisio) {
-        [void](Stop-OwnVisio -Visio $ownVisio)
+    if ($null -ne $ownVisio -and (Stop-OwnVisio -Visio $ownVisio)) {
+        Write-Diagnostic "Visio process $($ownVisio.Id) outlived Quit(); killed it so the next run can open these files"
     }
 }
 
