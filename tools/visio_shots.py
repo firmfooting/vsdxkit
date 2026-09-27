@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import dataclasses
 import datetime
 import hashlib
 import html
@@ -232,6 +233,8 @@ class _Drawn:
     parts: tuple[str, ...]
     group: int | None = None
     """The ID of the group it is drawn in, whose transform its own is relative to; None on the page itself."""
+    shown: bool = True
+    """Whether anything it draws, its members' drawings included, shows: where a shape that shows nothing is placed moves nothing anyone sees."""
 
 
 @dataclass(frozen=True)
@@ -275,6 +278,10 @@ def _svg_page(text: str) -> _Page:
     reported as itself, not as a change to the group around it. The group's
     own drawing, which Visio writes in a `groupContent` element carrying the
     group's ID again, is the group's.
+
+    Where a shape is placed is compared only if it draws something that
+    shows: a hidden shape with nothing beneath it, its members included,
+    shown again moves nothing anyone sees when a recalculation moves it.
     """
     root = ElementTree.fromstring(_normalise_svg(text).encode("utf-8"))
     styles = _styles(root)
@@ -283,8 +290,11 @@ def _svg_page(text: str) -> _Page:
     transforms: dict[int, list[str]] = {}
     parts: dict[int, list[str]] = {}
     groups: dict[int, int | None] = {}
+    shown: set[int] = set()
 
-    def walk(element: ElementTree.Element, into: list[str], hidden: bool, group: int | None) -> None:
+    def walk(element: ElementTree.Element, into: list[str], hidden: bool, group: int | None) -> bool:
+        """Describe `element`'s children into `into`; whether any of them, at any depth, draws something that shows."""
+        drew = False
         for child in element:
             if not child.tag.startswith(_SVG_NS) or child.tag in _NOT_DRAWN or child.tag in _COMPARED_ELSEWHERE:
                 continue
@@ -308,17 +318,20 @@ def _svg_page(text: str) -> _Page:
                 carried = _describe(child, styles, definitions, skip={"transform"})
                 if carried != "g":
                     own.append(carried)
-                walk(child, own, child_hidden, key)
+                if walk(child, own, child_hidden, key):
+                    shown.add(key)
+                    drew = True
                 continue
             # an element that is not drawn is compared only as being there and not drawn
             into.append(f"{_attribute_name(child.tag)} (not drawn)" if child_hidden else _describe(child, styles, definitions))
-            walk(child, into, child_hidden, group)
+            drew = walk(child, into, child_hidden, group) or not child_hidden or drew
+        return drew
 
     # the root's own style (Visio sets the font size every label's `em` is relative to) is inherited by the whole page
     page_parts.append(_describe(root, styles, definitions, skip=_PAGE_SIZE))
     walk(root, page_parts, False, None)
     size = " ".join(f"{name}={root.get(name)}" for name in _PAGE_SIZE if root.get(name) is not None)
-    shapes = {key: _Drawn(" ".join(transforms[key]), tuple(parts[key]), groups[key]) for key in transforms}
+    shapes = {key: _Drawn(" ".join(transforms[key]), tuple(parts[key]), groups[key], key in shown) for key in transforms}
     return _Page(size, tuple(page_parts), shapes, tuple(transforms))
 
 
@@ -378,7 +391,7 @@ def _diff_svgs(first: str, second: str) -> list[str]:
                 return "on the page" if group is None else f"in shape {group}"
 
             findings.append(f"shape {shape_id} regrouped: {where(was.group)} -> {where(now.group)}")
-        if was.transform != now.transform:
+        if was.transform != now.transform and (was.shown or now.shown):
             findings.append(
                 f"shape {shape_id} moved{_moved(was.transform, now.transform)}: {was.transform} -> {now.transform}"
             )
@@ -659,11 +672,21 @@ def _svg_object(store: Path, digest: str) -> str:
 
 
 def _findings(shots: dict[str, dict[str, dict]], stem: str) -> dict[str, list[str] | None]:
-    """Every comparison the run makes for one case; None where one side has no drawing."""
+    """Every comparison the run makes for one case; None where one side has no drawing.
+
+    The ref's drawing after recalc is none where Visio recalculated fewer of
+    its cells than the case asked: it was not taken after the recalculation
+    it is compared as. The candidate's is judged by `_failures` instead, and
+    the `before` file lacks, by design, any shape the case created.
+    """
 
     def svg(variant: str, state: str) -> str | None:
         shot = shots.get(variant, {}).get(stem)
-        return None if shot is None or "error" in shot else shot[state]["svg"]
+        if shot is None or "error" in shot:
+            return None
+        if variant == "ref" and state == "recalc" and shot.get("triggered", 0) < shot.get("asked", 0):
+            return None
+        return shot[state]["svg"]
 
     def diff(first: str | None, second: str | None) -> list[str] | None:
         return None if first is None or second is None else _diff_svgs(first, second)
@@ -910,9 +933,7 @@ def _source_identity(builder: Path) -> dict:
     }
 
 
-def _jobs(
-    candidate_dir: Path, cases: list[_Case], ref_dir: Path, ref_cases: dict[str, _Case]
-) -> list[tuple[str, _Case, Path]]:
+def _jobs(candidate_dir: Path, cases: list[_Case], ref_dir: Path, ref_cases: list[_Case]) -> list[tuple[str, _Case, Path]]:
     """Every (variant, case, file) to photograph: each case's `.before` file where it has one, the ref's build, the candidate's.
 
     The `.before` file is photographed with the candidate's case, whose
@@ -920,14 +941,22 @@ def _jobs(
     the case created is skipped by the export). The ref's build is
     photographed with the case the ref's own build wrote: its library may
     have given a shape the case created another ID.
+
+    A ref's case is matched by its file and page, and filed under the
+    candidate's name for it: the two libraries can check a case on a
+    different number of pages, so one names a page `foo/page 1` that the
+    other calls `foo`.
     """
+    by_page = {(case.file_stem, case.page): case for case in ref_cases}
     jobs = []
     for case in cases:
         before = candidate_dir / f"{case.file_stem}.before.vsdx"
         if before.exists():
             jobs.append(("before", case, before))
-        if case.stem in ref_cases:
-            jobs.append(("ref", ref_cases[case.stem], ref_dir / f"{case.file_stem}.vsdx"))
+        ref = by_page.get((case.file_stem, case.page))
+        if ref is not None:
+            named = dataclasses.replace(ref, stem=case.stem, file=ref.file_stem)
+            jobs.append(("ref", named, ref_dir / f"{case.file_stem}.vsdx"))
         jobs.append(("candidate", case, candidate_dir / f"{case.file_stem}.vsdx"))
     return jobs
 
@@ -942,12 +971,12 @@ def _command_run(builder: Path, against: str | None, store: Path, dpi: int) -> i
         work = Path(scratch)
         candidate = work / "candidate"
         errors = {"candidate": _build(builder, _REPO / "src", candidate)}
-        ref_info, ref_cases = None, {}
+        ref_info, ref_cases = None, []
         if against:
             ref_src, commit = _export_library(_REPO, against, work / "ref-library")
             errors["ref"] = _build(builder, ref_src, work / "ref")
             ref_info = {"ref": against, "commit": commit}
-            ref_cases = {case.stem: case for case in _read_cases(work / "ref")}
+            ref_cases = _read_cases(work / "ref")
         cases = _read_cases(candidate)
         if not cases and not errors["candidate"]:
             print(f"{builder.name} defines no cases", file=sys.stderr)
