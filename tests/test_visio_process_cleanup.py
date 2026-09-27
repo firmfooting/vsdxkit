@@ -286,6 +286,8 @@ def test_a_visio_is_named_by_the_process_that_owns_its_window():
     is trusted, and killed, only while it is seen to be one.
     """
     text = (TOOLS / "visio_process.ps1").read_text(encoding="utf-8")
+    code = re.sub(r"<#.*?#>|#[^\n]*", "", text, flags=re.DOTALL)
+    assert ".ProcessID" not in code, "only the comments may name it, to say why not"
     assert "GetWindowThreadProcessId" in text
     assert "$App.WindowHandle32" in text
     assert "$process.ProcessName -ne 'VISIO'" in text
