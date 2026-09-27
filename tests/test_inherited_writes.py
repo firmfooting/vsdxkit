@@ -112,6 +112,26 @@ def test_clearing_del_bool_through_a_second_wrapper_clears_the_row_the_first_del
     assert _master_row(conn_a, "1").attrib == {"T": "MoveTo", "IX": "1"}
 
 
+def test_a_second_wrapper_reads_the_type_del_and_cells_the_first_wrote(conn_a):
+    """Reads through a wrapper taken before another one wrote the row are of the instance's row, not the master's (#454).
+
+    The second wrapper still pointed at the master's row, so it reported
+    row 1 as a visible MoveTo at the master's X after the first had made it
+    a deleted LineTo at another X.
+    """
+    other = conn_a.page.shapes.by_text("Conn A")
+    first, second = conn_a.geometry.rows["1"], other.geometry.rows["1"]
+
+    first.row_type = "LineTo"
+    first.del_bool = True
+    first.x = 5.0
+
+    assert (second.row_type, second.del_bool) == ("LineTo", "1")
+    assert (second.x, second.cells["X"].value, second.y) == (5.0, first.cells["X"].value, 0.0)
+    assert second.inherited
+    assert _master_row(conn_a, "1").attrib == {"T": "MoveTo", "IX": "1"}
+
+
 def test_index_on_an_inherited_row_leaves_the_master_alone_and_refiles_the_row(conn_a):
     geometry = conn_a.geometry
     row = geometry.rows["1"]
@@ -403,6 +423,44 @@ def test_a_held_property_reads_the_override_another_handle_made(house_7):
     [row] = _property_rows(house_7, "ShapeClass")
     assert held.xml is other.xml is row
     assert other.value == "Again"
+
+
+def test_a_held_property_reads_an_override_a_nearer_master_made_since(vsdx_copy):
+    """A handle holds the farthest master's row; a row a nearer master has written since is the one Visio reads (#454).
+
+    No fixture has such a chain, so one is made as in
+    test_an_override_rows_fields_read_through_every_master_up_the_chain,
+    with shape 4's own Property section removed so its property is
+    inherited all the way from master 2.
+    """
+    shape = Document.open(vsdx_copy("test6_shape_properties.vsdx")).pages[2].shapes.require_id("4")
+    shape.xml.remove(shape.xml.find(f'{namespace}Section[@N="Property"]'))
+    shape.xml.set("Master", "6")
+    middle = shape.master_shape
+    middle.xml.set("Master", "2")
+    held = shape.data_properties["master_Prop"]
+    assert held.inherited
+
+    middle.data_properties["master_Prop"].value = "middle"
+    middle.data_properties["master_Prop"].set_attribute("Label", "V", "Relabelled")
+
+    assert (held.value, held.label) == ("middle", "Relabelled")
+    assert shape.data_properties["Relabelled"].value == "middle"
+
+
+def test_writing_an_unnamed_inherited_property_keeps_its_other_fields(house_7):
+    """A row with no ``N`` has no name to inherit its cells through, so the override carries every one of them (#454)."""
+    master_row = house_7.data_properties["ShapeClass"].xml
+    del master_row.attrib["N"]
+    prop = house_7.data_properties["ShapeClass"]
+    assert prop.inherited and prop.name is None
+
+    prop.value = "Written"
+
+    assert (prop.label, prop.value_type, prop.prompt, prop.sort_key, prop.value) == ("ShapeClass", "0", "", "", "Written")
+    fresh = house_7.data_properties["ShapeClass"]
+    assert (fresh.value_type, fresh.prompt, fresh.sort_key, fresh.value) == ("0", "", "", "Written")
+    assert master_row.find(f'{namespace}Cell[@N="Value"]').get("V") == "Location"
 
 
 def test_get_attribute_reads_a_cell_as_the_fields_do(house_7):
