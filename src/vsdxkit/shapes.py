@@ -552,10 +552,11 @@ class DataProperty(InheritedRow, ShapePart):
         """The label Visio shows the property under, which :attr:`Shape.data_properties` keys by; ``None`` where there is none.
 
         It is read from the row on every access, as are :attr:`value_type`,
-        :attr:`prompt` and :attr:`sort_key`. A row with no ``Label`` cell, which
-        is how an override of a master's property is written, takes all four
-        from the master's property of the same name, and gives ``None`` where
-        the master has none.
+        :attr:`prompt` and :attr:`sort_key`. Visio inherits each cell on its
+        own, so a cell the row lacks, as an override of a master's property
+        lacks most of them, is read from the master's row of the same name;
+        each gives ``None`` where neither row has it. The four are read-only:
+        :meth:`set_attribute` writes them.
         """
         return self._field("Label")
 
@@ -575,19 +576,34 @@ class DataProperty(InheritedRow, ShapePart):
         return self._field("SortKey")
 
     def _field(self, cell: str) -> str | None:
-        """Cell `cell`'s value from this row, or from the master's property of the same name where this row is an override with no ``Label``."""
-        if self.xml.find(f'{namespace}Cell[@N="Label"]') is None:
-            master = self._master_property()
-            return None if master is None else master._field(cell)
-        element = self.xml.find(f'{namespace}Cell[@N="{cell}"]')
+        """Cell `cell`'s value from this row, or from the master's row of the same ``N`` where this row lacks the cell, as Visio inherits each cell on its own."""
+        element = self._cell_or_masters(cell)
         return None if element is None else element.attrib.get("V")
 
-    def _master_property(self) -> DataProperty | None:
-        """The property of this one's name on the master shape, or ``None``."""
+    def _cell_or_masters(self, cell: str) -> Element | None:
+        """Cell `cell` of this row, or else of the master's row of the same ``N``; ``None`` where neither has it."""
+        element = self.xml.find(f'{namespace}Cell[@N="{cell}"]')
+        if element is not None:
+            return element
+        master_row = self._master_row()
+        return None if master_row is None else master_row.find(f'{namespace}Cell[@N="{cell}"]')
+
+    def _master_row(self) -> Element | None:
+        """The row of this property's ``N`` in the master shape's Property section, or ``None``; looked up directly, not through the master's properties."""
         master_shape = self.shape.master_shape
-        if master_shape is None:
+        if self.name is None or master_shape is None:
             return None
-        return next((prop for prop in master_shape.data_properties.values() if prop.name == self.name), None)
+        section = master_shape.xml.find(f'{namespace}Section[@N="Property"]')
+        if section is None:
+            return None
+        return next((row for row in section.iterfind(f"{namespace}Row") if row.get("N") == self.name), None)
+
+    def _own_row(self) -> Element | None:
+        """The row of this property's ``N`` in the instance's own Property section, or ``None``: the override a write goes to."""
+        section = self.shape.xml.find(f'{namespace}Section[@N="Property"]')
+        if self.name is None or section is None:
+            return None
+        return next((row for row in section.iterfind(f"{namespace}Row") if row.get("N") == self.name), None)
 
     @property
     @override
@@ -618,10 +634,18 @@ class DataProperty(InheritedRow, ShapePart):
         new row needs nothing but that name; the caller is about to write the
         ``Value`` cell. A master row with no name has nothing to match on, so
         the label is carried down to keep the property addressable.
+
+        Where the instance already has a row of that name, written through
+        another object for this property, that row is reused: Visio reads
+        one override row per name.
         """
         # make_local() is public and reaches here directly, not only through
         # the guarded value setter, and this is the only materialisation path
         self._require_attached("materialising an inherited data property")
+        existing = self._own_row()
+        if existing is not None:
+            self.xml = existing
+            return
         section = self.shape.xml.find(f'{namespace}Section[@N="Property"]')
         if section is None:
             section = ET.fromstring(f'<Section xmlns="{namespace[1:-1]}" N="Property"/>')
@@ -642,11 +666,14 @@ class DataProperty(InheritedRow, ShapePart):
     def value(self) -> str | None:
         """Get the value of the data property, or None when it has none.
 
+        An override row with no ``Value`` cell, such as one a relabel through
+        :meth:`set_attribute` wrote, reads the master's row's, as Visio does.
+
         Reading is free of side effects: it neither creates the ``Value`` cell
         nor tidies a ``No Formula`` formula, so inspecting a document does not
         change the bytes it saves.
         """
-        value_cell = self.xml.find(f'{namespace}Cell[@N="Value"]')
+        value_cell = self._cell_or_masters("Value")
         if not isinstance(value_cell, Element):
             return None
         if value_cell.attrib.get("V") is not None:
@@ -700,19 +727,19 @@ class DataProperty(InheritedRow, ShapePart):
         """Set attribute `attrib` of cell `name` of this property's row; ``False`` where neither the row nor its master's has that cell.
 
         A property inherited from a master is given a row of its own first,
-        carrying a copy of the master's cell, so the master is left as it was.
+        or the one the instance already has for it, and a cell the row lacks
+        is copied down from the master's row of the same name, so the master
+        is left as it was.
         """
         self._require_attached("DataProperty.set_attribute()")
+        source = self._cell_or_masters(name)
+        if source is None:
+            return False
+        self.make_local()
         element = self._get_element(name)
         if element is None:
-            return False
-        if self.inherited:
-            self.make_local()
-            own = self._get_element(name)
-            if own is None:
-                own = copy.deepcopy(element)
-                self.xml.append(own)
-            element = own
+            element = copy.deepcopy(source)
+            self.xml.append(element)
         element.attrib[attrib] = value
         return True
 
@@ -1194,11 +1221,12 @@ class Shape:
         relabelled - through this Shape object, another one for the same
         shape, or the XML itself - is in the next dictionary.
 
-        Setting :attr:`DataProperty.value` on an inherited property is safe:
-        the property is marked inherited, so writing to it creates an override
-        row on this shape and leaves the master alone.
-        :meth:`DataProperty.set_attribute` does not yet do this, and still
-        writes an inherited property's cell in the master.
+        Writing through an inherited property is safe: the property is marked
+        inherited, so :attr:`DataProperty.value` and
+        :meth:`DataProperty.set_attribute` give this shape an override row and
+        leave the master alone. An override row replaces the master's property
+        of the same name, under the label it now shows, so a property
+        relabelled on this shape is listed once.
 
         :return: Dict[str, DataProperty]
         """
@@ -1213,9 +1241,18 @@ class Shape:
         )
         for prop in property_rows:
             data_prop = DataProperty(xml=prop, shape=self)
-            # add properties to dict to allow fast lookup by property.label
-            # (a property row without a Label cell keys under "")
-            properties[data_prop.label or ""] = data_prop
+            # a property row without a Label cell, of its own or its master's,
+            # keys under ""
+            label = data_prop.label or ""
+            if data_prop.name is not None:
+                # Visio matches an override to its master's row by N, so the
+                # master's property of that name is this one, whatever label
+                # this row now gives it
+                replaced = [key for key, seen in properties.items() if seen.inherited and seen.name == data_prop.name]
+                for key in replaced:
+                    if key != label:
+                        del properties[key]
+            properties[label] = data_prop
         return properties
 
     @property
