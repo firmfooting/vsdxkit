@@ -305,3 +305,4 @@ def test_a_property_with_no_value_does_not_match_the_text_none(vsdx_copy):
     assert shape.data_properties["my_property_label"].value is None
 
     assert page.shapes.matching_property("my_property_label", "None") == ()
+    assert page.shapes.by_property("my_property_label", "None") is None
