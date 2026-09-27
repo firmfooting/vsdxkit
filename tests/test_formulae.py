@@ -7,6 +7,7 @@ implementation from its plausible neighbours.
 """
 
 import math
+import time
 
 import pytest
 
@@ -165,6 +166,29 @@ def test_a_width_or_height_times_a_number_is_evaluated(formula, expected):
 )
 def test_the_fallback_refuses_anything_but_a_width_or_height_times_a_decimal(formula):
     assert calc_value(_Metrics(), formula) is None
+
+
+@pytest.mark.parametrize(
+    ("formula", "width"),
+    [("Width*" + "9" * 400, 2.0), ("Width*" + "9" * 400, 0.0), ("Height*-" + "9" * 400, 2.0)],
+    ids=["infinite", "zero-times-infinite", "negative-infinite"],
+)
+def test_a_multiplier_too_large_for_a_float_has_no_value(formula, width):
+    """``float()`` reads it as infinity, and a zero size times that is NaN; either was written into ``V`` as ``inf`` or ``nan`` (#455)."""
+    shape = _Metrics()
+    shape.width = width
+    assert calc_value(shape, formula) is None
+
+
+def test_a_long_run_of_digits_that_is_not_a_multiplier_is_refused_at_once():
+    """``\\d+\\.?\\d*`` could split a run of digits two ways, and tried each before refusing: seconds for 20,000 digits (#455).
+
+    A package's formula is whatever the file says, so the pattern must refuse
+    it in time proportional to its length.
+    """
+    started = time.perf_counter()
+    assert calc_value(_Metrics(), "Width*" + "1" * 20_000 + "x") is None
+    assert time.perf_counter() - started < 0.5
 
 
 @pytest.mark.parametrize(("formula", "metric"), [("Width*0.3", "width"), ("Height*0.3", "height")])
