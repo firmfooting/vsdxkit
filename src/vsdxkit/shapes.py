@@ -1907,7 +1907,10 @@ class Shape:
                         raise InvalidOperationError("shape text coordinates cannot be None")
                 txt_pin_x._set_value(text_x, keep_formula=True)
                 txt_pin_y._set_value(text_y, keep_formula=True)
-                for cell_name, value in (("X", text_x), ("Y", text_y), ("DynX", text_x), ("DynY", text_y)):
+                # Visio's Controls row names its anchor cells XDyn and YDyn,
+                # not DynX/DynY; a shape without a TextPosition row of its own
+                # is left alone rather than given stray top-level cells
+                for cell_name, value in (("X", text_x), ("Y", text_y), ("XDyn", text_x), ("YDyn", text_y)):
                     if self._cell(f"Control/TextPosition/{cell_name}") is not None:
                         self._write_cell(f"Control/TextPosition/{cell_name}", v=xml_value(value), keep_formula=True)
             self._refresh_formula_values()

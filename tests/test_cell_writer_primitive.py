@@ -151,6 +151,17 @@ def test_a_section_cell_the_shape_has_is_written_in_its_row(vsdx_copy):
     assert shape.xml.find(f'{namespace}Cell[@N="Control/TextPosition/DynX"]') is None
 
 
+def test_set_start_and_finish_writes_the_controls_row_dyn_anchors(vsdx_copy):
+    """#319: Visio names a Controls row's anchor cells XDyn/YDyn, not DynX/DynY; test9 Conn A has both rows Visio wrote."""
+    shape = Document.open(vsdx_copy("test9_rect_and_line.vsdx")).pages[0].shapes.by_text("Conn A")
+
+    shape.set_start_and_finish((2.0, 7.0), (4.0, 7.0))
+
+    text_x, text_y = shape.cells["TxtPinX"].value, shape.cells["TxtPinY"].value
+    assert shape.cells["Control/TextPosition/XDyn"].value == shape.cells["Control/TextPosition/X"].value == text_x
+    assert shape.cells["Control/TextPosition/YDyn"].value == shape.cells["Control/TextPosition/Y"].value == text_y
+
+
 def test_the_glue_engine_keeps_the_formulas_it_writes(vsdx_copy):
     """The engine's CellWrite leaves the half it does not name as it is, so glue stays formula-driven."""
     page = Document.open(vsdx_copy("test8_simple_connector.vsdx")).pages[0]
