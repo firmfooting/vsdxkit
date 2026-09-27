@@ -720,6 +720,41 @@ Writing an end of a glued connector: ``begin_x``, ``begin_y``, ``end_x``, ``end_
    ``connector.retarget`` glues an end to another shape. 0.8 wrote the
    coordinate beside the glue, and Visio pulled the end back on open.
 
+Writes stay on the instance
+---------------------------
+
+A write to an instance of a master lands on the instance, in an override row
+of the kind Visio writes itself, and leaves the master that every other
+instance reads as it was. A property's fields are read from its row, or its
+master's, each time.
+
+Writing a geometry row's ``row_type``, ``index`` or ``del_bool``, or a data property's attribute through ``DataProperty.set_attribute``
+   Copies a row or property the shape inherits from its master onto the shape
+   first, as the ``x`` and ``y`` setters and ``DataProperty.value`` already
+   do, so the master and every other instance keep reading their own value.
+   ``index`` refuses a value another row of the same geometry already holds.
+   Clearing ``del_bool`` where neither the row nor an inherited one has it
+   set writes nothing. A property relabelled on the instance is listed once
+   in ``shape.data_properties``, under its new label, and keeps the type,
+   prompt and sort key it inherits. 0.8 wrote the master's row, and with it
+   every instance's.
+
+``DataProperty.label``, ``DataProperty.value_type``, ``DataProperty.prompt``, ``DataProperty.sort_key``
+   Read-only properties, read from the row on every access, so assigning one
+   raises ``AttributeError``. 0.8 read them once, when the property was
+   built: a relabel left ``label`` stale, and assigning one changed the
+   Python object and nothing in the file. Write the cell instead:
+   ``prop.set_attribute("Label", "V", "New label")``.
+
+``scope.matching_property(label, "None")``, ``scope.by_property(label, "None")``
+   No longer match a property with no value (#432). 0.8 compared the value
+   as text, so a property with none matched the string ``"None"``. Find
+   those with
+   ``[s for s in scope.matching_property(label) if s.data_properties[label].value is None]``.
+
+A deleted shape stays deleted
+-----------------------------
+
 ``group.append_shape(deleted_shape)``
    Raises :class:`vsdxkit.errors.InvalidOperationError`. 0.8 placed a shape
    deleted from the same page back inside the group, without the ``Connect``
@@ -728,15 +763,6 @@ Writing an end of a glued connector: ``begin_x``, ``begin_y``, ``end_x``, ``end_
 ``shape.master_page_ID = ...`` on a deleted shape
    Raises :class:`vsdxkit.errors.InvalidOperationError`, as every other write
    to a deleted shape does.
-
-Writing a geometry row's ``row_type``, ``index`` or ``del_bool``, or a data property's attribute through ``DataProperty.set_attribute``
-   Copies a row or property the shape inherits from its master onto the shape
-   first, as the ``x`` and ``y`` setters and ``DataProperty.value`` already
-   do, so the master and every other instance keep reading their own value.
-   ``index`` refuses a value another row of the same geometry already holds.
-   Clearing ``del_bool`` where neither the row nor an inherited one has it
-   set writes nothing. 0.8 wrote the master's row, and with it every
-   instance's.
 
 A swimlane diagram replaces the container
 -----------------------------------------
