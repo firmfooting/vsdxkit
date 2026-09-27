@@ -625,8 +625,9 @@ class DataProperty(InheritedRow, ShapePart):
         another object for the property has written one since this one was
         read, and then each master's up the chain, where a nearer master has
         written one over the farther master's row it was handed. Visio reads
-        the nearest. The row it was handed comes last, for a row without an
-        ``N``, which has no name to find it by.
+        the nearest. The row it was handed is read only for a row without an
+        ``N``, which has no name to find it by; a named row no master has any
+        longer is not the shape's property, and reads nothing.
         """
         own = self._row_in(self.shape.xml) if self.inherited else self.xml
         rows = [own] if own is not None else []
@@ -636,7 +637,7 @@ class DataProperty(InheritedRow, ShapePart):
             if row is not None:
                 rows.append(row)
             master_shape = master_shape.master_shape
-        if self.inherited:
+        if self.inherited and self.name is None:
             rows.append(self.xml)
         for row in rows:
             element = row.find(f'{namespace}Cell[@N="{cell}"]')

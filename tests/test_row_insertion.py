@@ -47,6 +47,15 @@ def test_an_index_that_is_not_a_number_sorts_after_every_number():
     assert _layout(section) == ["5", "x"]
 
 
+def test_an_index_of_digits_that_are_not_decimal_sorts_after_every_number():
+    """``"²".isdigit()`` is true, and ``int("²")`` raises: such an index stopped every insertion into the section (#452)."""
+    section = _section('<Row IX="²"/>')
+
+    insert_row_in_index_order(section, _row("5"))
+
+    assert _layout(section) == ["5", "²"]
+
+
 def test_text_colour_on_a_shape_whose_character_section_has_a_non_numeric_index(vsdx_copy):
     """`_insert_character_row` did int(IX) on every sibling, so one odd index made text_color raise ValueError."""
     vis = Document.open(vsdx_copy("test1.vsdx"))
