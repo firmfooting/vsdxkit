@@ -1,4 +1,4 @@
-"""Write the files the Visio harness checks the writes-land package against (#300, #319, #430).
+"""Write the files the Visio harness checks the writes-land package against (#300, #301, #319, #430).
 
 Usage:
     python tools/writes_land_cases.py <out-dir>
@@ -204,6 +204,78 @@ def instance_property(out: Path) -> Case:
     )
 
 
+def moved_instance(out: Path) -> Case:
+    """Case 4: a master instance with MoveTo and LineTo rows, moved."""
+    document, path = _copy("test9_rect_and_line.vsdx", out, "04_moved_instance")
+    conn = document.pages[0].shapes.by_text("Conn A")
+    begin_x, begin_y, end_x, end_y = conn.begin_x, conn.begin_y, conn.end_x, conn.end_y
+    conn.move(1.0, 1.0)
+    document.save(path)
+    conn_id = int(conn.ID)
+    return Case(
+        "04_moved_instance: 'Conn A' is drawn between its two ends, 1 in right of and 1 in above where it was",
+        (
+            CellCheck(1, conn_id, "BeginX", begin_x + 1.0),
+            CellCheck(1, conn_id, "BeginY", begin_y + 1.0),
+            CellCheck(1, conn_id, "EndX", end_x + 1.0),
+            CellCheck(1, conn_id, "EndY", end_y + 1.0),
+            CellCheck(1, conn_id, "PinX", (begin_x + end_x) / 2 + 1.0),
+            CellCheck(1, conn_id, "PinY", (begin_y + end_y) / 2 + 1.0),
+        ),
+        stem=path.stem,
+    )
+
+
+def plain_line_text(out: Path) -> Case:
+    """Case 5: a plain line placed by its ends; its text must sit on it."""
+    document, path = _copy("test5_master.vsdx", out, "05_plain_line_text")
+    line = document.pages[0].shapes.require_id("5")
+    line.set_start_and_finish((1.0, 7.0), (3.0, 7.0))
+    document.save(path)
+    line_id = int(line.ID)
+    return Case(
+        "05_plain_line_text: shape 5 runs from (1, 7) to (3, 7) with its text at its middle",
+        (
+            CellCheck(1, line_id, "BeginX", 1.0),
+            CellCheck(1, line_id, "BeginY", 7.0),
+            CellCheck(1, line_id, "EndX", 3.0),
+            CellCheck(1, line_id, "EndY", 7.0),
+            CellCheck(1, line_id, "Width", 2.0),
+            CellCheck(1, line_id, "TxtPinX", 1.0),
+            CellCheck(1, line_id, "TxtPinY", 0.0),
+        ),
+        stem=path.stem,
+    )
+
+
+def diagonals(out: Path) -> Case:
+    """Case 6: a connector and a plain line placed on a diagonal."""
+    document, path = _copy("test9_rect_and_line.vsdx", out, "06_diagonals")
+    page = document.pages[0]
+    conn = page.shapes.by_text("Conn A")
+    line = page.shapes.by_text("Line A")
+    conn.set_start_and_finish((1.0, 1.0), (3.0, 2.0))
+    line.set_start_and_finish((4.0, 1.0), (5.0, 3.0))
+    document.save(path)
+    conn_id, line_id = int(conn.ID), int(line.ID)
+    return Case(
+        "06_diagonals: 'Conn A' runs from (1, 1) to (3, 2) and 'Line A' from (4, 1) to (5, 3), each drawn between its ends",
+        (
+            CellCheck(1, conn_id, "BeginX", 1.0),
+            CellCheck(1, conn_id, "BeginY", 1.0),
+            CellCheck(1, conn_id, "EndX", 3.0),
+            CellCheck(1, conn_id, "EndY", 2.0),
+            CellCheck(1, conn_id, "Width", 2.0),
+            CellCheck(1, line_id, "BeginX", 4.0),
+            CellCheck(1, line_id, "BeginY", 1.0),
+            CellCheck(1, line_id, "EndX", 5.0),
+            CellCheck(1, line_id, "EndY", 3.0),
+            CellCheck(1, line_id, "Width", math.sqrt(5.0)),
+        ),
+        stem=path.stem,
+    )
+
+
 CASES: tuple[Callable[[Path], Case], ...] = (
     colours,
     text_colour,
@@ -212,6 +284,9 @@ CASES: tuple[Callable[[Path], Case], ...] = (
     instance_geometry,
     glued_end,
     instance_property,
+    moved_instance,
+    plain_line_text,
+    diagonals,
 )
 """Every case, in the order its file is numbered."""
 

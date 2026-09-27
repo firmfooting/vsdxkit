@@ -5,6 +5,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 from vsdxkit.document import Document
 
 TOOL = Path(__file__).resolve().parent.parent / "tools" / "writes_land_cases.py"
@@ -18,7 +20,13 @@ def _tool():
     return module
 
 
+@pytest.mark.allow_invalid_package("missing-part")
 def test_every_case_writes_a_file_that_opens(tmp_path):
+    """`05_plain_line_text.vsdx` comes from `test5_master.vsdx`, which ships with seven `missing-part`
+    defects of its own (KNOWN_NON_CONFORMANT in test_package_validator.py); conftest's provenance
+    match goes by filename, and case 5 is named for the brief, not for its fixture, so the known
+    defects need excusing here rather than being mistaken for ones this test introduced.
+    """
     tool = _tool()
 
     assert tool.main([str(tmp_path)]) == 0
@@ -31,7 +39,9 @@ def test_every_case_writes_a_file_that_opens(tmp_path):
     assert len(expected) == len(tool.CASES)
 
 
+@pytest.mark.allow_invalid_package("missing-part")
 def test_the_cases_are_in_file_name_order(tmp_path):
+    """Also writes `05_plain_line_text.vsdx`; see the marker's rationale on `test_every_case_writes_a_file_that_opens`."""
     tool = _tool()
     tool.main([str(tmp_path)])
 
@@ -170,8 +180,13 @@ def test_judge_handles_a_single_document_collapsed_to_a_bare_dict():
     assert tool.judge(expected, tool._documents(payload)) == []
 
 
+@pytest.mark.allow_invalid_package("missing-part")
 def test_every_case_says_what_visio_must_show(tmp_path):
-    """A case with no checks is a case the check cannot fail on."""
+    """A case with no checks is a case the check cannot fail on.
+
+    Also writes `05_plain_line_text.vsdx`; see the marker's rationale on
+    `test_every_case_writes_a_file_that_opens`.
+    """
     tool = _tool()
     tool.main([str(tmp_path)])
 
