@@ -398,11 +398,16 @@ def _float_end(connector: _ConnectorShape, *, begin: bool) -> None:
     """Leave one end of a 1-D shape unglued: its trigger inherits, its coordinates keep their values without their formulas, and its record goes.
 
     The other end, and the cells that say what kind of connector it is, are
-    left as they are, as dragging one end away in Visio leaves them.
+    left as they are, as dragging one end away in Visio leaves them. Freeing
+    the begin end also removes the ``BeginTrigger`` cell point glue wrote
+    before 1.0, which names the shape the end was glued to.
     """
     for change in glue_cells(None, None):
         if change.name in _END_CELLS[begin]:
             _change_cell(connector, change)
+    if begin:
+        # point glue before 1.0 wrote its begin trigger here; Visio has no such cell
+        _change_cell(connector, CellInherit("BeginTrigger"))
     connector._page._remove_connect_records({_id(connector)}, from_cell="BeginX" if begin else "EndX")
 
 
@@ -415,6 +420,4 @@ def _float_ends(connector: _ConnectorShape) -> None:
     """
     _float_end(connector, begin=True)
     _float_end(connector, begin=False)
-    # point glue before 1.0 wrote its begin trigger here; Visio has no such cell
-    _change_cell(connector, CellInherit("BeginTrigger"))
     connector._page._remove_connect_records({_id(connector)})

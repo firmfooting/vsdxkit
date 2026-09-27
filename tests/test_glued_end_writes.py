@@ -35,6 +35,24 @@ def test_writing_begin_x_frees_the_begin_and_keeps_the_end_glued(glued):
     assert "BegTrigger" not in glued.cells
 
 
+def test_writing_begin_x_removes_the_begintrigger_earlier_releases_wrote(glued):
+    """Point glue before #106 wrote a `BeginTrigger` naming the begin's shape; freeing the begin takes it too."""
+    glued.get_or_create_cell("BeginTrigger", f="_XFTRIGGER(Sheet1!EventXFMod)")
+
+    glued.begin_x = 1.0
+
+    assert "BeginTrigger" not in glued.cells
+    assert glued.xml.find('.//{*}Cell[@N="BeginTrigger"]') is None
+
+
+def test_writing_end_x_leaves_the_begintrigger_to_the_begin(glued):
+    glued.get_or_create_cell("BeginTrigger", f="_XFTRIGGER(Sheet1!EventXFMod)")
+
+    glued.end_x = 1.0
+
+    assert glued.cells["BeginTrigger"].formula == "_XFTRIGGER(Sheet1!EventXFMod)"
+
+
 def _state(connector) -> tuple[set[tuple[str, str | None]], dict[str, str | None]]:
     """The connector's glue records and every cell formula it holds, the two things freeing an end changes."""
     return _records(connector), {name: cell.formula for name, cell in connector.cells.items()}
