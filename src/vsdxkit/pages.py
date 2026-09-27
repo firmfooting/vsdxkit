@@ -940,14 +940,18 @@ class Page:
         if container is not None:
             container.remove(shape.xml)
 
-    def _remove_connect_records(self, connector_ids: Iterable[str | int], *, match: str = "from") -> None:
+    def _remove_connect_records(
+        self, connector_ids: Iterable[str | int], *, match: str = "from", from_cell: str | None = None
+    ) -> None:
         """Remove Connect records naming any of these shapes.
 
         Single record-removal path, shared by the delete cascade and connector
         retargeting. ``match="from"`` removes only the records leading from
         these shapes, which is what retargeting wants: it is replacing a
         connector's own glue. ``match="either"`` also removes records pointing
-        at them, for a shape that is going away entirely.
+        at them, for a shape that is going away entirely. With `from_cell`,
+        only a record whose ``FromCell`` equals it is removed, for freeing one
+        end of a connector without disturbing the other's record.
         """
         if match not in ("from", "either"):
             raise ValueError(f"match must be 'from' or 'either', not {match!r}")
@@ -957,7 +961,9 @@ class Page:
         normalised_ids = {str(connector_id) for connector_id in connector_ids}
         attributes = ("FromSheet",) if match == "from" else _CONNECT_SHEET_ATTRIBUTES
         for connect in list(connects_el):
-            if normalised_ids & {connect.attrib.get(attribute) for attribute in attributes}:
+            if normalised_ids & {connect.attrib.get(attribute) for attribute in attributes} and (
+                from_cell is None or connect.attrib.get("FromCell") == from_cell
+            ):
                 connects_el.remove(connect)
 
     def _remap_connect_records(self, id_map: Mapping[str, int]) -> None:
