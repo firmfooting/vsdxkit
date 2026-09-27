@@ -413,9 +413,16 @@ def test_a_case_the_library_cannot_build_is_recorded_and_the_rest_still_build(tm
     }
 
 
-def test_a_run_whose_every_case_fails_to_build_is_recorded_as_a_failed_run(tmp_path, capsys):
-    """It exited 2, as if it could not run, and recorded nothing: a regression breaking every case left no trace (#462)."""
+def test_a_run_whose_every_case_fails_to_build_is_recorded_as_a_failed_run(tmp_path, monkeypatch):
+    """It exited 2, as if it could not run, and recorded nothing: a regression breaking every case left no trace (#462).
+
+    The source identity is stubbed: the suite also runs from the unpacked
+    sdist, which is not a git checkout.
+    """
     tool = _tool()
+    monkeypatch.setattr(
+        tool, "_source_identity", lambda builder: {"commit": "c" * 40, "branch": "b", "dirty": False, "builder": None}
+    )
     builder = tmp_path / "cases.py"
     builder.write_text(_FAKE_BUILDER.replace("CASES = (good, bad)", "CASES = (bad,)"), encoding="utf-8")
     store = tmp_path / "store"
