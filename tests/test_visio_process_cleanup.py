@@ -13,6 +13,7 @@ Visio's among them.
 
 import contextlib
 import importlib.util
+import json
 import re
 import subprocess
 import sys
@@ -42,9 +43,11 @@ def verify(monkeypatch):
 
 
 KILL = (
-    "Get-Process -Id {} -ErrorAction SilentlyContinue | Where-Object {{ $_.ProcessName -eq 'VISIO' -and "
-    "$_.StartTime.ToUniversalTime().Ticks -eq {} }} | Stop-Process -Force"
+    "$visio = Get-Process -Id {} -ErrorAction SilentlyContinue | Where-Object {{ $_.ProcessName -eq 'VISIO' -and "
+    "$_.StartTime.ToUniversalTime().Ticks -eq {} }}; "
+    "if ($visio) {{ $visio | Stop-Process -Force; [void]$visio.WaitForExit(10000) }}"
 )
+"""The kill, which waits for the process to end: Stop-Process returns before Windows has ended it."""
 
 
 def _started(process_id: int) -> int:
@@ -58,13 +61,23 @@ class _Powershell:
     `visio` maps each running Visio's ID to whether it has a visible window;
     each started at `_started` of its ID unless `started` says otherwise.
     The script starts invisible Visio `spawned`, names it in its file only if
-    `named`, and times out. A listing reads `visio`; a kill removes the Visio
+    `named`, and times out, unless it is to `answer` with (stdout, stderr), which it then
+    does, exiting 0. A listing reads `visio`; a kill removes the Visio
     with its ID and start time unless it is `unkillable`, and is kept. While
     `hung`, every call after the script's times out as well.
     """
 
-    def __init__(self, process_id_file: Path, visio: dict[int, bool], spawned: int | None = None, *, named: bool = True):
+    def __init__(
+        self,
+        process_id_file: Path,
+        visio: dict[int, bool],
+        spawned: int | None = None,
+        *,
+        named: bool = True,
+        answer: tuple[str, str] | None = None,
+    ):
         self.process_id_file = process_id_file
+        self.answer = answer
         self.visio = dict(visio)
         self.started = {process_id: _started(process_id) for process_id in visio}
         self.spawned = spawned
@@ -84,6 +97,8 @@ class _Powershell:
                 self.started[self.spawned] = _started(self.spawned)
                 if self.named:
                     self.process_id_file.write_text(f"{self.spawned} {_started(self.spawned)}\r\n", encoding="ascii")
+            if self.answer is not None:
+                return subprocess.CompletedProcess(command, 0, *self.answer)
             raise subprocess.TimeoutExpired(command, kwargs.get("timeout", 0))
         if self.hung and self.script_ran:
             raise subprocess.TimeoutExpired(command, kwargs.get("timeout", 0))
@@ -236,6 +251,45 @@ def test_a_cleanup_powershell_does_not_answer_still_gives_the_callers_message(ve
         verify._observe_directory(str(tmp_path), timeout=1, allow_running=False)
 
     assert powershell.kills == []
+
+
+WARNING = "WARNING: Visio process 4242 outlived Quit() and could not be killed: Access is denied"
+
+
+def test_an_observation_that_succeeds_passes_the_scripts_warnings_on(verify, tmp_path, monkeypatch, capsys):
+    """A run that answers can still have left its Visio running; the warning must reach whoever ran it (#464)."""
+    answer = json.dumps({"schema": verify.SCHEMA_VERSION, "viewer": {}, "documents": []})
+    powershell = _Powershell(tmp_path / "visio.pid", {}, answer=(answer, WARNING + "\r\n"))
+    monkeypatch.setattr(verify.subprocess, "run", powershell)
+
+    assert verify._observe_directory(str(tmp_path), timeout=1, allow_running=False)["documents"] == []
+
+    assert WARNING in capsys.readouterr().err
+
+
+def test_a_cell_check_that_succeeds_passes_the_scripts_warnings_on(verify, tmp_path, monkeypatch, capsys):
+    tool = _load("writes_land_cases")
+    powershell = _Powershell(tmp_path / "visio.pid", {}, answer=("[]", WARNING + "\r\n"))
+    monkeypatch.setattr(verify.subprocess, "run", powershell)
+    monkeypatch.setattr(verify, "_staged", lambda paths: contextlib.nullcontext((str(tmp_path), {})))
+
+    assert tool._ask_visio(TOOLS, [], {}, verify) == []
+
+    assert WARNING in capsys.readouterr().err
+
+
+def test_an_export_that_succeeds_passes_the_scripts_warnings_on(verify, tmp_path, monkeypatch, vsdx_copy, capsys):
+    shots = _load("visio_shots")
+    answer = json.dumps({"visio": {"version": "16.0"}, "files": [{"error": "could not open"}]})
+    powershell = _Powershell(tmp_path / "staged" / "visio.pid", {}, answer=(answer, WARNING + "\r\n"))
+    monkeypatch.setattr(verify.subprocess, "run", powershell)
+    (tmp_path / "staged").mkdir()
+    monkeypatch.setattr(verify, "_staged", lambda paths: contextlib.nullcontext((str(tmp_path / "staged"), {})))
+    job = ("candidate", shots._Case(stem="case", line="", page=1, triggers=()), vsdx_copy("test1.vsdx"))
+
+    shots._shoot([job], 96, tmp_path / "work")
+
+    assert WARNING in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("script", SCRIPTS)

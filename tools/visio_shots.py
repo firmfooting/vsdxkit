@@ -603,6 +603,7 @@ def _shoot(jobs: list[tuple[str, _Case, Path]], dpi: int, work: Path) -> tuple[d
             raise visio_verify.VisioUnavailable(
                 f"visio_export.ps1 exited {result.returncode}: {result.stderr.strip() or '(no output)'}"
             )
+        visio_verify._relay_diagnostics(result.stderr)
         payload = json.loads(result.stdout.strip())
         if len(payload["files"]) != len(jobs):
             raise visio_verify.VisioUnavailable(

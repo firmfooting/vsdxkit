@@ -518,6 +518,7 @@ def _ask_visio(tools_dir: Path, paths: list[str], expected: dict[str, Case], vis
         raise visio_verify.VisioUnavailable(
             f"visio_cells.ps1 exited {result.returncode}: {result.stderr.strip() or '(no output)'}"
         )
+    visio_verify._relay_diagnostics(result.stderr)
     try:
         parsed = json.loads(payload_text)
     except json.JSONDecodeError as error:

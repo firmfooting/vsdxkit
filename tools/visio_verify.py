@@ -283,42 +283,53 @@ def _stop_started_visio(process_id_file: Path, before: set[_Visio]) -> str:
     timeout.
     """
     try:
-        return _end_started_visio(process_id_file, before)
+        visio = _started_visio(process_id_file)
+        if visio is None:
+            started = sorted(_visio_processes(invisible_only=True) - before)
+            if not started:
+                return "; it had not started Visio"
+            named = ", ".join(str(process.id) for process in started)
+            return (
+                f"; it named no Visio as its own, so none was killed; invisible Visio "
+                f"{'process' if len(started) == 1 else 'processes'} {named} started while it ran: "
+                "end the one it left, if you can tell it from another program's"
+            )
+        if visio not in _visio_processes():
+            return f"; the Visio it started, process {visio.id}, had already ended"
+        # Stop-Process returns before Windows has ended the process, so the
+        # kill waits for the exit before the listing below judges it
+        subprocess.run(
+            [
+                _shell(),
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                f"$visio = Get-Process -Id {visio.id} -ErrorAction SilentlyContinue | Where-Object {{ "
+                f"$_.ProcessName -eq 'VISIO' -and {_START_TICKS} -eq {visio.started} }}; "
+                "if ($visio) { $visio | Stop-Process -Force; [void]$visio.WaitForExit(10000) }",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        still_running = visio in _visio_processes()
     except subprocess.TimeoutExpired:
         return "; PowerShell did not answer while ending the Visio it started, which may still be running: end it before the next run"
-
-
-def _end_started_visio(process_id_file: Path, before: set[_Visio]) -> str:
-    """`_stop_started_visio`'s work, which can itself time out."""
-    visio = _started_visio(process_id_file)
-    if visio is None:
-        started = sorted(_visio_processes(invisible_only=True) - before)
-        if not started:
-            return "; it had not started Visio"
-        named = ", ".join(str(process.id) for process in started)
-        return (
-            f"; it named no Visio as its own, so none was killed; invisible Visio "
-            f"{'process' if len(started) == 1 else 'processes'} {named} started while it ran: "
-            "end the one it left, if you can tell it from another program's"
-        )
-    if visio not in _visio_processes():
-        return f"; the Visio it started, process {visio.id}, had already ended"
-    subprocess.run(
-        [
-            _shell(),
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            f"Get-Process -Id {visio.id} -ErrorAction SilentlyContinue | Where-Object {{ $_.ProcessName -eq 'VISIO' -and "
-            f"{_START_TICKS} -eq {visio.started} }} | Stop-Process -Force",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    if visio not in _visio_processes():
+    if not still_running:
         return f"; so was the Visio it started, process {visio.id}"
     return f"; the Visio it started, process {visio.id}, could not be killed: end it before the next run"
+
+
+def _relay_diagnostics(stderr: str) -> None:
+    """Pass on what a Visio script that answered wrote to stderr: its lifecycle warnings.
+
+    A script that answered can still have left its Visio running, and says
+    so only there; a caller that read stderr only on failure reported the
+    run as clean (#464).
+    """
+    for line in stderr.splitlines():
+        if line.strip():
+            print(line.rstrip(), file=sys.stderr)
 
 
 def _observe_directory(root: str, *, timeout: int, allow_running: bool) -> dict:
@@ -355,6 +366,7 @@ def _observe_directory(root: str, *, timeout: int, allow_running: bool) -> dict:
     payload = result.stdout.strip()
     if not payload:
         raise VisioUnavailable(_refusal(result.returncode, result.stderr.strip()))
+    _relay_diagnostics(result.stderr)
     try:
         return json.loads(payload)
     except json.JSONDecodeError as error:
