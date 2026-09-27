@@ -133,6 +133,39 @@ def guarded(out: Path) -> Case:
     )
 
 
+def prop_over_formula(out: Path) -> Case:
+    """Case 2b: a Shape Data value written over the property's own real formula."""
+    document, path = _copy("fixtures/com_reference/s05_swimlanes_cfflow.vsdx", out, "02b_prop_over_formula")
+    shape = document.pages[0].shapes.require_id("54")
+    # the row is shape 54's own, and its Value is IFERROR(CONTAINERSHEETREF(1,"Swimlane")!...)
+    shape.data_properties["Function"].value = "Sales"
+    document.save(path)
+    return Case(
+        "02b_prop_over_formula: shape 54's Function property reads Sales, not its swimlane's heading",
+        (CellCheck(1, int(shape.ID), "Prop.Function", "Sales"),),
+        stem=path.stem,
+    )
+
+
+def instance_geometry(out: Path) -> Case:
+    """Case 2c: a geometry cell written on an instance whose row is its master's; a copy of the instance keeps the master's value."""
+    document, path = _copy("test9_rect_and_line.vsdx", out, "02c_instance_geometry")
+    written = document.pages[0].shapes.by_text("Conn A")
+    sibling = written.copy()
+    # the Geometry section is IX 0 and its MoveTo row IX 1, so Visio names the
+    # cell Geometry1.X1; the row is the master's, whose X is 0
+    written.geometry.rows["1"].cells["X"].value = 0.25
+    document.save(path)
+    return Case(
+        "02c_instance_geometry: 'Conn A' starts its path at x = 0.25 in; its copy, the same master's instance, still at 0",
+        (
+            CellCheck(1, int(written.ID), "Geometry1.X1", 0.25),
+            CellCheck(1, int(sibling.ID), "Geometry1.X1", 0.0),
+        ),
+        stem=path.stem,
+    )
+
+
 def glued_end(out: Path) -> Case:
     """Case 3: one end of a connector glued at both ends, written to."""
     document, path = _copy("test4_connectors.vsdx", out, "03_glued_end")
@@ -153,7 +186,14 @@ def glued_end(out: Path) -> Case:
     )
 
 
-CASES: tuple[Callable[[Path], Case], ...] = (colours, text_colour, guarded, glued_end)
+CASES: tuple[Callable[[Path], Case], ...] = (
+    colours,
+    text_colour,
+    guarded,
+    prop_over_formula,
+    instance_geometry,
+    glued_end,
+)
 """Every case, in the order its file is numbered."""
 
 

@@ -31,6 +31,39 @@ def test_every_case_writes_a_file_that_opens(tmp_path):
     assert len(expected) == len(tool.CASES)
 
 
+def test_the_cases_are_in_file_name_order(tmp_path):
+    tool = _tool()
+    tool.main([str(tmp_path)])
+
+    stems = list(json.loads((tmp_path / "expected.json").read_text(encoding="utf-8")))
+
+    assert stems == sorted(stems)
+    assert stems == sorted(path.stem for path in tmp_path.glob("*.vsdx"))
+
+
+def test_the_prop_over_formula_case_writes_the_value_without_the_formula(tmp_path):
+    tool = _tool()
+    tool.prop_over_formula(tmp_path)
+
+    prop = Document.open(tmp_path / "02b_prop_over_formula.vsdx").pages[0].shapes.require_id("54").data_properties["Function"]
+
+    assert prop.value == "Sales"
+    assert prop.get_attribute("Value", "F") is None
+
+
+def test_the_instance_geometry_case_writes_the_instance_and_leaves_the_master(tmp_path):
+    """What 02c asks Visio to confirm, checked in the file: the copy still reads the master's X of 0."""
+    tool = _tool()
+    case = tool.instance_geometry(tmp_path)
+
+    page = Document.open(tmp_path / "02c_instance_geometry.vsdx").pages[0]
+    written, sibling = (page.shapes.require_id(str(check.shape)) for check in case.cells)
+
+    assert (written.geometry.rows["1"].x, written.geometry.rows["1"].inherited) == (0.25, False)
+    assert (sibling.geometry.rows["1"].x, sibling.geometry.rows["1"].inherited) == (0.0, True)
+    assert written.master_shape.geometry.rows["1"].cells["X"].value == "0"
+
+
 def _payload(stem, cells, connects=()):
     return {"path": f"C:\\x\\{stem}.vsdx", "cells": list(cells), "connects": list(connects)}
 
