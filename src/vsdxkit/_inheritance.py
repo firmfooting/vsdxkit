@@ -16,9 +16,12 @@ written in place.
 
 That covers the coordinate setters of :class:`vsdxkit.geometry.GeometryRow`
 and :class:`vsdxkit.geometry.Geometry`; the row's ``row_type``, ``index``
-and ``del_bool``; the ``value``, ``formula`` and ``name`` setters of a
+and ``del_bool``; the ``value`` and ``formula`` setters of a
 :class:`vsdxkit.geometry.GeometryCell` in an inherited row; and
-:class:`vsdxkit.shapes.DataProperty`'s ``value`` and ``set_attribute``.
+:class:`vsdxkit.shapes.DataProperty`'s ``value`` and ``set_attribute``. A
+:class:`vsdxkit.geometry.GeometryCell`'s ``name`` setter refuses a cell
+whose name the master's row also has, since the master's cell would come
+back under the old name, and renames a cell only the instance has.
 """
 
 from __future__ import annotations

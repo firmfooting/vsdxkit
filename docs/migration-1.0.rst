@@ -702,11 +702,21 @@ Setting a cell's value, through a setter such as ``shape.line_color`` or ``shape
    such as the ``CONTAINERSHEETREF`` a cross-functional flowchart shape
    carries, did not show.
 
-A geometry cell's ``value``, ``formula`` or ``name``, on a cell the shape inherits from its master
-   Writes a cell of the shape's own, copying an inherited row onto the
-   shape first; the master's cell keeps its value and formula. 0.8 wrote
+A geometry cell's ``value`` or ``formula``, on a cell the shape inherits from its master
+   Writes a cell of the shape's own, a copy of the master's with its unit,
+   copying an inherited row onto the shape first; the master's cell keeps
+   its value and formula. 0.8 wrote
    the master's cell, which changed every other shape drawn from the
    master.
+
+A geometry cell's ``name``, where the master's row or section has a cell of that name
+   Raises :class:`vsdxkit.errors.InvalidOperationError`, whether the shape
+   inherits the cell or overrides it: Visio matches a shape's cells to its
+   master's by name, so the master's cell would come back under the old
+   name. 0.8 renamed an inherited cell on the master, which changed every
+   other shape drawn from it, and renamed an overriding cell on the shape,
+   which brought the master's cell back. A cell only the shape has is
+   still renamed.
 
 ``shape.set_cell_value("Control/TextPosition/X", ...)`` and other names holding ``/``
    Write the cell in its section row where the shape has it, and raise
