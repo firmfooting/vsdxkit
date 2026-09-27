@@ -1,10 +1,10 @@
 """The Visio tools kill only the Visio their own script started (#463).
 
-Each script records the process its COM object runs in, `Application.ProcessID`,
-and on the way out kills that one if Quit left it running. A caller whose
-script timed out kills the one the script wrote to its `-ProcessIdFile`. Any
-other Visio, a developer's opened while a long run was under way included,
-is theirs, with their unsaved work in it.
+Each script names the process its COM object runs in, the owner of Visio's
+main window, and on the way out kills that one if Quit left it running. A
+caller whose script timed out kills the one the script wrote to its
+`-ProcessIdFile`. Any other Visio, a developer's opened while a long run was
+under way included, is theirs, with their unsaved work in it.
 """
 
 import contextlib
@@ -17,6 +17,7 @@ import pytest
 
 TOOLS = Path(__file__).resolve().parent.parent / "tools"
 SCRIPTS = ("visio_cells.ps1", "visio_observe.ps1", "visio_export.ps1")
+LIST_VISIO = "Get-Process -Name VISIO -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }"
 
 
 def _load(name: str):
@@ -37,12 +38,18 @@ def verify(monkeypatch):
 
 
 class _Powershell:
-    """Stands in for `subprocess.run`: the script times out, having recorded Visio `process_id`; every other command is kept."""
+    """Stands in for `subprocess.run`.
 
-    def __init__(self, process_id_file: Path, process_id: int | None):
+    The script times out, having named Visio `process_id` in its file, or
+    none; listing the VISIO processes gives each of `running` in turn, before
+    the script and after it; every kill is kept.
+    """
+
+    def __init__(self, process_id_file: Path, process_id: int | None, running: tuple[set[int], ...] = (set(), set())):
         self.process_id_file = process_id_file
         self.process_id = process_id
-        self.commands: list[str] = []
+        self.running = list(running)
+        self.kills: list[str] = []
 
     def __call__(self, command, **kwargs):
         expression = command[-1]
@@ -51,7 +58,9 @@ class _Powershell:
             if self.process_id is not None:
                 self.process_id_file.write_text(f"{self.process_id}\r\n", encoding="ascii")
             raise subprocess.TimeoutExpired(command, kwargs.get("timeout", 0))
-        self.commands.append(expression)
+        if expression == LIST_VISIO:
+            return subprocess.CompletedProcess(command, 0, "\n".join(map(str, self.running.pop(0))), "")
+        self.kills.append(expression)
         return subprocess.CompletedProcess(command, 0, "", "")
 
 
@@ -67,43 +76,62 @@ def test_the_visio_a_script_started_is_read_from_the_file_it_wrote(verify, tmp_p
 def test_stopping_kills_the_recorded_visio_and_no_other(verify, tmp_path, monkeypatch):
     written = tmp_path / "visio.pid"
     written.write_text("4242", encoding="ascii")
-    powershell = _Powershell(written, None)
+    powershell = _Powershell(written, None, running=({7}, {7, 4242, 5151}))
     monkeypatch.setattr(verify.subprocess, "run", powershell)
 
-    assert verify._stop_started_visio(written) == 4242
-    assert powershell.commands == [verify._stop_visio_command(4242)]
+    assert verify._stop_started_visio(written, {7}) == "; so was the Visio it started, process 4242"
+    assert powershell.kills == [verify._stop_visio_command(4242)]
 
 
-def test_stopping_before_the_script_recorded_a_visio_kills_nothing(verify, tmp_path, monkeypatch):
-    """A script killed before its COM object existed started no Visio of its own."""
-    powershell = _Powershell(tmp_path / "visio.pid", None)
+def test_stopping_before_the_script_named_its_visio_kills_the_one_that_started(verify, tmp_path, monkeypatch):
+    """COM activation can hang with VISIO.EXE started and the file not yet written; that Visio is the script's."""
+    powershell = _Powershell(tmp_path / "visio.pid", None, running=({7, 4242},))
     monkeypatch.setattr(verify.subprocess, "run", powershell)
 
-    assert verify._stop_started_visio(tmp_path / "visio.pid") is None
-    assert powershell.commands == []
+    assert verify._stop_started_visio(tmp_path / "visio.pid", {7}) == "; so was the Visio it started, process 4242"
+    assert powershell.kills == [verify._stop_visio_command(4242)]
+
+
+def test_stopping_before_the_script_named_its_visio_kills_none_of_several_that_started(verify, tmp_path, monkeypatch):
+    """Which is the script's is not known, and one may be a developer's: none is killed, and both are named."""
+    powershell = _Powershell(tmp_path / "visio.pid", None, running=({7, 4242, 5151},))
+    monkeypatch.setattr(verify.subprocess, "run", powershell)
+
+    message = verify._stop_started_visio(tmp_path / "visio.pid", {7})
+
+    assert message.startswith("; Visio processes 4242, 5151 started while it ran")
+    assert powershell.kills == []
+
+
+def test_stopping_a_script_that_started_no_visio_kills_nothing(verify, tmp_path, monkeypatch):
+    powershell = _Powershell(tmp_path / "visio.pid", None, running=({7},))
+    monkeypatch.setattr(verify.subprocess, "run", powershell)
+
+    assert verify._stop_started_visio(tmp_path / "visio.pid", {7}) == "; it had not started Visio"
+    assert powershell.kills == []
 
 
 def test_an_observation_that_times_out_kills_only_the_visio_it_started(verify, tmp_path, monkeypatch):
     """It killed every Visio not running when it began, a developer's opened meanwhile included."""
-    powershell = _Powershell(tmp_path / "visio.pid", 4242)
+    powershell = _Powershell(tmp_path / "visio.pid", 4242, running=({7},))
     monkeypatch.setattr(verify.subprocess, "run", powershell)
 
     with pytest.raises(verify.VisioUnavailable, match="process 4242"):
         verify._observe_directory(str(tmp_path), timeout=1, allow_running=False)
 
-    assert powershell.commands == [verify._stop_visio_command(4242)]
+    assert powershell.kills == [verify._stop_visio_command(4242)]
 
 
 def test_a_cell_check_that_times_out_kills_only_the_visio_it_started(verify, tmp_path, monkeypatch):
     tool = _load("writes_land_cases")
-    powershell = _Powershell(tmp_path / "visio.pid", 4242)
+    powershell = _Powershell(tmp_path / "visio.pid", 4242, running=({7},))
     monkeypatch.setattr(verify.subprocess, "run", powershell)
     monkeypatch.setattr(verify, "_staged", lambda paths: contextlib.nullcontext((str(tmp_path), {})))
 
     with pytest.raises(verify.VisioUnavailable, match="process 4242"):
         tool._ask_visio(TOOLS, [], {}, verify)
 
-    assert powershell.commands == [verify._stop_visio_command(4242)]
+    assert powershell.kills == [verify._stop_visio_command(4242)]
 
 
 def test_the_kill_stops_a_process_only_while_it_is_a_visio(verify):
@@ -117,7 +145,7 @@ def test_each_script_kills_only_the_visio_its_own_com_object_runs_in(script):
     """Not every Visio that started after the script did: the start-time rule took a developer's Visio too."""
     text = (TOOLS / script).read_text(encoding="utf-8")
     assert ". (Join-Path $PSScriptRoot 'visio_process.ps1')" in text
-    assert "$ownProcessId = Get-OwnProcessId -App $app" in text
+    assert "$ownProcessId = Register-OwnVisio -App $app -ProcessIdFile $ProcessIdFile" in text
     assert "[string]$ProcessIdFile" in text
     assert "Stop-OwnVisio -ProcessId $ownProcessId" in text
     assert "$app.ProcessID" not in text
@@ -137,3 +165,9 @@ def test_a_visio_is_named_by_the_process_that_owns_its_window():
     assert "$App.WindowHandle32" in text
     assert "$process.ProcessName -ne 'VISIO'" in text
     assert "$leftover | Stop-Process -Force" in text
+
+
+def test_the_helper_type_is_added_once_per_powershell_session():
+    """A script run twice from one prompt dot-sources the helper twice, and a type cannot be added twice."""
+    text = (TOOLS / "visio_process.ps1").read_text(encoding="utf-8")
+    assert "if (-not ('VsdxKit.Window' -as [type])) {" in text

@@ -590,18 +590,14 @@ def _shoot(jobs: list[tuple[str, _Case, Path]], dpi: int, work: Path) -> tuple[d
             expression,
         ]
         timeout = 60 + 30 * len(jobs)
+        before = visio_verify._visio_ids()
         try:
             result = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
         except subprocess.TimeoutExpired as expired:
             # only the Visio the script started, never one opened meanwhile (#463)
-            process_id = visio_verify._stop_started_visio(process_id_file)
             raise visio_verify.VisioUnavailable(
                 f"visio_export.ps1 did not answer within {timeout}s and was killed"
-                + (
-                    f"; so was the Visio it started, process {process_id}"
-                    if process_id is not None
-                    else "; it had not started Visio"
-                )
+                + visio_verify._stop_started_visio(process_id_file, before)
             ) from expired
         if result.returncode != 0 or not result.stdout.strip():
             raise visio_verify.VisioUnavailable(

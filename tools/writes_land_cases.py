@@ -503,14 +503,14 @@ def _ask_visio(tools_dir: Path, paths: list[str], expected: dict[str, Case], vis
         shell = visio_verify._shell()
         command = [shell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", expression]
         timeout = 60 + 20 * len(paths)
+        before = visio_verify._visio_ids()
         try:
             result = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
         except subprocess.TimeoutExpired as expired:
             # only the Visio the script started, never one opened meanwhile (#463)
-            killed = visio_verify._stop_started_visio(process_id_file)
             raise visio_verify.VisioUnavailable(
                 f"visio_cells.ps1 did not answer within {timeout}s and was killed"
-                + (f"; so was the Visio it started, process {killed}" if killed is not None else "")
+                + visio_verify._stop_started_visio(process_id_file, before)
             ) from expired
 
     payload_text = result.stdout.strip()

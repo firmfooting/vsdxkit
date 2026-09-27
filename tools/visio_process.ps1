@@ -13,9 +13,13 @@
     unsaved work in it (#463).
 #>
 
-Add-Type -Namespace VsdxKit -Name Window -MemberDefinition @'
+# Once per PowerShell session: a type cannot be added twice, and a script
+# run a second time from the same prompt dot-sources this again.
+if (-not ('VsdxKit.Window' -as [type])) {
+    Add-Type -Namespace VsdxKit -Name Window -MemberDefinition @'
 [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(System.IntPtr hWnd, out uint processId);
 '@
+}
 
 function Get-VisioProcess {
     # The Visio with ID $ProcessId, or $null: an ID a Visio has let go of can
@@ -49,7 +53,7 @@ function Stop-OwnVisio {
     <#
       Give the Visio with ID $ProcessId, one this script started and has
       asked to Quit, 15 seconds to go, then kill it; $true if it had to be
-      killed.
+      killed, and was. A kill that fails is warned of, and gives $false.
     #>
     param([int]$ProcessId)
 
@@ -59,6 +63,30 @@ function Stop-OwnVisio {
     }
     $leftover = Get-VisioProcess -ProcessId $ProcessId
     if ($null -eq $leftover) { return $false }
-    try { $leftover | Stop-Process -Force -ErrorAction Stop } catch { }
-    return $true
+    try {
+        $leftover | Stop-Process -Force -ErrorAction Stop
+        return $true
+    }
+    catch {
+        Write-Warning "Visio process $ProcessId outlived Quit() and could not be killed: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Register-OwnVisio {
+    <#
+      The ID of the Visio $App runs in, written to $ProcessIdFile where one is
+      named; $null, with a warning, where it cannot be told, as then nothing
+      will end this Visio if Quit does not.
+    #>
+    param($App, [string]$ProcessIdFile)
+
+    $processId = Get-OwnProcessId -App $App
+    if ($null -eq $processId) {
+        Write-Warning ("could not tell which process this Visio runs in, so it will not be killed if Quit " +
+            "leaves it running; if a later run finds Visio already running, end VISIO.EXE by hand")
+        return $null
+    }
+    if ($ProcessIdFile) { Set-Content -Path $ProcessIdFile -Value $processId -Encoding ascii }
+    return $processId
 }

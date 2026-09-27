@@ -53,7 +53,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# Get-OwnProcessId and Stop-OwnVisio: which Visio this script started, and
+# Register-OwnVisio and Stop-OwnVisio: which Visio this script started, and
 # how it is ended.
 . (Join-Path $PSScriptRoot 'visio_process.ps1')
 
@@ -109,10 +109,7 @@ try {
     # The one process this script may kill if Quit leaves it running. Not
     # "any Visio started during the run": a Visio the developer opens while
     # a long export is under way is theirs, with their unsaved work in it.
-    $ownProcessId = Get-OwnProcessId -App $app
-    if ($ProcessIdFile -and $null -ne $ownProcessId) {
-        Set-Content -Path $ProcessIdFile -Value $ownProcessId -Encoding ascii
-    }
+    $ownProcessId = Register-OwnVisio -App $app -ProcessIdFile $ProcessIdFile
     $app.AlertResponse = 7
     $visio.version = [string]$app.Version
     $visio.build = [string]$app.Build

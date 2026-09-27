@@ -213,26 +213,58 @@ def _stop_visio_command(process_id: int) -> str:
     return f"Get-Process -Id {process_id} -ErrorAction SilentlyContinue | Where-Object ProcessName -eq 'VISIO' | Stop-Process -Force"
 
 
-def _stop_started_visio(process_id_file: Path) -> int | None:
-    """Kill the Visio a timed-out script recorded in `process_id_file`, and no other; its ID, or None where it recorded none.
+def _visio_ids() -> set[int]:
+    """The IDs of the VISIO processes running now."""
+    result = subprocess.run(
+        [
+            _shell(),
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "Get-Process -Name VISIO -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    return {int(line) for line in result.stdout.split() if line.strip().isdigit()}
+
+
+def _stop_started_visio(process_id_file: Path, before: set[int]) -> str:
+    """Kill the Visio a timed-out script started, and no other; what was done, as a clause to end the caller's message.
 
     Killing PowerShell does not kill Visio: `New-Object -ComObject` starts
     VISIO.EXE out of process, so the script's own cleanup never runs and an
     invisible Visio is left holding the staged files. Only that one is
     killed, not every Visio started since the run began: a developer's,
     opened while a long run was under way, is theirs, with their unsaved
-    work in it (#463). A script killed before its COM object existed
-    recorded none, and started none.
+    work in it (#463).
+
+    The script names its Visio in `process_id_file` as soon as it has one.
+    One killed before then, while COM activation hung with VISIO.EXE
+    already started, named none: where one Visio has started since
+    `before`, the IDs running when the script was started, that is the
+    one; where more have, which is the script's is not known, and none is
+    killed.
     """
     process_id = _started_process_id(process_id_file)
-    if process_id is not None:
-        subprocess.run(
-            [_shell(), "-NoProfile", "-NonInteractive", "-Command", _stop_visio_command(process_id)],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-    return process_id
+    if process_id is None:
+        started = sorted(_visio_ids() - before)
+        if not started:
+            return "; it had not started Visio"
+        if len(started) > 1:
+            return (
+                f"; Visio processes {', '.join(map(str, started))} started while it ran and it named none as its own,"
+                " so none was killed"
+            )
+        [process_id] = started
+    subprocess.run(
+        [_shell(), "-NoProfile", "-NonInteractive", "-Command", _stop_visio_command(process_id)],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    return f"; so was the Visio it started, process {process_id}"
 
 
 def _observe_directory(root: str, *, timeout: int, allow_running: bool) -> dict:
@@ -256,13 +288,13 @@ def _observe_directory(root: str, *, timeout: int, allow_running: bool) -> dict:
         f"-ProcessIdFile {_quote(_windows_path(str(process_id_file)))}; exit $LASTEXITCODE"
     )
     command = [_shell(), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", expression]
+    before = _visio_ids()
     try:
         result = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired as expired:
-        killed = _stop_started_visio(process_id_file)
         raise VisioUnavailable(
-            f"Visio did not answer within {timeout}s and was killed"
-            + (f" (process {killed}, the Visio the observer started, killed with it)" if killed is not None else "")
+            f"the Visio observer did not answer within {timeout}s and was killed"
+            + _stop_started_visio(process_id_file, before)
             + ". Raise --timeout if the corpus is large, or open one of the files by hand: a modal "
             "dialog Visio raises outside its alert mechanism blocks until something dismisses it."
         ) from expired
