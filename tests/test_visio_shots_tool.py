@@ -101,18 +101,59 @@ def test_a_shape_only_one_drawing_has_is_reported():
     assert tool._diff_svgs(_svg("a", _box(1)), _svg("b", _box(1), _box(7))) == ["shape 7 only in the second drawing"]
 
 
+def _group(member_x: float = 0, own_fill_class: str = "st1") -> str:
+    """A group as Visio's export writes one: an outer `group` element, its member, then the group's own drawing
+    in a `groupContent` element that carries the group's ID again."""
+    return (
+        '<g id="group1-1" transform="translate(54,-513)" v:mID="1" v:groupContext="group"><title>Sheet.1</title>'
+        f'<g id="shape2-2" v:mID="2" v:groupContext="shape" transform="translate({member_x},0)">'
+        '<path d="M0 0 L1 1" class="st1"/></g>'
+        '<g id="shape1-4" v:mID="1" v:groupContext="groupContent">'
+        f'<path d="M0 0 L72 0 L72 72 Z" class="{own_fill_class}"/><text x="4" y="40" class="st2">Shape A</text></g></g>'
+    )
+
+
 def test_a_group_members_change_is_its_own_not_the_groups():
     tool = _tool()
+    assert tool._diff_svgs(_svg("a", _group(member_x=0)), _svg("b", _group(member_x=72))) == [
+        "shape 2 moved (+1.000 in, +0.000 in): translate(0,0) -> translate(72,0)"
+    ]
 
-    def group(member_x: float) -> str:
-        return (
-            '<g id="group3" v:mID="3" v:groupContext="shape" transform="translate(10,-10)"><title>Sheet.3</title>'
-            f'<g id="shape4" v:mID="4" v:groupContext="groupContent" transform="translate({member_x},0)">'
-            '<path d="M0 0 L1 1" class="st1"/></g></g>'
+
+def test_a_change_to_a_groups_own_drawing_is_the_groups():
+    tool = _tool()
+    styles = ".st1 {fill:#ffffff}\n.st2 {fill:#000000}\n.st3 {fill:#ff0000}"
+    [finding] = tool._diff_svgs(
+        _svg("a", _group(own_fill_class="st1"), styles=styles), _svg("b", _group(own_fill_class="st3"), styles=styles)
+    )
+    assert finding.startswith("shape 1 drawn differently: ")
+    assert "fill:#ff0000" in finding
+
+
+def test_what_the_export_records_but_does_not_draw_is_no_difference():
+    """Shape Data, user cells and text blocks ride along in Visio's own namespace; no renderer draws them."""
+    tool = _tool()
+
+    def with_property(value: str) -> str:
+        return _box(1).replace(
+            "<title>Sheet.1</title>",
+            f'<title>Sheet.1</title><desc>{value}</desc><v:custProps><v:cp v:nameU="Function" v:val="VT4({value})"/></v:custProps>',
         )
 
-    assert tool._diff_svgs(_svg("a", group(0)), _svg("b", group(72))) == [
-        "shape 4 moved (+1.000 in, +0.000 in): translate(0,0) -> translate(72,0)"
+    assert tool._diff_svgs(_svg("a", with_property("Sales")), _svg("b", with_property("Function 1"))) == []
+
+
+def test_a_page_drawn_at_another_size_is_a_difference():
+    tool = _tool()
+    first = _svg("a", _box(1))
+    second = first.replace('viewBox="0 0 595.276 841.89"', 'viewBox="0 0 841.89 595.276"')
+    assert tool._diff_svgs(first, second) == ["the page: viewBox=0 0 595.276 841.89 -> viewBox=0 0 841.89 595.276"]
+
+
+def test_shapes_stacked_in_another_order_are_a_difference():
+    tool = _tool()
+    assert tool._diff_svgs(_svg("a", _box(1), _box(2)), _svg("b", _box(2), _box(1))) == [
+        "shapes stacked in another order, bottom first: 1, 2 -> 2, 1"
     ]
 
 
@@ -255,6 +296,66 @@ def test_a_recorded_run_names_the_stale_case_and_stores_each_drawing_once(tmp_pa
     assert (tmp_path / "local" / "r1" / "report.html").exists()
     [line] = (tmp_path / "index.jsonl").read_text(encoding="utf-8").splitlines()
     assert json.loads(line)["stale_on_open"] == ["01_a"]
+
+
+def _identity(run_id: str) -> dict:
+    return {
+        "run": run_id,
+        "created": "2026-09-27T00:00:00Z",
+        "commit": "c" * 40,
+        "branch": "b",
+        "dirty": False,
+        "against": None,
+        "visio": {},
+        "dpi": 150,
+    }
+
+
+def test_a_run_whose_every_case_draws_the_same_on_open_and_after_recalc_passes(tmp_path):
+    tool = _tool()
+    drawing = _svg("x", _box(1))
+    manifest = tool._record_run(
+        tmp_path,
+        _identity("r1"),
+        {"01_a": "a"},
+        {"candidate": {"01_a": _shots(drawing, drawing)}},
+        build_errors={"candidate": {}},
+    )
+    assert tool._failures(manifest) == []
+
+
+def test_a_run_fails_when_a_candidate_case_could_not_be_built(tmp_path):
+    """A case that never reached Visio was not judged; a run that skipped it has not passed."""
+    tool = _tool()
+    drawing = _svg("x", _box(1))
+    manifest = tool._record_run(
+        tmp_path,
+        _identity("r1"),
+        {"01_a": "a"},
+        {"candidate": {"01_a": _shots(drawing, drawing)}},
+        build_errors={"candidate": {"glued_end": "AttributeError: no"}},
+    )
+    assert tool._failures(manifest) == ["the candidate could not build glued_end: AttributeError: no"]
+
+
+def test_a_run_fails_when_visio_could_not_export_a_candidate_case(tmp_path):
+    tool = _tool()
+    manifest = tool._record_run(
+        tmp_path, _identity("r1"), {"01_a": "a"}, {"candidate": {"01_a": {"error": "file is corrupt"}}}, build_errors={}
+    )
+    assert tool._failures(manifest) == ["01_a was not judged: Visio could not export it: file is corrupt"]
+
+
+def test_the_refs_cases_are_photographed_with_the_refs_own_shape_ids(tmp_path):
+    """The ref's library may give a shape the case creates another ID; its triggers are the ones its own build wrote."""
+    tool = _tool()
+    candidate = tool._Case("03b", "line", 1, ((1, 9, "Prop.ShapeClass"),))
+    ref = tool._Case("03b", "line", 1, ((1, 8, "Prop.ShapeClass"),))
+    jobs = tool._jobs(tmp_path / "candidate", [candidate], tmp_path / "ref", {"03b": ref})
+    assert [(variant, case.triggers) for variant, case, _path in jobs] == [
+        ("ref", ((1, 8, "Prop.ShapeClass"),)),
+        ("candidate", ((1, 9, "Prop.ShapeClass"),)),
+    ]
 
 
 def test_the_report_carries_its_images_inside_it(tmp_path):

@@ -24,7 +24,8 @@ recognised.
 Visio draws from the values a file caches, so a candidate drawn differently
 after recalculating was stale on open: the file said one thing and would
 show another as soon as anything recalculated (#461). ``run`` exits 1 when
-any case is. Differences from the ref or from the fixture are what the
+any case is, and when any candidate case was never judged because it could
+not be built or exported. Differences from the ref or from the fixture are what the
 change did, and are reported, not judged.
 
 Every run is recorded in the store (``.hermes/visio-shots`` by default):
@@ -149,34 +150,59 @@ class _Drawn:
     parts: tuple[str, ...]
 
 
-def _svg_shapes(text: str) -> dict[int, _Drawn]:
-    """Every shape in a Visio SVG export, by its Visio ID.
+@dataclass(frozen=True)
+class _Page:
+    """What Visio drew for a page: its size, its shapes by Visio ID, and the order they are painted in."""
+
+    size: str
+    shapes: dict[int, _Drawn]
+    order: tuple[int, ...]
+    """Shape IDs bottom first: SVG paints in document order, so a later shape covers an earlier one."""
+
+
+_PAGE_SIZE = ("width", "height", "viewBox")
+_NOT_DRAWN = {f"{_SVG_NS}title", f"{_SVG_NS}desc", f"{_SVG_NS}metadata"}
+"""SVG elements a renderer never paints. Elements outside the SVG namespace (Visio's `v:` records of Shape Data,
+user cells and text blocks) are never painted either, and are skipped with everything inside them."""
+
+
+def _svg_page(text: str) -> _Page:
+    """A Visio SVG export's page, shape by shape.
 
     A group's members are shapes of their own: a member that moves is
-    reported as itself, not as a change to the group around it.
+    reported as itself, not as a change to the group around it. The group's
+    own drawing, which Visio writes in a `groupContent` element carrying the
+    group's ID again, is the group's.
     """
     root = ElementTree.fromstring(_normalise_svg(text).encode("utf-8"))
     styles = _styles(root)
-    shapes: dict[int, _Drawn] = {}
+    transforms: dict[int, list[str]] = {}
+    parts: dict[int, list[str]] = {}
 
-    def walk(element: ElementTree.Element, parts: list[str] | None) -> None:
+    def walk(element: ElementTree.Element, into: list[str] | None) -> None:
         for child in element:
+            if not child.tag.startswith(_SVG_NS) or child.tag in _NOT_DRAWN:
+                continue
             shape_id = child.get(f"{_VISIO_NS}mID")
             if (
                 child.tag == f"{_SVG_NS}g"
                 and shape_id is not None
                 and child.get(f"{_VISIO_NS}groupContext") != "foregroundPage"
             ):
-                own: list[str] = []
-                walk(child, own)
-                shapes[int(shape_id)] = _Drawn(child.get("transform", ""), tuple(own))
+                key = int(shape_id)
+                transforms.setdefault(key, [])
+                if child.get("transform"):
+                    transforms[key].append(child.get("transform", ""))
+                walk(child, parts.setdefault(key, []))
                 continue
-            if parts is not None and child.tag != f"{_SVG_NS}title":
-                parts.append(_describe(child, styles))
-            walk(child, parts)
+            if into is not None:
+                into.append(_describe(child, styles))
+            walk(child, into)
 
     walk(root, None)
-    return shapes
+    size = " ".join(f"{name}={root.get(name)}" for name in _PAGE_SIZE if root.get(name) is not None)
+    shapes = {key: _Drawn(" ".join(transforms[key]), tuple(parts[key])) for key in transforms}
+    return _Page(size, shapes, tuple(transforms))
 
 
 def _translation(transform: str) -> tuple[float, float] | None:
@@ -199,9 +225,15 @@ def _clip(part: str) -> str:
 
 
 def _diff_svgs(first: str, second: str) -> list[str]:
-    """Each shape two Visio SVG exports draw differently, in shape ID order; empty if they draw the same."""
-    a, b = _svg_shapes(first), _svg_shapes(second)
+    """What two Visio SVG exports draw differently: the page, then each shape in ID order, then the stacking order.
+
+    Empty if they draw the same.
+    """
+    first_page, second_page = _svg_page(first), _svg_page(second)
+    a, b = first_page.shapes, second_page.shapes
     findings = []
+    if first_page.size != second_page.size:
+        findings.append(f"the page: {first_page.size} -> {second_page.size}")
     for shape_id in sorted(a.keys() | b.keys()):
         if shape_id not in b:
             findings.append(f"shape {shape_id} only in the first drawing")
@@ -222,6 +254,14 @@ def _diff_svgs(first: str, second: str) -> list[str]:
                 for old, fresh in itertools.zip_longest(gone, new, fillvalue="")
             ]
             findings.append(f"shape {shape_id} drawn differently: " + "; ".join(pairs or ["the same parts, reordered"]))
+    both = a.keys() & b.keys()
+    first_order = [shape_id for shape_id in first_page.order if shape_id in both]
+    second_order = [shape_id for shape_id in second_page.order if shape_id in both]
+    if first_order != second_order:
+        findings.append(
+            "shapes stacked in another order, bottom first: "
+            f"{', '.join(map(str, first_order))} -> {', '.join(map(str, second_order))}"
+        )
     return findings
 
 
@@ -447,6 +487,27 @@ def _verdict(found: list[str] | None) -> str:
     return "same" if not found else f"{len(found)} difference{'s' if len(found) != 1 else ''}"
 
 
+def _failures(manifest: dict) -> list[str]:
+    """Why the run fails: a candidate case stale on open, or one that was never judged; empty if it passes.
+
+    A case the candidate could not build, or Visio could not export, never
+    reached a verdict, and a run that skipped it has not shown anything.
+    """
+    failures = [
+        f"the candidate could not build {name}: {error}"
+        for name, error in manifest["build_errors"].get("candidate", {}).items()
+    ]
+    for stem, case in manifest["cases"].items():
+        shot = case["shots"].get("candidate")
+        if shot is None:
+            failures.append(f"{stem} was not judged: Visio was not asked to export it")
+        elif "error" in shot:
+            failures.append(f"{stem} was not judged: Visio could not export it: {shot['error']}")
+        elif case["stale_on_open"]:
+            failures.append(f"{stem} is stale on open")
+    return failures
+
+
 def _summary(manifest: dict) -> str:
     """The run as Markdown, for a person reading the store or a pull request."""
     against = manifest["against"]
@@ -468,6 +529,8 @@ def _summary(manifest: dict) -> str:
     for side, errors in manifest["build_errors"].items():
         for name, error in errors.items():
             lines.append(f"\n{side} could not build `{name}`: {error}")
+    failures = _failures(manifest)
+    lines += ["", f"**FAIL**: {len(failures)} reason(s)" if failures else "**PASS**", *[f"- {reason}" for reason in failures]]
     for stem, case in manifest["cases"].items():
         lines += ["", f"## {stem}", "", case["line"]]
         for heading, found in case["findings"].items():
@@ -552,6 +615,7 @@ def _record_run(
     entry = {key: identity[key] for key in ("run", "created", "commit", "branch", "dirty", "against")} | {
         "cases": len(cases),
         "stale_on_open": [stem for stem, case in cases.items() if case["stale_on_open"]],
+        "failures": _failures(manifest),
     }
     with (store / "index.jsonl").open("a", encoding="utf-8") as index:
         index.write(json.dumps(entry) + "\n")
@@ -609,6 +673,28 @@ def _identity(run_id: str, created: str, against: dict | None, visio: dict, dpi:
     }
 
 
+def _jobs(
+    candidate_dir: Path, cases: list[_Case], ref_dir: Path, ref_cases: dict[str, _Case]
+) -> list[tuple[str, _Case, Path]]:
+    """Every (variant, case, file) to photograph: each case's `.before` file where it has one, the ref's build, the candidate's.
+
+    The `.before` file is photographed with the candidate's case, whose
+    triggers name shapes the fixture already has (a trigger naming a shape
+    the case created is skipped by the export). The ref's build is
+    photographed with the case the ref's own build wrote: its library may
+    have given a shape the case created another ID.
+    """
+    jobs = []
+    for case in cases:
+        before = candidate_dir / f"{case.stem}.before.vsdx"
+        if before.exists():
+            jobs.append(("before", case, before))
+        if case.stem in ref_cases:
+            jobs.append(("ref", ref_cases[case.stem], ref_dir / f"{case.stem}.vsdx"))
+        jobs.append(("candidate", case, candidate_dir / f"{case.stem}.vsdx"))
+    return jobs
+
+
 def _command_run(builder: Path, against: str | None, store: Path, dpi: int) -> int:
     sys.path.insert(0, str(_TOOLS))
     import visio_verify
@@ -618,26 +704,18 @@ def _command_run(builder: Path, against: str | None, store: Path, dpi: int) -> i
         work = Path(scratch)
         candidate = work / "candidate"
         errors = {"candidate": _build(builder, _REPO / "src", candidate)}
-        ref_info, ref_stems = None, set()
+        ref_info, ref_cases = None, {}
         if against:
             ref_src, commit = _export_library(_REPO, against, work / "ref-library")
             errors["ref"] = _build(builder, ref_src, work / "ref")
             ref_info = {"ref": against, "commit": commit}
-            ref_stems = {case.stem for case in _read_cases(work / "ref")}
+            ref_cases = {case.stem: case for case in _read_cases(work / "ref")}
         cases = _read_cases(candidate)
         if not cases:
             print(f"{builder.name} built no cases: {errors['candidate']}", file=sys.stderr)
             return 2
-        jobs = []
-        for case in cases:
-            before = candidate / f"{case.stem}.before.vsdx"
-            if before.exists():
-                jobs.append(("before", case, before))
-            if case.stem in ref_stems:
-                jobs.append(("ref", case, work / "ref" / f"{case.stem}.vsdx"))
-            jobs.append(("candidate", case, candidate / f"{case.stem}.vsdx"))
         try:
-            visio, shots = _shoot(jobs, dpi, work / "shots")
+            visio, shots = _shoot(_jobs(candidate, cases, work / "ref", ref_cases), dpi, work / "shots")
         except visio_verify.VisioUnavailable as error:
             print(f"Visio is not usable from here: {error}", file=sys.stderr)
             return 2
@@ -646,11 +724,11 @@ def _command_run(builder: Path, against: str | None, store: Path, dpi: int) -> i
     manifest = _record_run(store, identity, {case.stem: case.line for case in cases}, shots, build_errors=errors)
     print(_summary(manifest).split("\n## ")[0])
     print(f"recorded {store / 'runs' / run_id}; images in {store / 'local' / run_id / 'report.html'}")
-    return 1 if any(case["stale_on_open"] for case in manifest["cases"].values()) else 0
+    return 1 if _failures(manifest) else 0
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the harness; 0 when no candidate is stale on open, 1 when one is, 2 when it could not run."""
+    """Run the harness; 0 when every candidate case was judged and none is stale on open, 1 otherwise, 2 when it could not run."""
     parser = argparse.ArgumentParser(prog="visio_shots.py", description=__doc__.split("\n\n")[0])
     commands = parser.add_subparsers(dest="command", required=True)
     run = commands.add_parser("run", help="build, photograph and record the case set")
