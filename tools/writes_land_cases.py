@@ -15,8 +15,8 @@ what it shows for each written cell, both on open and after ``Cell.Trigger()``
 forces it to recalculate: Visio shows the cached value it opened with until
 something recalculates a cell, and a stale formula left in place by a bug (a
 ``GUARD()``, a theme) wins only at that point, so reading the open value alone
-would miss exactly the write this checks for. The package is not merged until every check passes (CONTRIBUTING,
-"When a change needs Visio").
+would miss exactly the write this checks for. The package is not merged
+until every check passes (CONTRIBUTING, "When a change needs Visio").
 """
 
 from __future__ import annotations
