@@ -2,8 +2,9 @@
 
 `_packages_written_are_structurally_sound` is autouse, so it cannot be driven
 through a normal test the way a fixture-consuming function is; the tests here
-exercise the pure piece of it, `_excused_kinds`, directly, against packages a
-real fixture is known to leave with defects.
+exercise the pure piece of it, `_excused_kinds`, which makes every decision
+about a marker the fixture acts on, directly, against packages a real fixture
+is known to leave with defects.
 """
 
 import os
@@ -18,9 +19,16 @@ def test_a_bare_marker_excuses_every_kind_for_every_file():
     """No `kinds` and no `files`: unchanged from before `files` existed."""
     marker = pytest.mark.allow_invalid_package.mark
 
-    assert conftest._excused_kinds("a.vsdx", marker) == frozenset()
-    # a bare marker is handled by the fixture's own early return, not by
-    # `_excused_kinds`; see `_packages_written_are_structurally_sound`.
+    assert conftest._excused_kinds("a.vsdx", marker) is None
+    assert conftest._excused_kinds("b.vsdx", marker) is None
+
+
+def test_a_bare_marker_with_files_excuses_every_kind_only_for_the_named_files():
+    """It returned early for every package the test wrote, whatever `files` named (the #455 review)."""
+    marker = pytest.mark.allow_invalid_package(files=("a.vsdx",)).mark
+
+    assert conftest._excused_kinds("a.vsdx", marker) is None
+    assert conftest._excused_kinds("b.vsdx", marker) == frozenset()
 
 
 def test_a_marker_naming_kinds_but_no_files_excuses_them_for_every_file():
