@@ -20,12 +20,14 @@ def _tool():
     return module
 
 
-@pytest.mark.allow_invalid_package("missing-part")
+@pytest.mark.allow_invalid_package("missing-part", files=("05_plain_line_text.vsdx",))
 def test_every_case_writes_a_file_that_opens(tmp_path):
     """`05_plain_line_text.vsdx` comes from `test5_master.vsdx`, which ships with seven `missing-part`
     defects of its own (KNOWN_NON_CONFORMANT in test_package_validator.py); conftest's provenance
     match goes by filename, and case 5 is named for the brief, not for its fixture, so the known
-    defects need excusing here rather than being mistaken for ones this test introduced.
+    defects need excusing here rather than being mistaken for ones this test introduced. `files`
+    keeps the exemption to that one case, so a real `missing-part` regression in any of the other
+    seven would still be seen.
     """
     tool = _tool()
 
@@ -180,7 +182,7 @@ def test_judge_handles_a_single_document_collapsed_to_a_bare_dict():
     assert tool.judge(expected, tool._documents(payload)) == []
 
 
-@pytest.mark.allow_invalid_package("missing-part")
+@pytest.mark.allow_invalid_package("missing-part", files=("05_plain_line_text.vsdx",))
 def test_every_case_says_what_visio_must_show(tmp_path):
     """A case with no checks is a case the check cannot fail on.
 

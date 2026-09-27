@@ -1931,7 +1931,7 @@ class Shape:
         pin, width and height follow the ends: where they are formulas of the
         ends, the formulas stay, and their values are refreshed.
 
-        :raises InvalidOperationError: if the shape is detached, a coordinate is ``None``, or it is a 2-D shape
+        :raises InvalidOperationError: if the shape is detached, it is a 2-D shape, or a coordinate is ``None``
         """
         # nothing at all is written on a shape with no BeginX, so leaving this
         # to the coordinate setters below would make the refusal depend on the
