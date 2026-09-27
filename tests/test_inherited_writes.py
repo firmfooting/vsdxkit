@@ -284,6 +284,23 @@ def test_a_value_written_after_a_relabel_leaves_one_row(house_7):
     assert house_7.data_properties["Renamed"].value == "Again"
 
 
+def test_a_held_property_reads_the_override_another_handle_made(house_7):
+    """A handle taken while the property was inherited reads the row a second handle wrote, not the master's."""
+    held = house_7.data_properties["ShapeClass"]
+    other = house_7.data_properties["ShapeClass"]
+    assert held is not other and held.inherited
+
+    other.set_attribute("Label", "V", "Renamed")
+    other.value = "Written"
+
+    assert (held.label, held.value) == ("Renamed", "Written")
+    assert (held.value_type, held.prompt, held.sort_key) == ("0", "", "")
+    held.value = "Again"
+    [row] = _property_rows(house_7, "ShapeClass")
+    assert held.xml is other.xml is row
+    assert other.value == "Again"
+
+
 def test_set_attribute_twice_leaves_one_row(house_7):
     prop = house_7.data_properties["ShapeClass"]
 
