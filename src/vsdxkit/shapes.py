@@ -1732,13 +1732,18 @@ class Shape:
         self._write_end("EndY", value)
 
     def _write_end(self, name: str, value: float | str) -> None:
-        """Write end coordinate `name`, freeing that end first if it is glued, as dragging a glued end away does in Visio."""
+        """Write end coordinate `name`, freeing that end first if it is glued, as dragging a glued end away does in Visio.
+
+        The value is converted before the end is freed, so a value refused
+        leaves the end glued, as it was.
+        """
         self._require_attached(f"writing shape cell {name!r}")
+        coordinate = _coordinate_value(value)
         begin = name.startswith("Begin")
         end_cell = "BeginX" if begin else "EndX"
         if any(record.from_id == self.ID and record.from_rel == end_cell for record in self._page._connects()):
             _float_end(self, begin=begin)
-        self.set_cell_value(name, _coordinate_value(value))
+        self.set_cell_value(name, coordinate)
 
     def move(self, x_delta: float, y_delta: float) -> None:
         """Move the shape by ``x_delta`` and ``y_delta`` inches.
@@ -1913,11 +1918,15 @@ class Shape:
             finish_x, finish_y = finish
             if start_x is None or start_y is None or finish_x is None or finish_y is None:
                 raise InvalidOperationError("connector start and finish coordinates cannot be None")
-            self._write_cell("PinX", v=xml_value(start_x), keep_formula=True)
-            self._write_cell("PinY", v=xml_value(start_y), keep_formula=True)
             # lines/connectors are defined in different ways
             # Check whether shape is a connector based on name in known languages
             is_connector = self.universal_name == "Dynamic connector"
+            # worked out before anything is written, so a coordinate that is
+            # not a number is refused with the shape, and its glue, as it was
+            width = finish_x - start_x
+            height = finish_y - start_y if is_connector else 0.0
+            self._write_cell("PinX", v=xml_value(start_x), keep_formula=True)
+            self._write_cell("PinY", v=xml_value(start_y), keep_formula=True)
 
             if keep_glue:
                 for name, value in (("BeginX", start_x), ("BeginY", start_y), ("EndX", finish_x), ("EndY", finish_y)):
@@ -1925,8 +1934,6 @@ class Shape:
             else:
                 self.begin_x, self.begin_y = start_x, start_y
                 self.end_x, self.end_y = finish_x, finish_y
-            width = finish_x - start_x
-            height = finish_y - start_y if is_connector else 0.0
             self._write_cell("Width", v=xml_value(width), keep_formula=True)
             self._write_cell("Height", v=xml_value(height), keep_formula=True)
             self._write_cell("PinX", v=xml_value(start_x), keep_formula=True)
