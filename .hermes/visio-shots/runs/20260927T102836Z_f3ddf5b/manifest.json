@@ -1,9 +1,13 @@
 {
-  "run": "20260927T100834Z_1e69dfc",
-  "created": "2026-09-27T10:08:34+00:00",
-  "commit": "1e69dfc492b91beaba71817583c8022acb50276c",
+  "run": "20260927T102836Z_f3ddf5b",
+  "created": "2026-09-27T10:28:36+00:00",
+  "commit": "f3ddf5b3414dc0b1f749a4c7359e0c7d177d65a6",
   "branch": "test/visio-shots",
   "dirty": false,
+  "builder": {
+    "path": "tools/writes_land_cases.py",
+    "sha256": "acda876583967d232223b034184762285201fea14afbb385712aaface42bcf15"
+  },
   "against": {
     "ref": "main",
     "commit": "e7ad0aa50221d48c32a37dad3dd1a1d810f6f365"
@@ -61,7 +65,7 @@
           "shape 37 drawn differently: path style={fill:#fff9f1;stroke:#d49f00;stroke-linecap:butt;stroke-width:1.25} d=M0 595.28 L785.2 595.28 L785.2 566.93 L0 566.93 L0 595.28 Z -> path style={fill:#00ff00;stroke:#ff0000;stroke-linecap:butt;stroke-width:1.25} d=M0 595.28 L785.2 595.28 L785.2 566.93 L0 566.93 L0 595.28 Z"
         ],
         "before -> candidate, after recalc": [
-          "shape 37 drawn differently: path style={fill:#fff9f1;stroke:#d49f00;stroke-linecap:butt;stroke-width:1.25} d=M0 595.28 L785.2 595.28 L785.2 566.93 L0 566.93 L0 595.28 Z -> path style={fill:#00ff00;stroke:#ff0000;stroke-linecap:butt;stroke-width:1.25} d=M0 595.28 L785.2 595.28 L785.2 566.93 L0 566.93 L0 595.28 Z; text style={fill:#000000;font-family:Calibri;font-size:1.33333em} x=4 y=585.9 v:langID=1033 -> text style={fill:#0000ff;font-family:Calibri;font-size:1.33333em} x=4 y=585.9 v:langID=1033"
+          "shape 37 drawn differently: path style={fill:#fff9f1;stroke:#d49f00;stroke-linecap:butt;stroke-width:1.25} d=M0 595.28 L785.2 595.28 L785.2 566.93 L0 566.93 L0 595.28 Z -> path style={fill:#00ff00;stroke:#ff0000;stroke-linecap:butt;stroke-width:1.25} d=M0 595.28 L785.2 595.28 L785.2 566.93 L0 566.93 L0 595.28 Z; text style={fill:#000000;font-family:Calibri;font-size:1.33333em} x=4 y=585.9 v:langID=1033 \"Cross-Functional Flowchart\" -> text style={fill:#0000ff;font-family:Calibri;font-size:1.33333em} x=4 y=585.9 v:langID=1033 \"Cross-Functional Flowchart\""
         ]
       },
       "stale_on_open": false
@@ -103,13 +107,13 @@
       "findings": {
         "candidate on open -> after recalc": [],
         "ref on open -> after recalc": [
-          "shape 2 drawn differently: text style={fill:#0000ff;font-family:Calibri;font-size:1.00001em} x=53.08 y=788.8 v:langID=2057 -> text style={fill:#ff0000;font-family:Calibri;font-size:1.00001em} x=53.08 y=788.8 v:langID=2057"
+          "shape 2 drawn differently: text style={fill:#0000ff;font-family:Calibri;font-size:1.00001em} x=53.08 y=788.8 v:langID=2057 \"Text Color\" -> text style={fill:#ff0000;font-family:Calibri;font-size:1.00001em} x=53.08 y=788.8 v:langID=2057 \"Text Color\""
         ],
         "ref -> candidate, after recalc": [
-          "shape 2 drawn differently: text style={fill:#ff0000;font-family:Calibri;font-size:1.00001em} x=53.08 y=788.8 v:langID=2057 -> text style={fill:#0000ff;font-family:Calibri;font-size:1.00001em} x=53.08 y=788.8 v:langID=2057"
+          "shape 2 drawn differently: text style={fill:#ff0000;font-family:Calibri;font-size:1.00001em} x=53.08 y=788.8 v:langID=2057 \"Text Color\" -> text style={fill:#0000ff;font-family:Calibri;font-size:1.00001em} x=53.08 y=788.8 v:langID=2057 \"Text Color\""
         ],
         "before -> candidate, after recalc": [
-          "shape 2 drawn differently: text style={fill:#ff0000;font-family:Calibri;font-size:1.00001em} x=53.08 y=788.8 v:langID=2057 -> text style={fill:#0000ff;font-family:Calibri;font-size:1.00001em} x=53.08 y=788.8 v:langID=2057"
+          "shape 2 drawn differently: text style={fill:#ff0000;font-family:Calibri;font-size:1.00001em} x=53.08 y=788.8 v:langID=2057 \"Text Color\" -> text style={fill:#0000ff;font-family:Calibri;font-size:1.00001em} x=53.08 y=788.8 v:langID=2057 \"Text Color\""
         ]
       },
       "stale_on_open": false
@@ -154,15 +158,15 @@
         ],
         "ref on open -> after recalc": [
           "shape 1 moved (-1.417 in, +0.000 in): translate(138.047,-710.504) -> translate(36,-710.504)",
-          "shape 1 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=113.386 width=180 x=0 y=728.504 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=113.386 width=72 x=0 y=728.504; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.2 y=788.8 v:langID=2057 -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=9.2 y=788.8 v:langID=2057"
+          "shape 1 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=113.386 width=180 x=0 y=728.504 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=113.386 width=72 x=0 y=728.504; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.2 y=788.8 v:langID=2057 \"Shape Text\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=9.2 y=788.8 v:langID=2057 \"Shape Text\""
         ],
         "ref -> candidate, after recalc": [
           "shape 1 moved (+1.250 in, +0.000 in): translate(36,-710.504) -> translate(126,-710.504)",
-          "shape 1 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=113.386 width=72 x=0 y=728.504 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=113.386 width=180 x=0 y=728.504; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=9.2 y=788.8 v:langID=2057 -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.2 y=788.8 v:langID=2057"
+          "shape 1 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=113.386 width=72 x=0 y=728.504 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=113.386 width=180 x=0 y=728.504; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=9.2 y=788.8 v:langID=2057 \"Shape Text\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.2 y=788.8 v:langID=2057 \"Shape Text\""
         ],
         "before -> candidate, after recalc": [
           "shape 1 moved (+1.500 in, +0.000 in): translate(18,-710.504) -> translate(126,-710.504)",
-          "shape 1 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=113.386 width=155.906 x=0 y=728.504 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=113.386 width=180 x=0 y=728.504; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=51.16 y=788.8 v:langID=2057 -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.2 y=788.8 v:langID=2057"
+          "shape 1 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=113.386 width=155.906 x=0 y=728.504 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=113.386 width=180 x=0 y=728.504; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=51.16 y=788.8 v:langID=2057 \"Shape Text\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.2 y=788.8 v:langID=2057 \"Shape Text\""
         ]
       },
       "stale_on_open": true
@@ -182,7 +186,7 @@
         },
         "ref": {
           "open": {
-            "svg": "49eaeb6c69b445ec73a05464c6877ac65f0a62f7f9154c8b8fc36496ea704a60",
+            "svg": "2b85937aa0328c10dfc92c32143d0e7593dbcbe5d3b42ec21733fbd1595c4826",
             "png": "7d18dc69464ef4be272b59b7b3782d710521aafcfb6fc58e6de1b10605e2102b"
           },
           "recalc": {
@@ -238,7 +242,7 @@
             "png": "09b13ab4a3c1a51bd2b83b100af4d29206f859a5adfde4d22b9bb0bb9c36b2e6"
           },
           "recalc": {
-            "svg": "6daf403294bfe84d35d0a18017f612109b727c1b74adafdb91cc690ac077741d",
+            "svg": "b3e8bbbef09f5be65284de6059119e15eb7a7ea501b38b1c6cda064988c11113",
             "png": "09b13ab4a3c1a51bd2b83b100af4d29206f859a5adfde4d22b9bb0bb9c36b2e6"
           }
         }
@@ -359,11 +363,11 @@
       "shots": {
         "before": {
           "open": {
-            "svg": "1887766e4f1f7778359b6f0a89735e5e8204c4beae2fec05dfc8fdf562f3419d",
+            "svg": "d4dac7888eabd44931fa272c4024c021c332beef608eefe3bf72e0178c63d068",
             "png": "96426436e99ee570b795956888e11111f832e7c71ede6f8d5556c2cd44870114"
           },
           "recalc": {
-            "svg": "1eb1f841294ed57212f2a6aa256043acb768fa7b0229169bc16eb6febb0ef840",
+            "svg": "d4dac7888eabd44931fa272c4024c021c332beef608eefe3bf72e0178c63d068",
             "png": "96426436e99ee570b795956888e11111f832e7c71ede6f8d5556c2cd44870114"
           }
         },
@@ -383,7 +387,7 @@
             "png": "fa3ceaffff1ca57eb5e52964957749097e6c8b36aeb25336df86c5432b520803"
           },
           "recalc": {
-            "svg": "afd86b30394dc6ce57565cd83e3a36b05bfef7c4f304877ecd8f9e1e4105129b",
+            "svg": "ffc84ab93c19bf73f1578e79058af0318b25a782cf8e1dbe3a646bb55e9c0f5c",
             "png": "fa3ceaffff1ca57eb5e52964957749097e6c8b36aeb25336df86c5432b520803"
           }
         }
@@ -391,10 +395,10 @@
       "findings": {
         "candidate on open -> after recalc": [],
         "ref on open -> after recalc": [
-          "shape 3 drawn differently: path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M72 769.89 L327.12 713.2 -> path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 841.89 L72 769.89 L327.12 713.2 L183.12 857.2; rect style={fill:#ffffff;stroke:none} height=9.59985 width=23.3281 x=115.895 y=808.744 v:rectContext=textBkgnd -> rect style={fill:#ffffff;stroke:none} height=9.59985 width=23.3281 x=95.645 y=807.091 v:rectContext=textBkgnd; text style={fill:#000000;font-family:Calibri;font-size:0.666664em} x=115.89 y=815.94 v:langID=2057 -> text style={fill:#000000;font-family:Calibri;font-size:0.666664em} x=95.64 y=814.29 v:langID=2057"
+          "shape 3 drawn differently: path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M72 769.89 L327.12 713.2 -> path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 841.89 L72 769.89 L327.12 713.2 L183.12 857.2; rect style={fill:#ffffff;stroke:none} height=9.59985 width=23.3281 x=115.895 y=808.744 v:rectContext=textBkgnd -> rect style={fill:#ffffff;stroke:none} height=9.59985 width=23.3281 x=95.645 y=807.091 v:rectContext=textBkgnd; text style={fill:#000000;font-family:Calibri;font-size:0.666664em} x=115.89 y=815.94 v:langID=2057 \"Conn A\" -> text style={fill:#000000;font-family:Calibri;font-size:0.666664em} x=95.64 y=814.29 v:langID=2057 \"Conn A\""
         ],
         "ref -> candidate, after recalc": [
-          "shape 3 drawn differently: path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 841.89 L72 769.89 L327.12 713.2 L183.12 857.2 -> path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 841.89 L255.12 785.2; rect style={fill:#ffffff;stroke:none} height=9.59985 width=23.3281 x=95.645 y=807.091 v:rectContext=textBkgnd -> rect style={fill:#ffffff;stroke:none} height=9.59985 width=23.3281 x=115.895 y=808.744 v:rectContext=textBkgnd; text style={fill:#000000;font-family:Calibri;font-size:0.666664em} x=95.64 y=814.29 v:langID=2057 -> text style={fill:#000000;font-family:Calibri;font-size:0.666664em} x=115.89 y=815.94 v:langID=2057"
+          "shape 3 drawn differently: path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 841.89 L72 769.89 L327.12 713.2 L183.12 857.2 -> path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 841.89 L255.12 785.2; rect style={fill:#ffffff;stroke:none} height=9.59985 width=23.3281 x=95.645 y=807.091 v:rectContext=textBkgnd -> rect style={fill:#ffffff;stroke:none} height=9.59985 width=23.3281 x=115.895 y=808.744 v:rectContext=textBkgnd; text style={fill:#000000;font-family:Calibri;font-size:0.666664em} x=95.64 y=814.29 v:langID=2057 \"Conn A\" -> text style={fill:#000000;font-family:Calibri;font-size:0.666664em} x=115.89 y=815.94 v:langID=2057 \"Conn A\""
         ],
         "before -> candidate, after recalc": [
           "shape 3 moved (+1.000 in, +1.000 in): translate(28.3465,-623.622) -> translate(100.346,-695.622)"
@@ -407,17 +411,17 @@
       "shots": {
         "before": {
           "open": {
-            "svg": "2e616b2fde8ac9c37ac7a2280ef610d7c2c05f1fc99d0d5b7d136b680df46a42",
+            "svg": "b394106915a208e016ade9d41b8bc4b0d451e0fe0cf07842788c5eb3d07c8d1a",
             "png": "4d11f69fe5dae3413a458a9e3eb7235bd35367990dd64708b8690d47183126d3"
           },
           "recalc": {
-            "svg": "b394106915a208e016ade9d41b8bc4b0d451e0fe0cf07842788c5eb3d07c8d1a",
+            "svg": "2e616b2fde8ac9c37ac7a2280ef610d7c2c05f1fc99d0d5b7d136b680df46a42",
             "png": "4d11f69fe5dae3413a458a9e3eb7235bd35367990dd64708b8690d47183126d3"
           }
         },
         "ref": {
           "open": {
-            "svg": "55af69b2dadc4668fb1b31a2a5260bc0d4075a18195e8bc93f16c0e7ff2fce66",
+            "svg": "ceabad65c190b6af9f880e12819a5ce544a6d78ae93e61c89fc81df05d978e0a",
             "png": "a41d503602c8c27b289db2ce67684be97847b2e8c56a09eb7fa92ec0ae5d7e57"
           },
           "recalc": {
@@ -427,7 +431,7 @@
         },
         "candidate": {
           "open": {
-            "svg": "11e8e39bf241e28732598e9591157e618c5857c07b8e4e06efe5d293a8e6856e",
+            "svg": "93e5b115a372706cf615390c7677c5914d9f7a44e26a1430bafa3a1049bd4918",
             "png": "4dc2c136ab456f081c200f55a8ec6064bd95b2e2b0149909249523605c9a20e1"
           },
           "recalc": {
@@ -443,11 +447,11 @@
         ],
         "ref -> candidate, after recalc": [
           "shape 5 moved (+1.000 in, +0.000 in): translate(0.00387868,-504) -> translate(72.0039,-504)",
-          "shape 5 drawn differently: rect style={fill:#ffffff;stroke:none} height=8.20596 width=23.1169 x=132.441 y=103.797 v:rectContext=textBkgnd -> rect style={fill:#ffffff;stroke:none} height=8.20596 width=23.1169 x=60.4414 y=607.797 v:rectContext=textBkgnd; text style={fill:#333333;font-family:Arial;font-size:0.666664em;font-weight:bold} x=132.44 y=110 v:langID=1033 -> text style={fill:#333333;font-family:Arial;font-size:0.666664em;font-weight:bold} x=60.44 y=614 v:langID=1033"
+          "shape 5 drawn differently: rect style={fill:#ffffff;stroke:none} height=8.20596 width=23.1169 x=132.441 y=103.797 v:rectContext=textBkgnd -> rect style={fill:#ffffff;stroke:none} height=8.20596 width=23.1169 x=60.4414 y=607.797 v:rectContext=textBkgnd; text style={fill:#333333;font-family:Arial;font-size:0.666664em;font-weight:bold} x=132.44 y=110 v:langID=1033 \"Line 1\" -> text style={fill:#333333;font-family:Arial;font-size:0.666664em;font-weight:bold} x=60.44 y=614 v:langID=1033 \"Line 1\""
         ],
         "before -> candidate, after recalc": [
           "shape 5 moved (-0.759 in, -0.500 in): translate(126.677,-540) -> translate(72.0039,-504)",
-          "shape 5 drawn differently: path style={marker-end:url(#mrkr4-16);stroke:#5e5e5e;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.9} d=M0 612 L126.81 612 -> path style={marker-end:url(#mrkr4-16);stroke:#5e5e5e;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.9} d=M0 612 L137.16 612; rect style={fill:#ffffff;stroke:none} height=8.20596 width=23.1169 x=63.9694 y=607.797 v:rectContext=textBkgnd -> rect style={fill:#ffffff;stroke:none} height=8.20596 width=23.1169 x=60.4414 y=607.797 v:rectContext=textBkgnd; text style={fill:#333333;font-family:Arial;font-size:0.666664em;font-weight:bold} x=63.97 y=614 v:langID=1033 -> text style={fill:#333333;font-family:Arial;font-size:0.666664em;font-weight:bold} x=60.44 y=614 v:langID=1033"
+          "shape 5 drawn differently: path style={marker-end:url({marker style={fill:#5e5e5e;fill-opacity:1;stroke:#5e5e5e;stroke-opacity:1;stroke-width:0.26315789473684} markerUnits=strokeWidth orient=auto overflow=visible refX=-7.6 v:arrowSize=2 v:arrowType=4 v:setback=7.6... -> path style={marker-end:url({marker style={fill:#5e5e5e;fill-opacity:1;stroke:#5e5e5e;stroke-opacity:1;stroke-width:0.26315789473684} markerUnits=strokeWidth orient=auto overflow=visible refX=-7.6 v:arrowSize=2 v:arrowType=4 v:setback=7.6...; rect style={fill:#ffffff;stroke:none} height=8.20596 width=23.1169 x=63.9694 y=607.797 v:rectContext=textBkgnd -> rect style={fill:#ffffff;stroke:none} height=8.20596 width=23.1169 x=60.4414 y=607.797 v:rectContext=textBkgnd; text style={fill:#333333;font-family:Arial;font-size:0.666664em;font-weight:bold} x=63.97 y=614 v:langID=1033 \"Line 1\" -> text style={fill:#333333;font-family:Arial;font-size:0.666664em;font-weight:bold} x=60.44 y=614 v:langID=1033 \"Line 1\""
         ]
       },
       "stale_on_open": false
@@ -457,17 +461,17 @@
       "shots": {
         "before": {
           "open": {
-            "svg": "b394106915a208e016ade9d41b8bc4b0d451e0fe0cf07842788c5eb3d07c8d1a",
+            "svg": "43be5437a11c7171ff1f8da98d368a4ec065f9b47d727c6f667d947e5fe62d9e",
             "png": "4d11f69fe5dae3413a458a9e3eb7235bd35367990dd64708b8690d47183126d3"
           },
           "recalc": {
-            "svg": "efaa2b5c22cae39d7f845b8ae04dce9c0331d3b4305aa83c294e91c51009d6b5",
+            "svg": "b394106915a208e016ade9d41b8bc4b0d451e0fe0cf07842788c5eb3d07c8d1a",
             "png": "4d11f69fe5dae3413a458a9e3eb7235bd35367990dd64708b8690d47183126d3"
           }
         },
         "ref": {
           "open": {
-            "svg": "57423891da1f6ffd09641822554551b815476e1bb05f8f9a2922baa39ae08e6a",
+            "svg": "b9c7e2658814f2f69917f00eb91b40d2af9ac2036d33cabcd9e6fba101e1c17f",
             "png": "878241fb39adc31b7a13bfaee11a517d1eefbb56c48df8e36b72bedb6475e2c5"
           },
           "recalc": {
@@ -481,7 +485,7 @@
             "png": "a8e8dc809ad4427ecfbb3f145cf735120bc042a2454e78d696b604bd499ac93a"
           },
           "recalc": {
-            "svg": "a21b51c72c64d8e784fd0204bcb2b9f897e69d1caae265d4b626f558feeca667",
+            "svg": "86fd5a265480c92508b19911afe9214029c89260b43e2b14a47d6d48fc942222",
             "png": "a8e8dc809ad4427ecfbb3f145cf735120bc042a2454e78d696b604bd499ac93a"
           }
         }
@@ -493,11 +497,11 @@
         ],
         "ref -> candidate, after recalc": [
           "shape 5 moved (-5.300 in, -3.400 in): translate(-35.9942,-504) -> translate(-417.594,-259.208) rotate(-53.1301)",
-          "shape 5 drawn differently: path style={marker-end:url(#mrkr4-16);stroke:#5e5e5e;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.9} d=M0 612 L209.16 612 -> path style={marker-end:url(#mrkr4-16);stroke:#5e5e5e;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.9} d=M0 612 L353.16 612; rect style={fill:#ffffff;stroke:none} height=8.20596 width=23.1169 x=168.441 y=103.797 v:rectContext=textBkgnd -> rect style={fill:#ffffff;stroke:none} height=8.20596 width=23.1169 x=168.441 y=607.797 v:rectContext=textBkgnd; text style={fill:#333333;font-family:Arial;font-size:0.666664em;font-weight:bold} x=168.44 y=110 v:langID=1033 -> text style={fill:#333333;font-family:Arial;font-size:0.666664em;font-weight:bold} x=168.44 y=614 v:langID=1033"
+          "shape 5 drawn differently: path style={marker-end:url({marker style={fill:#5e5e5e;fill-opacity:1;stroke:#5e5e5e;stroke-opacity:1;stroke-width:0.26315789473684} markerUnits=strokeWidth orient=auto overflow=visible refX=-7.6 v:arrowSize=2 v:arrowType=4 v:setback=7.6... -> path style={marker-end:url({marker style={fill:#5e5e5e;fill-opacity:1;stroke:#5e5e5e;stroke-opacity:1;stroke-width:0.26315789473684} markerUnits=strokeWidth orient=auto overflow=visible refX=-7.6 v:arrowSize=2 v:arrowType=4 v:setback=7.6...; rect style={fill:#ffffff;stroke:none} height=8.20596 width=23.1169 x=168.441 y=103.797 v:rectContext=textBkgnd -> rect style={fill:#ffffff;stroke:none} height=8.20596 width=23.1169 x=168.441 y=607.797 v:rectContext=textBkgnd; text style={fill:#333333;font-family:Arial;font-size:0.666664em;font-weight:bold} x=168.44 y=110 v:langID=1033 \"Line 1\" -> text style={fill:#333333;font-family:Arial;font-size:0.666664em;font-weight:bold} x=168.44 y=614 v:langID=1033 \"Line 1\""
         ],
         "before -> candidate, after recalc": [
           "shape 5 moved (-7.559 in, -3.900 in): translate(126.677,-540) -> translate(-417.594,-259.208) rotate(-53.1301)",
-          "shape 5 drawn differently: path style={marker-end:url(#mrkr4-16);stroke:#5e5e5e;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.9} d=M0 612 L126.81 612 -> path style={marker-end:url(#mrkr4-16);stroke:#5e5e5e;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.9} d=M0 612 L353.16 612; rect style={fill:#ffffff;stroke:none} height=8.20596 width=23.1169 x=63.9694 y=607.797 v:rectContext=textBkgnd -> rect style={fill:#ffffff;stroke:none} height=8.20596 width=23.1169 x=168.441 y=607.797 v:rectContext=textBkgnd; text style={fill:#333333;font-family:Arial;font-size:0.666664em;font-weight:bold} x=63.97 y=614 v:langID=1033 -> text style={fill:#333333;font-family:Arial;font-size:0.666664em;font-weight:bold} x=168.44 y=614 v:langID=1033"
+          "shape 5 drawn differently: path style={marker-end:url({marker style={fill:#5e5e5e;fill-opacity:1;stroke:#5e5e5e;stroke-opacity:1;stroke-width:0.26315789473684} markerUnits=strokeWidth orient=auto overflow=visible refX=-7.6 v:arrowSize=2 v:arrowType=4 v:setback=7.6... -> path style={marker-end:url({marker style={fill:#5e5e5e;fill-opacity:1;stroke:#5e5e5e;stroke-opacity:1;stroke-width:0.26315789473684} markerUnits=strokeWidth orient=auto overflow=visible refX=-7.6 v:arrowSize=2 v:arrowType=4 v:setback=7.6...; rect style={fill:#ffffff;stroke:none} height=8.20596 width=23.1169 x=63.9694 y=607.797 v:rectContext=textBkgnd -> rect style={fill:#ffffff;stroke:none} height=8.20596 width=23.1169 x=168.441 y=607.797 v:rectContext=textBkgnd; text style={fill:#333333;font-family:Arial;font-size:0.666664em;font-weight:bold} x=63.97 y=614 v:langID=1033 \"Line 1\" -> text style={fill:#333333;font-family:Arial;font-size:0.666664em;font-weight:bold} x=168.44 y=614 v:langID=1033 \"Line 1\""
         ]
       },
       "stale_on_open": false
@@ -517,7 +521,7 @@
         },
         "ref": {
           "open": {
-            "svg": "4de1fed22ecd43bb5ee40938d181c9ebda32994f79bf7d89847dc3b70bbb5b44",
+            "svg": "78be9933c9eb3c629f9955b91162d0be183432d7dabc660b053a1adc6e20badf",
             "png": "970a6ac7f7a5fde65cc8a361340cc4e8d395d36b759b4f6e8a5d405670457059"
           },
           "recalc": {
@@ -527,7 +531,7 @@
         },
         "candidate": {
           "open": {
-            "svg": "d0f2cdbb6bc7e445a8b0f135169b22266051dabab85b6c14561b6ca23c7744ac",
+            "svg": "4de1fed22ecd43bb5ee40938d181c9ebda32994f79bf7d89847dc3b70bbb5b44",
             "png": "970a6ac7f7a5fde65cc8a361340cc4e8d395d36b759b4f6e8a5d405670457059"
           },
           "recalc": {
@@ -542,9 +546,9 @@
         "ref -> candidate, after recalc": [],
         "before -> candidate, after recalc": [
           "shape 2 moved (-4.316 in, -14.634 in): translate(-154.285,-660.267) rotate(-12.5288) -> translate(-465.009,393.385) rotate(-63.4349)",
-          "shape 2 drawn differently: path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 841.89 L261.34 841.89 -> path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 841.89 L161 841.89; rect style={fill:#ffffff;stroke:none} height=14.4001 width=29.7307 x=115.806 y=834.69 v:rectContext=textBkgnd -> rect style={fill:#ffffff;stroke:none} height=14.4001 width=29.7307 x=65.6331 y=834.69 v:rectContext=textBkgnd; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=115.81 y=845.49 v:langID=2057 -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=65.63 y=845.49 v:langID=2057",
+          "shape 2 drawn differently: path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 841.89 L261.34 841.89 -> path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 841.89 L161 841.89; rect style={fill:#ffffff;stroke:none} height=14.4001 width=29.7307 x=115.806 y=834.69 v:rectContext=textBkgnd -> rect style={fill:#ffffff;stroke:none} height=14.4001 width=29.7307 x=65.6331 y=834.69 v:rectContext=textBkgnd; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=115.81 y=845.49 v:langID=2057 \"Line A\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=65.63 y=845.49 v:langID=2057 \"Line A\"",
           "shape 3 moved (+0.606 in, -7.661 in): translate(28.3465,-623.622) -> translate(72,-72)",
-          "shape 3 drawn differently: path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 841.89 L255.12 785.2 -> path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 841.89 L144 769.89; rect style={fill:#ffffff;stroke:none} height=9.59985 width=23.3281 x=115.895 y=808.744 v:rectContext=textBkgnd -> rect style={fill:#ffffff;stroke:none} height=9.59985 width=23.3281 x=60.3359 y=801.09 v:rectContext=textBkgnd; text style={fill:#000000;font-family:Calibri;font-size:0.666664em} x=115.89 y=815.94 v:langID=2057 -> text style={fill:#000000;font-family:Calibri;font-size:0.666664em} x=60.34 y=808.29 v:langID=2057"
+          "shape 3 drawn differently: path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 841.89 L255.12 785.2 -> path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 841.89 L144 769.89; rect style={fill:#ffffff;stroke:none} height=9.59985 width=23.3281 x=115.895 y=808.744 v:rectContext=textBkgnd -> rect style={fill:#ffffff;stroke:none} height=9.59985 width=23.3281 x=60.3359 y=801.09 v:rectContext=textBkgnd; text style={fill:#000000;font-family:Calibri;font-size:0.666664em} x=115.89 y=815.94 v:langID=2057 \"Conn A\" -> text style={fill:#000000;font-family:Calibri;font-size:0.666664em} x=60.34 y=808.29 v:langID=2057 \"Conn A\""
         ]
       },
       "stale_on_open": false

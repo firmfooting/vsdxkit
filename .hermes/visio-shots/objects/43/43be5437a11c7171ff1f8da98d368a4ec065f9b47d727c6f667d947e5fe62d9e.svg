@@ -16,9 +16,9 @@
 		.st2 {fill:#333333;font-family:Arial;font-size:0.833336em}
 		.st3 {marker-end:url(#mrkr4-16);stroke:#5e5e5e;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.9}
 		.st4 {fill:#5e5e5e;fill-opacity:1;stroke:#5e5e5e;stroke-opacity:1;stroke-width:0.26315789473684}
-		.st5 {fill:#ffffff;stroke:none;stroke-linecap:butt;stroke-width:7.2}
+		.st5 {fill:#ffffff;stroke:none;stroke-linecap:butt}
 		.st6 {fill:#333333;font-family:Arial;font-size:0.666664em;font-weight:bold}
-		.st7 {fill:#ffffff;stroke:none;stroke-linecap:butt}
+		.st7 {fill:#ffffff;stroke:none;stroke-linecap:butt;stroke-width:7.2}
 		.st8 {fill:none;fill-rule:evenodd;font-size:12px;overflow:visible;stroke-linecap:square;stroke-miterlimit:3}
 	]]>
 	</style>
@@ -75,7 +75,7 @@
 			<v:textBlock v:margins="rect(0,0,0,0)"/>
 			<v:textRect cx="-76.1256" cy="612.003" width="25.35" height="8.00357"/>
 			<path d="M0 612.01 L-126.81 612.01" class="st3"/>
-			<rect v:rectContext="textBkgnd" x="-87.6842" y="607.797" width="23.1169" height="8.20596" class="st7"/>
+			<rect v:rectContext="textBkgnd" x="-87.6842" y="607.797" width="23.1169" height="8.20596" class="st5"/>
 			<text x="-87.68" y="614" class="st6" v:langID="1033"><v:paragraph v:spLine="-1" v:horizAlign="1"/><v:tabList/>Line 2</text>		</g>
 		<g id="shape7-26" v:mID="7" v:groupContext="shape" transform="translate(126.677,-522)">
 			<title>com.lucidchart.Line.7</title>
@@ -83,7 +83,7 @@
 			<v:textBlock v:margins="rect(0,0,0,0)"/>
 			<v:textRect cx="56.9304" cy="612.003" width="25.35" height="8.00357"/>
 			<path d="M0 612 L126.81 612" class="st3"/>
-			<rect v:rectContext="textBkgnd" x="45.3718" y="607.797" width="23.1169" height="8.20596" class="st5"/>
+			<rect v:rectContext="textBkgnd" x="45.3718" y="607.797" width="23.1169" height="8.20596" class="st7"/>
 			<text x="45.37" y="614" class="st6" v:langID="1033"><v:paragraph v:spLine="-1" v:horizAlign="1"/><v:tabList/>Line 3</text>		</g>
 	</g>
 </svg>
