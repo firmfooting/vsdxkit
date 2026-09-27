@@ -527,17 +527,19 @@ def test_del_bool_can_be_set_and_cleared():
     assert row.del_bool is None
 
 
-def test_clearing_del_bool_that_is_not_set_raises():
-    """Clearing an absent Del raises KeyError instead of doing nothing."""
+def test_clearing_del_bool_that_is_not_set_is_a_no_op():
+    """Clearing an absent Del does nothing, rather than raising KeyError (#273)."""
     vis = Document.open(TEST9)
     row = vis.pages[0].shapes.by_text("Line A").geometry.rows["1"]
+    assert row.del_bool is None
 
-    with pytest.raises(KeyError):
-        row.del_bool = False
+    row.del_bool = False
+
+    assert row.del_bool is None
 
 
-def test_changing_a_rows_index_does_not_rekey_the_geometry():
-    """`Geometry.rows` is keyed at parse time, so renumbering desyncs it."""
+def test_changing_a_rows_index_rekeys_the_geometry():
+    """`Geometry.rows` is re-filed under the row's new index when it changes (#273)."""
     vis = Document.open(TEST9)
     geometry = vis.pages[0].shapes.by_text("Line A").geometry
     row = geometry.rows["1"]
@@ -546,8 +548,18 @@ def test_changing_a_rows_index_does_not_rekey_the_geometry():
     row.index = 7
 
     assert (row.row_type, row.index) == ("LineTo", "7")
-    assert sorted(geometry.rows) == ["1", "2"]
-    assert geometry.rows["1"] is row
+    assert sorted(geometry.rows) == ["2", "7"]
+    assert geometry.rows["7"] is row
+
+
+def test_a_reindexed_row_moves_to_its_place_in_the_section():
+    """Visio reads a section's rows in document order, so a row given IX 7 goes after IX 5, not where IX 1 was (#273)."""
+    geometry = Document.open(os.path.join(FIXTURES, "test1.vsdx")).pages[0].shapes.require_id("1").geometry
+    assert [row.get("IX") for row in geometry.xml.findall(f"{namespace}Row")] == ["1", "2", "3", "4", "5"]
+
+    geometry.rows["1"].index = 7
+
+    assert [row.get("IX") for row in geometry.xml.findall(f"{namespace}Row")] == ["2", "3", "4", "5", "7"]
 
 
 # --- GeometryCell -----------------------------------------------------------

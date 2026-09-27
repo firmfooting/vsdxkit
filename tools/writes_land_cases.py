@@ -200,6 +200,24 @@ def glued_end(out: Path) -> Case:
     )
 
 
+def instance_property(out: Path) -> Case:
+    """Case 3b: a property one instance inherits, written on that instance; a sibling of the same master keeps the master's value."""
+    document, path = _copy("test3_house.vsdx", out, "03b_instance_property")
+    page = document.pages[0]
+    written = page.shapes.require_id("7")
+    sibling = written.copy()
+    written.data_properties["ShapeClass"].set_attribute("Value", "V", "Changed")
+    document.save(path)
+    return Case(
+        "03b_instance_property: shape 7's ShapeClass reads Changed; its copy, the same master's instance, still reads Location",
+        (
+            CellCheck(1, int(written.ID), "Prop.ShapeClass", "Changed"),
+            CellCheck(1, int(sibling.ID), "Prop.ShapeClass", "Location"),
+        ),
+        stem=path.stem,
+    )
+
+
 CASES: tuple[Callable[[Path], Case], ...] = (
     colours,
     text_colour,
@@ -207,6 +225,7 @@ CASES: tuple[Callable[[Path], Case], ...] = (
     prop_over_formula,
     instance_geometry,
     glued_end,
+    instance_property,
 )
 """Every case, in the order its file is numbered."""
 

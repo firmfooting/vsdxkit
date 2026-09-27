@@ -539,9 +539,9 @@ class DataProperty(InheritedRow, ShapePart):
     """Represents a single Data Property item associated with a Shape object
 
     A property a shape inherits from its master is handed out marked
-    :attr:`inherited`. Setting :attr:`value` on
-    one materialises an override row on the instance rather than writing to the
-    master page's XML.
+    :attr:`inherited`. Setting :attr:`value`, or calling
+    :meth:`set_attribute`, on one materialises an override row on the
+    instance rather than writing to the master page's XML.
     """
 
     shape: Shape
@@ -550,70 +550,111 @@ class DataProperty(InheritedRow, ShapePart):
     """The property's ``<Row>`` element.
 
     For an inherited property it is the master's row, until the first write
-    through :attr:`value`, or a call to :meth:`make_local`, gives the
-    instance a row of its own.
+    through :attr:`value` or :meth:`set_attribute`, or a call to
+    :meth:`make_local`, gives the instance a row of its own.
     """
     name: str | None
     """The row's ``N`` attribute, which an override row shares with its master's row; ``None`` for a row without one."""
-    value_type: str | None
-    """The ``Type`` cell's value, as Visio numbers property types (``"0"`` text, ``"2"`` number, ``"5"`` date, and so on); ``None`` where there is none."""
-    label: str | None
-    """The label Visio shows the property under, which :attr:`Shape.data_properties` keys by; ``None`` where there is none.
-
-    It is read once, when the property is built, as are :attr:`value_type`,
-    :attr:`prompt` and :attr:`sort_key`. A row with no ``Label`` cell, which
-    is how an override of a master's property is written, takes all four from
-    the master's property of the same name, and leaves them ``None`` where
-    the master has none.
-    """
-    prompt: str | None
-    """The ``Prompt`` cell's value, the description Visio gives the property; ``None`` where there is none."""
-    sort_key: str | None
-    """The ``SortKey`` cell's value, which orders the properties in Visio's Shape Data window; ``None`` where there is none."""
 
     def __init__(self, *, xml: Element, shape: Shape):
         """init a DataProperty from a property xml element in a Shape object"""
-        name = xml.attrib.get("N")
-        # the row's cells by name, first of each, in one pass: a property is
-        # read whenever data_properties is, so four searches of the row apiece
-        # added up
-        cells: dict[str, Element] = {}
-        for cell in xml.iterfind(f"{namespace}Cell"):
-            cells.setdefault(cell.get("N", ""), cell)
-        label_cell = cells.get("Label")
-
-        # initialise empty DataProperty properties
         self.shape = shape  # reference back to Shape object
         self.xml = xml  # reference to xml used to create DataProperty
-        self.name = name
-        self.value_type = None
-        self.label = None
-        self.prompt = None
-        self.sort_key = None
+        self.name = xml.attrib.get("N")
 
-        if isinstance(label_cell, Element):
-            value_type_cell = cells.get("Type")
-            prompt_cell = cells.get("Prompt")
-            sort_key_cell = cells.get("SortKey")
+    @property
+    def label(self) -> str | None:
+        """The label Visio shows the property under, which :attr:`Shape.data_properties` keys by; ``None`` where there is none.
 
-            # get values from each Cell Element
-            self.value_type = value_type_cell.attrib.get("V") if isinstance(value_type_cell, Element) else None
-            self.label = label_cell.attrib.get("V") if isinstance(label_cell, Element) else None
-            self.prompt = prompt_cell.attrib.get("V") if isinstance(prompt_cell, Element) else None
-            self.sort_key = sort_key_cell.attrib.get("V") if isinstance(sort_key_cell, Element) else None
-        else:
-            # over-ridden master shape properties have no label - only a name and value
-            master_shape = shape.master_shape
-            master_props: list[DataProperty] = (
-                [p for p in master_shape.data_properties.values() if p.name == name] if master_shape is not None else []
-            )
-            if master_props:
-                # get first match 0 - there should always be one item
-                master_prop = master_props[0]  # type: DataProperty
-                self.label = master_prop.label
-                self.value_type = master_prop.value_type
-                self.prompt = master_prop.prompt
-                self.sort_key = master_prop.sort_key
+        It is read from the row on every access, as are :attr:`value_type`,
+        :attr:`prompt` and :attr:`sort_key`. Visio inherits each cell on its
+        own, so a cell the row lacks, as an override of a master's property
+        lacks most of them, is read from the master's row of the same name,
+        or, where a master's shape is itself an instance of another master,
+        from the nearest row up that chain that has it; each gives ``None``
+        where no row has it. A property read from the master reads the
+        shape's own row as well, once another object for it has written one,
+        and a nearer master's, once that master has written one, as
+        :attr:`value` does. The four are read-only:
+        :meth:`set_attribute` writes them.
+        """
+        return self._field("Label")
+
+    @property
+    def value_type(self) -> str | None:
+        """The ``Type`` cell's value, as Visio numbers property types (``"0"`` text, ``"2"`` number, ``"5"`` date, and so on); ``None`` where there is none."""
+        return self._field("Type")
+
+    @property
+    def prompt(self) -> str | None:
+        """The ``Prompt`` cell's value, the description Visio gives the property; ``None`` where there is none."""
+        return self._field("Prompt")
+
+    @property
+    def sort_key(self) -> str | None:
+        """The ``SortKey`` cell's value, which orders the properties in Visio's Shape Data window; ``None`` where there is none."""
+        return self._field("SortKey")
+
+    def _field(self, cell: str) -> str | None:
+        """Cell `cell`'s value, as `_cell_or_masters` finds the cell: this row's, or a master's row of the same ``N`` up the chain."""
+        element = self._cell_or_masters(cell)
+        return None if element is None else element.attrib.get("V")
+
+    def _cell_or_masters(self, cell: str) -> Element | None:
+        """Cell `cell` of this row, or else of the nearest master's row of the same ``N`` that has it; ``None`` where none does.
+
+        A master's shape can itself be an instance of another master, and
+        Visio inherits each cell on its own down the whole chain, as
+        :attr:`Shape.data_properties` lists the properties it inherits.
+
+        A property still marked inherited reads the rows of its ``N`` as they
+        stand now, not the row it was handed: the instance's own, where
+        another object for the property has written one since this one was
+        read, and then each master's up the chain, where a nearer master has
+        written one over the farther master's row it was handed. Visio reads
+        the nearest. The row it was handed is read only for a row without an
+        ``N``, which has no name to find it by; a named row no master has any
+        longer is not the shape's property, and reads nothing.
+        """
+        own = self._row_in(self.shape.xml) if self.inherited else self.xml
+        rows = [own] if own is not None else []
+        rows.extend(self._master_rows())
+        if self.inherited and self.name is None:
+            rows.append(self.xml)
+        for row in rows:
+            element = row.find(f'{namespace}Cell[@N="{cell}"]')
+            if element is not None:
+                return element
+        return None
+
+    def _in_master_chain(self) -> bool:
+        """Whether a master up the shape's chain, as it stands now, has a row of this property's ``N``."""
+        return next(self._master_rows(), None) is not None
+
+    def _master_has_cell(self, cell: str) -> bool:
+        """Whether a master up the shape's chain, as it stands now, has cell `cell` in its row of this property's ``N``."""
+        return any(row.find(f'{namespace}Cell[@N="{cell}"]') is not None for row in self._master_rows())
+
+    def _master_rows(self) -> Iterator[Element]:
+        """The row of this property's ``N`` in each master up the shape's chain that has one, nearest first."""
+        master_shape = self.shape.master_shape
+        while master_shape is not None:
+            row = self._row_in(master_shape.xml)
+            if row is not None:
+                yield row
+            master_shape = master_shape.master_shape
+
+    def _row_in(self, shape_xml: Element) -> Element | None:
+        """The row of this property's ``N`` in the Property section of `shape_xml`, a shape's element, or ``None``.
+
+        Looked up directly, not through that shape's properties, which would
+        rebuild them on every read. On the instance's own element it is the
+        override a write goes to; on a master's, the row it reads over.
+        """
+        section = shape_xml.find(f'{namespace}Section[@N="Property"]')
+        if self.name is None or section is None:
+            return None
+        return next((row for row in section.iterfind(f"{namespace}Row") if row.get("N") == self.name), None)
 
     @property
     @override
@@ -643,11 +684,27 @@ class DataProperty(InheritedRow, ShapePart):
         attribute, and reads label, type and prompt from the master, so the
         new row needs nothing but that name; the caller is about to write the
         ``Value`` cell. A master row with no name has nothing to match on, so
-        the label is carried down to keep the property addressable.
+        the new row carries a copy of each of its cells, which it could not
+        otherwise read, and the property keeps its label, type, prompt and
+        sort key.
+
+        Where the instance already has a row of that name, written through
+        another object for this property, that row is reused: Visio reads
+        one override row per name.
         """
         # make_local() is public and reaches here directly, not only through
         # the guarded value setter, and this is the only materialisation path
         self._require_attached("materialising an inherited data property")
+        existing = self._row_in(self.shape.xml)
+        if existing is not None:
+            self.xml = existing
+            return
+        if self.name is not None and not self._in_master_chain():
+            # an override of a row no master has would bring back a property
+            # the shape no longer has, as a fresh data_properties shows
+            raise InvalidOperationError(
+                f"shape ID {self.shape.ID} no longer inherits data property {self.name!r}: no master in its chain has it"
+            )
         section = self.shape.xml.find(f'{namespace}Section[@N="Property"]')
         if section is None:
             section = ET.fromstring(f'<Section xmlns="{namespace[1:-1]}" N="Property"/>')
@@ -657,9 +714,7 @@ class DataProperty(InheritedRow, ShapePart):
         if self.name is not None:
             row.attrib["N"] = self.name
         else:
-            label_cell = self.xml.find(f'{namespace}Cell[@N="Label"]')
-            if label_cell is not None:
-                row.append(copy.deepcopy(label_cell))
+            row.extend(copy.deepcopy(cell) for cell in self.xml.findall(f"{namespace}Cell"))
         section.append(row)
         self.xml = row
         _logger.debug("materialised inherited data property %r on shape %s", self.label, self.shape.ID)
@@ -668,11 +723,14 @@ class DataProperty(InheritedRow, ShapePart):
     def value(self) -> str | None:
         """Get the value of the data property, or None when it has none.
 
+        An override row with no ``Value`` cell, such as one a relabel through
+        :meth:`set_attribute` wrote, reads the master's row's, as Visio does.
+
         Reading is free of side effects: it neither creates the ``Value`` cell
         nor tidies a ``No Formula`` formula, so inspecting a document does not
         change the bytes it saves.
         """
-        value_cell = self.xml.find(f'{namespace}Cell[@N="Value"]')
+        value_cell = self._cell_or_masters("Value")
         if not isinstance(value_cell, Element):
             return None
         if value_cell.attrib.get("V") is not None:
@@ -696,7 +754,10 @@ class DataProperty(InheritedRow, ShapePart):
 
         A property inherited from a master is given an override row on this
         shape first, so the master's value is left as it was, and with it every
-        other shape drawn from that master.
+        other shape drawn from that master. One read while it was inherited,
+        whose row no master in the shape's chain has any longer, is no longer
+        the shape's property: writing it raises
+        :class:`~vsdxkit.errors.InvalidOperationError` rather than bring it back.
         """
         # ahead of make_local(), which materialises an override row: a refused
         # write must not leave an empty property behind on the shape
@@ -717,19 +778,48 @@ class DataProperty(InheritedRow, ShapePart):
         value_cell.attrib.pop("F", None)  # the value wins, as in Visio (#300)
 
     def get_attribute(self, name: str, attrib: str) -> str | None:
-        """Get the attribute value of the cell element"""
-        element = self._get_element(name)
-        if isinstance(element, Element):
-            return element.attrib.get(attrib)
+        """Attribute `attrib` of cell `name`, read as the fields are: from this row, or else from the master's row of the same ``N``; ``None`` where neither has it."""
+        element = self._cell_or_masters(name)
+        return None if element is None else element.attrib.get(attrib)
 
     def set_attribute(self, name: str, attrib: str, value: str) -> bool:
-        """Set the attribute value of the cell element"""
+        """Set attribute `attrib` of cell `name` of this property's row; ``False`` where neither the row nor its master's has that cell.
+
+        A property inherited from a master is given a row of its own first,
+        or the one the instance already has for it, and a cell the row lacks
+        is copied down from the master's row of the same name, so the master
+        is left as it was.
+
+        Writing ``V`` removes the cell's formula, whether the cell was copied
+        down or was this row's own, as :attr:`value` does: the value wins, as
+        typing into the ShapeSheet does in Visio, which would otherwise
+        recalculate the formula over it on open. Any other attribute leaves
+        the formula as it is.
+
+        Renaming a cell, writing ``N``, raises
+        :class:`~vsdxkit.errors.InvalidOperationError` where a master up the
+        chain has a cell of the old name in this property's row, and changes
+        nothing: Visio inherits each cell by name, so the master's cell would
+        come back beside the renamed one.
+        """
         self._require_attached("DataProperty.set_attribute()")
+        source = self._cell_or_masters(name)
+        if source is None:
+            return False
+        if attrib == "N" and value != name and self._master_has_cell(name):
+            raise InvalidOperationError(
+                f"cannot rename cell {name!r} of property {self.name!r} to {value!r}: a master has a cell named "
+                f"{name!r} in this property's row, so the master's cell would come back under the old name"
+            )
+        self.make_local()
         element = self._get_element(name)
-        if isinstance(element, Element):
-            element.attrib[attrib] = value
-            return True
-        return False
+        if element is None:
+            element = copy.deepcopy(source)
+            self.xml.append(element)
+        element.attrib[attrib] = value
+        if attrib == "V":
+            element.attrib.pop("F", None)  # the value wins, as in Visio (#300)
+        return True
 
     def _get_element(self, name: str) -> Element | None:
         """Get the value of the data property as an xml element"""
@@ -869,8 +959,7 @@ class Shape:
 
         Reading its cells, coordinates, sizes, text, geometry, data properties
         or connectors raises :class:`~vsdxkit.errors.InvalidOperationError`, as does every
-        write but one: the ``master_page_ID`` setter is not guarded, and
-        writes to the detached element.
+        write.
         """
         page = self._page
         if not page._attached():
@@ -991,7 +1080,10 @@ class Shape:
 
         Writing ``None`` drops the attribute, which puts a sub-shape back to
         inheriting its group's master.
+
+        :raises InvalidOperationError: if the shape is detached
         """
+        self._require_attached("writing a shape's master_page_ID")
         if value is None:
             self.xml.attrib.pop("Master", None)
         else:
@@ -1207,11 +1299,12 @@ class Shape:
         relabelled - through this Shape object, another one for the same
         shape, or the XML itself - is in the next dictionary.
 
-        Setting :attr:`DataProperty.value` on an inherited property is safe:
-        the property is marked inherited, so writing to it creates an override
-        row on this shape and leaves the master alone.
-        :meth:`DataProperty.set_attribute` does not yet do this, and still
-        writes an inherited property's cell in the master.
+        Writing through an inherited property is safe: the property is marked
+        inherited, so :attr:`DataProperty.value` and
+        :meth:`DataProperty.set_attribute` give this shape an override row and
+        leave the master alone. An override row replaces the master's property
+        of the same name, under the label it now shows, so a property
+        relabelled on this shape is listed once.
 
         :return: Dict[str, DataProperty]
         """
@@ -1226,9 +1319,18 @@ class Shape:
         )
         for prop in property_rows:
             data_prop = DataProperty(xml=prop, shape=self)
-            # add properties to dict to allow fast lookup by property.label
-            # (a property row without a Label cell keys under "")
-            properties[data_prop.label or ""] = data_prop
+            # a property row without a Label cell, of its own or its master's,
+            # keys under ""
+            label = data_prop.label or ""
+            if data_prop.name is not None:
+                # Visio matches an override to its master's row by N, so the
+                # master's property of that name is this one, whatever label
+                # this row now gives it
+                replaced = [key for key, seen in properties.items() if seen.inherited and seen.name == data_prop.name]
+                for key in replaced:
+                    if key != label:
+                        del properties[key]
+            properties[label] = data_prop
         return properties
 
     @property
@@ -1982,13 +2084,17 @@ class Shape:
         """Recompute the value held beside each formula this shape's cells carry, as Visio would on open.
 
         A formula this library cannot evaluate keeps the value it had.
+        A cell the shape only inherits is left alone: it is the master's, and Visio recomputes it for this shape on open.
         """
         cells: list[Cell | GeometryCell] = list(self.cells.values())
         if self.geometry is not None:
             cells.extend(self.geometry.cells)
             for r in self.geometry.rows.values():
                 cells.extend(r.cells.values())
+        own = set(self.xml.iter(f"{namespace}Cell"))
         for c in cells:
+            if c.xml not in own:
+                continue  # a cell only inherited is the master's; Visio recomputes it for this instance on open
             formula = c.formula
             if formula and c.name is not None:
                 master = self.master_shape
@@ -2107,7 +2213,7 @@ class Shape:
         self._page._delete([self], {str(self.ID)} | {str(shape.ID) for shape in self._descendants()})
 
     def append_shape(self, append_shape: Shape) -> None:
-        """Place another shape inside this one, with IDs the page is not using.
+        """Place another shape on this page inside this one, keeping the IDs it already has.
 
         A group holds its children in a ``<Shapes>`` container, created here
         when the group has none. Appending to the group's own ``<Shape>``
@@ -2118,18 +2224,21 @@ class Shape:
         A shape already on this page, such as a fresh ``shape.copy()``, is
         moved: its element is taken out of whatever held it first, so it never
         has two parents, and it keeps its IDs, so the ``Connect`` records
-        naming it still hold. A shape whose element is not on the page, such
-        as one built by hand or one deleted from this page, is placed, with
-        IDs the page is not using. A shape on another page is refused; copy
-        it onto this page first.
+        naming it still hold. A shape on another page is refused; copy it
+        onto this page first.
 
         :raises InvalidOperationError: if this shape is detached or is not a
-            group, if ``append_shape`` is on another page, or if it would end
-            up inside itself
+            group, if ``append_shape`` is detached or is on another page, or
+            if it would end up inside itself
         """
         # ahead of every check and every write, so a detached group refuses
         # before anything is moved into it
         self._require_attached("Shape.append_shape()")
+        if not append_shape.is_attached:
+            raise InvalidOperationError(
+                f"shape ID={append_shape.ID} was deleted, or is on a removed page, so it cannot be placed; "
+                "a deleted shape stays deleted"
+            )
         if self.shape_type != "Group":
             raise InvalidOperationError(
                 f"shape ID={self.ID} has type {self.shape_type!r} and cannot contain shapes; "
@@ -2157,15 +2266,15 @@ class Shape:
                 "which is the shape itself or one of the shapes inside it"
             )
         current_parent = parent_of(self._page.xml.getroot(), append_shape.xml)
-        if current_parent is None:
-            # New to the page, so it needs ids; a move keeps the ones it has,
-            # or every Connect record naming the shape would be left dangling.
-            self._page._renumber_shape_ids(append_shape.xml)
-        else:
-            current_parent.remove(append_shape.xml)
-        # last, because it creates the <Shapes> element an empty group lacks:
-        # running it ahead of the id allocation left that element behind when
-        # the allocation refused the call
+        # append_shape.is_attached, checked above, and the page-identity check
+        # just passed both mean its element is reachable from this page's
+        # root by parent links; parent_of and is_attached both test that by
+        # identity, so it always finds a parent here. A move keeps the ids
+        # append_shape already has, or every Connect record naming it would
+        # be left dangling.
+        assert current_parent is not None
+        current_parent.remove(append_shape.xml)
+        # creates the <Shapes> element an empty group lacks
         container = find_or_create_shapes_tag(self.xml)
         container.append(append_shape.xml)
         # The ID follows the element on its own; the parent is the Shape
@@ -2391,11 +2500,10 @@ class ShapeCollection:
 def _has_property(shape: Shape, label: str, value: str | None) -> bool:
     """Whether `shape` has a property labelled `label` and, where `value` is given, whose value as text is `value`.
 
-    A property with no value reads as ``"None"`` here, so it matches a
-    `value` of ``"None"``.
+    A property with no value matches no `value`.
     """
     found = shape.data_properties.get(label)
-    return found is not None and (value is None or str(found.value) == value)
+    return found is not None and (value is None or found.value == value)
 
 
 def _describe_property(label: str, value: str | None) -> str:

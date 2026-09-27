@@ -284,3 +284,25 @@ def test_an_override_section_is_placed_before_the_shapes_text(vsdx_copy):
     shape.data_properties["title"].value = "written through the instance"
 
     assert [child.tag for child in shape.xml] == [f"{namespace}Section", f"{namespace}Text"]
+
+
+def test_a_label_set_through_set_attribute_is_read_back(vsdx_copy):
+    """#435: label was read once, in __init__, so the class's own set_attribute left it stale."""
+    shape = Document.open(vsdx_copy("test1.vsdx")).pages[0].shapes.require_id("1")
+    prop = shape.data_properties["my_property_label"]
+
+    prop.set_attribute("Label", "V", "renamed")
+
+    assert prop.label == "renamed"
+
+
+def test_a_property_with_no_value_does_not_match_the_text_none(vsdx_copy):
+    """#432: a property with no value read as the text "None", so it matched a search for that string."""
+    page = Document.open(vsdx_copy("test1.vsdx")).pages[0]
+    shape = page.shapes.require_id("1")
+    prop = shape.data_properties["my_property_label"]
+    prop.xml.remove(prop.xml.find(f'{namespace}Cell[@N="Value"]'))
+    assert shape.data_properties["my_property_label"].value is None
+
+    assert page.shapes.matching_property("my_property_label", "None") == ()
+    assert page.shapes.by_property("my_property_label", "None") is None
