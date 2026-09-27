@@ -618,12 +618,7 @@ class DataProperty(InheritedRow, ShapePart):
         """
         own = self._row_in(self.shape.xml) if self.inherited else self.xml
         rows = [own] if own is not None else []
-        master_shape = self.shape.master_shape
-        while master_shape is not None:
-            row = self._row_in(master_shape.xml)
-            if row is not None:
-                rows.append(row)
-            master_shape = master_shape.master_shape
+        rows.extend(self._master_rows())
         if self.inherited and self.name is None:
             rows.append(self.xml)
         for row in rows:
@@ -634,12 +629,20 @@ class DataProperty(InheritedRow, ShapePart):
 
     def _in_master_chain(self) -> bool:
         """Whether a master up the shape's chain, as it stands now, has a row of this property's ``N``."""
+        return next(self._master_rows(), None) is not None
+
+    def _master_has_cell(self, cell: str) -> bool:
+        """Whether a master up the shape's chain, as it stands now, has cell `cell` in its row of this property's ``N``."""
+        return any(row.find(f'{namespace}Cell[@N="{cell}"]') is not None for row in self._master_rows())
+
+    def _master_rows(self) -> Iterator[Element]:
+        """The row of this property's ``N`` in each master up the shape's chain that has one, nearest first."""
         master_shape = self.shape.master_shape
         while master_shape is not None:
-            if self._row_in(master_shape.xml) is not None:
-                return True
+            row = self._row_in(master_shape.xml)
+            if row is not None:
+                yield row
             master_shape = master_shape.master_shape
-        return False
 
     def _row_in(self, shape_xml: Element) -> Element | None:
         """The row of this property's ``N`` in the Property section of `shape_xml`, a shape's element, or ``None``.
@@ -792,11 +795,22 @@ class DataProperty(InheritedRow, ShapePart):
         typing into the ShapeSheet does in Visio, which would otherwise
         recalculate the formula over it on open. Any other attribute leaves
         the formula as it is.
+
+        Renaming a cell, writing ``N``, raises
+        :class:`~vsdxkit.errors.InvalidOperationError` where a master up the
+        chain has a cell of the old name in this property's row, and changes
+        nothing: Visio inherits each cell by name, so the master's cell would
+        come back beside the renamed one.
         """
         self._require_attached("DataProperty.set_attribute()")
         source = self._cell_or_masters(name)
         if source is None:
             return False
+        if attrib == "N" and value != name and self._master_has_cell(name):
+            raise InvalidOperationError(
+                f"cannot rename cell {name!r} of property {self.name!r} to {value!r}: a master has a cell named "
+                f"{name!r} in this property's row, so the master's cell would come back under the old name"
+            )
         self.make_local()
         element = self._get_element(name)
         if element is None:

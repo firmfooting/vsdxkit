@@ -6,6 +6,7 @@ row of its own and leave the master's row, which every other instance reads,
 as it was.
 """
 
+import copy
 import xml.etree.ElementTree as ET
 
 import pytest
@@ -471,6 +472,25 @@ def house_7(vsdx_copy):
 
 def _property_rows(shape, name: str) -> list:
     return [row for row in shape.xml.findall(f'{namespace}Section[@N="Property"]/{namespace}Row') if row.get("N") == name]
+
+
+@pytest.mark.parametrize("local_first", [False, True], ids=["inherited", "overridden"])
+def test_renaming_a_cell_the_master_has_raises_and_changes_nothing(house_7, local_first):
+    """Visio inherits each cell by name: the master's Label would come back beside a stray renamed cell (#454).
+
+    As renaming a geometry cell the master has raises, and whether or not
+    the instance already has a row of its own for the property.
+    """
+    prop = house_7.data_properties["ShapeClass"]
+    if local_first:
+        prop.make_local()
+    rows_before = [copy.deepcopy(row) for row in _property_rows(house_7, "ShapeClass")]
+
+    with pytest.raises(InvalidOperationError, match="Label"):
+        prop.set_attribute("Label", "N", "Caption")
+
+    assert [ET.tostring(row) for row in _property_rows(house_7, "ShapeClass")] == [ET.tostring(row) for row in rows_before]
+    assert house_7.data_properties["ShapeClass"].label == "ShapeClass"
 
 
 def test_relabelling_an_inherited_property_keeps_the_masters_other_fields(house_7):
