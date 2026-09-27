@@ -32,12 +32,70 @@ def _svg(name: str, *shapes: str, styles: str = ".st1 {fill:#ffffff;stroke:#0000
 
 
 def _box(shape_id: int, x: float = 18.0, text: str = "Box", text_class: str = "st2") -> str:
+    """A shape as Visio's export writes one; its text follows Visio's own `v:` records inside `<text>`, as their tail."""
     return (
         f'<g id="shape{shape_id}-1" v:mID="{shape_id}" v:groupContext="shape" transform="translate({x},-700)">'
         f"<title>Sheet.{shape_id}</title>"
         '<path d="M0 841.89 L72 841.89 L72 800 Z" class="st1"/>'
-        f'<text x="20" y="820" class="{text_class}">{text}</text></g>'
+        f'<text x="20" y="820" class="{text_class}"><v:paragraph v:horizAlign="1"/><v:tabList/>{text}</text>\t\t</g>'
     )
+
+
+def test_a_change_to_what_a_label_says_is_a_difference():
+    tool = _tool()
+    [finding] = tool._diff_svgs(_svg("a", _box(1, text="Shape A")), _svg("b", _box(1, text="Shape B")))
+    assert '"Shape A"' in finding
+    assert '"Shape B"' in finding
+
+
+def test_the_spaces_a_label_draws_between_its_runs_are_part_of_it():
+    """Visio's export sets xml:space="preserve": a space at the end of one run is drawn, between words."""
+    tool = _tool()
+
+    def label(first_run: str) -> str:
+        return _box(1).replace(
+            "<v:tabList/>Box</text>", f'<v:tabList/><tspan class="st2">{first_run}</tspan><tspan class="st2">B</tspan></text>'
+        )
+
+    assert len(tool._diff_svgs(_svg("a", label("A ")), _svg("b", label("A")))) == 1
+
+
+def _arrow(shape_id: int, marker_id: str, arrow_scale: str) -> tuple[str, str]:
+    """A connector whose style ends it with a marker, and the `<defs>` that draw the marker, as Visio writes both."""
+    defs = (
+        '<defs id="Markers"><g id="lend4"><path d="M 2 1 L 0 0 L 2 -1 L 2 1 " style="stroke:none"/></g>'
+        f'<marker id="{marker_id}" class="st9" refX="-7.6" orient="auto" markerUnits="strokeWidth" overflow="visible">'
+        f'<use xlink:href="#lend4" transform="scale({arrow_scale}) "/></marker></defs>'
+    )
+    shape = (
+        f'<g id="shape{shape_id}-1" v:mID="{shape_id}" v:groupContext="shape" transform="translate(0,-500)">'
+        f'<title>Sheet.{shape_id}</title><path d="M0 800 L100 800" class="st3"/></g>'
+    )
+    return defs, shape
+
+
+def _svg_with_defs(defs: str, shape: str, marker_id: str) -> str:
+    styles = f".st3 {{marker-end:url(#{marker_id});stroke:#5e5e5e}}\n.st9 {{fill:#5e5e5e;stroke:#5e5e5e}}"
+    page = _svg("x", shape, styles=styles)
+    return page.replace('xmlns:v="', 'xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:v="').replace(
+        '<g v:mID="0"', defs + '<g v:mID="0"'
+    )
+
+
+def test_an_arrowhead_drawn_at_another_size_is_the_connectors_difference():
+    tool = _tool()
+    first = _svg_with_defs(*_arrow(6, "mrkr4-16", "-3.8,-3.8"), "mrkr4-16")
+    second = _svg_with_defs(*_arrow(6, "mrkr4-16", "-7.6,-7.6"), "mrkr4-16")
+    [finding] = tool._diff_svgs(first, second)
+    assert finding.startswith("shape 6 drawn differently: ")
+    assert "scale(-7.6,-7.6)" in finding
+
+
+def test_an_arrowhead_renumbered_by_the_export_is_no_difference():
+    tool = _tool()
+    first = _svg_with_defs(*_arrow(6, "mrkr4-16", "-3.8,-3.8"), "mrkr4-16")
+    second = _svg_with_defs(*_arrow(6, "mrkr4-55", "-3.8,-3.8"), "mrkr4-55")
+    assert tool._diff_svgs(first, second) == []
 
 
 def test_the_same_drawing_exported_under_two_names_has_no_differences():
@@ -168,6 +226,18 @@ def test_each_case_is_exported_on_its_first_checked_page_and_recalculates_its_ch
     assert [(c.stem, c.page, c.triggers) for c in cases] == [
         ("01_a", 2, ((2, 5, "PinX"), (2, 5, "Width"))),
         ("02_b", 1, ()),
+    ]
+
+
+def test_a_case_checking_cells_on_two_pages_is_exported_page_by_page(tmp_path):
+    """Each page a case checks is exported, after every cell it checks has recalculated."""
+    tool = _tool()
+    expected = {"07_pages": {"line": "p", "cells": [[1, 5, "PinX", 1.0], [2, 9, "PinX", 2.0]], "glue": []}}
+    (tmp_path / "expected.json").write_text(json.dumps(expected), encoding="utf-8")
+    triggers = ((1, 5, "PinX"), (2, 9, "PinX"))
+    assert [(c.stem, c.file_stem, c.page, c.triggers) for c in tool._read_cases(tmp_path)] == [
+        ("07_pages page 1", "07_pages", 1, triggers),
+        ("07_pages page 2", "07_pages", 2, triggers),
     ]
 
 
@@ -379,6 +449,28 @@ def test_diff_runs_of_a_run_with_itself_is_empty(tmp_path):
     tool = _tool()
     _run(tool, tmp_path, "r1", candidate_recalc_x=90)
     assert tool._diff_runs(tmp_path, "r1", "r1") == []
+
+
+def test_diff_runs_reports_a_case_that_stopped_building(tmp_path):
+    """A case whose builder now throws never reaches the cases map; the run's verdict changed all the same."""
+    tool = _tool()
+    drawing = _svg("x", _box(1))
+    shots = {"candidate": {"01_a": _shots(drawing, drawing)}}
+    tool._record_run(tmp_path, _identity("r1"), {"01_a": "a"}, shots, build_errors={"candidate": {}})
+    tool._record_run(tmp_path, _identity("r2"), {"01_a": "a"}, shots, build_errors={"candidate": {"glued_end": "E"}})
+    assert tool._diff_runs(tmp_path, "r1", "r2") == ["fails only in r2: the candidate could not build glued_end: E"]
+
+
+def test_a_runs_builder_is_named_by_its_content(tmp_path):
+    """Two builders at one path are two builders: a run records which one it ran."""
+    tool = _tool()
+    builder = tmp_path / "cases.py"
+    builder.write_text("CASES = ()\n", encoding="utf-8")
+    first = tool._builder_identity(builder)
+    builder.write_text("CASES = (lambda out: None,)\n", encoding="utf-8")
+    second = tool._builder_identity(builder)
+    assert first["path"] == second["path"] == str(builder)
+    assert first["sha256"] != second["sha256"]
 
 
 def test_an_unknown_command_is_a_usage_error(capsys):

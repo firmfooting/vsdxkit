@@ -58,15 +58,10 @@ function Get-VisioProcessIds {
     return @(Get-Process -Name VISIO -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
 }
 
-function Get-LeakedProcessIds {
-    # Only processes that started after this script did; see tools/visio_cells.ps1.
-    param([int[]]$Preexisting, [datetime]$StartedAfter)
+function Test-ProcessRunning {
+    param([int]$ProcessId)
 
-    return @(
-        Get-Process -Name VISIO -ErrorAction SilentlyContinue |
-            Where-Object { $Preexisting -notcontains $_.Id -and $_.StartTime -ge $StartedAfter } |
-            ForEach-Object { $_.Id }
-    )
+    return $null -ne (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue)
 }
 
 # CellExistsU's second argument: 0 counts a cell inherited from a master, as
@@ -100,12 +95,16 @@ $visRasterPixelsPerInch = 0
 
 # --- run --------------------------------------------------------------------
 
-$startedAt = Get-Date
 $app = $null
+$ownProcessId = $null
 $out = @()
 $visio = [ordered]@{}
 try {
     $app = New-Object -ComObject Visio.InvisibleApp
+    # The one process this script may kill if Quit leaves it running. Not
+    # "any Visio started during the run": a Visio the developer opens while
+    # a long export is under way is theirs, with their unsaved work in it.
+    $ownProcessId = [int]$app.ProcessID
     $app.AlertResponse = 7
     $visio.version = [string]$app.Version
     $visio.build = [string]$app.Build
@@ -152,13 +151,14 @@ finally {
     [System.GC]::Collect()
     [System.GC]::WaitForPendingFinalizers()
 
-    $deadline = (Get-Date).AddSeconds(15)
-    while ((Get-Date) -lt $deadline) {
-        if (@(Get-LeakedProcessIds -Preexisting $preexisting -StartedAfter $startedAt).Count -eq 0) { break }
-        Start-Sleep -Milliseconds 250
-    }
-    foreach ($processId in @(Get-LeakedProcessIds -Preexisting $preexisting -StartedAfter $startedAt)) {
-        try { Stop-Process -Id $processId -Force -ErrorAction Stop } catch { }
+    if ($null -ne $ownProcessId) {
+        $deadline = (Get-Date).AddSeconds(15)
+        while ((Get-Date) -lt $deadline -and (Test-ProcessRunning -ProcessId $ownProcessId)) {
+            Start-Sleep -Milliseconds 250
+        }
+        if (Test-ProcessRunning -ProcessId $ownProcessId) {
+            try { Stop-Process -Id $ownProcessId -Force -ErrorAction Stop } catch { }
+        }
     }
 }
 

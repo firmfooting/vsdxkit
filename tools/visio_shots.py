@@ -70,6 +70,7 @@ _STATE_WORDS = {"open": "on open", "recalc": "after recalc"}
 
 _SVG_NS = "{http://www.w3.org/2000/svg}"
 _VISIO_NS = "{http://schemas.microsoft.com/visio/2003/SVGExtensions/}"
+_XLINK_NS = "{http://www.w3.org/1999/xlink}"
 _POINTS_PER_INCH = 72.0
 _CLIP = 240
 """The longest a drawn part is quoted in a finding; a path's `d` can run to kilobytes."""
@@ -104,7 +105,7 @@ def _styles(root: ElementTree.Element) -> dict[str, str]:
 
 
 def _attribute_name(name: str) -> str:
-    return name.replace(_VISIO_NS, "v:").replace(_SVG_NS, "")
+    return name.replace(_VISIO_NS, "v:").replace(_XLINK_NS, "xlink:").replace(_SVG_NS, "")
 
 
 def _drawn_style(rules: Iterable[str]) -> str:
@@ -126,20 +127,64 @@ def _drawn_style(rules: Iterable[str]) -> str:
     return ";".join(f"{prop}:{value}" for prop, value in declarations.items())
 
 
-def _describe(element: ElementTree.Element, styles: dict[str, str]) -> str:
-    """One drawn element as a line: its tag, its attributes with each class spelled out as its style, and its text."""
-    tag = _attribute_name(element.tag)
+_TEXT = {f"{_SVG_NS}text", f"{_SVG_NS}tspan"}
+_REFERENCE = re.compile(r"url\(#([^)\s]+)\)")
+_REFERENCE_DEPTH = 4
+"""How many definitions deep a reference is followed: a marker uses a path, and nothing Visio writes goes deeper."""
+
+
+def _rendered_text(element: ElementTree.Element) -> str:
+    """The characters a `text` or `tspan` element draws, spaces and all.
+
+    That is its own text, each run's, and the text after each of Visio's `v:`
+    records inside it: Visio writes a label as `<text><v:paragraph/>
+    <v:tabList/>Shape A</text>`, so the words are the tail of a record no
+    renderer draws. Visio's export sets `xml:space="preserve"`, so nothing is
+    stripped: a space ending one run is drawn, between two words.
+    """
+    pieces = [element.text or ""]
+    for child in element:
+        if child.tag in _TEXT:
+            pieces.append(_rendered_text(child))
+        pieces.append(child.tail or "")
+    return "".join(pieces)
+
+
+def _resolved(value: str, definitions: dict[str, str], depth: int = 0) -> str:
+    """`value` with each `url(#id)` naming one of the page's definitions replaced by what that definition draws.
+
+    Visio numbers its definitions per export (`mrkr4-16` in one, `mrkr4-55`
+    in the next), so a reference is compared by what it draws, never by its
+    name; and a change inside a definition, an arrowhead's size, shows on the
+    shape that uses it.
+    """
+
+    def swap(match: re.Match[str]) -> str:
+        key = match.group(1)
+        if key not in definitions or depth >= _REFERENCE_DEPTH:
+            return match.group(0)
+        return "url({" + _resolved(definitions[key], definitions, depth + 1) + "})"
+
+    return _REFERENCE.sub(swap, value)
+
+
+def _describe(element: ElementTree.Element, styles: dict[str, str], definitions: dict[str, str]) -> str:
+    """One drawn element as a line: its tag, its attributes with each class spelled out as its style
+    and each reference as what it names, and, for text, the characters it draws."""
     attributes = []
     for name, value in sorted(element.attrib.items()):
         if name == "id":
             continue  # Visio numbers these per export: shape6-10 in one, shape6-12 in the next
         if name == "class":
             attributes.append("style={" + _drawn_style(styles.get(c, c) for c in value.split()) + "}")
+        elif name.endswith("}href") and value.startswith("#"):
+            attributes.append(f"{_attribute_name(name)}=url({value})")
         else:
             attributes.append(f"{_attribute_name(name)}={value}")
-    text = (element.text or "").strip()
-    tail = (element.tail or "").strip()
-    return " ".join([tag, *attributes, *([json.dumps(text)] if text else []), *([f"+{json.dumps(tail)}"] if tail else [])])
+    words = [_attribute_name(element.tag), *(_resolved(a, definitions) for a in attributes)]
+    if element.tag in _TEXT:
+        words.append(json.dumps(_rendered_text(element)))
+    return " ".join(words)
 
 
 @dataclass(frozen=True)
@@ -152,9 +197,10 @@ class _Drawn:
 
 @dataclass(frozen=True)
 class _Page:
-    """What Visio drew for a page: its size, its shapes by Visio ID, and the order they are painted in."""
+    """What Visio drew for a page: its size, what it drew outside any shape, its shapes, and their paint order."""
 
     size: str
+    parts: tuple[str, ...]
     shapes: dict[int, _Drawn]
     order: tuple[int, ...]
     """Shape IDs bottom first: SVG paints in document order, so a later shape covers an earlier one."""
@@ -164,6 +210,23 @@ _PAGE_SIZE = ("width", "height", "viewBox")
 _NOT_DRAWN = {f"{_SVG_NS}title", f"{_SVG_NS}desc", f"{_SVG_NS}metadata"}
 """SVG elements a renderer never paints. Elements outside the SVG namespace (Visio's `v:` records of Shape Data,
 user cells and text blocks) are never painted either, and are skipped with everything inside them."""
+_COMPARED_ELSEWHERE = {f"{_SVG_NS}style", f"{_SVG_NS}defs"}
+"""Compared through what uses them: a class as the style it stands for, a definition as what it draws."""
+
+
+def _definitions(root: ElementTree.Element, styles: dict[str, str]) -> dict[str, str]:
+    """Each definition in the page's `<defs>` (a marker, a path it uses), by its ID: what it and everything in it draw.
+
+    References inside a definition are left as they are, and followed when the definition is used.
+    """
+    definitions = {}
+    for defs in root.iter(f"{_SVG_NS}defs"):
+        for element in defs.iter():
+            key = element.get("id")
+            if element is not defs and key:
+                drawn = (e for e in element.iter() if e.tag.startswith(_SVG_NS) and e.tag not in _NOT_DRAWN)
+                definitions[key] = " ".join(_describe(e, styles, {}) for e in drawn)
+    return definitions
 
 
 def _svg_page(text: str) -> _Page:
@@ -176,12 +239,14 @@ def _svg_page(text: str) -> _Page:
     """
     root = ElementTree.fromstring(_normalise_svg(text).encode("utf-8"))
     styles = _styles(root)
+    definitions = _definitions(root, styles)
+    page_parts: list[str] = []
     transforms: dict[int, list[str]] = {}
     parts: dict[int, list[str]] = {}
 
-    def walk(element: ElementTree.Element, into: list[str] | None) -> None:
+    def walk(element: ElementTree.Element, into: list[str]) -> None:
         for child in element:
-            if not child.tag.startswith(_SVG_NS) or child.tag in _NOT_DRAWN:
+            if not child.tag.startswith(_SVG_NS) or child.tag in _NOT_DRAWN or child.tag in _COMPARED_ELSEWHERE:
                 continue
             shape_id = child.get(f"{_VISIO_NS}mID")
             if (
@@ -195,14 +260,13 @@ def _svg_page(text: str) -> _Page:
                     transforms[key].append(child.get("transform", ""))
                 walk(child, parts.setdefault(key, []))
                 continue
-            if into is not None:
-                into.append(_describe(child, styles))
+            into.append(_describe(child, styles, definitions))
             walk(child, into)
 
-    walk(root, None)
+    walk(root, page_parts)
     size = " ".join(f"{name}={root.get(name)}" for name in _PAGE_SIZE if root.get(name) is not None)
     shapes = {key: _Drawn(" ".join(transforms[key]), tuple(parts[key])) for key in transforms}
-    return _Page(size, shapes, tuple(transforms))
+    return _Page(size, tuple(page_parts), shapes, tuple(transforms))
 
 
 def _translation(transform: str) -> tuple[float, float] | None:
@@ -224,6 +288,17 @@ def _clip(part: str) -> str:
     return part if len(part) <= _CLIP else part[: _CLIP - 3] + "..."
 
 
+def _changed_parts(was: tuple[str, ...], now: tuple[str, ...]) -> str:
+    """Each part one drawing has and the other lacks, paired off in order."""
+    gone = [p for p in was if p not in now]
+    new = [p for p in now if p not in was]
+    pairs = [
+        f"{_clip(old) if old else '(nothing)'} -> {_clip(fresh) if fresh else '(nothing)'}"
+        for old, fresh in itertools.zip_longest(gone, new, fillvalue="")
+    ]
+    return "; ".join(pairs or ["the same parts, reordered"])
+
+
 def _diff_svgs(first: str, second: str) -> list[str]:
     """What two Visio SVG exports draw differently: the page, then each shape in ID order, then the stacking order.
 
@@ -234,6 +309,8 @@ def _diff_svgs(first: str, second: str) -> list[str]:
     findings = []
     if first_page.size != second_page.size:
         findings.append(f"the page: {first_page.size} -> {second_page.size}")
+    if first_page.parts != second_page.parts:
+        findings.append("the page drawn differently: " + _changed_parts(first_page.parts, second_page.parts))
     for shape_id in sorted(a.keys() | b.keys()):
         if shape_id not in b:
             findings.append(f"shape {shape_id} only in the first drawing")
@@ -247,13 +324,7 @@ def _diff_svgs(first: str, second: str) -> list[str]:
                 f"shape {shape_id} moved{_moved(was.transform, now.transform)}: {was.transform} -> {now.transform}"
             )
         if was.parts != now.parts:
-            gone = [p for p in was.parts if p not in now.parts]
-            new = [p for p in now.parts if p not in was.parts]
-            pairs = [
-                f"{_clip(old) if old else '(nothing)'} -> {_clip(fresh) if fresh else '(nothing)'}"
-                for old, fresh in itertools.zip_longest(gone, new, fillvalue="")
-            ]
-            findings.append(f"shape {shape_id} drawn differently: " + "; ".join(pairs or ["the same parts, reordered"]))
+            findings.append(f"shape {shape_id} drawn differently: " + _changed_parts(was.parts, now.parts))
     both = a.keys() & b.keys()
     first_order = [shape_id for shape_id in first_page.order if shape_id in both]
     second_order = [shape_id for shape_id in second_page.order if shape_id in both]
@@ -270,23 +341,35 @@ def _diff_svgs(first: str, second: str) -> list[str]:
 
 @dataclass(frozen=True)
 class _Case:
-    """One case of a built case set, as far as photographing it goes."""
+    """One page of one case of a built case set, as far as photographing it goes."""
 
     stem: str
+    """What the run calls it: the case's stem, with the page when the case checks cells on more than one."""
     line: str
     page: int
-    """The page exported: the first one the case checks a cell on."""
+    """The page exported."""
     triggers: tuple[tuple[int, int, str], ...]
-    """(page, shape ID, cell) for every cell the case checks; each is recalculated before the second export."""
+    """(page, shape ID, cell) for every cell the case checks, on any page; each is recalculated before the second export."""
+    file: str = ""
+    """The case file's stem, where it differs from `stem`."""
+
+    @property
+    def file_stem(self) -> str:
+        """The stem of the `.vsdx` this case was written to."""
+        return self.file or self.stem
 
 
 def _read_cases(folder: Path) -> list[_Case]:
-    """The cases `folder`'s `expected.json` names, in its order."""
+    """The cases `folder`'s `expected.json` names, in its order: one for each page a case checks cells on."""
     expected = json.loads((folder / "expected.json").read_text(encoding="utf-8"))
     cases = []
     for stem, data in expected.items():
         triggers = tuple((int(page), int(shape), str(cell)) for page, shape, cell, _want in data["cells"])
-        cases.append(_Case(stem, data["line"], min((t[0] for t in triggers), default=1), triggers))
+        pages = sorted({page for page, _shape, _cell in triggers}) or [1]
+        if len(pages) == 1:
+            cases.append(_Case(stem, data["line"], pages[0], triggers))
+        else:
+            cases += [_Case(f"{stem} page {page}", data["line"], page, triggers, file=stem) for page in pages]
     return cases
 
 
@@ -369,7 +452,7 @@ def _shoot(jobs: list[tuple[str, _Case, Path]], dpi: int, work: Path) -> tuple[d
     work.mkdir(parents=True, exist_ok=True)
     keys = []
     for variant, case, path in jobs:
-        key = f"{variant}__{case.stem}"
+        key = f"{variant}__{case.stem}".replace(" ", "_")
         shutil.copy2(path, work / f"{key}.vsdx")
         keys.append(key)
     shots: dict[str, dict[str, dict]] = {variant: {} for variant in _VARIANTS}
@@ -512,11 +595,13 @@ def _summary(manifest: dict) -> str:
     """The run as Markdown, for a person reading the store or a pull request."""
     against = manifest["against"]
     ref = f"`{against['ref']}` ({against['commit'][:7]})" if against else "no ref"
+    builder = manifest.get("builder")
+    built = f"cases from `{builder['path']}` ({builder['sha256'][:7]}); " if builder else ""
     lines = [
         f"# Visio shots {manifest['run']}",
         "",
         f"Candidate {manifest['commit'][:7]} on `{manifest['branch']}`{' with uncommitted changes' if manifest['dirty'] else ''}; "
-        f"against {ref}; Visio {manifest['visio'].get('version', '?')} build {manifest['visio'].get('build', '?')}; "
+        f"{built}against {ref}; Visio {manifest['visio'].get('version', '?')} build {manifest['visio'].get('build', '?')}; "
         f"{manifest['dpi']} dpi.",
         "",
         "| Case | Candidate on open vs after recalc | Ref vs candidate | Before vs candidate |",
@@ -627,9 +712,17 @@ def _manifest(store: Path, run: str) -> dict:
 
 
 def _diff_runs(store: Path, first: str, second: str) -> list[str]:
-    """Each case whose candidate verdict or drawing differs between two recorded runs, with what changed."""
-    a, b = _manifest(store, first)["cases"], _manifest(store, second)["cases"]
-    lines: list[str] = []
+    """What differs between two recorded runs: each reason one fails for and the other doesn't, then each case whose
+    candidate verdict or drawing differs, with what changed.
+
+    A case stale in one run is reported with its case, below, not among the reasons.
+    """
+    first_manifest, second_manifest = _manifest(store, first), _manifest(store, second)
+    first_failures = [f for f in _failures(first_manifest) if not f.endswith(" is stale on open")]
+    second_failures = [f for f in _failures(second_manifest) if not f.endswith(" is stale on open")]
+    lines = [f"fails only in {first}: {reason}" for reason in first_failures if reason not in second_failures]
+    lines += [f"fails only in {second}: {reason}" for reason in second_failures if reason not in first_failures]
+    a, b = first_manifest["cases"], second_manifest["cases"]
     for stem in sorted(a.keys() | b.keys()):
         if stem not in b or stem not in a:
             lines.append(f"{stem}: only in {first if stem in a else second}")
@@ -659,7 +752,19 @@ def _diff_runs(store: Path, first: str, second: str) -> list[str]:
 # --- commands -----------------------------------------------------------------------
 
 
-def _identity(run_id: str, created: str, against: dict | None, visio: dict, dpi: int) -> dict:
+def _builder_identity(builder: Path) -> dict[str, str]:
+    """The case module a run built from: where it is, and its content's hash.
+
+    The hash is what names it. A builder outside this repository is not
+    covered by the commit or the dirty check, and two edits of one file are
+    two builders.
+    """
+    path = builder.resolve()
+    shown = str(path.relative_to(_REPO)) if path.is_relative_to(_REPO) else str(builder)
+    return {"path": shown, "sha256": _sha256(path.read_bytes())}
+
+
+def _identity(run_id: str, created: str, builder: Path, against: dict | None, visio: dict, dpi: int) -> dict:
     commit = _git(_REPO, "rev-parse", "HEAD")
     return {
         "run": run_id,
@@ -667,6 +772,7 @@ def _identity(run_id: str, created: str, against: dict | None, visio: dict, dpi:
         "commit": commit,
         "branch": _git(_REPO, "branch", "--show-current") or "(detached)",
         "dirty": bool(_git(_REPO, "status", "--porcelain", "--", "src", "tools", "tests")),
+        "builder": _builder_identity(builder),
         "against": against,
         "visio": visio,
         "dpi": dpi,
@@ -686,12 +792,12 @@ def _jobs(
     """
     jobs = []
     for case in cases:
-        before = candidate_dir / f"{case.stem}.before.vsdx"
+        before = candidate_dir / f"{case.file_stem}.before.vsdx"
         if before.exists():
             jobs.append(("before", case, before))
         if case.stem in ref_cases:
-            jobs.append(("ref", ref_cases[case.stem], ref_dir / f"{case.stem}.vsdx"))
-        jobs.append(("candidate", case, candidate_dir / f"{case.stem}.vsdx"))
+            jobs.append(("ref", ref_cases[case.stem], ref_dir / f"{case.file_stem}.vsdx"))
+        jobs.append(("candidate", case, candidate_dir / f"{case.file_stem}.vsdx"))
     return jobs
 
 
@@ -720,7 +826,7 @@ def _command_run(builder: Path, against: str | None, store: Path, dpi: int) -> i
             print(f"Visio is not usable from here: {error}", file=sys.stderr)
             return 2
     run_id = f"{now:%Y%m%dT%H%M%SZ}_{_git(_REPO, 'rev-parse', '--short=7', 'HEAD')}"
-    identity = _identity(run_id, now.isoformat(timespec="seconds"), ref_info, visio, dpi)
+    identity = _identity(run_id, now.isoformat(timespec="seconds"), builder, ref_info, visio, dpi)
     manifest = _record_run(store, identity, {case.stem: case.line for case in cases}, shots, build_errors=errors)
     print(_summary(manifest).split("\n## ")[0])
     print(f"recorded {store / 'runs' / run_id}; images in {store / 'local' / run_id / 'report.html'}")
