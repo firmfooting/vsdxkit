@@ -552,6 +552,16 @@ def test_changing_a_rows_index_rekeys_the_geometry():
     assert geometry.rows["7"] is row
 
 
+def test_a_reindexed_row_moves_to_its_place_in_the_section():
+    """Visio reads a section's rows in document order, so a row given IX 7 goes after IX 5, not where IX 1 was (#273)."""
+    geometry = Document.open(os.path.join(FIXTURES, "test1.vsdx")).pages[0].shapes.require_id("1").geometry
+    assert [row.get("IX") for row in geometry.xml.findall(f"{namespace}Row")] == ["1", "2", "3", "4", "5"]
+
+    geometry.rows["1"].index = 7
+
+    assert [row.get("IX") for row in geometry.xml.findall(f"{namespace}Row")] == ["2", "3", "4", "5", "7"]
+
+
 # --- GeometryCell -----------------------------------------------------------
 
 

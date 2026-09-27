@@ -102,6 +102,56 @@ def test_reindexing_onto_an_occupied_ix_raises_and_leaves_everything_alone(conn_
     assert _instance_row_count(conn_a) == rows_before
 
 
+def _rows_view(connector) -> dict[str, tuple[str | None, dict[str, tuple[str | None, str | None]]]]:
+    """Each row Conn A shows, by index: its type, and each cell's value and formula."""
+    return {
+        ix: (row.row_type, {name: (cell.value, cell.formula) for name, cell in row.cells.items()})
+        for ix, row in connector.geometry.rows.items()
+    }
+
+
+@pytest.mark.parametrize(
+    "moved",
+    [
+        pytest.param("1", id="an inherited row"),
+        pytest.param("2", id="an own row over the master's"),
+    ],
+)
+def test_a_row_moved_to_a_new_index_reloads_as_it_reads(vsdx_copy, moved):
+    """The master's row at the old index is hidden, and the moved row keeps every cell it read (#273).
+
+    Before, only the override moved: after a save the master's row came
+    back at the old index, and the moved row lost the cells it had read from
+    the master (test9 Conn A's row 1 moved to 7 reloaded as rows 1, 2 and 7).
+    """
+    path = vsdx_copy("test9_rect_and_line.vsdx")
+    document = Document.open(path)
+    connector = document.pages[0].shapes.by_text("Conn A")
+    read = _rows_view(connector)["1" if moved == "1" else "2"]
+
+    connector.geometry.rows[moved].index = 7
+    written = _rows_view(connector)
+    document.save(path)
+
+    reloaded = Document.open(path).pages[0].shapes.by_text("Conn A")
+    assert sorted(written) == sorted({"1", "2"} - {moved} | {"7"})
+    assert written["7"] == read
+    assert _rows_view(reloaded) == written
+
+
+def test_moving_a_row_onto_an_index_a_deleted_row_holds_raises(conn_a):
+    """Conn A's own row IX 3 carries Del="1": hidden from `rows`, but the index is still taken (#273)."""
+    geometry = conn_a.geometry
+    assert "3" not in geometry.rows
+    rows_before = [dict(row.attrib) for row in geometry.xml.findall(f"{namespace}Row")]
+
+    with pytest.raises(InvalidOperationError):
+        geometry.rows["2"].index = 3
+
+    assert [dict(row.attrib) for row in geometry.xml.findall(f"{namespace}Row")] == rows_before
+    assert geometry.rows["2"].index == "2"
+
+
 def test_reindexing_a_row_onto_its_own_index_is_a_no_op(conn_a):
     row = conn_a.geometry.rows["1"]
     rows_before = _instance_row_count(conn_a)
