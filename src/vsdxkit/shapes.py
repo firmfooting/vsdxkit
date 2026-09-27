@@ -1782,25 +1782,27 @@ class Shape:
     def move(self, x_delta: float, y_delta: float) -> None:
         """Move the shape by ``x_delta`` and ``y_delta`` inches.
 
-        It shifts the pin, a 1-D shape's begin point, and the ``MoveTo`` and
-        ``LineTo`` rows of the shape's geometry, which are in the shape's own
-        coordinates. A 1-D shape's end point is left where it is. A pin the
-        shape lacks is taken as 0, and written.
+        A 2-D shape moves by its pin, and the value written replaces a
+        formula the pin had, as dragging the shape does in Visio. A pin the
+        shape lacks is taken as 0, and written. A 1-D shape moves by its two
+        ends, which frees an end that was glued; its pin, width and angle are
+        formulas of its ends, and follow them. The geometry is in the shape's
+        own coordinates, so it is not touched.
 
         :raises InvalidOperationError: if the shape is detached
         """
-        if self.geometry:
-            self.geometry._move(x_delta, y_delta, keep_formula=True)
-        begin_x = self.begin_x
-        if begin_x is not None:
-            self._write_cell("BeginX", v=xml_value(begin_x + x_delta), keep_formula=True)
-        pin_x = self.x
-        self._write_cell("PinX", v=xml_value((pin_x or 0.0) + x_delta), keep_formula=True)
-        begin_y = self.begin_y
-        if begin_y is not None:
-            self._write_cell("BeginY", v=xml_value(begin_y + y_delta), keep_formula=True)
-        pin_y = self.y
-        self._write_cell("PinY", v=xml_value((pin_y or 0.0) + y_delta), keep_formula=True)
+        begin_x, begin_y, end_x, end_y = self.begin_x, self.begin_y, self.end_x, self.end_y
+        if begin_x is None or begin_y is None or end_x is None or end_y is None:
+            self.x = (self.x or 0.0) + x_delta
+            self.y = (self.y or 0.0) + y_delta
+            return
+        self.begin_x, self.begin_y = begin_x + x_delta, begin_y + y_delta
+        self.end_x, self.end_y = end_x + x_delta, end_y + y_delta
+        # derived from the ends: written as the library writes them, so a
+        # formula stays and the refresh below gives it the new ends' value
+        self._write_cell("PinX", v=xml_value((self.x or 0.0) + x_delta), keep_formula=True)
+        self._write_cell("PinY", v=xml_value((self.y or 0.0) + y_delta), keep_formula=True)
+        self._refresh_formula_values()
 
     def get_or_create_cell(self, name: str, v: str | None = None, f: str | None = None) -> Cell:
         """Set or create a named cell on this shape, through :meth:`_write_cell`.

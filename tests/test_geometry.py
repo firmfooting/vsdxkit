@@ -281,7 +281,7 @@ def test_move_copies_an_inherited_row_onto_the_instance():
     connector = vis.pages[0].shapes.by_text("Conn A")
     assert cell_values(row_element(connector.master_shape, "1")) == {"X": "0", "Y": "0"}
 
-    connector.move(1.0, 2.0)
+    connector.geometry.move(1.0, 2.0)
 
     assert cell_values(row_element(connector.master_shape, "1")) == {"X": "0", "Y": "0"}
     assert cell_values(row_element(connector, "1")) == {"X": "1.0", "Y": "2.0"}
@@ -300,7 +300,7 @@ def test_a_row_copied_down_by_move_lands_after_the_sections_cells():
     geometry_xml(connector).insert(0, ET.fromstring(f'<Cell xmlns="{namespace[1:-1]}" N="NoShow" V="1"/>'))
     connector = reparse(connector)
 
-    connector.move(1.0, 2.0)
+    connector.geometry.move(1.0, 2.0)
 
     assert [child.tag.rpartition("}")[2] for child in geometry_xml(connector)] == ["Cell", "Row", "Row", "Row"]
     assert row_indexes(connector) == ["1", "2", "3"]
