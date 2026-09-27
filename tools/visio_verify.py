@@ -230,9 +230,6 @@ def _started_visio(path: Path) -> _Visio | None:
 _START_TICKS = "$_.StartTime.ToUniversalTime().Ticks"
 """PowerShell for when the process `$_` started, as `_Visio.started` holds it; tools/visio_process.ps1 writes the same."""
 
-_LIST_VISIO = "Get-Process -Name VISIO -ErrorAction SilentlyContinue"
-"""PowerShell listing every VISIO process, piped on to pick and print them."""
-
 
 def _visio_processes(*, invisible_only: bool = False) -> set[_Visio]:
     """The VISIO processes running now; with `invisible_only`, those with no visible main window.
@@ -247,7 +244,7 @@ def _visio_processes(*, invisible_only: bool = False) -> set[_Visio]:
             "-NoProfile",
             "-NonInteractive",
             "-Command",
-            f'{_LIST_VISIO}{pick} | ForEach-Object {{ "$($_.Id) $({_START_TICKS})" }}',
+            f'Get-Process -Name VISIO -ErrorAction SilentlyContinue{pick} | ForEach-Object {{ "$($_.Id) $({_START_TICKS})" }}',
         ],
         capture_output=True,
         text=True,
