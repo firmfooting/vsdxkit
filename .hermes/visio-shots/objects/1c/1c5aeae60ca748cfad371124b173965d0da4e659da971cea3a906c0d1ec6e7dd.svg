@@ -16,9 +16,9 @@
 		.st2 {fill:#333333;font-family:Arial;font-size:0.833336em}
 		.st3 {marker-end:url(#mrkr4-16);stroke:#5e5e5e;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.9}
 		.st4 {fill:#5e5e5e;fill-opacity:1;stroke:#5e5e5e;stroke-opacity:1;stroke-width:0.26315789473684}
-		.st5 {fill:#ffffff;stroke:none;stroke-linecap:butt}
+		.st5 {fill:#ffffff;stroke:none;stroke-linecap:butt;stroke-width:7.2}
 		.st6 {fill:#333333;font-family:Arial;font-size:0.666664em;font-weight:bold}
-		.st7 {fill:#ffffff;stroke:none;stroke-linecap:butt;stroke-width:7.2}
+		.st7 {fill:#ffffff;stroke:none;stroke-linecap:butt}
 		.st8 {fill:none;fill-rule:evenodd;font-size:12px;overflow:visible;stroke-linecap:square;stroke-miterlimit:3}
 	]]>
 	</style>
@@ -61,14 +61,14 @@
 				<v:textRect cx="36" cy="585" width="61.2" height="43.2"/>
 				<text x="16.82" y="587.5" class="st2" v:langID="1033"><v:paragraph v:spLine="-1" v:horizAlign="1"/><v:tabList/>Shape B</text>			</g>
 		</g>
-		<g id="shape5-11" v:mID="5" v:groupContext="shape" transform="translate(-417.594,-259.208) rotate(-53.1301)">
+		<g id="shape5-11" v:mID="5" v:groupContext="shape" transform="translate(126.677,-540)">
 			<title>com.lucidchart.Line</title>
 			<desc>Line 1</desc>
 			<v:textBlock v:margins="rect(0,0,0,0)"/>
-			<v:textRect cx="180" cy="612.003" width="25.35" height="8.00357"/>
-			<path d="M0 612 L353.16 612" class="st3"/>
-			<rect v:rectContext="textBkgnd" x="168.441" y="607.797" width="23.1169" height="8.20596" class="st5"/>
-			<text x="168.44" y="614" class="st6" v:langID="1033"><v:paragraph v:spLine="-1" v:horizAlign="1"/><v:tabList/>Line 1</text>		</g>
+			<v:textRect cx="75.528" cy="612.003" width="25.35" height="8.00357"/>
+			<path d="M0 612 L126.81 612" class="st3"/>
+			<rect v:rectContext="textBkgnd" x="63.9694" y="607.797" width="23.1169" height="8.20596" class="st5"/>
+			<text x="63.97" y="614" class="st6" v:langID="1033"><v:paragraph v:spLine="-1" v:horizAlign="1"/><v:tabList/>Line 1</text>		</g>
 		<g id="shape6-19" v:mID="6" v:groupContext="shape" transform="translate(260.323,-531.598)">
 			<title>com.lucidchart.Line.6</title>
 			<desc>Line 2</desc>

@@ -1,7 +1,7 @@
 {
-  "run": "20260927T102836Z_f3ddf5b",
-  "created": "2026-09-27T10:28:36+00:00",
-  "commit": "f3ddf5b3414dc0b1f749a4c7359e0c7d177d65a6",
+  "run": "20260927T104501Z_1b83626",
+  "created": "2026-09-27T10:45:01+00:00",
+  "commit": "1b836268b329d6355e3e67677d94178e62c65aef",
   "branch": "test/visio-shots",
   "dirty": false,
   "builder": {
@@ -33,7 +33,9 @@
           "recalc": {
             "svg": "2b85937aa0328c10dfc92c32143d0e7593dbcbe5d3b42ec21733fbd1595c4826",
             "png": "7d18dc69464ef4be272b59b7b3782d710521aafcfb6fc58e6de1b10605e2102b"
-          }
+          },
+          "triggered": 3,
+          "asked": 3
         },
         "ref": {
           "open": {
@@ -43,17 +45,21 @@
           "recalc": {
             "svg": "e7cdb1e2d89ed8d1f0b7f5cfae084bebb2605b1235071c97384e9ee6460523cc",
             "png": "8fe32aadc578470cc21f72b52a78fa3289c3364a49829d7416006dfd00dea243"
-          }
+          },
+          "triggered": 3,
+          "asked": 3
         },
         "candidate": {
           "open": {
-            "svg": "7ea84b4df3c1207dc85e282d1b2db7d7fc248e1825e23cc73ce5de0178da083d",
+            "svg": "bfd8668e7b28cedd1de4f2e748eb087e979ca00f7d46ba37a34e951d77decfd0",
             "png": "264676169b673613ac73d3ca8f2622ee8ae16df9b1ade2aa58cf651f925879d5"
           },
           "recalc": {
             "svg": "7ea84b4df3c1207dc85e282d1b2db7d7fc248e1825e23cc73ce5de0178da083d",
             "png": "264676169b673613ac73d3ca8f2622ee8ae16df9b1ade2aa58cf651f925879d5"
-          }
+          },
+          "triggered": 3,
+          "asked": 3
         }
       },
       "findings": {
@@ -81,7 +87,9 @@
           "recalc": {
             "svg": "ac22b9e2804586c463765d6b7e9a1f570204aaea7911c296e1817bac67f1c093",
             "png": "da84cf064982bb7b3b1ea3fffee24808f62a51ad71f52f5be3ae405d16ffdb6f"
-          }
+          },
+          "triggered": 1,
+          "asked": 1
         },
         "ref": {
           "open": {
@@ -91,7 +99,9 @@
           "recalc": {
             "svg": "ac22b9e2804586c463765d6b7e9a1f570204aaea7911c296e1817bac67f1c093",
             "png": "da84cf064982bb7b3b1ea3fffee24808f62a51ad71f52f5be3ae405d16ffdb6f"
-          }
+          },
+          "triggered": 1,
+          "asked": 1
         },
         "candidate": {
           "open": {
@@ -101,7 +111,9 @@
           "recalc": {
             "svg": "6a90f30de15394340b16fa223718b747b17de2f7a937ed77d411823614000c32",
             "png": "3cee399c0171861187a5c320a248456a24425cdce912d340e11203ae7e9be22d"
-          }
+          },
+          "triggered": 1,
+          "asked": 1
         }
       },
       "findings": {
@@ -129,7 +141,9 @@
           "recalc": {
             "svg": "ab88968cda8fa12c60a4d54b7050466e28c6cefd7292c695ae3715a42f71db95",
             "png": "cc31803d24cf2136a3f1582ef55b0bdc85aef02a481ad02df06fe224b2b0030d"
-          }
+          },
+          "triggered": 2,
+          "asked": 2
         },
         "ref": {
           "open": {
@@ -139,7 +153,9 @@
           "recalc": {
             "svg": "f93c6a48862b1a371c6acc6a5fc129de60330717da1901ed23b1b0108a74ff45",
             "png": "72e259f4d9046e388a4ec9ce3c45295536b4289cb0d954d2c8f7db39249e3071"
-          }
+          },
+          "triggered": 2,
+          "asked": 2
         },
         "candidate": {
           "open": {
@@ -149,7 +165,9 @@
           "recalc": {
             "svg": "8694abe86cd854ededdf99e8767ae079cce13b639f799a4e9cb0723553616216",
             "png": "fffd776b809937af53d02d4b295b11a340bfc589224a4c0297de4422cebdc942"
-          }
+          },
+          "triggered": 2,
+          "asked": 2
         }
       },
       "findings": {
@@ -182,7 +200,9 @@
           "recalc": {
             "svg": "2b85937aa0328c10dfc92c32143d0e7593dbcbe5d3b42ec21733fbd1595c4826",
             "png": "7d18dc69464ef4be272b59b7b3782d710521aafcfb6fc58e6de1b10605e2102b"
-          }
+          },
+          "triggered": 1,
+          "asked": 1
         },
         "ref": {
           "open": {
@@ -192,7 +212,9 @@
           "recalc": {
             "svg": "2b85937aa0328c10dfc92c32143d0e7593dbcbe5d3b42ec21733fbd1595c4826",
             "png": "7d18dc69464ef4be272b59b7b3782d710521aafcfb6fc58e6de1b10605e2102b"
-          }
+          },
+          "triggered": 1,
+          "asked": 1
         },
         "candidate": {
           "open": {
@@ -200,9 +222,11 @@
             "png": "7d18dc69464ef4be272b59b7b3782d710521aafcfb6fc58e6de1b10605e2102b"
           },
           "recalc": {
-            "svg": "653a5615e7ceeb6af715a2e50d1ffa2e8978105ebc1a78e04e7625e596087cf4",
+            "svg": "783bc54cf03af785b37f746af6a8f779d93c95a983773ea8b4ddc4e4d3c6b82c",
             "png": "7d18dc69464ef4be272b59b7b3782d710521aafcfb6fc58e6de1b10605e2102b"
-          }
+          },
+          "triggered": 1,
+          "asked": 1
         }
       },
       "findings": {
@@ -224,7 +248,9 @@
           "recalc": {
             "svg": "d4dac7888eabd44931fa272c4024c021c332beef608eefe3bf72e0178c63d068",
             "png": "96426436e99ee570b795956888e11111f832e7c71ede6f8d5556c2cd44870114"
-          }
+          },
+          "triggered": 1,
+          "asked": 2
         },
         "ref": {
           "open": {
@@ -234,7 +260,9 @@
           "recalc": {
             "svg": "884a157df2899767d6985813b160b3ccc015e969c528ab811385521edfb9ee28",
             "png": "2f9c4871d33f0c4e6791e35dc04ab712db8a9c6dbf8488b88b437af906de3078"
-          }
+          },
+          "triggered": 2,
+          "asked": 2
         },
         "candidate": {
           "open": {
@@ -242,9 +270,11 @@
             "png": "09b13ab4a3c1a51bd2b83b100af4d29206f859a5adfde4d22b9bb0bb9c36b2e6"
           },
           "recalc": {
-            "svg": "b3e8bbbef09f5be65284de6059119e15eb7a7ea501b38b1c6cda064988c11113",
+            "svg": "4a7b0958c41c90624fb09c128c4c9926add732beacfed77f0a721b7eedb18a17",
             "png": "09b13ab4a3c1a51bd2b83b100af4d29206f859a5adfde4d22b9bb0bb9c36b2e6"
-          }
+          },
+          "triggered": 2,
+          "asked": 2
         }
       },
       "findings": {
@@ -271,7 +301,9 @@
           "recalc": {
             "svg": "e3fe88c0094ce8f645b522d10a00f2c41c9340e1e9ed3b4538cc6c5e1cca5d67",
             "png": "7145014671c8f3c3659fa2f63169224d30a2da3e4e5bb0fbc41d1a8f5104e7e6"
-          }
+          },
+          "triggered": 2,
+          "asked": 2
         },
         "ref": {
           "open": {
@@ -281,7 +313,9 @@
           "recalc": {
             "svg": "e3fe88c0094ce8f645b522d10a00f2c41c9340e1e9ed3b4538cc6c5e1cca5d67",
             "png": "7145014671c8f3c3659fa2f63169224d30a2da3e4e5bb0fbc41d1a8f5104e7e6"
-          }
+          },
+          "triggered": 2,
+          "asked": 2
         },
         "candidate": {
           "open": {
@@ -291,7 +325,9 @@
           "recalc": {
             "svg": "152f60f41f2cc658b6d83e02a7e8f31048a220fa394a8e4d1eb3e2e595ba4132",
             "png": "ee17340f113abdaaf6bb9d7feb7b9472dfb773e37fd7051faf117e7e80e68eb8"
-          }
+          },
+          "triggered": 2,
+          "asked": 2
         }
       },
       "findings": {
@@ -322,7 +358,9 @@
           "recalc": {
             "svg": "e40caba1139b4b05fc67afff2bcafecbc0d56cb22460564443eb4864b4c51078",
             "png": "b2f540b5c3d1857cce755f61d09d0fd7cfb273f2030d502abe7e582b0997806c"
-          }
+          },
+          "triggered": 1,
+          "asked": 2
         },
         "ref": {
           "open": {
@@ -332,7 +370,9 @@
           "recalc": {
             "svg": "ced54eec227dae49e582578dae1957238fe38d5575024fcd6a1e5002ecc0688b",
             "png": "c4a1bd9676f850a20044d2ad5e4da9e06024cdeb6fbddd17b91466a2291b6be0"
-          }
+          },
+          "triggered": 2,
+          "asked": 2
         },
         "candidate": {
           "open": {
@@ -342,7 +382,9 @@
           "recalc": {
             "svg": "b6a2603f1746ff3943dd35815d298bd4f92f843c86acb348a79e2b6285ef4d8a",
             "png": "c4a1bd9676f850a20044d2ad5e4da9e06024cdeb6fbddd17b91466a2291b6be0"
-          }
+          },
+          "triggered": 2,
+          "asked": 2
         }
       },
       "findings": {
@@ -369,7 +411,9 @@
           "recalc": {
             "svg": "d4dac7888eabd44931fa272c4024c021c332beef608eefe3bf72e0178c63d068",
             "png": "96426436e99ee570b795956888e11111f832e7c71ede6f8d5556c2cd44870114"
-          }
+          },
+          "triggered": 6,
+          "asked": 6
         },
         "ref": {
           "open": {
@@ -379,17 +423,21 @@
           "recalc": {
             "svg": "e2ca33dc735371bc4c294171496967a9512de4b6c18af8da678b524c33f9067b",
             "png": "c38bafc6765e2b5eb94f23cb6fff4561c4634504f84a0bce2cb2f90f7d32b20e"
-          }
+          },
+          "triggered": 6,
+          "asked": 6
         },
         "candidate": {
           "open": {
-            "svg": "afd86b30394dc6ce57565cd83e3a36b05bfef7c4f304877ecd8f9e1e4105129b",
+            "svg": "72277f4089f97fa8f14cf2271f9742cad07d32b170974ab7bf9a426701fc59d4",
             "png": "fa3ceaffff1ca57eb5e52964957749097e6c8b36aeb25336df86c5432b520803"
           },
           "recalc": {
-            "svg": "ffc84ab93c19bf73f1578e79058af0318b25a782cf8e1dbe3a646bb55e9c0f5c",
+            "svg": "afd86b30394dc6ce57565cd83e3a36b05bfef7c4f304877ecd8f9e1e4105129b",
             "png": "fa3ceaffff1ca57eb5e52964957749097e6c8b36aeb25336df86c5432b520803"
-          }
+          },
+          "triggered": 6,
+          "asked": 6
         }
       },
       "findings": {
@@ -411,23 +459,27 @@
       "shots": {
         "before": {
           "open": {
-            "svg": "b394106915a208e016ade9d41b8bc4b0d451e0fe0cf07842788c5eb3d07c8d1a",
+            "svg": "2e616b2fde8ac9c37ac7a2280ef610d7c2c05f1fc99d0d5b7d136b680df46a42",
             "png": "4d11f69fe5dae3413a458a9e3eb7235bd35367990dd64708b8690d47183126d3"
           },
           "recalc": {
-            "svg": "2e616b2fde8ac9c37ac7a2280ef610d7c2c05f1fc99d0d5b7d136b680df46a42",
+            "svg": "1c5aeae60ca748cfad371124b173965d0da4e659da971cea3a906c0d1ec6e7dd",
             "png": "4d11f69fe5dae3413a458a9e3eb7235bd35367990dd64708b8690d47183126d3"
-          }
+          },
+          "triggered": 7,
+          "asked": 7
         },
         "ref": {
           "open": {
-            "svg": "ceabad65c190b6af9f880e12819a5ce544a6d78ae93e61c89fc81df05d978e0a",
+            "svg": "55af69b2dadc4668fb1b31a2a5260bc0d4075a18195e8bc93f16c0e7ff2fce66",
             "png": "a41d503602c8c27b289db2ce67684be97847b2e8c56a09eb7fa92ec0ae5d7e57"
           },
           "recalc": {
-            "svg": "3f752cbbd7b32e74eaf82865b9912459a614db0d7cc033d1d5a62922cd858855",
+            "svg": "af0de3b806008b363a6fd9901f275c899f45326f132f75ae162a1376ae4189e9",
             "png": "837079966276ad6691d9929318d3e1db6a41df96a6ff26bcb466ab59b1834b64"
-          }
+          },
+          "triggered": 7,
+          "asked": 7
         },
         "candidate": {
           "open": {
@@ -435,9 +487,11 @@
             "png": "4dc2c136ab456f081c200f55a8ec6064bd95b2e2b0149909249523605c9a20e1"
           },
           "recalc": {
-            "svg": "93e5b115a372706cf615390c7677c5914d9f7a44e26a1430bafa3a1049bd4918",
+            "svg": "5810983bab757e7b324e015d956184abe45d6b522018a0e334fcef6a9d8ae6d8",
             "png": "4dc2c136ab456f081c200f55a8ec6064bd95b2e2b0149909249523605c9a20e1"
-          }
+          },
+          "triggered": 7,
+          "asked": 7
         }
       },
       "findings": {
@@ -461,13 +515,15 @@
       "shots": {
         "before": {
           "open": {
-            "svg": "43be5437a11c7171ff1f8da98d368a4ec065f9b47d727c6f667d947e5fe62d9e",
+            "svg": "53e8a32d06a22821808ab262332c162dd7062a6ea4ba41e0178e6caaf3447648",
             "png": "4d11f69fe5dae3413a458a9e3eb7235bd35367990dd64708b8690d47183126d3"
           },
           "recalc": {
-            "svg": "b394106915a208e016ade9d41b8bc4b0d451e0fe0cf07842788c5eb3d07c8d1a",
+            "svg": "efaa2b5c22cae39d7f845b8ae04dce9c0331d3b4305aa83c294e91c51009d6b5",
             "png": "4d11f69fe5dae3413a458a9e3eb7235bd35367990dd64708b8690d47183126d3"
-          }
+          },
+          "triggered": 10,
+          "asked": 10
         },
         "ref": {
           "open": {
@@ -477,7 +533,9 @@
           "recalc": {
             "svg": "3fa1074863b0bf2cde7f2c022c286f1575edb3c59e165859d1ef3e46e5988dc6",
             "png": "442d77015b5b3ddf11224922c04d3c101a75c9f9b2d2e1c5bb307321f9475ed7"
-          }
+          },
+          "triggered": 10,
+          "asked": 10
         },
         "candidate": {
           "open": {
@@ -485,9 +543,11 @@
             "png": "a8e8dc809ad4427ecfbb3f145cf735120bc042a2454e78d696b604bd499ac93a"
           },
           "recalc": {
-            "svg": "86fd5a265480c92508b19911afe9214029c89260b43e2b14a47d6d48fc942222",
+            "svg": "a21b51c72c64d8e784fd0204bcb2b9f897e69d1caae265d4b626f558feeca667",
             "png": "a8e8dc809ad4427ecfbb3f145cf735120bc042a2454e78d696b604bd499ac93a"
-          }
+          },
+          "triggered": 10,
+          "asked": 10
         }
       },
       "findings": {
@@ -517,17 +577,21 @@
           "recalc": {
             "svg": "d4dac7888eabd44931fa272c4024c021c332beef608eefe3bf72e0178c63d068",
             "png": "96426436e99ee570b795956888e11111f832e7c71ede6f8d5556c2cd44870114"
-          }
+          },
+          "triggered": 10,
+          "asked": 10
         },
         "ref": {
           "open": {
-            "svg": "78be9933c9eb3c629f9955b91162d0be183432d7dabc660b053a1adc6e20badf",
+            "svg": "4de1fed22ecd43bb5ee40938d181c9ebda32994f79bf7d89847dc3b70bbb5b44",
             "png": "970a6ac7f7a5fde65cc8a361340cc4e8d395d36b759b4f6e8a5d405670457059"
           },
           "recalc": {
             "svg": "4de1fed22ecd43bb5ee40938d181c9ebda32994f79bf7d89847dc3b70bbb5b44",
             "png": "970a6ac7f7a5fde65cc8a361340cc4e8d395d36b759b4f6e8a5d405670457059"
-          }
+          },
+          "triggered": 10,
+          "asked": 10
         },
         "candidate": {
           "open": {
@@ -535,9 +599,11 @@
             "png": "970a6ac7f7a5fde65cc8a361340cc4e8d395d36b759b4f6e8a5d405670457059"
           },
           "recalc": {
-            "svg": "4de1fed22ecd43bb5ee40938d181c9ebda32994f79bf7d89847dc3b70bbb5b44",
+            "svg": "d0f2cdbb6bc7e445a8b0f135169b22266051dabab85b6c14561b6ca23c7744ac",
             "png": "970a6ac7f7a5fde65cc8a361340cc4e8d395d36b759b4f6e8a5d405670457059"
-          }
+          },
+          "triggered": 10,
+          "asked": 10
         }
       },
       "findings": {

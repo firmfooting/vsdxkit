@@ -34,21 +34,21 @@
 			<v:textRect cx="127.559" cy="823.465" width="255.12" height="36.8504"/>
 			<rect x="0" y="805.039" width="255.118" height="36.8504" class="st1"/>
 			<text x="111.94" y="827.06" class="st2" v:langID="2057"><v:paragraph v:horizAlign="1"/><v:tabList/>Rect A</text>		</g>
-		<g id="shape2-4" v:mID="2" v:groupContext="shape" transform="translate(-465.009,393.385) rotate(-63.4349)">
+		<g id="shape2-4" v:mID="2" v:groupContext="shape" transform="translate(-154.285,-660.267) rotate(-12.5288)">
 			<title>Sheet.2</title>
 			<desc>Line A</desc>
 			<v:textBlock v:margins="rect(4,4,4,4)" v:tabSpace="42.5197"/>
-			<v:textRect cx="80.4984" cy="841.89" width="161" height="0"/>
-			<path d="M0 841.89 L161 841.89" class="st3"/>
-			<rect v:rectContext="textBkgnd" x="65.6331" y="834.69" width="29.7307" height="14.4001" class="st4"/>
-			<text x="65.63" y="845.49" class="st2" v:langID="2057"><v:paragraph v:horizAlign="1"/><v:tabList/>Line A</text>		</g>
-		<g id="shape3-9" v:mID="3" v:groupContext="shape" v:layerMember="0" transform="translate(72,-72)">
+			<v:textRect cx="130.671" cy="841.89" width="261.35" height="0"/>
+			<path d="M0 841.89 L261.34 841.89" class="st3"/>
+			<rect v:rectContext="textBkgnd" x="115.806" y="834.69" width="29.7307" height="14.4001" class="st4"/>
+			<text x="115.81" y="845.49" class="st2" v:langID="2057"><v:paragraph v:horizAlign="1"/><v:tabList/>Line A</text>		</g>
+		<g id="shape3-9" v:mID="3" v:groupContext="shape" v:layerMember="0" transform="translate(100.346,-695.622)">
 			<title>Dynamic connector</title>
 			<desc>Conn A</desc>
 			<v:textBlock v:margins="rect(4,4,4,4)" v:tabSpace="42.5197"/>
-			<v:textRect cx="72" cy="805.89" width="40" height="17.6036"/>
-			<path d="M0 841.89 L144 769.89" class="st3"/>
-			<rect v:rectContext="textBkgnd" x="60.3359" y="801.09" width="23.3281" height="9.59985" class="st5"/>
-			<text x="60.34" y="808.29" class="st6" v:langID="2057"><v:paragraph v:horizAlign="1"/><v:tabList/>Conn A</text>		</g>
+			<v:textRect cx="127.559" cy="813.543" width="40" height="17.6036"/>
+			<path d="M0 841.89 L255.12 785.2" class="st3"/>
+			<rect v:rectContext="textBkgnd" x="115.895" y="808.744" width="23.3281" height="9.59985" class="st5"/>
+			<text x="115.89" y="815.94" class="st6" v:langID="2057"><v:paragraph v:horizAlign="1"/><v:tabList/>Conn A</text>		</g>
 	</g>
 </svg>
