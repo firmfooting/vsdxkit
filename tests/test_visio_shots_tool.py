@@ -170,6 +170,35 @@ def test_how_a_hidden_element_would_be_drawn_is_no_difference():
     assert tool._diff_svgs(first, second) == []
 
 
+def _hidden_group(x: float, member: str = "") -> str:
+    """A shape whose own `<g>` Visio's export hides, drawing a frame; `member`, a shape inside it, may show itself again."""
+    return (
+        f'<g id="shape5-1" v:mID="5" v:groupContext="shape" transform="translate({x},-504)" visibility="hidden">'
+        '<title>Sheet.5</title><rect x="0" y="340" width="785" height="255" class="st5"/>'
+        f"{member}</g>"
+    )
+
+
+def test_where_a_shape_that_draws_nothing_is_placed_is_no_difference():
+    """A hidden shape moved by a recalculation moves nothing anyone sees; it was reported as moved, and stale (#462)."""
+    tool = _tool()
+    styles = ".st5 {stroke:#d49f00}"
+    assert tool._diff_svgs(_svg("a", _hidden_group(0), styles=styles), _svg("b", _hidden_group(90), styles=styles)) == []
+
+
+def test_a_hidden_group_moving_a_member_that_shows_itself_is_a_difference():
+    """A member drawn inside a hidden group is placed by the group's transform as well as its own."""
+    tool = _tool()
+    styles = ".st5 {stroke:#d49f00}\n.st6 {visibility:visible}"
+    member = (
+        '<g id="shape6-2" v:mID="6" v:groupContext="shape" class="st6"><title>Sheet.6</title>'
+        '<rect x="0" y="0" width="10" height="10" class="st5"/></g>'
+    )
+    first = _svg("a", _hidden_group(0, member), styles=styles)
+    second = _svg("b", _hidden_group(90, member), styles=styles)
+    assert [finding.split(" (")[0] for finding in tool._diff_svgs(first, second)] == ["shape 5 moved"]
+
+
 def test_an_element_hidden_in_one_drawing_and_shown_in_the_other_is_a_difference():
     tool = _tool()
     styles = ".st5 {stroke:#d49f00;visibility:hidden}\n.st6 {stroke:#d49f00}"
@@ -602,11 +631,41 @@ def test_the_refs_cases_are_photographed_with_the_refs_own_shape_ids(tmp_path):
     tool = _tool()
     candidate = tool._Case("03b", "line", 1, ((1, 9, "Prop.ShapeClass"),))
     ref = tool._Case("03b", "line", 1, ((1, 8, "Prop.ShapeClass"),))
-    jobs = tool._jobs(tmp_path / "candidate", [candidate], tmp_path / "ref", {"03b": ref})
+    jobs = tool._jobs(tmp_path / "candidate", [candidate], tmp_path / "ref", [ref])
     assert [(variant, case.triggers) for variant, case, _path in jobs] == [
         ("ref", ((1, 8, "Prop.ShapeClass"),)),
         ("candidate", ((1, 9, "Prop.ShapeClass"),)),
     ]
+
+
+def test_a_refs_case_is_matched_by_its_file_and_page_not_its_name(tmp_path):
+    """A case checking two pages under the candidate and one under the ref is `foo/page 1` in one and `foo` in the other (#462).
+
+    Matched by name, the ref's page 1 was never photographed, though both have it.
+    """
+    tool = _tool()
+    candidate = [tool._Case(f"foo/page {page}", "line", page, (), file="foo") for page in (1, 2)]
+    ref = tool._Case("foo", "line", 1, ((1, 8, "PinX"),))
+    jobs = tool._jobs(tmp_path / "candidate", candidate, tmp_path / "ref", [ref])
+    assert [(variant, case.stem, case.page, case.triggers, path.name) for variant, case, path in jobs] == [
+        ("ref", "foo/page 1", 1, ((1, 8, "PinX"),), "foo.vsdx"),
+        ("candidate", "foo/page 1", 1, (), "foo.vsdx"),
+        ("candidate", "foo/page 2", 2, (), "foo.vsdx"),
+    ]
+
+
+def test_a_ref_that_did_not_recalculate_every_cell_has_no_drawing_after_recalc():
+    """Its "after recalc" export was taken with some of the case's cells never recalculated (#462)."""
+    tool = _tool()
+    drawing = _svg("x", _box(1))
+    shots = {
+        "ref": {"01_a": {**_shots(drawing, drawing), "triggered": 1, "asked": 2}},
+        "candidate": {"01_a": {**_shots(drawing, drawing), "triggered": 2, "asked": 2}},
+    }
+    found = tool._findings(shots, "01_a")
+    assert found[tool._REF_STATES] is None
+    assert found[tool._REF_TO_CANDIDATE] is None
+    assert found[tool._STALE] == []
 
 
 def test_two_runs_given_one_id_are_recorded_apart(tmp_path):
