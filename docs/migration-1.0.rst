@@ -632,6 +632,31 @@ are gone; glue and routing are :class:`vsdxkit.glue.Glue` and
 ``ConnectorOptions.from_route(route)``
    Gone with the route strings.
 
+A value written is the value Visio shows
+----------------------------------------
+
+Setting a cell's value, through a setter such as ``shape.line_color`` or ``shape.x``, ``shape.set_cell_value``, ``shape.get_or_create_cell(name, v=...)``, ``cell.value`` or a geometry cell's ``value``
+   Replaces the cell's formula, as typing a number into the ShapeSheet does
+   in Visio, including a ``GUARD`` or theme formula and one the shape inherits
+   from its master. 0.8 kept the formula, and Visio recalculated it over the
+   value on open, so a colour or position written to a themed or guarded
+   shape did not show. ``shape.set_cell_formula`` sets a formula.
+
+``shape.text_color``
+   Replaces the colour cell's formula, as the other colour setters do.
+
+``shape.set_cell_value("Control/TextPosition/X", ...)`` and other names holding ``/``
+   Write the cell in its section row where the shape has it, and raise
+   :class:`vsdxkit.errors.InvalidOperationError` where it does not. 0.8
+   created a top-level cell of that name, which is no ShapeSheet cell.
+
+Writing an end of a glued connector: ``begin_x``, ``begin_y``, ``end_x``, ``end_y``, ``set_start_and_finish``
+   Frees that end first: its ``Connect`` record, trigger and glue formulas
+   go, and ``connector.source`` or ``connector.target`` reads ``None``, as
+   dragging a glued end away does in Visio. The other end stays glued.
+   ``connector.retarget`` glues an end to another shape. 0.8 wrote the
+   coordinate beside the glue, and Visio pulled the end back on open.
+
 The ``<Connect>`` records are internal
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

@@ -1435,7 +1435,8 @@ class Shape:
         """The thickness of the shape's line, in inches, from its ``LineWeight`` cell or its master's; ``None`` where neither has one.
 
         Setting it writes the cell's value: a number, or a string written as
-        it stands. A formula the cell has is kept.
+        it stands, and replaces the cell's formula, as typing a number into
+        the ShapeSheet does in Visio.
 
         :raises MalformedPackageError: if the ``LineWeight`` value is not a number
         """
@@ -1452,7 +1453,8 @@ class Shape:
 
         It is the text the file holds, such as ``#FF0000`` or an index into
         the document's colours. Setting it writes the cell's value as it
-        stands, and keeps a formula the cell has.
+        stands, and replaces the cell's formula, as typing a number into the
+        ShapeSheet does in Visio.
         """
         return self.cell_value("LineColor")
 
@@ -1613,8 +1615,9 @@ class Shape:
 
         The pin is the point the shape rotates about, usually its centre.
         Setting it moves the shape: it writes the cell's value, a number or a
-        string written as it stands, and keeps a formula the cell has.
-        ``None`` raises :class:`TypeError`.
+        string written as it stands, and replaces the cell's formula, as
+        typing a number into the ShapeSheet does in Visio. ``None`` raises
+        :class:`TypeError`.
 
         :raises MalformedPackageError: if the ``PinX`` value is not a number
         """
