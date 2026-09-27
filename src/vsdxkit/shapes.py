@@ -1311,8 +1311,8 @@ class Shape:
                 return master.cell_formula(name)
         return None
 
-    def _write_cell(self, name: str, *, v: str | None = None, f: str | None = None, keep_formula: bool = False) -> None:
-        """Set cell `name`'s value or formula: the one function that creates or updates a shape's named cell.
+    def _write_cell(self, name: str, *, v: str | None = None, f: str | None = None, keep_formula: bool = False) -> Cell:
+        """Set cell `name`'s value or formula, and return the cell: the one function that creates or updates a shape's named cell.
 
         A value written without a formula replaces the cell's formula, as
         typing a number into the ShapeSheet does in Visio, unless
@@ -1347,6 +1347,7 @@ class Shape:
             cell.formula = f
         if v is not None:
             cell._set_value(v, keep_formula=keep_formula or f is not None)
+        return cell
 
     def _new_cell_element(self, name: str) -> Element:
         """A new top-level cell `name` among the shape's cells: a copy of its master's, formula and all, where the master has one."""
@@ -1776,11 +1777,7 @@ class Shape:
         :param f: formula to set on the F attribute (optional)
         :return: the Cell object
         """
-        self._write_cell(name, v=v, f=f)
-        cell = self._cell(name)
-        if cell is None:  # _write_cell wrote it or raised; this satisfies the type checker
-            raise InvalidOperationError(f"shape ID {self.ID} has no cell {name!r} after writing it")
-        return cell
+        return self._write_cell(name, v=v, f=f)
 
     @property
     def height(self) -> float | None:

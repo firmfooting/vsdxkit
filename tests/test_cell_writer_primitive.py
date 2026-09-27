@@ -130,6 +130,18 @@ def test_get_or_create_cell_is_the_same_writer(vsdx_copy):
     assert cell.xml is shape.xml.find(f'{namespace}Cell[@N="LineColor"]')
 
 
+def test_the_writer_returns_the_cell_it_wrote(vsdx_copy):
+    """get_or_create_cell hands back what _write_cell wrote, with no second lookup to fail."""
+    shape = Document.open(vsdx_copy("test5_master.vsdx")).pages[0].shapes.by_id("5")
+
+    created = shape._write_cell("BrandNew", v="1")
+    in_a_row = shape._write_cell("Control/TextPosition/DynX", v="2.0")
+
+    assert created.xml is shape.xml.find(f'{namespace}Cell[@N="BrandNew"]')
+    assert (in_a_row.name, in_a_row.value) == ("DynX", "2.0")
+    assert in_a_row.xml is shape.cells["Control/TextPosition/DynX"].xml
+
+
 def test_a_section_cell_the_shape_lacks_is_refused_not_created_at_the_top(shape):
     """#319: a name holding '/' became a top-level <Cell N="Control/TextPosition/X">, which is no ShapeSheet cell."""
     cells_before = [element.get("N") for element in shape.xml.findall(f"{namespace}Cell")]
