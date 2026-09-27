@@ -791,12 +791,6 @@ def test_set_shape_line_color(
     assert _colour_of(shape, color_param) == expected_colour
 
 
-def _loose_shape(page, shape_id: str = "1"):
-    """A Shape wrapping a standalone <Shape> element, not yet placed anywhere."""
-    xml = ET.fromstring(f'<Shape xmlns="{namespace[1:-1]}" ID="{shape_id}" Type="Shape"><Text>appended</Text></Shape>')
-    return Shape(xml=xml, parent=page, page=page)
-
-
 def test_append_shape_puts_the_shape_inside_the_group(vsdx_copy, tmp_path):
     """A group holds its children in a <Shapes> container, not in the group element.
 
@@ -813,7 +807,11 @@ def test_append_shape_puts_the_shape_inside_the_group(vsdx_copy, tmp_path):
     assert group.shape_type == "Group"
     ids_before = [s.ID for s in page.shapes]
 
-    new_shape = _loose_shape(page)
+    # a copy() lands on the page and is attached, so it exercises the "new to
+    # the group" path rather than the "new to the page" one a hand-built
+    # Shape used to; the placement it is testing is shared by both
+    source_text = page.shapes.require_id("6").text
+    new_shape = page.shapes.require_id("6").copy()
     group.append_shape(new_shape)
 
     assert group.xml.findall(f"{namespace}Shape") == []  # no <Shape> directly under the group
@@ -832,7 +830,7 @@ def test_append_shape_puts_the_shape_inside_the_group(vsdx_copy, tmp_path):
     assert new_id in [s.ID for s in group.children]
     ids = [s.ID for s in page.shapes]
     assert len(ids) == len(set(ids))
-    assert page.shapes.require_id(new_id).text.strip() == "appended"
+    assert page.shapes.require_id(new_id).text == source_text
 
 
 def test_append_shape_creates_a_shapes_container_for_an_empty_group(vsdx_copy):
@@ -845,7 +843,9 @@ def test_append_shape_creates_a_shapes_container_for_an_empty_group(vsdx_copy):
     group.xml.remove(group.xml.find(f"{namespace}Shapes"))
     assert list(group.children) == []
 
-    new_shape = _loose_shape(page)
+    # a copy() lands on the page and is attached, so it exercises the "new to
+    # the group" path a hand-built Shape used to take through "new to the page"
+    new_shape = page.shapes.require_id("6").copy()
     group.append_shape(new_shape)
 
     shapes_tag = group.xml.find(f"{namespace}Shapes")
@@ -863,8 +863,10 @@ def test_append_shape_rejects_a_shape_that_cannot_hold_sub_shapes(vsdx_copy):
     plain = page.shapes.require_id("6")
     assert plain.shape_type != "Group"
 
+    # an attached shape, so the "cannot contain shapes" check is the one that
+    # fires rather than the detached-shape guard
     with pytest.raises(ValueError, match="cannot contain shapes"):
-        plain.append_shape(_loose_shape(page))
+        plain.append_shape(plain.copy())
 
     assert plain.xml.find(f"{namespace}Shapes") is None
 
@@ -923,9 +925,12 @@ def test_append_shape_rejects_a_shape_built_against_another_page(vsdx_copy):
     vis = Document.open(filename)
     page, other_page = vis.pages[0], vis.pages[1]
     group = page.shapes.require_id("9")
+    # attached to other_page, so the "belongs to page" check is the one that
+    # fires rather than the detached-shape guard
+    on_other_page = page.shapes.require_id("6").copy(other_page)
 
     with pytest.raises(ValueError, match="belongs to page"):
-        group.append_shape(_loose_shape(other_page))
+        group.append_shape(on_other_page)
 
 
 def test_a_group_member_copied_onto_its_own_page_names_its_master(vsdx_copy):

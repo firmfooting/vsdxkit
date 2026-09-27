@@ -854,8 +854,7 @@ class Shape:
 
         Reading its cells, coordinates, sizes, text, geometry, data properties
         or connectors raises :class:`~vsdxkit.errors.InvalidOperationError`, as does every
-        write but one: the ``master_page_ID`` setter is not guarded, and
-        writes to the detached element.
+        write.
         """
         page = self._page
         if not page._attached():
@@ -976,7 +975,10 @@ class Shape:
 
         Writing ``None`` drops the attribute, which puts a sub-shape back to
         inheriting its group's master.
+
+        :raises InvalidOperationError: if the shape is detached
         """
+        self._require_attached("writing a shape's master_page_ID")
         if value is None:
             self.xml.attrib.pop("Master", None)
         else:
@@ -2098,18 +2100,21 @@ class Shape:
         A shape already on this page, such as a fresh ``shape.copy()``, is
         moved: its element is taken out of whatever held it first, so it never
         has two parents, and it keeps its IDs, so the ``Connect`` records
-        naming it still hold. A shape whose element is not on the page, such
-        as one built by hand or one deleted from this page, is placed, with
-        IDs the page is not using. A shape on another page is refused; copy
-        it onto this page first.
+        naming it still hold. A shape on another page is refused; copy it
+        onto this page first.
 
         :raises InvalidOperationError: if this shape is detached or is not a
-            group, if ``append_shape`` is on another page, or if it would end
-            up inside itself
+            group, if ``append_shape`` is detached or is on another page, or
+            if it would end up inside itself
         """
         # ahead of every check and every write, so a detached group refuses
         # before anything is moved into it
         self._require_attached("Shape.append_shape()")
+        if not append_shape.is_attached:
+            raise InvalidOperationError(
+                f"shape ID={append_shape.ID} was deleted, or is on a removed page, so it cannot be placed; "
+                "a deleted shape stays deleted"
+            )
         if self.shape_type != "Group":
             raise InvalidOperationError(
                 f"shape ID={self.ID} has type {self.shape_type!r} and cannot contain shapes; "

@@ -720,6 +720,24 @@ Writing an end of a glued connector: ``begin_x``, ``begin_y``, ``end_x``, ``end_
    ``connector.retarget`` glues an end to another shape. 0.8 wrote the
    coordinate beside the glue, and Visio pulled the end back on open.
 
+``group.append_shape(deleted_shape)``
+   Raises :class:`vsdxkit.errors.InvalidOperationError`. 0.8 placed a shape
+   deleted from the same page back inside the group, without the ``Connect``
+   records its deletion removed.
+
+``shape.master_page_ID = ...`` on a deleted shape
+   Raises :class:`vsdxkit.errors.InvalidOperationError`, as every other write
+   to a deleted shape does.
+
+Writing a geometry row's ``row_type``, ``index`` or ``del_bool``, or a data property's attribute through ``DataProperty.set_attribute``
+   Copies a row or property the shape inherits from its master onto the shape
+   first, as the ``x`` and ``y`` setters and ``DataProperty.value`` already
+   do, so the master and every other instance keep reading their own value.
+   ``index`` refuses a value another row of the same geometry already holds.
+   Clearing ``del_bool`` where neither the row nor an inherited one has it
+   set writes nothing. 0.8 wrote the master's row, and with it every
+   instance's.
+
 A swimlane diagram replaces the container
 -----------------------------------------
 

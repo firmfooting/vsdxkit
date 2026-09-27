@@ -123,3 +123,29 @@ def test_a_detached_shape_keeps_its_id_repr_and_hash(vsdx_copy):
     assert "ID=1" in repr(shape)
     assert hash(shape) == before
     assert shape in members
+
+
+def test_a_deleted_shape_refuses_master_page_ID(vsdx_copy):
+    """#434: the one write the detached-shape guard forgot."""
+    shape = Document.open(vsdx_copy("test3_house.vsdx")).pages[0].shapes.by_id("7")
+    master = shape.xml.get("Master")
+    shape.delete()
+
+    with pytest.raises(InvalidOperationError):
+        shape.master_page_ID = "99"
+
+    assert shape.xml.get("Master") == master
+
+
+def test_append_shape_refuses_a_deleted_shape(vsdx_copy):
+    """#438: a shape deleted from the same page took the 'new to the page' branch and was attached again."""
+    page = Document.open(vsdx_copy("test10_nested_shapes.vsdx")).pages[0]
+    group = page.shapes.require_id("7")
+    victim = page.shapes.require_id("8")
+    victim.delete()
+
+    with pytest.raises(InvalidOperationError, match="deleted"):
+        group.append_shape(victim)
+
+    assert not victim.is_attached
+    assert all(child.ID != "8" for child in group.children)
