@@ -229,6 +229,16 @@ def _judge_glue(stem: str, glue: GlueCheck, connects: list[dict]) -> str | None:
     return f"{stem}: p{glue.page} connector {glue.connector} glue: want {sorted(glue.records)}, Visio shows {sorted(have)}"
 
 
+def _documents(payload: object) -> list[dict]:
+    """Visio's answer, normalised to one record per file.
+
+    `ConvertTo-Json` collapses a one-element array into a bare JSON object,
+    so a batch of exactly one file arrives here as a dict rather than a list
+    holding one dict. Anything else is assumed to already be a list of them.
+    """
+    return [payload] if isinstance(payload, dict) else list(payload)
+
+
 def judge(expected: dict[str, Case], payload: list[dict]) -> list[str]:
     """One line per check Visio's answer does not satisfy; empty means every write landed.
 
@@ -237,6 +247,13 @@ def judge(expected: dict[str, Case], payload: list[dict]) -> list[str]:
     value it shows after recalculating match what was written. A glue check
     passes only when the set of (from_cell, to_shape) records Visio's Connects
     holds for that connector, on that page, equals what was expected exactly.
+
+    A case with neither a cell check nor a glue check fails closed, with one
+    line naming it: the check exists so a bad write can fail it, and an empty
+    case is one nothing Visio says can ever fail. A file record carrying an
+    `error` (Visio could not open it at all - locked, corrupt) fails every one
+    of that case's checks in turn, each line naming the error, rather than
+    losing the case's checks silently.
     """
     by_stem: dict[str, dict] = {}
     for record in payload:
@@ -248,9 +265,23 @@ def judge(expected: dict[str, Case], payload: list[dict]) -> list[str]:
 
     failures: list[str] = []
     for stem, case in expected.items():
+        if not case.cells and not case.glue:
+            failures.append(f"{stem}: checks nothing - no cell or glue expectation can ever fail it")
+            continue
         record = by_stem.get(stem)
         if record is None:
             failures.append(f"{stem}: Visio reported no document for this file")
+            continue
+        file_error = record.get("error")
+        if file_error:
+            for check in case.cells:
+                failures.append(
+                    f"{stem}: p{check.page} shape {check.shape} {check.cell}: Visio could not open this file: {file_error}"
+                )
+            for glue in case.glue:
+                failures.append(
+                    f"{stem}: p{glue.page} connector {glue.connector} glue: Visio could not open this file: {file_error}"
+                )
             continue
         cells_by_key = {(cell["page"], cell["shape"], cell["cell"]): cell for cell in record.get("cells", [])}
         for check in case.cells:
@@ -307,11 +338,14 @@ def _ask_visio(tools_dir: Path, paths: list[str], expected: dict[str, Case], vis
             f"visio_cells.ps1 exited {result.returncode}: {result.stderr.strip() or '(no output)'}"
         )
     try:
-        return json.loads(payload_text)
+        parsed = json.loads(payload_text)
     except json.JSONDecodeError as error:
         raise visio_verify.VisioUnavailable(
             f"visio_cells.ps1 produced output that is not JSON: {error}\n{payload_text[:400]}"
         ) from error
+    # A batch of exactly one file collapses to a bare object on the way
+    # through ConvertTo-Json; see `_documents`.
+    return _documents(parsed)
 
 
 def _check(out: Path) -> int:
