@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import copy
 import html
+import math
 import sys
 import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterable, Iterator, Mapping
@@ -1959,8 +1960,13 @@ class Shape:
 
         Writing an end frees it if it is glued, as dragging it away does in
         Visio; :meth:`Connector.retarget` glues an end to another shape. The
-        pin, width and height follow the ends: where they are formulas of the
-        ends, the formulas stay, and their values are refreshed.
+        pin, width, height and angle follow the ends: where they are formulas
+        of the ends, the formulas stay, and their values are refreshed. A
+        plain line with no ``Angle`` formula is placed as Visio's own lines
+        are: as long as its ends are apart, with no height, turned to point
+        from start to finish, and pinned at its middle. The text pin is at
+        the middle of the width and height the shape is then drawn with, in
+        its own coordinates.
 
         :raises InvalidOperationError: if the shape is detached, it is a 2-D shape, or a coordinate is ``None``
         """
@@ -1995,11 +2001,24 @@ class Shape:
         is_connector = self.universal_name == "Dynamic connector"
         # worked out before anything is written, so a coordinate that is
         # not a number is refused with the shape, and its glue, as it was
-        width = finish_x - start_x
-        # a dynamic connector's height is its y span; a plain line's is 0, its slope carried by its geometry
-        height = finish_y - start_y if is_connector else 0.0
-        self._write_cell("PinX", v=xml_value(start_x), keep_formula=True)
-        self._write_cell("PinY", v=xml_value(start_y), keep_formula=True)
+        span_x, span_y = finish_x - start_x, finish_y - start_y
+        # A plain line runs along its own x axis, turned by its Angle. Where
+        # an Angle formula holds the angle, the formulas place the line: an
+        # ATAN2(...) turns it, as Visio's own lines do (test9 'Line A'), and
+        # a connector's GUARD(0DA) keeps it square, with its spans for its
+        # size; the values written below are refreshed from them. A line
+        # with no Angle formula, as a Lucidchart line has, is placed here.
+        turned = not is_connector and self.cell_formula("Angle") is None
+        if turned:
+            # as long as its ends are apart, with no height, pointing from
+            # start to finish, and pinned at its middle: what Visio's SQRT(...),
+            # ATAN2(...) and (BeginX+EndX)/2 give its own lines
+            width, height = math.hypot(span_x, span_y), 0.0
+            pin_x, pin_y = (start_x + finish_x) / 2, (start_y + finish_y) / 2
+        else:
+            # a dynamic connector's height is its y span; a plain line's is 0
+            width, height = span_x, span_y if is_connector else 0.0
+            pin_x, pin_y = start_x, start_y
 
         if keep_glue:
             for name, value in (("BeginX", start_x), ("BeginY", start_y), ("EndX", finish_x), ("EndY", finish_y)):
@@ -2009,15 +2028,26 @@ class Shape:
             self.end_x, self.end_y = finish_x, finish_y
         self._write_cell("Width", v=xml_value(width), keep_formula=True)
         self._write_cell("Height", v=xml_value(height), keep_formula=True)
-        self._write_cell("PinX", v=xml_value(start_x), keep_formula=True)
-        self._write_cell("PinY", v=xml_value(start_y), keep_formula=True)
+        if turned:
+            self._write_cell("Angle", v=xml_value(math.atan2(span_y, span_x)), keep_formula=True)
+        self._write_cell("PinX", v=xml_value(pin_x), keep_formula=True)
+        self._write_cell("PinY", v=xml_value(pin_y), keep_formula=True)
+        # the geometry and the text pin follow the width and height the shape
+        # is drawn with, which a formula of the ends, such as a GUARD(EndY-BeginY)
+        # height, gives only once it is refreshed
+        self._refresh_formula_values()
+        drawn_width, drawn_height = self.width, self.height
+        # both were written above, and a refresh writes only numbers
+        assert drawn_width is not None and drawn_height is not None
         if self.geometry is not None:
             self.geometry._set_point("moveto", "Shape.set_start_and_finish()", 0.0, 0.0, 0, keep_formula=True)
-            self.geometry._set_point("lineto", "Shape.set_start_and_finish()", width, height, 0, keep_formula=True)
+            self.geometry._set_point(
+                "lineto", "Shape.set_start_and_finish()", drawn_width, drawn_height, 0, keep_formula=True
+            )
         txt_pin_x = self._cell("TxtPinX")
         txt_pin_y = self._cell("TxtPinY")
         if txt_pin_x and txt_pin_y:
-            text_x, text_y = width / 2, height / 2
+            text_x, text_y = drawn_width / 2, drawn_height / 2
             txt_pin_x._set_value(text_x, keep_formula=True)
             txt_pin_y._set_value(text_y, keep_formula=True)
             # Visio's Controls row names its anchor cells XDyn and YDyn,

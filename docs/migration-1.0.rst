@@ -782,8 +782,14 @@ Moving a shape moves the shape
 
 ``shape.set_start_and_finish`` on a 2-D shape
    Raises :class:`vsdxkit.errors.InvalidOperationError`. 0.8 did nothing.
-   On a 1-D shape, the text pin is set in the shape's own coordinates, at its
-   middle, whatever the shape is called.
+   On a 1-D shape, the text pin is set in the shape's own coordinates, at the
+   middle of the width and height it is drawn with, whatever the shape is
+   called: where those are formulas of the ends, the values the formulas
+   give. A plain line with no ``Angle`` formula, such as one Lucidchart
+   exported, is placed as Visio's own lines are: as long as its ends are
+   apart, turned to point from start to finish, and pinned at its middle.
+   0.8 gave it the x distance between its ends as its width, no angle, and
+   its start as its pin, so a diagonal line was drawn short and flat.
 
 A swimlane diagram replaces the container
 -----------------------------------------

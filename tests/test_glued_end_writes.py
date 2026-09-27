@@ -5,6 +5,8 @@ would have Visio pull it back on open, so the record and the end's trigger go
 with the formula, and only that end's.
 """
 
+import math
+
 import pytest
 
 from vsdxkit.document import Document
@@ -133,3 +135,70 @@ def test_set_start_and_finish_refuses_a_2d_shape(vsdx_copy):
         shape.set_start_and_finish((1.0, 1.0), (2.0, 2.0))
 
     assert shape.x == before
+
+
+def _placed(line) -> dict[str, float]:
+    return {name: float(line.cell_value(name)) for name in ("Width", "Height", "Angle", "PinX", "PinY", "TxtPinX", "TxtPinY")}
+
+
+def test_a_diagonal_plain_line_is_as_long_as_its_ends_are_apart_with_its_text_at_its_middle(vsdx_copy):
+    """test5_master shape 5 has no Width or Angle formula: it was given `finish_x - start_x`, 3, and no angle.
+
+    A 3-by-4 placement is a line 5 long, pointing from start to finish, with
+    its pin and its text at its middle, as Visio's own lines hold it (test9
+    'Line A': Width is SQRT(...), Angle ATAN2(...), PinX (BeginX+EndX)/2).
+    """
+    line = Document.open(vsdx_copy("test5_master.vsdx")).pages[0].shapes.by_id("5")
+    assert (line.cell_formula("Width"), line.cell_formula("Angle")) == (None, None)
+
+    line.set_start_and_finish((1.0, 7.0), (4.0, 11.0))
+
+    assert _placed(line) == pytest.approx(
+        {"Width": 5.0, "Height": 0.0, "Angle": math.atan2(4.0, 3.0), "PinX": 2.5, "PinY": 9.0, "TxtPinX": 2.5, "TxtPinY": 0.0}
+    )
+    assert (line.begin_x, line.begin_y, line.end_x, line.end_y) == (1.0, 7.0, 4.0, 11.0)
+    assert float(line.cells["Control/TextPosition/X"].value) == pytest.approx(2.5)
+
+
+def test_a_plain_line_placed_right_to_left_points_left(vsdx_copy):
+    line = Document.open(vsdx_copy("test5_master.vsdx")).pages[0].shapes.by_id("5")
+
+    line.set_start_and_finish((4.0, 7.0), (1.0, 7.0))
+
+    assert _placed(line) == pytest.approx(
+        {"Width": 3.0, "Height": 0.0, "Angle": math.pi, "PinX": 2.5, "PinY": 7.0, "TxtPinX": 1.5, "TxtPinY": 0.0}
+    )
+
+
+def test_a_connector_named_otherwise_keeps_the_height_its_formula_gives(vsdx_copy):
+    """test4 shape 7 is a dynamic connector with no NameU, so the name test calls it a plain line.
+
+    Its GUARD(0DA) Angle keeps it square and its GUARD(EndY-BeginY) Height is
+    its y span: the geometry and the text pin follow that height, where they
+    took the 0 written for a plain line, and no angle is written over the formula.
+    """
+    connector = Document.open(vsdx_copy("test4_connectors.vsdx")).pages[0].shapes.require_id("7")
+    assert connector.universal_name != "Dynamic connector"
+
+    connector.set_start_and_finish((1.0, 2.0), (4.0, 6.0))
+
+    assert (connector.height, connector.angle, connector.cell_formula("Angle")) == (4.0, 0.0, "GUARD(0DA)")
+    assert (float(connector.cell_value("TxtPinX")), float(connector.cell_value("TxtPinY"))) == (1.5, 2.0)
+    assert (connector.geometry.rows["2"].x, connector.geometry.rows["2"].y) == (3.0, 4.0)
+
+
+def test_a_plain_lines_text_pin_follows_the_width_its_formula_gives(vsdx_copy):
+    """test9 'Line A' has Width SQRT(...): a text pin with no formula is set from the width the refresh computes, not from `finish_x - start_x`."""
+    line = Document.open(vsdx_copy("test9_rect_and_line.vsdx")).pages[0].shapes.by_text("Line A")
+    line.set_cell_value("TxtPinX", "0")
+    line.set_cell_value("TxtPinY", "0")
+
+    line.set_start_and_finish((1.0, 1.0), (4.0, 5.0))
+
+    assert (line.cell_formula("Width"), line.cell_formula("Angle")) == (
+        "SQRT((EndX-BeginX)^2+(EndY-BeginY)^2)",
+        "ATAN2(EndY-BeginY,EndX-BeginX)",
+    )
+    assert _placed(line) == pytest.approx(
+        {"Width": 5.0, "Height": 0.0, "Angle": math.atan2(4.0, 3.0), "PinX": 2.5, "PinY": 3.0, "TxtPinX": 2.5, "TxtPinY": 0.0}
+    )
