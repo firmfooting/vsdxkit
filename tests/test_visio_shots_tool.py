@@ -582,17 +582,6 @@ def test_two_runs_given_one_id_are_recorded_apart(tmp_path):
     assert runs == ["r1", "r1-2"]
 
 
-def test_the_visio_an_export_started_is_read_from_the_file_it_wrote(tmp_path):
-    """On a timeout only the Visio the export started may be killed; its ID is in the file the script wrote."""
-    tool = _tool()
-    written = tmp_path / "visio.pid"
-    assert tool._exporter_process_id(written) is None
-    written.write_text("", encoding="utf-8")
-    assert tool._exporter_process_id(written) is None
-    written.write_text("4242\r\n", encoding="utf-8")
-    assert tool._exporter_process_id(written) == 4242
-
-
 def test_the_report_carries_its_images_inside_it(tmp_path):
     tool = _tool()
     _run(tool, tmp_path, "r1", candidate_recalc_x=90)

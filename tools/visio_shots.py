@@ -505,15 +505,6 @@ def _export_library(repo: Path, ref: str, dest: Path) -> tuple[Path, str]:
 # --- asking Visio ---------------------------------------------------------------
 
 
-def _exporter_process_id(path: Path) -> int | None:
-    """The ID of the Visio process `visio_export.ps1` started, from the file it writes as soon as it has one; None before that."""
-    try:
-        text = path.read_text(encoding="utf-8").strip()
-    except FileNotFoundError:
-        return None
-    return int(text) if text.isdigit() else None
-
-
 def _staged_names(jobs: list[tuple[str, _Case, Path]]) -> list[str]:
     """A file name for each job, unique by construction: its place in the list and its variant.
 
@@ -557,7 +548,7 @@ def _shoot(jobs: list[tuple[str, _Case, Path]], dpi: int, work: Path) -> tuple[d
         }
         request_file = staged / "request.json"
         request_file.write_text(json.dumps(request), encoding="utf-8")
-        process_id_file = staged / "visio.pid"
+        process_id_file = staged / visio_verify.PROCESS_ID_FILE
         # -Command, the ExecutionPolicy bypass and `; exit $LASTEXITCODE`, for
         # the reasons visio_verify._observe_directory gives.
         expression = (
@@ -579,20 +570,7 @@ def _shoot(jobs: list[tuple[str, _Case, Path]], dpi: int, work: Path) -> tuple[d
             result = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
         except subprocess.TimeoutExpired as expired:
             # only the Visio the script started, never one opened meanwhile (#463)
-            process_id = _exporter_process_id(process_id_file)
-            if process_id is not None:
-                subprocess.run(
-                    [
-                        visio_verify._shell(),
-                        "-NoProfile",
-                        "-NonInteractive",
-                        "-Command",
-                        f"Stop-Process -Id {process_id} -Force",
-                    ],
-                    capture_output=True,
-                    text=True,
-                    timeout=60,
-                )
+            process_id = visio_verify._stop_started_visio(process_id_file)
             raise visio_verify.VisioUnavailable(
                 f"visio_export.ps1 did not answer within {timeout}s and was killed"
                 + (

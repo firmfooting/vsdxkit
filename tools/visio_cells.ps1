@@ -23,6 +23,11 @@
     "shape": 35, "cell": "LineColor" } ] } ] }. "cell" is a Visio universal
     cell name: PinX, LineColor, Char.Color, Geometry1.X2, ...
 
+.PARAMETER ProcessIdFile
+    A file to write the ID of the Visio process this script starts to, as
+    soon as it has one. A caller whose run times out kills that process, and
+    no other: killing PowerShell leaves the out-of-process Visio running.
+
 .PARAMETER AllowRunningVisio
     Proceed even if Visio is already running. Off by default: a pre-existing
     instance can hold a lock on the file under test and can be carrying
@@ -41,6 +46,8 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$Request,
+
+    [string]$ProcessIdFile,
 
     [switch]$AllowRunningVisio
 )
@@ -69,23 +76,10 @@ function Get-VisioProcessIds {
     return @(Get-Process -Name VISIO -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
 }
 
-function Get-LeakedProcessIds {
-    <#
-      Visio processes this run is responsible for killing.
+function Test-ProcessRunning {
+    param([int]$ProcessId)
 
-      Not simply "any pid that was not in the snapshot": a developer may open
-      Visio while a run is in progress, and killing it would take their work
-      away in the middle of it. A process that started before this script did
-      is theirs whether or not it was in the snapshot, so the start time is
-      the deciding fact, as in tools/visio_observe.ps1.
-    #>
-    param([int[]]$Preexisting, [datetime]$StartedAfter)
-
-    return @(
-        Get-Process -Name VISIO -ErrorAction SilentlyContinue |
-            Where-Object { $Preexisting -notcontains $_.Id -and $_.StartTime -ge $StartedAfter } |
-            ForEach-Object { $_.Id }
-    )
+    return $null -ne (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue)
 }
 
 # CellExistsU's second argument: 0 asks "does this shape have this cell at all",
@@ -172,11 +166,16 @@ $OpenFlags = $visOpenRO + $visOpenMacrosDisabled + $visOpenNoWorkspace
 
 # --- run --------------------------------------------------------------------
 
-$startedAt = Get-Date
 $app = $null
+$ownProcessId = $null
 $out = @()
 try {
     $app = New-Object -ComObject Visio.InvisibleApp
+    # The one process this script may kill if Quit leaves it running. Not
+    # "any Visio started during the run": a Visio the developer opens while
+    # a long run is under way is theirs, with their unsaved work in it (#463).
+    $ownProcessId = [int]$app.ProcessID
+    if ($ProcessIdFile) { Set-Content -Path $ProcessIdFile -Value $ownProcessId -Encoding ascii }
     # Answer every modal dialog with "no" instead of waiting for a click: an
     # unattended run that puts up a dialog does not fail, it hangs.
     $app.AlertResponse = 7
@@ -222,16 +221,17 @@ finally {
     [System.GC]::WaitForPendingFinalizers()
 
     # Quit is a request, not a guarantee: a document Visio believes is dirty
-    # keeps the process alive holding the file. Only processes that started
-    # after this one did are killed, so a Visio the developer had open, or
-    # opened while this ran, is never taken from them.
-    $deadline = (Get-Date).AddSeconds(15)
-    while ((Get-Date) -lt $deadline) {
-        if (@(Get-LeakedProcessIds -Preexisting $preexisting -StartedAfter $startedAt).Count -eq 0) { break }
-        Start-Sleep -Milliseconds 250
-    }
-    foreach ($processId in @(Get-LeakedProcessIds -Preexisting $preexisting -StartedAfter $startedAt)) {
-        try { Stop-Process -Id $processId -Force -ErrorAction Stop } catch { }
+    # keeps the process alive holding the file. Only the Visio this script
+    # started is killed, so one the developer had open, or opened while this
+    # ran, is never taken from them.
+    if ($null -ne $ownProcessId) {
+        $deadline = (Get-Date).AddSeconds(15)
+        while ((Get-Date) -lt $deadline -and (Test-ProcessRunning -ProcessId $ownProcessId)) {
+            Start-Sleep -Milliseconds 250
+        }
+        if (Test-ProcessRunning -ProcessId $ownProcessId) {
+            try { Stop-Process -Id $ownProcessId -Force -ErrorAction Stop } catch { }
+        }
     }
 }
 

@@ -489,7 +489,7 @@ def _ask_visio(tools_dir: Path, paths: list[str], expected: dict[str, Case], vis
         request_file = Path(root) / "request.json"
         request_file.write_text(json.dumps(request), encoding="utf-8")
 
-        before = visio_verify._visio_pids()
+        process_id_file = Path(root) / visio_verify.PROCESS_ID_FILE
         script = tools_dir / "visio_cells.ps1"
         # -Command rather than -File, and the ExecutionPolicy bypass, and
         # `; exit $LASTEXITCODE`: all for the reasons visio_verify._observe_directory
@@ -497,7 +497,8 @@ def _ask_visio(tools_dir: Path, paths: list[str], expected: dict[str, Case], vis
         # `exit` that otherwise never reaches the caller's own exit code.
         expression = (
             f"& {visio_verify._quote(visio_verify._windows_path(str(script)))} "
-            f"-Request {visio_verify._quote(visio_verify._windows_path(str(request_file)))}; exit $LASTEXITCODE"
+            f"-Request {visio_verify._quote(visio_verify._windows_path(str(request_file)))} "
+            f"-ProcessIdFile {visio_verify._quote(visio_verify._windows_path(str(process_id_file)))}; exit $LASTEXITCODE"
         )
         shell = visio_verify._shell()
         command = [shell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", expression]
@@ -505,10 +506,11 @@ def _ask_visio(tools_dir: Path, paths: list[str], expected: dict[str, Case], vis
         try:
             result = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
         except subprocess.TimeoutExpired as expired:
-            killed = visio_verify._reap_visio(before)
+            # only the Visio the script started, never one opened meanwhile (#463)
+            killed = visio_verify._stop_started_visio(process_id_file)
             raise visio_verify.VisioUnavailable(
                 f"visio_cells.ps1 did not answer within {timeout}s and was killed"
-                + (f" (stranded process {', '.join(map(str, killed))} also killed)" if killed else "")
+                + (f"; so was the Visio it started, process {killed}" if killed is not None else "")
             ) from expired
 
     payload_text = result.stdout.strip()

@@ -21,6 +21,11 @@
 .PARAMETER Path
     One or more .vsdx files, or directories to scan for them.
 
+.PARAMETER ProcessIdFile
+    A file to write the ID of the Visio process this script starts to, as
+    soon as it has one. A caller whose run times out kills that process, and
+    no other: killing PowerShell leaves the out-of-process Visio running.
+
 .PARAMETER AllowRunningVisio
     Proceed even if Visio is already running. Off by default: a pre-existing
     instance can hold a lock on the file under test and can be carrying settings
@@ -38,6 +43,8 @@
 param(
     [Parameter(Mandatory = $true)]
     [string[]]$Path,
+
+    [string]$ProcessIdFile,
 
     [switch]$AllowRunningVisio
 )
@@ -112,23 +119,10 @@ function Get-VisioProcessIds {
     return @(Get-Process -Name VISIO -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
 }
 
-function Get-LeakedProcessIds {
-    <#
-      Visio processes this run is responsible for killing.
+function Test-ProcessRunning {
+    param([int]$ProcessId)
 
-      Not simply "any pid that was not in the snapshot": the developer may open
-      Visio while a run is in progress, and killing it would take their work
-      away in the middle of it - the opposite of what the cleanup promises. A
-      process that started before this script did is theirs whether or not it
-      was in the snapshot, so the start time is the deciding fact.
-    #>
-    param([int[]]$Preexisting, [datetime]$StartedAfter)
-
-    return @(
-        Get-Process -Name VISIO -ErrorAction SilentlyContinue |
-            Where-Object { $Preexisting -notcontains $_.Id -and $_.StartTime -ge $StartedAfter } |
-            ForEach-Object { $_.Id }
-    )
+    return $null -ne (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue)
 }
 
 function Get-CellRecords {
@@ -319,12 +313,17 @@ if ($preexisting.Count -gt 0 -and -not $AllowRunningVisio) {
 
 # --- run --------------------------------------------------------------------
 
-$startedAt = Get-Date
 $app = $null
+$ownProcessId = $null
 $viewer = @{ product = ''; version = '' }
 $documents = @()
 try {
     $app = New-Object -ComObject Visio.InvisibleApp
+    # The one process this script may kill if Quit leaves it running. Not
+    # "any Visio started during the run": a Visio the developer opens while
+    # a long run is under way is theirs, with their unsaved work in it (#463).
+    $ownProcessId = [int]$app.ProcessID
+    if ($ProcessIdFile) { Set-Content -Path $ProcessIdFile -Value $ownProcessId -Encoding ascii }
     # Answer every modal dialog with "no" instead of waiting for a click: an
     # unattended run that puts up a dialog does not fail, it hangs.
     $app.AlertResponse = 7
@@ -348,18 +347,18 @@ finally {
     [System.GC]::WaitForPendingFinalizers()
 
     # Quit is a request, not a guarantee: a document Visio believes is dirty, or
-    # a hung add-on, keeps the process alive holding the file. Only processes
-    # that were not running when this started are killed, so a Visio the user
-    # had open is never taken away from them.
-    $deadline = (Get-Date).AddSeconds(15)
-    while ((Get-Date) -lt $deadline) {
-        if (@(Get-LeakedProcessIds -Preexisting $preexisting -StartedAfter $startedAt).Count -eq 0) { break }
-        Start-Sleep -Milliseconds 250
-    }
-    $leaked = @(Get-LeakedProcessIds -Preexisting $preexisting -StartedAfter $startedAt)
-    foreach ($processId in $leaked) {
-        Write-Warning "Visio process $processId outlived Quit(); killing it so the next run can open these files"
-        try { Stop-Process -Id $processId -Force -ErrorAction Stop } catch { }
+    # a hung add-on, keeps the process alive holding the file. Only the Visio
+    # this script started is killed, so one the user had open, or opened while
+    # this ran, is never taken away from them.
+    if ($null -ne $ownProcessId) {
+        $deadline = (Get-Date).AddSeconds(15)
+        while ((Get-Date) -lt $deadline -and (Test-ProcessRunning -ProcessId $ownProcessId)) {
+            Start-Sleep -Milliseconds 250
+        }
+        if (Test-ProcessRunning -ProcessId $ownProcessId) {
+            Write-Warning "Visio process $ownProcessId outlived Quit(); killing it so the next run can open these files"
+            try { Stop-Process -Id $ownProcessId -Force -ErrorAction Stop } catch { }
+        }
     }
 }
 
