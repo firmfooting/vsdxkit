@@ -2041,9 +2041,7 @@ class Shape:
         assert drawn_width is not None and drawn_height is not None
         if self.geometry is not None:
             self.geometry._set_point("moveto", "Shape.set_start_and_finish()", 0.0, 0.0, 0, keep_formula=True)
-            self.geometry._set_point(
-                "lineto", "Shape.set_start_and_finish()", drawn_width, drawn_height, 0, keep_formula=True
-            )
+            self.geometry._set_point("lineto", "Shape.set_start_and_finish()", drawn_width, drawn_height, 0, keep_formula=True)
         txt_pin_x = self._cell("TxtPinX")
         txt_pin_y = self._cell("TxtPinY")
         if txt_pin_x and txt_pin_y:
