@@ -10,12 +10,12 @@ next to the case to see what the write changed. ``EXPECTED.txt`` there says,
 one line per case, what Visio must show, for a person to read;
 ``expected.json`` says the same thing as data, for ``check`` to judge without
 a person reading anything. ``check`` judges only the cases ``expected.json``
-names, and never sends a ``.before`` file to Visio. ``check`` asks a Windows Visio what it shows for each written cell,
-both on open and after ``Cell.Trigger()`` forces it to recalculate: Visio shows
-the cached value it opened with until something recalculates a cell, and a
-stale formula left in place by a bug (a ``GUARD()``, a theme) wins only at
-that point, so reading the open value alone would miss exactly the write this
-checks for. The package is not merged until every check passes (CONTRIBUTING,
+names, and never sends a ``.before`` file to Visio. It asks a Windows Visio
+what it shows for each written cell, both on open and after ``Cell.Trigger()``
+forces it to recalculate: Visio shows the cached value it opened with until
+something recalculates a cell, and a stale formula left in place by a bug (a
+``GUARD()``, a theme) wins only at that point, so reading the open value alone
+would miss exactly the write this checks for. The package is not merged until every check passes (CONTRIBUTING,
 "When a change needs Visio").
 """
 
