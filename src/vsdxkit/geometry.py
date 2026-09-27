@@ -185,10 +185,6 @@ class Geometry(ShapePart):
         this shape already owns loses its formula, as typing a number into
         the ShapeSheet does in Visio, so the value is the one Visio shows.
         """
-        self._move(x_delta, y_delta, keep_formula=False)
-
-    def _move(self, x_delta: float, y_delta: float, *, keep_formula: bool) -> None:
-        """As :meth:`move`, with `keep_formula` passed to each coordinate write."""
         # a shape with no absolute rows writes nothing, so leaving this to the
         # row setters would make the refusal depend on the shape
         self._require_attached("Geometry.move()")
@@ -198,9 +194,9 @@ class Geometry(ShapePart):
                 x = r.x
                 y = r.y
                 if x is not None:
-                    r._write_coordinate("X", x + x_delta, keep_formula=keep_formula)
+                    r._write_coordinate("X", x + x_delta, keep_formula=False)
                 if y is not None:
-                    r._write_coordinate("Y", y + y_delta, keep_formula=keep_formula)
+                    r._write_coordinate("Y", y + y_delta, keep_formula=False)
                 _logger.debug("r=%s %s after move %s, %s", type(r), r, x_delta, y_delta)
 
     def set_move_to(self, x: float, y: float, move_to_index: int = 0) -> None:

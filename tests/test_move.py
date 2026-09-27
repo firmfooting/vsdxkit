@@ -9,6 +9,7 @@ import pytest
 
 from vsdxkit import namespace
 from vsdxkit.document import Document
+from vsdxkit.shape_kind import ShapeKind
 
 
 def _rows(shape) -> list[dict[str, str]]:
@@ -22,8 +23,14 @@ def _rows(shape) -> list[dict[str, str]]:
 
 
 def test_a_2d_shape_moves_by_its_pin_and_its_outline_stays_on_it(vsdx_copy):
+    """A palette PROCESS shape draws its outline with absolute MoveTo/LineTo rows.
+
+    test1's own 2-D shapes draw with relative rows instead, which the old
+    move never touched, so they cannot show #430's bug: the old move shifted
+    exactly the absolute rows this shape has, drawing its outline off it.
+    """
     page = Document.open(vsdx_copy("test1.vsdx")).pages[0]
-    shape = next(s for s in page.shapes if s.begin_x is None and s.geometry is not None and _rows(s))
+    shape = page.create_shape(ShapeKind.PROCESS, x=1.0, y=1.0)
     rows, x, y = _rows(shape), shape.x, shape.y
 
     shape.move(1.0, 2.0)
