@@ -402,7 +402,7 @@ class _Case:
     """One page of one case of a built case set, as far as photographing it goes."""
 
     stem: str
-    """What the run calls it: the case's stem, with the page when the case checks cells on more than one."""
+    """What the run calls it: the case's stem, with the page when the case checks cells or glue on more than one."""
     line: str
     page: int
     """The page exported."""
@@ -418,16 +418,22 @@ class _Case:
 
 
 def _read_cases(folder: Path) -> list[_Case]:
-    """The cases `folder`'s `expected.json` names, in its order: one for each page a case checks cells on."""
+    """The cases `folder`'s `expected.json` names, in its order: one for each page a case checks cells or glue on.
+
+    A case checking more than one page is named ``{stem}/page {n}`` for
+    each. A stem names a ``.vsdx`` in one folder, so it holds no ``/``, and
+    the name cannot be another case's.
+    """
     expected = json.loads((folder / "expected.json").read_text(encoding="utf-8"))
     cases = []
     for stem, data in expected.items():
         triggers = tuple((int(page), int(shape), str(cell)) for page, shape, cell, _want in data["cells"])
-        pages = sorted({page for page, _shape, _cell in triggers}) or [1]
+        glued = {int(page) for page, _connector, _records in data.get("glue", [])}
+        pages = sorted({page for page, _shape, _cell in triggers} | glued) or [1]
         if len(pages) == 1:
             cases.append(_Case(stem, data["line"], pages[0], triggers))
         else:
-            cases += [_Case(f"{stem} page {page}", data["line"], page, triggers, file=stem) for page in pages]
+            cases += [_Case(f"{stem}/page {page}", data["line"], page, triggers, file=stem) for page in pages]
     return cases
 
 
