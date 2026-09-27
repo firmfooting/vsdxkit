@@ -91,7 +91,10 @@ def test_a_created_character_row_is_referenced_by_a_run(filename, shape_id, base
 
 
 def test_text_color_updates_the_existing_cell_in_place(basedir):
-    """An existing cell is updated, not duplicated, and the runs are left alone."""
+    """An existing cell is updated, not duplicated, and the runs are left alone.
+
+    Its formula goes, so the colour is the one Visio shows (#300).
+    """
     vis = Document.open(os.path.join(basedir, "test12_colors.vsdx"))
     shape = vis.pages[0].shapes.require_id("2")
     runs_before = [run.attrib.get("IX") for run in character_runs(shape)]
@@ -101,10 +104,10 @@ def test_text_color_updates_the_existing_cell_in_place(basedir):
     assert len(shape.xml.findall(f'{namespace}Section[@N="Character"]')) == 1
     assert [cell.attrib.get("V") for cell in colour_cells(shape)] == ["#0000ff"]
     assert [run.attrib.get("IX") for run in character_runs(shape)] == runs_before
-    # the cell keeps the formula that produced its old value, so Visio
-    # recomputes over this write. Pinned rather than fixed: it is the same
-    # for line_color and fill_color, and issue #300 covers all three
-    assert colour_cells(shape)[0].attrib.get("F") == "THEMEGUARD(RGB(255,0,0))"
+    # the formula that produced the old colour goes, as typing a colour into
+    # the ShapeSheet does in Visio; left in place, Visio recomputes over the
+    # write (#300)
+    assert colour_cells(shape)[0].attrib.get("F") is None
 
 
 def test_text_color_fills_in_a_character_row_that_has_no_colour_cell(basedir):

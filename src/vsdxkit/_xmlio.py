@@ -12,6 +12,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, TypeAlias
 
+from vsdxkit import namespace
 from vsdxkit.errors import MalformedPackageError, MissingPartError, PartParseError
 
 # A parsed part. ElementTree is generic only in the type stubs: at runtime the
@@ -246,6 +247,29 @@ def make_cell_element(name: str, v: object | None = None, f: object | None = Non
     if f is not None:
         cell.attrib["F"] = xml_value(f)
     return cell
+
+
+def row_index_key(index: str) -> tuple[int, int, str]:
+    """Order a section row's ``IX`` as a number, with an index that is not a whole number after every one that is."""
+    # isascii and isdecimal, not isdigit: "²" is a digit int() cannot read
+    return (0, int(index), "") if index.isascii() and index.isdecimal() else (1, 0, index)
+
+
+def insert_row_in_index_order(section: ET.Element, row: ET.Element) -> None:
+    """Put `row` among `section`'s rows in ``IX`` order, after the cells and triggers the schema puts ahead of every row.
+
+    Row order is the order Visio reads a section in, so indexes compare as
+    numbers: as text, IX 10 would go ahead of IX 2. An index that is not a
+    whole number sorts after every one that is, rather than raising.
+    """
+    key = row_index_key(row.attrib.get("IX", ""))
+    children = list(section)
+    positions = [position for position, child in enumerate(children) if child.tag == f"{namespace}Row"]
+    for position in positions:
+        if row_index_key(children[position].attrib.get("IX", "")) > key:
+            section.insert(position, row)
+            return
+    section.insert(positions[-1] + 1 if positions else len(children), row)
 
 
 def parse_part(data: bytes, name: str = "") -> PartTree:

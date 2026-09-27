@@ -683,6 +683,53 @@ delete. The graph is read through connectors and shapes instead.
    those that name the shape. A record written by hand is not checked
    against the shapes it names.
 
+A value written is the value Visio shows
+----------------------------------------
+
+Setting a cell's value, through a setter such as ``shape.line_color`` or ``shape.x``, ``shape.set_cell_value``, ``shape.get_or_create_cell(name, v=...)``, ``cell.value`` or a geometry cell's ``value``
+   Replaces the cell's formula, as typing a number into the ShapeSheet does
+   in Visio, including a ``GUARD`` or theme formula and one the shape inherits
+   from its master. 0.8 kept the formula, and Visio recalculated it over the
+   value on open, so a colour or position written to a themed or guarded
+   shape did not show. ``shape.set_cell_formula`` sets a formula.
+
+``shape.text_color``
+   Replaces the colour cell's formula, as the other colour setters do.
+
+``prop.value``, for a Shape Data property
+   Replaces the ``Value`` cell's formula, whatever it is. 0.8 removed only
+   the ``No Formula`` placeholder, so a value written over a real formula,
+   such as the ``CONTAINERSHEETREF`` a cross-functional flowchart shape
+   carries, did not show.
+
+A geometry cell's ``value`` or ``formula``, on a cell the shape inherits from its master
+   Writes a cell of the shape's own, a copy of the master's with its unit,
+   copying an inherited row onto the shape first; the master's cell keeps
+   its value and formula. 0.8 wrote
+   the master's cell, which changed every other shape drawn from the
+   master.
+
+A geometry cell's ``name``, where the master's row or section has a cell of that name
+   Raises :class:`vsdxkit.errors.InvalidOperationError`, whether the shape
+   inherits the cell or overrides it: Visio matches a shape's cells to its
+   master's by name, so the master's cell would come back under the old
+   name. 0.8 renamed an inherited cell on the master, which changed every
+   other shape drawn from it, and renamed an overriding cell on the shape,
+   which brought the master's cell back. A cell only the shape has is
+   still renamed.
+
+``shape.set_cell_value("Control/TextPosition/X", ...)`` and other names holding ``/``
+   Write the cell in its section row where the shape has it, and raise
+   :class:`vsdxkit.errors.InvalidOperationError` where it does not. 0.8
+   created a top-level cell of that name, which is no ShapeSheet cell.
+
+Writing an end of a glued connector: ``begin_x``, ``begin_y``, ``end_x``, ``end_y``, ``set_start_and_finish``
+   Frees that end first: its ``Connect`` record, trigger and glue formulas
+   go, and ``connector.source`` or ``connector.target`` reads ``None``, as
+   dragging a glued end away does in Visio. The other end stays glued.
+   ``connector.retarget`` glues an end to another shape. 0.8 wrote the
+   coordinate beside the glue, and Visio pulled the end back on open.
+
 A swimlane diagram replaces the container
 -----------------------------------------
 

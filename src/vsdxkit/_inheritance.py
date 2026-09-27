@@ -13,10 +13,18 @@ before it writes materialises an override row on the instance and clears the
 flag, leaving the master untouched. An override row on the instance is what
 Visio itself writes. A row the shape already owns is written in place.
 
-Not every setter calls :meth:`make_local` first: :class:`vsdxkit.geometry.GeometryRow`'s
-``row_type``, ``index`` and ``del_bool`` setters write ``xml.attrib`` directly,
-so on an inherited row they edit the master's row rather than the instance's
-own (#273).
+The coordinate setters of :class:`vsdxkit.geometry.GeometryRow` and
+:class:`vsdxkit.geometry.Geometry` call it, as do the ``value`` and
+``formula`` setters of a :class:`vsdxkit.geometry.GeometryCell` in an
+inherited row, and :attr:`vsdxkit.shapes.DataProperty.value`. A
+:class:`vsdxkit.geometry.GeometryCell`'s ``name`` setter refuses a cell
+whose name the master's row also has, since the master's cell would come
+back under the old name, and renames a cell only the instance has. Not every
+setter does yet: :class:`vsdxkit.geometry.GeometryRow`'s ``row_type``,
+``index`` and ``del_bool`` setters, and
+:meth:`vsdxkit.shapes.DataProperty.set_attribute`, write the XML as it
+stands, so on an inherited row they edit the master's row rather than the
+instance's own (#273).
 """
 
 from __future__ import annotations

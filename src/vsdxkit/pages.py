@@ -86,17 +86,6 @@ def _dimension_value(value: float | str | None) -> str:
     return xml_value(number)
 
 
-def _drop_formula(shape: Shape, name: str) -> None:
-    """Keep the value just written to a cell and drop its formula, which Visio would recalculate over it on open.
-
-    A prototype's pin can be a formula of the group it sat in, such as
-    ``Sheet.9!Width*0.5``.
-    """
-    cell = shape._cell(name)
-    if cell is not None:
-        cell.xml.attrib.pop("F", None)
-
-
 def _left_behind(source: Shape, destination: Page) -> Callable[[str], bool]:
     """Whether a shape id a copy of `source` names is one the copy has left behind.
 
@@ -122,12 +111,13 @@ def _detach(shape: Shape, left_behind: Callable[[str], bool]) -> None:
     own = {element.attrib.get("ID") for element in shape.xml.iter(f"{namespace}Shape")}
     for name in _TRANSFORM_CELLS:
         cell = shape._cell(name)
-        formula = None if cell is None else cell.formula
-        if formula is None:
+        if cell is None or cell.formula is None:
             continue
-        named = {match.group(2) for match in SHEET_REFERENCE.finditer(formula)}
+        named = {match.group(2) for match in SHEET_REFERENCE.finditer(cell.formula)}
         if any(sheet not in own and left_behind(sheet) for sheet in named):
-            _drop_formula(shape, name)
+            # a library write: this removes a formula naming a shape the copy
+            # left behind, keeping the value the cell already had
+            cell.xml.attrib.pop("F", None)
 
 
 def _place_one_d(shape: Shape, x: float, y: float, length: float | None) -> None:
@@ -900,15 +890,11 @@ class Page:
             # a 2-D shape is drawn around its pin
             shape.get_or_create_cell("PinX", v=str(x))
             shape.get_or_create_cell("PinY", v=str(y))
-            _drop_formula(shape, "PinX")
-            _drop_formula(shape, "PinY")
             _detach(shape, left_behind)
             if width is not None:
                 shape.width = width
-                _drop_formula(shape, "Width")
         if height is not None:
             shape.height = height
-            _drop_formula(shape, "Height")
         if width is not None or height is not None:
             # LocPinX is Width*0.5 and the geometry scales with the size: their
             # values would otherwise describe the old size until Visio opens it
@@ -954,14 +940,18 @@ class Page:
         if container is not None:
             container.remove(shape.xml)
 
-    def _remove_connect_records(self, connector_ids: Iterable[str | int], *, match: str = "from") -> None:
+    def _remove_connect_records(
+        self, connector_ids: Iterable[str | int], *, match: str = "from", from_cell: str | None = None
+    ) -> None:
         """Remove Connect records naming any of these shapes.
 
         Single record-removal path, shared by the delete cascade and connector
         retargeting. ``match="from"`` removes only the records leading from
         these shapes, which is what retargeting wants: it is replacing a
         connector's own glue. ``match="either"`` also removes records pointing
-        at them, for a shape that is going away entirely.
+        at them, for a shape that is going away entirely. With `from_cell`,
+        only a record whose ``FromCell`` equals it is removed, for freeing one
+        end of a connector without disturbing the other's record.
         """
         if match not in ("from", "either"):
             raise ValueError(f"match must be 'from' or 'either', not {match!r}")
@@ -971,7 +961,9 @@ class Page:
         normalised_ids = {str(connector_id) for connector_id in connector_ids}
         attributes = ("FromSheet",) if match == "from" else _CONNECT_SHEET_ATTRIBUTES
         for connect in list(connects_el):
-            if normalised_ids & {connect.attrib.get(attribute) for attribute in attributes}:
+            if normalised_ids & {connect.attrib.get(attribute) for attribute in attributes} and (
+                from_cell is None or connect.attrib.get("FromCell") == from_cell
+            ):
                 connects_el.remove(connect)
 
     def _remap_connect_records(self, id_map: Mapping[str, int]) -> None:

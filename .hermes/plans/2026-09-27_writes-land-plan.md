@@ -563,10 +563,10 @@ Replace `_write_cell`, and add `_new_cell_element`:
 - **`shapes.py`, `set_start_and_finish`:**
   - Each of `self.x`, `self.y`, `self.width` and `self.height` becomes `self._write_cell("PinX", v=xml_value(start_x), keep_formula=True)`, and likewise for `PinY`, `Width` and `Height`. On a 1-D shape these are derived from its ends (spec ruling).
   - Keep the end writes as they are for now; Task 5 changes them.
-  - Replace the four `Control/TextPosition` writes with the loop below. Real files name the dynamic cells `DynX` and `DynY`. `XDyn` and `YDyn` exist nowhere, and were always created as stray top-level cells.
+  - Replace the four `Control/TextPosition` writes with the loop below. `set_start_and_finish` writes the Control/TextPosition cells X, Y, XDyn and YDyn only where the shape has them, as library writes, and creates no top-level cell.
 
     ```python
-                    for cell_name, value in (("X", text_x), ("Y", text_y), ("DynX", text_x), ("DynY", text_y)):
+                    for cell_name, value in (("X", text_x), ("Y", text_y), ("XDyn", text_x), ("YDyn", text_y)):
                         if self._cell(f"Control/TextPosition/{cell_name}") is not None:
                             self._write_cell(f"Control/TextPosition/{cell_name}", v=xml_value(value), keep_formula=True)
     ```
@@ -1052,7 +1052,7 @@ Then change each docstring that promises the old rule. `x`'s "and keeps a formul
 - [ ] **Step 6: The full gates, and the sweeps (controller)**
 
 Run every gate in Global Constraints. The controller then runs the save sweep and the render sweep against `main`.
-- **Expected save sweep:** 28 of 28 `same`, except connect cases that lose stray top-level `Control/TextPosition/XDyn`/`YDyn` cells, or gain `DynX`/`DynY` values. Each such difference is named in the PR.
+- **Expected save sweep:** 28 of 28 `same`.
 - **Expected render sweep:** 10 of 10 `same`.
 
 - [ ] **Step 7: Commit**
