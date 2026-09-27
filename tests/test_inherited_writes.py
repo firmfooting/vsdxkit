@@ -316,6 +316,24 @@ def test_an_index_written_with_a_leading_zero_is_the_index_it_names(conn_a):
     assert conn_a.geometry.rows["7"].xml.get("IX") == "7"
 
 
+def test_a_row_moved_down_is_listed_where_the_section_reads_it(vsdx_copy):
+    """`rows` is in the order Visio reads the section, as a fresh read gives it; a move re-filed the row at the end (#454).
+
+    `start_pos` and `set_move_to(move_to_index=...)` go by that order, so
+    before a save they addressed a different row than after it.
+    """
+    path = vsdx_copy("test9_rect_and_line.vsdx")
+    document = Document.open(path)
+    line = document.pages[0].shapes.by_text("Line A")
+    assert line.master_shape is None and list(line.geometry.rows) == ["1", "2"]
+
+    line.geometry.rows["2"].index = 0
+
+    assert list(line.geometry.rows) == ["0", "1"]
+    document.save(path)
+    assert list(Document.open(path).pages[0].shapes.by_text("Line A").geometry.rows) == ["0", "1"]
+
+
 def test_a_row_does_not_move_onto_an_index_another_wrapper_filled(conn_a):
     """A row another Shape object moved to an index holds it, though this one's `rows` has never seen it there."""
     other = conn_a.page.shapes.by_text("Conn A")
