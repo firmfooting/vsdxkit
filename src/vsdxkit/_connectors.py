@@ -141,8 +141,8 @@ class _ConnectorShape(_EndShape, Protocol):
         """Place the connector's ends; the engine passes `keep_glue`, so the glue it has just written stays."""
         ...
 
-    def _write_cell(self, name: str, *, v: str | None = None, f: str | None = None, keep_formula: bool = False) -> None:
-        """Set or create the named cell; the engine passes `keep_formula`, so a half of the cell it does not name stays as it is."""
+    def _write_cell(self, name: str, *, v: str | None = None, f: str | None = None, keep_formula: bool = False) -> _CellXml:
+        """Set or create the named cell, and return it; the engine passes `keep_formula`, so a half of the cell it does not name stays as it is."""
         ...
 
     def _cell(self, name: str) -> _CellXml | None:
