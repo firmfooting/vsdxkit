@@ -185,6 +185,9 @@ class Geometry(ShapePart):
     def move(self, x_delta: float, y_delta: float) -> None:
         """Shift the rows that hold absolute coordinates.
 
+        It shifts the outline within the shape, which is not moving the
+        shape; to move the shape, use :meth:`vsdxkit.shapes.Shape.move`.
+
         Only MoveTo and LineTo rows are shifted; relative rows are offsets
         from the previous point and stay as they are. A coordinate the row
         does not define is left undefined rather than treated as zero.
@@ -194,10 +197,6 @@ class Geometry(ShapePart):
         this shape already owns loses its formula, as typing a number into
         the ShapeSheet does in Visio, so the value is the one Visio shows.
         """
-        self._move(x_delta, y_delta, keep_formula=False)
-
-    def _move(self, x_delta: float, y_delta: float, *, keep_formula: bool) -> None:
-        """As :meth:`move`, with `keep_formula` passed to each coordinate write."""
         # a shape with no absolute rows writes nothing, so leaving this to the
         # row setters would make the refusal depend on the shape
         self._require_attached("Geometry.move()")
@@ -207,9 +206,9 @@ class Geometry(ShapePart):
                 x = r.x
                 y = r.y
                 if x is not None:
-                    r._write_coordinate("X", x + x_delta, keep_formula=keep_formula)
+                    r._write_coordinate("X", x + x_delta, keep_formula=False)
                 if y is not None:
-                    r._write_coordinate("Y", y + y_delta, keep_formula=keep_formula)
+                    r._write_coordinate("Y", y + y_delta, keep_formula=False)
                 _logger.debug("r=%s %s after move %s, %s", type(r), r, x_delta, y_delta)
 
     def set_move_to(self, x: float, y: float, move_to_index: int = 0) -> None:
@@ -486,7 +485,7 @@ class GeometryRow(InheritedRow, ShapePart):
         inherited_there = not occupants and self._master_row_at(new_ix) is not None
         if inherited_there or len(tombstones) < len(occupants):
             raise InvalidOperationError(
-                f"shape ID={self.geometry.shape.ID} already has a geometry row at IX={new_ix}; choose a free index"
+                f"shape ID {self.geometry.shape.ID} already has a geometry row at IX={new_ix}; choose a free index"
             )
         master_row = self._master_row_at(old)
         self.make_local()

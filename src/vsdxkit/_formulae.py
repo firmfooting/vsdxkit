@@ -4,12 +4,14 @@ Visio recalculates a formula on open; this library never opens the file it
 writes, so a cell such as `TxtPinX` that Visio would compute needs a value of
 its own or the shape renders wrong until Visio next touches it.
 `func_map`/`calc_value` cover the handful of formula texts the library itself
-writes; a formula from elsewhere in the package is left unevaluated.
+writes, and ``Width`` or ``Height`` times a number, as Visio writes a local
+pin; any other formula from elsewhere in the package is left unevaluated.
 """
 
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Callable
 from logging import Logger
 from typing import Protocol
@@ -151,10 +153,31 @@ func_map: dict[str, Callable[[ShapeMetrics], float | None]] = {
 """Every formula text `calc_value` recognises, to the function that evaluates it."""
 
 
+# digits after a point only once there is a point: `\d+\.?\d*` could split a
+# run of digits two ways and try each, quadratic in a formula a package supplies
+_SIZE_TIMES_NUMBER = re.compile(r"(Width|Height)\*([+-]?(?:\d+(?:\.\d*)?|\.\d+))")
+"""``Width*<number>`` or ``Height*<number>``, the number a decimal literal, optionally signed: how Visio writes a local pin as a fraction of the size."""
+
+
 def calc_value(shape: ShapeMetrics, func_text: str) -> float | None:
-    """`func_text` evaluated for `shape`, or ``None`` for a formula not in `func_map` or one reading a metric `shape` lacks."""
+    """`func_text` evaluated for `shape`, or ``None`` for a formula it does not know or one reading a metric `shape` lacks.
+
+    It knows the formulas in `func_map` and, as a fallback rather than a
+    parser, ``Width`` or ``Height`` times a decimal number and nothing else:
+    Visio writes a local pin that way, as test5_master's shape 5 has
+    ``LocPinX`` ``Width*0.499973064698594``, which no fixed entry can name.
+    """
     f = func_map.get(func_text)
-    if f is None:
+    if f is not None:
+        return f(shape)
+    match = _SIZE_TIMES_NUMBER.fullmatch(func_text)
+    if match is None:
         _logger.debug("calc_value(func_text='%s') no method found", func_text)
         return None
-    return f(shape)
+    metric = shape.width if match.group(1) == "Width" else shape.height
+    if metric is None:
+        return None
+    value = metric * float(match.group(2))
+    # a multiplier too long for a float is infinite, and zero times it NaN:
+    # neither is a value Visio could hold, so the cell keeps the one it had
+    return value if math.isfinite(value) else None

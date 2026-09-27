@@ -138,6 +138,22 @@ def _inherited_by(filename: str, request) -> frozenset:
     return inherited
 
 
+def _excused_kinds(filename: str, marker) -> frozenset | None:
+    """The defect kinds `marker` excuses for `filename`: empty with no marker, and ``None`` for every kind.
+
+    A marker naming no kinds excuses every kind; naming kinds excuses only
+    those; `files` narrows either to the named basenames.
+    """
+    if marker is None:
+        return frozenset()
+    files = marker.kwargs.get("files")
+    if files is not None and filename not in files:
+        return frozenset()
+    if not marker.args:
+        return None
+    return frozenset(marker.args)
+
+
 @pytest.fixture(autouse=True)
 def _packages_written_are_structurally_sound(request, tmp_path):
     """Validate every .vsdx a test leaves in tmp_path, whether it meant to or not.
@@ -156,25 +172,30 @@ def _packages_written_are_structurally_sound(request, tmp_path):
 
         @pytest.mark.allow_invalid_package
         @pytest.mark.allow_invalid_package("stale-sheet-reference")
+        @pytest.mark.allow_invalid_package("missing-part", files=("a.vsdx",))
 
     Tests that deliberately write a broken or synthetic archive say so, and the
     marker is enforced by `--strict-markers`, so a typo is an error rather than
     a silent no-op. Naming kinds excuses only those, which is what a test that
     reaches one known shortfall wants: a bare marker on such a test switches off
     every other rule for it too, and the next defect it writes goes unreported.
+    `files` narrows a marker, bare or naming kinds, to the listed basenames,
+    wherever the test writes them, for a test that writes more than one
+    package and only one of them carries the known defect; see
+    `_excused_kinds`.
     """
     # `tmp_path` is taken as an argument rather than looked up on demand: pytest
     # finalises fixtures in reverse dependency order, and a fixture that merely
     # asks for it at teardown finds it already gone.
     yield
     marker = request.node.get_closest_marker("allow_invalid_package")
-    if marker is not None and not marker.args:
-        return
-    excused_kinds = frozenset(marker.args) if marker is not None else frozenset()
     for directory, _, filenames in os.walk(str(tmp_path)):
         for filename in sorted(filenames):
             if not _is_package_file(filename):
                 continue
+            excused_kinds = _excused_kinds(filename, marker)
+            if excused_kinds is None:
+                continue  # every kind excused: not validated at all
             path = os.path.join(directory, filename)
             inherited = _inherited_by(filename, request)
             defects = tuple(d for d in validate_package(path) if d not in inherited and d.kind not in excused_kinds)

@@ -784,6 +784,34 @@ A deleted shape stays deleted
    Raises :class:`vsdxkit.errors.InvalidOperationError`, as every other write
    to a deleted shape does.
 
+Moving a shape moves the shape
+------------------------------
+
+``shape.move(dx, dy)``
+   Moves a 2-D shape's pin, replacing a formula it had, and a 1-D shape's two
+   ends, freeing a glued end. It never shifts the geometry's rows, which are
+   in the shape's own coordinates. 0.8 shifted them, drawing the outline off
+   the shape, and left a 1-D shape's end behind. A move by zero in both
+   directions changes nothing.
+
+``shape.set_start_and_finish`` on a 2-D shape
+   Raises :class:`vsdxkit.errors.InvalidOperationError`. 0.8 did nothing.
+   On a 1-D shape, the text pin is set in the shape's own coordinates, at the
+   middle of the width and height it is drawn with, whatever the shape is
+   called: where those are formulas of the ends, the values the formulas
+   give. A plain line with no ``Width``, ``Height`` or ``Angle`` formula,
+   such as one Lucidchart exported, is placed as Visio's own lines are: as long as its ends are
+   apart, turned to point from start to finish, and pinned at its middle.
+   0.8 gave it the x distance between its ends as its width, no angle, and
+   its start as its pin, so a diagonal line was drawn short and flat.
+
+``shape.center_x_y`` on a 1-D shape
+   The midpoint of its two ends. 0.8 gave its begin point plus half its width
+   and height, which is off the line for a line not drawn left to right, and
+   for any line whose width is its length rather than its x span. The glue
+   engine reads this centre, so a connector glued to such a line now meets it
+   at its middle. A 2-D shape's centre is its pin, as before.
+
 A swimlane diagram replaces the container
 -----------------------------------------
 

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import copy
 import html
+import math
 import numbers
 import sys
 import xml.etree.ElementTree as ET
@@ -277,6 +278,18 @@ def _is_connector(shape: Shape) -> bool:
     return _is_one_d(shape.xml, shape._parent, shape._page)
 
 
+def _is_name_or_copy(name: str | None, base: str) -> bool:
+    """Whether `name` is `base`, or a numbered copy of it: Visio names the second one `base.12`.
+
+    Only a number follows the last dot. A shape its author named
+    `base.backup` is not a copy Visio made.
+    """
+    if name == base:
+        return True
+    stem, dot, suffix = (name or "").rpartition(".")
+    return bool(dot) and stem == base and suffix.isdigit()
+
+
 def _is_one_d(xml: Element, parent: _PageSeam | Shape, page: _PageSeam) -> bool:
     """The one test of whether a shape element is 1-D, before or after it has a wrapper.
 
@@ -341,8 +354,8 @@ def _end_point_value(value: object) -> float:
     """Return a coordinate handed to :meth:`Shape.set_start_and_finish` as a float.
 
     Every coordinate is converted before the shape is written, so one that is
-    not a number is refused with the shape as it was: a plain line never works
-    out ``finish_y - start_y``, so nothing else would check its y.
+    not a number is refused with the shape as it was, rather than by whichever
+    arithmetic, or later read of a cell already written, first trips on it.
 
     :raises TypeError: if the value is not a real number
     """
@@ -1865,25 +1878,41 @@ class Shape:
     def move(self, x_delta: float, y_delta: float) -> None:
         """Move the shape by ``x_delta`` and ``y_delta`` inches.
 
-        It shifts the pin, a 1-D shape's begin point, and the ``MoveTo`` and
-        ``LineTo`` rows of the shape's geometry, which are in the shape's own
-        coordinates. A 1-D shape's end point is left where it is. A pin the
-        shape lacks is taken as 0, and written.
+        A 2-D shape moves by its pin, and the value written replaces a
+        formula the pin had, as dragging the shape does in Visio. A pin the
+        shape lacks is taken as 0, and written. A 1-D shape moves by its two
+        ends, which frees an end that was glued; its pin, width and angle are
+        formulas of its ends, and follow them. The geometry is in the shape's
+        own coordinates, so it is not touched. A move by zero in both
+        directions changes nothing: a glued end stays glued, and a pin
+        formula stays.
 
-        :raises InvalidOperationError: if the shape is detached
+        :raises InvalidOperationError: if the shape is detached, or it is a
+            1-D shape missing one of its ends, moved by more than zero; place
+            such a shape by its ends with :meth:`set_start_and_finish`
         """
-        if self.geometry:
-            self.geometry._move(x_delta, y_delta, keep_formula=True)
-        begin_x = self.begin_x
-        if begin_x is not None:
-            self._write_cell("BeginX", v=xml_value(begin_x + x_delta), keep_formula=True)
-        pin_x = self.x
-        self._write_cell("PinX", v=xml_value((pin_x or 0.0) + x_delta), keep_formula=True)
-        begin_y = self.begin_y
-        if begin_y is not None:
-            self._write_cell("BeginY", v=xml_value(begin_y + y_delta), keep_formula=True)
-        pin_y = self.y
-        self._write_cell("PinY", v=xml_value((pin_y or 0.0) + y_delta), keep_formula=True)
+        self._require_attached("Shape.move()")
+        if x_delta == 0 and y_delta == 0:
+            return  # moving by nothing must not free glue or replace formulas
+        if not _is_connector(self):
+            self.x = (self.x or 0.0) + x_delta
+            self.y = (self.y or 0.0) + y_delta
+            return
+        begin_x, begin_y, end_x, end_y = self.begin_x, self.begin_y, self.end_x, self.end_y
+        if begin_x is None or begin_y is None or end_x is None or end_y is None:
+            ends = {"BeginX": begin_x, "BeginY": begin_y, "EndX": end_x, "EndY": end_y}
+            missing = ", ".join(name for name, value in ends.items() if value is None)
+            raise InvalidOperationError(
+                f"shape ID {self.ID} is 1-D but has no {missing} value to move; "
+                "place it by its ends with set_start_and_finish()"
+            )
+        self.begin_x, self.begin_y = begin_x + x_delta, begin_y + y_delta
+        self.end_x, self.end_y = end_x + x_delta, end_y + y_delta
+        # derived from the ends: written as the library writes them, so a
+        # formula stays and the refresh below gives it the new ends' value
+        self._write_cell("PinX", v=xml_value((self.x or 0.0) + x_delta), keep_formula=True)
+        self._write_cell("PinY", v=xml_value((self.y or 0.0) + y_delta), keep_formula=True)
+        self._refresh_formula_values()
 
     def get_or_create_cell(self, name: str, v: str | None = None, f: str | None = None) -> Cell:
         """Set or create a named cell on this shape, through :meth:`_write_cell`.
@@ -1991,16 +2020,18 @@ class Shape:
         """A centre for the shape as ``(x, y)``, in inches in its parent's coordinates.
 
         For a 2-D shape it is the pin, either half ``None`` where that cell
-        is missing. For a 1-D shape it is the begin point plus half the
-        width and half the height, a missing cell counting as 0.
+        is missing. For a 1-D shape, a line or a connector, it is the
+        midpoint of its ends, whichever way it points: a line's ``Width`` is
+        its length, so half of it added to the begin point is the midpoint
+        only of a line drawn left to right. A 1-D shape with an end that has
+        no value falls back to its pin, rather than to a midpoint of the end
+        :attr:`bounds` would make up.
         """
-        if self.begin_x is not None:
-            x = self.begin_x + ((self.width or 0.0) / 2)
-            y = (self.begin_y or 0.0) + ((self.height or 0.0) / 2)
-        else:
-            x = self.x
-            y = self.y
-        return x, y
+        if _is_connector(self):
+            begin_x, begin_y, end_x, end_y = self.begin_x, self.begin_y, self.end_x, self.end_y
+            if begin_x is not None and begin_y is not None and end_x is not None and end_y is not None:
+                return (begin_x + end_x) / 2, (begin_y + end_y) / 2
+        return self.x, self.y
 
     def set_start_and_finish(
         self, start: tuple[float | None, float | None], finish: tuple[float | None, float | None]
@@ -2009,10 +2040,15 @@ class Shape:
 
         Writing an end frees it if it is glued, as dragging it away does in
         Visio; :meth:`Connector.retarget` glues an end to another shape. The
-        pin, width and height follow the ends: where they are formulas of the
-        ends, the formulas stay, and their values are refreshed.
+        pin, width, height and angle follow the ends: where they are formulas
+        of the ends, the formulas stay, and their values are refreshed. A
+        plain line with no ``Width``, ``Height`` or ``Angle`` formula is
+        placed as Visio's own lines are: as long as its ends are apart, with no height, turned to point
+        from start to finish, and pinned at its middle. The text pin is at
+        the middle of the width and height the shape is then drawn with, in
+        its own coordinates.
 
-        :raises InvalidOperationError: if the shape is detached, or a coordinate is ``None``
+        :raises InvalidOperationError: if the shape is detached, it is a 2-D shape, or a coordinate is ``None``
         :raises TypeError: if a coordinate is not a number; the shape is left as it was
         """
         # nothing at all is written on a shape with no BeginX, so leaving this
@@ -2031,54 +2067,78 @@ class Shape:
         formulas and records in place. Without it, the end setters write the
         ends, and free a glued one.
         """
-        if self.begin_x is not None:  # only apply changes to lines and connector shapes
-            if any(value is None for value in (*start, *finish)):
-                raise InvalidOperationError("connector start and finish coordinates cannot be None")
-            # all four are converted before anything is written, so a
-            # coordinate that is not a number is refused with the shape, and
-            # its glue, as it was
-            start_x, start_y = (_end_point_value(value) for value in start)
-            finish_x, finish_y = (_end_point_value(value) for value in finish)
-            # lines/connectors are defined in different ways
-            # Check whether shape is a connector based on name in known languages
-            is_connector = self.universal_name == "Dynamic connector"
-            width = finish_x - start_x
-            height = finish_y - start_y if is_connector else 0.0
-            self._write_cell("PinX", v=xml_value(start_x), keep_formula=True)
-            self._write_cell("PinY", v=xml_value(start_y), keep_formula=True)
+        if not _is_connector(self):
+            raise InvalidOperationError(
+                f"shape ID {self.ID} is 2-D, so it has no start and finish; move it with move(), or x and y"
+            )
+        if any(value is None for value in (*start, *finish)):
+            raise InvalidOperationError(
+                f"shape ID {self.ID}: start and finish coordinates cannot be None; give a number for each of the four"
+            )
+        # all four are converted before anything is written, so a coordinate
+        # that is not a number is refused with the shape, and its glue, as it was
+        start_x, start_y = (_end_point_value(value) for value in start)
+        finish_x, finish_y = (_end_point_value(value) for value in finish)
+        # lines/connectors are defined in different ways
+        # Check whether shape is a connector based on name in known languages,
+        # a second connector on the page included: Visio names it
+        # `Dynamic connector.58`
+        is_connector = _is_name_or_copy(self.universal_name, "Dynamic connector")
+        span_x, span_y = finish_x - start_x, finish_y - start_y
+        # A plain line runs along its own x axis, turned by its Angle. Where
+        # its Width, Height or Angle is a formula, the formulas place the
+        # shape: Visio's own lines hold SQRT(...) and ATAN2(...) (test9
+        # 'Line A'), and its connectors GUARD(...) spans and a GUARD(0DA)
+        # that keeps them square, whatever the connector is called; the
+        # values written below are refreshed from them. A line with none of
+        # the three, as a Lucidchart line has, is placed here.
+        turned = not is_connector and all(self.cell_formula(name) is None for name in ("Width", "Height", "Angle"))
+        if turned:
+            # as long as its ends are apart, with no height, pointing from
+            # start to finish, and pinned at its middle: what Visio's SQRT(...),
+            # ATAN2(...) and (BeginX+EndX)/2 give its own lines
+            width, height = math.hypot(span_x, span_y), 0.0
+            pin_x, pin_y = (start_x + finish_x) / 2, (start_y + finish_y) / 2
+        else:
+            # a dynamic connector's height is its y span; a plain line's is 0
+            width, height = span_x, span_y if is_connector else 0.0
+            pin_x, pin_y = start_x, start_y
 
-            if keep_glue:
-                for name, value in (("BeginX", start_x), ("BeginY", start_y), ("EndX", finish_x), ("EndY", finish_y)):
-                    self._write_cell(name, v=xml_value(value), keep_formula=True)
-            else:
-                self.begin_x, self.begin_y = start_x, start_y
-                self.end_x, self.end_y = finish_x, finish_y
-            self._write_cell("Width", v=xml_value(width), keep_formula=True)
-            self._write_cell("Height", v=xml_value(height), keep_formula=True)
-            self._write_cell("PinX", v=xml_value(start_x), keep_formula=True)
-            self._write_cell("PinY", v=xml_value(start_y), keep_formula=True)
-            if self.geometry is not None:
-                self.geometry._set_point("moveto", "Shape.set_start_and_finish()", 0.0, 0.0, 0, keep_formula=True)
-                self.geometry._set_point("lineto", "Shape.set_start_and_finish()", width, height, 0, keep_formula=True)
-            txt_pin_x = self._cell("TxtPinX")
-            txt_pin_y = self._cell("TxtPinY")
-            if txt_pin_x and txt_pin_y:
-                if is_connector:
-                    text_x = width / 2
-                    text_y = height / 2
-                else:
-                    text_x, text_y = self.center_x_y
-                    if text_x is None or text_y is None:
-                        raise InvalidOperationError("shape text coordinates cannot be None")
-                txt_pin_x._set_value(text_x, keep_formula=True)
-                txt_pin_y._set_value(text_y, keep_formula=True)
-                # Visio's Controls row names its anchor cells XDyn and YDyn,
-                # not DynX/DynY; a shape without a TextPosition row of its own
-                # is left alone rather than given stray top-level cells
-                for cell_name, value in (("X", text_x), ("Y", text_y), ("XDyn", text_x), ("YDyn", text_y)):
-                    if self._cell(f"Control/TextPosition/{cell_name}") is not None:
-                        self._write_cell(f"Control/TextPosition/{cell_name}", v=xml_value(value), keep_formula=True)
-            self._refresh_formula_values()
+        if keep_glue:
+            for name, value in (("BeginX", start_x), ("BeginY", start_y), ("EndX", finish_x), ("EndY", finish_y)):
+                self._write_cell(name, v=xml_value(value), keep_formula=True)
+        else:
+            self.begin_x, self.begin_y = start_x, start_y
+            self.end_x, self.end_y = finish_x, finish_y
+        self._write_cell("Width", v=xml_value(width), keep_formula=True)
+        self._write_cell("Height", v=xml_value(height), keep_formula=True)
+        if turned:
+            self._write_cell("Angle", v=xml_value(math.atan2(span_y, span_x)), keep_formula=True)
+        self._write_cell("PinX", v=xml_value(pin_x), keep_formula=True)
+        self._write_cell("PinY", v=xml_value(pin_y), keep_formula=True)
+        # the geometry and the text pin follow the width and height the shape
+        # is drawn with, which a formula of the ends, such as a GUARD(EndY-BeginY)
+        # height, gives only once it is refreshed
+        self._refresh_formula_values()
+        drawn_width, drawn_height = self.width, self.height
+        # both were written above, and a refresh writes only numbers
+        assert drawn_width is not None and drawn_height is not None
+        if self.geometry is not None:
+            self.geometry._set_point("moveto", "Shape.set_start_and_finish()", 0.0, 0.0, 0, keep_formula=True)
+            self.geometry._set_point("lineto", "Shape.set_start_and_finish()", drawn_width, drawn_height, 0, keep_formula=True)
+        txt_pin_x = self._cell("TxtPinX")
+        txt_pin_y = self._cell("TxtPinY")
+        if txt_pin_x and txt_pin_y:
+            text_x, text_y = drawn_width / 2, drawn_height / 2
+            txt_pin_x._set_value(text_x, keep_formula=True)
+            txt_pin_y._set_value(text_y, keep_formula=True)
+            # Visio's Controls row names its anchor cells XDyn and YDyn,
+            # not DynX/DynY; a shape without a TextPosition row of its own
+            # is left alone rather than given stray top-level cells
+            for cell_name, value in (("X", text_x), ("Y", text_y), ("XDyn", text_x), ("YDyn", text_y)):
+                if self._cell(f"Control/TextPosition/{cell_name}") is not None:
+                    self._write_cell(f"Control/TextPosition/{cell_name}", v=xml_value(value), keep_formula=True)
+        self._refresh_formula_values()
 
     def _refresh_formula_values(self) -> None:
         """Recompute the value held beside each formula this shape's cells carry, as Visio would on open.
@@ -2236,7 +2296,7 @@ class Shape:
         self._require_attached("Shape.append_shape()")
         if not append_shape.is_attached:
             raise InvalidOperationError(
-                f"shape ID={append_shape.ID} was deleted, or is on a removed page, so it cannot be placed; "
+                f"shape ID {append_shape.ID} was deleted, or is on a removed page, so it cannot be placed; "
                 "a deleted shape stays deleted"
             )
         if self.shape_type != "Group":

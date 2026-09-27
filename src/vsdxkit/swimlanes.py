@@ -25,7 +25,7 @@ from typing import Protocol
 
 from vsdxkit import namespace
 from vsdxkit.errors import InvalidOperationError
-from vsdxkit.shapes import PageView, Shape, _is_connector
+from vsdxkit.shapes import PageView, Shape, _is_connector, _is_name_or_copy
 
 
 class _DiagramPage(PageView, Protocol):
@@ -74,14 +74,8 @@ _CFF_MACHINERY = (_CONTAINER_NAME, _SWIMLANE_LIST_NAME, "Phase List", "Separator
 
 
 def _named(shape: Shape, name: str) -> bool:
-    """Whether the shape is `name`, or a numbered copy of it: Visio names the second one `name.12`.
-
-    Only a number follows the dot. A shape its author named `name.backup` is
-    not a copy Visio made.
-    """
-    shape_name = shape.shape_name or ""
-    base, dot, suffix = shape_name.partition(".")
-    return base == name and (not dot or suffix.isdigit())
+    """Whether the shape is `name`, or a numbered copy of it, as `_is_name_or_copy` reads its name."""
+    return _is_name_or_copy(shape.shape_name, name)
 
 
 def _is_member(shape: Shape) -> bool:
