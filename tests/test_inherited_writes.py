@@ -264,6 +264,61 @@ def test_a_moved_rows_inh_cell_takes_the_formula_from_up_the_whole_master_chain(
     assert _cell_attributes(moved) == {"X": ("10.90551181102363", "Width*1"), "Y": ("4.133858267716532", "Height*1")}
 
 
+def test_a_moved_rows_inh_cell_takes_no_formula_past_a_master_that_deletes_the_row(vsdx_copy):
+    """A nearer master that deletes the row ends the chain there: its `Inh` cell had no row to inherit from (#454).
+
+    The chain of the test above, with the middle master's row 3 deleted. The
+    walk went on past it to the Process master and gave the moved cell a
+    formula it never had.
+    """
+    path = vsdx_copy(S05)
+    document = Document.open(path)
+    shape = document.pages[0].shapes.require_id("36")
+    middle = shape.master_shape
+    middle.xml.set("Master", document.master_index["Process"]._page_id)
+    middle.xml.find(f'{namespace}Section[@N="Geometry"]/{namespace}Row[@IX="3"]').set("Del", "1")
+    assert "3" not in middle.geometry.rows
+
+    shape.geometry.rows["3"].index = 9
+    document.save(path)
+
+    moved = Document.open(path).pages[0].shapes.require_id("36").geometry.rows["9"]
+    assert _cell_attributes(moved) == {"X": ("10.90551181102363", None), "Y": ("4.133858267716532", None)}
+
+
+def test_a_row_moves_onto_an_index_another_wrapper_freed(conn_a):
+    """The section as it stands says whether an index is free, not a `rows` another Shape object has made stale (#454).
+
+    The first wrapper's move of row 2 leaves only a bare ``Del`` row at IX 2,
+    which gives way; the second wrapper still held the inherited row 2 in its
+    `rows`, and refused.
+    """
+    other = conn_a.page.shapes.by_text("Conn A")
+    first, second = conn_a.geometry, other.geometry
+    assert "2" in second.rows
+
+    first.rows["2"].index = 7
+    moved = second.rows["1"]
+    moved.index = 2
+
+    at_2 = [row for row in conn_a.geometry.xml.findall(f"{namespace}Row") if row.get("IX") == "2"]
+    assert at_2 == [moved.xml]
+    assert moved.xml.get("Del") is None
+    assert second.rows["2"] is moved
+
+
+def test_a_row_does_not_move_onto_an_index_another_wrapper_filled(conn_a):
+    """A row another Shape object moved to an index holds it, though this one's `rows` has never seen it there."""
+    other = conn_a.page.shapes.by_text("Conn A")
+    first, second = conn_a.geometry, other.geometry
+    assert "7" not in second.rows
+
+    first.rows["2"].index = 7
+
+    with pytest.raises(InvalidOperationError, match="IX=7"):
+        second.rows["1"].index = 7
+
+
 def _own_rows(connector) -> list[tuple[dict[str, str], list[str | None]]]:
     """Each Row element of the connector's own section, in document order: its attributes and its cells' names."""
     return [
