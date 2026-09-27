@@ -524,9 +524,9 @@ class DataProperty(InheritedRow, ShapePart):
     """Represents a single Data Property item associated with a Shape object
 
     A property a shape inherits from its master is handed out marked
-    :attr:`inherited`. Setting :attr:`value` on
-    one materialises an override row on the instance rather than writing to the
-    master page's XML.
+    :attr:`inherited`. Setting :attr:`value`, or calling
+    :meth:`set_attribute`, on one materialises an override row on the
+    instance rather than writing to the master page's XML.
     """
 
     shape: Shape
@@ -535,8 +535,8 @@ class DataProperty(InheritedRow, ShapePart):
     """The property's ``<Row>`` element.
 
     For an inherited property it is the master's row, until the first write
-    through :attr:`value`, or a call to :meth:`make_local`, gives the
-    instance a row of its own.
+    through :attr:`value` or :meth:`set_attribute`, or a call to
+    :meth:`make_local`, gives the instance a row of its own.
     """
     name: str | None
     """The row's ``N`` attribute, which an override row shares with its master's row; ``None`` for a row without one."""

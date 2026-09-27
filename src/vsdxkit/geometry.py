@@ -79,8 +79,9 @@ class Geometry(ShapePart):
     An inherited row reads the master's cells but is marked
     :attr:`GeometryRow.inherited`. The first write to it,
     through :attr:`GeometryRow.x`, :meth:`move`, :meth:`set_move_to`,
-    :meth:`set_line_to` or one of its cells' setters, materialises an
-    override row on this shape and leaves the master alone. A write to a
+    :meth:`set_line_to`, the row's other setters or one of its cells'
+    setters, materialises an override row on this shape and leaves the
+    master alone. A write to a
     section cell this shape inherits gives this shape's section a cell of
     its own, in the same way.
 
@@ -248,7 +249,13 @@ class GeometryRow(InheritedRow, ShapePart):
     geometry: Geometry
     """The :class:`Geometry` the row is in: for a row inherited from a master, the instance's, not the master's."""
     xml: Element
-    """The row's ``<Row>`` element: for an inherited row, the master's, until :meth:`make_local`, a write through :attr:`x` or :attr:`y`, or a write to one of its :attr:`cells`, gives this shape a row of its own."""
+    """The row's ``<Row>`` element.
+
+    For an inherited row it is the master's, until :meth:`make_local`, or a
+    write through :attr:`x`, :attr:`y`, :attr:`row_type`, :attr:`index`,
+    :attr:`del_bool` or one of its :attr:`cells`, gives this shape a row of
+    its own.
+    """
     cells: dict[str, GeometryCell]
     """The row's cells by name, such as ``X`` and ``Y``: the master row's, with this row's own over them.
 
