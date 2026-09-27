@@ -8,6 +8,7 @@ with the formula, and only that end's.
 import pytest
 
 from vsdxkit.document import Document
+from vsdxkit.errors import InvalidOperationError
 
 
 @pytest.fixture
@@ -76,3 +77,25 @@ def test_a_diagonal_plain_line_keeps_its_length_formula(vsdx_copy):
     line.set_start_and_finish((2.0, 7.0), (3.0, 8.0))
 
     assert line.cell_formula("Width") == width_formula
+
+
+def test_a_plain_lines_text_pin_is_in_its_own_coordinates(vsdx_copy):
+    """test5_master shape 5 is a Lucidchart line, not named 'Dynamic connector': its text pin was set in the page's coordinates."""
+    line = Document.open(vsdx_copy("test5_master.vsdx")).pages[0].shapes.by_id("5")
+
+    line.set_start_and_finish((1.0, 7.5), (3.0, 7.5))
+
+    assert float(line.cells["TxtPinX"].value) == pytest.approx(1.0)
+    assert float(line.cells["TxtPinY"].value) == pytest.approx(0.0)
+    assert float(line.cells["Control/TextPosition/X"].value) == pytest.approx(1.0)
+
+
+def test_set_start_and_finish_refuses_a_2d_shape(vsdx_copy):
+    """#301: it did nothing, silently, on a shape with no ends."""
+    shape = Document.open(vsdx_copy("test1.vsdx")).pages[0].shapes.require_id("1")
+    before = shape.x
+
+    with pytest.raises(InvalidOperationError, match="2-D"):
+        shape.set_start_and_finish((1.0, 1.0), (2.0, 2.0))
+
+    assert shape.x == before

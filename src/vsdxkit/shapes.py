@@ -1931,7 +1931,7 @@ class Shape:
         pin, width and height follow the ends: where they are formulas of the
         ends, the formulas stay, and their values are refreshed.
 
-        :raises InvalidOperationError: if the shape is detached, or a coordinate is ``None``
+        :raises InvalidOperationError: if the shape is detached, a coordinate is ``None``, or it is a 2-D shape
         """
         # nothing at all is written on a shape with no BeginX, so leaving this
         # to the coordinate setters below would make the refusal depend on the
@@ -1949,51 +1949,49 @@ class Shape:
         formulas and records in place. Without it, the end setters write the
         ends, and free a glued one.
         """
-        if self.begin_x is not None:  # only apply changes to lines and connector shapes
-            start_x, start_y = start
-            finish_x, finish_y = finish
-            if start_x is None or start_y is None or finish_x is None or finish_y is None:
-                raise InvalidOperationError("connector start and finish coordinates cannot be None")
-            self._write_cell("PinX", v=xml_value(start_x), keep_formula=True)
-            self._write_cell("PinY", v=xml_value(start_y), keep_formula=True)
-            # lines/connectors are defined in different ways
-            # Check whether shape is a connector based on name in known languages
-            is_connector = self.universal_name == "Dynamic connector"
+        if self.begin_x is None:
+            raise InvalidOperationError(
+                f"shape ID {self.ID} is 2-D, so it has no start and finish; move it with move(), or x and y"
+            )
+        start_x, start_y = start
+        finish_x, finish_y = finish
+        if start_x is None or start_y is None or finish_x is None or finish_y is None:
+            raise InvalidOperationError("connector start and finish coordinates cannot be None")
+        self._write_cell("PinX", v=xml_value(start_x), keep_formula=True)
+        self._write_cell("PinY", v=xml_value(start_y), keep_formula=True)
+        # lines/connectors are defined in different ways
+        # Check whether shape is a connector based on name in known languages
+        is_connector = self.universal_name == "Dynamic connector"
 
-            if keep_glue:
-                for name, value in (("BeginX", start_x), ("BeginY", start_y), ("EndX", finish_x), ("EndY", finish_y)):
-                    self._write_cell(name, v=xml_value(value), keep_formula=True)
-            else:
-                self.begin_x, self.begin_y = start_x, start_y
-                self.end_x, self.end_y = finish_x, finish_y
-            width = finish_x - start_x
-            height = finish_y - start_y if is_connector else 0.0
-            self._write_cell("Width", v=xml_value(width), keep_formula=True)
-            self._write_cell("Height", v=xml_value(height), keep_formula=True)
-            self._write_cell("PinX", v=xml_value(start_x), keep_formula=True)
-            self._write_cell("PinY", v=xml_value(start_y), keep_formula=True)
-            if self.geometry is not None:
-                self.geometry._set_point("moveto", "Shape.set_start_and_finish()", 0.0, 0.0, 0, keep_formula=True)
-                self.geometry._set_point("lineto", "Shape.set_start_and_finish()", width, height, 0, keep_formula=True)
-            txt_pin_x = self._cell("TxtPinX")
-            txt_pin_y = self._cell("TxtPinY")
-            if txt_pin_x and txt_pin_y:
-                if is_connector:
-                    text_x = width / 2
-                    text_y = height / 2
-                else:
-                    text_x, text_y = self.center_x_y
-                    if text_x is None or text_y is None:
-                        raise InvalidOperationError("shape text coordinates cannot be None")
-                txt_pin_x._set_value(text_x, keep_formula=True)
-                txt_pin_y._set_value(text_y, keep_formula=True)
-                # Visio's Controls row names its anchor cells XDyn and YDyn,
-                # not DynX/DynY; a shape without a TextPosition row of its own
-                # is left alone rather than given stray top-level cells
-                for cell_name, value in (("X", text_x), ("Y", text_y), ("XDyn", text_x), ("YDyn", text_y)):
-                    if self._cell(f"Control/TextPosition/{cell_name}") is not None:
-                        self._write_cell(f"Control/TextPosition/{cell_name}", v=xml_value(value), keep_formula=True)
-            self._refresh_formula_values()
+        if keep_glue:
+            for name, value in (("BeginX", start_x), ("BeginY", start_y), ("EndX", finish_x), ("EndY", finish_y)):
+                self._write_cell(name, v=xml_value(value), keep_formula=True)
+        else:
+            self.begin_x, self.begin_y = start_x, start_y
+            self.end_x, self.end_y = finish_x, finish_y
+        width = finish_x - start_x
+        # a dynamic connector's height is its y span; a plain line's is 0, its slope carried by its geometry
+        height = finish_y - start_y if is_connector else 0.0
+        self._write_cell("Width", v=xml_value(width), keep_formula=True)
+        self._write_cell("Height", v=xml_value(height), keep_formula=True)
+        self._write_cell("PinX", v=xml_value(start_x), keep_formula=True)
+        self._write_cell("PinY", v=xml_value(start_y), keep_formula=True)
+        if self.geometry is not None:
+            self.geometry._set_point("moveto", "Shape.set_start_and_finish()", 0.0, 0.0, 0, keep_formula=True)
+            self.geometry._set_point("lineto", "Shape.set_start_and_finish()", width, height, 0, keep_formula=True)
+        txt_pin_x = self._cell("TxtPinX")
+        txt_pin_y = self._cell("TxtPinY")
+        if txt_pin_x and txt_pin_y:
+            text_x, text_y = width / 2, height / 2
+            txt_pin_x._set_value(text_x, keep_formula=True)
+            txt_pin_y._set_value(text_y, keep_formula=True)
+            # Visio's Controls row names its anchor cells XDyn and YDyn,
+            # not DynX/DynY; a shape without a TextPosition row of its own
+            # is left alone rather than given stray top-level cells
+            for cell_name, value in (("X", text_x), ("Y", text_y), ("XDyn", text_x), ("YDyn", text_y)):
+                if self._cell(f"Control/TextPosition/{cell_name}") is not None:
+                    self._write_cell(f"Control/TextPosition/{cell_name}", v=xml_value(value), keep_formula=True)
+        self._refresh_formula_values()
 
     def _refresh_formula_values(self) -> None:
         """Recompute the value held beside each formula this shape's cells carry, as Visio would on open.
