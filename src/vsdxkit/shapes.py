@@ -31,7 +31,7 @@ else:
 
 
 from vsdxkit import namespace
-from vsdxkit._connectors import _ConnectorPage, _glued_ends, _retarget_connector
+from vsdxkit._connectors import _ConnectorPage, _float_end, _glued_ends, _retarget_connector
 from vsdxkit._formulae import calc_value
 from vsdxkit._inheritance import InheritedRow
 from vsdxkit._logging_support import get_logger
@@ -1670,8 +1670,10 @@ class Shape:
     def begin_x(self) -> float | None:
         """The x of a 1-D shape's begin point, in inches in its parent's coordinates; ``None`` where neither the shape nor its master has a ``BeginX`` cell, as on a 2-D shape.
 
-        Setting it writes the cell's value, as :attr:`x` does; the glue is
-        left as it was.
+        Setting it writes the cell's value, as :attr:`x` does. A glued begin
+        end is freed first: its ``Connect`` record, trigger and glue formulas
+        go, as dragging the end away does in Visio. The other end stays
+        glued.
 
         :raises MalformedPackageError: if the ``BeginX`` value is not a number
         """
@@ -1679,13 +1681,13 @@ class Shape:
 
     @begin_x.setter
     def begin_x(self, value: float | str) -> None:
-        self.set_cell_value("BeginX", _coordinate_value(value))
+        self._write_end("BeginX", value)
 
     @property
     def begin_y(self) -> float | None:
         """The y of a 1-D shape's begin point, in inches in its parent's coordinates; ``None`` where neither the shape nor its master has a ``BeginY`` cell.
 
-        Setting it writes the cell's value, as :attr:`begin_x` does.
+        Setting it writes the cell's value, as :attr:`begin_x` does, for its end.
 
         :raises MalformedPackageError: if the ``BeginY`` value is not a number
         """
@@ -1693,13 +1695,13 @@ class Shape:
 
     @begin_y.setter
     def begin_y(self, value: float | str) -> None:
-        self.set_cell_value("BeginY", _coordinate_value(value))
+        self._write_end("BeginY", value)
 
     @property
     def end_x(self) -> float | None:
         """The x of a 1-D shape's end point, in inches in its parent's coordinates; ``None`` where neither the shape nor its master has an ``EndX`` cell.
 
-        Setting it writes the cell's value, as :attr:`begin_x` does.
+        Setting it writes the cell's value, as :attr:`begin_x` does, for its end.
 
         :raises MalformedPackageError: if the ``EndX`` value is not a number
         """
@@ -1707,13 +1709,13 @@ class Shape:
 
     @end_x.setter
     def end_x(self, value: float | str) -> None:
-        self.set_cell_value("EndX", _coordinate_value(value))
+        self._write_end("EndX", value)
 
     @property
     def end_y(self) -> float | None:
         """The y of a 1-D shape's end point, in inches in its parent's coordinates; ``None`` where neither the shape nor its master has an ``EndY`` cell.
 
-        Setting it writes the cell's value, as :attr:`begin_x` does.
+        Setting it writes the cell's value, as :attr:`begin_x` does, for its end.
 
         :raises MalformedPackageError: if the ``EndY`` value is not a number
         """
@@ -1721,7 +1723,16 @@ class Shape:
 
     @end_y.setter
     def end_y(self, value: float | str) -> None:
-        self.set_cell_value("EndY", _coordinate_value(value))
+        self._write_end("EndY", value)
+
+    def _write_end(self, name: str, value: float | str) -> None:
+        """Write end coordinate `name`, freeing that end first if it is glued, as dragging a glued end away does in Visio."""
+        self._require_attached(f"writing shape cell {name!r}")
+        begin = name.startswith("Begin")
+        end_cell = "BeginX" if begin else "EndX"
+        if any(record.from_id == self.ID and record.from_rel == end_cell for record in self._page._connects()):
+            _float_end(self, begin=begin)
+        self.set_cell_value(name, _coordinate_value(value))
 
     def move(self, x_delta: float, y_delta: float) -> None:
         """Move the shape by ``x_delta`` and ``y_delta`` inches.
@@ -1870,11 +1881,31 @@ class Shape:
     def set_start_and_finish(
         self, start: tuple[float | None, float | None], finish: tuple[float | None, float | None]
     ) -> None:
-        """Set the start and finish of a simple line or connector."""
+        """Place a line or connector by its two ends, and draw it between them.
+
+        Writing an end frees it if it is glued, as dragging it away does in
+        Visio; :meth:`Connector.retarget` glues an end to another shape. The
+        pin, width and height follow the ends: where they are formulas of the
+        ends, the formulas stay, and their values are refreshed.
+
+        :raises InvalidOperationError: if the shape is detached, or a coordinate is ``None``
+        """
         # nothing at all is written on a shape with no BeginX, so leaving this
         # to the coordinate setters below would make the refusal depend on the
         # shape it was asked of
         self._require_attached("Shape.set_start_and_finish()")
+        self._place_ends(start, finish, keep_glue=False)
+
+    def _place_ends(
+        self, start: tuple[float | None, float | None], finish: tuple[float | None, float | None], *, keep_glue: bool
+    ) -> None:
+        """Place a 1-D shape by its ends: the body of :meth:`set_start_and_finish`.
+
+        The glue engine calls it with `keep_glue`, to put the ends it has just
+        glued where they render before Visio recalculates, leaving their glue
+        formulas and records in place. Without it, the end setters write the
+        ends, and free a glued one.
+        """
         if self.begin_x is not None:  # only apply changes to lines and connector shapes
             start_x, start_y = start
             finish_x, finish_y = finish
@@ -1886,10 +1917,12 @@ class Shape:
             # Check whether shape is a connector based on name in known languages
             is_connector = self.universal_name == "Dynamic connector"
 
-            self._write_cell("BeginX", v=xml_value(start_x), keep_formula=True)
-            self._write_cell("BeginY", v=xml_value(start_y), keep_formula=True)
-            self._write_cell("EndX", v=xml_value(finish_x), keep_formula=True)
-            self._write_cell("EndY", v=xml_value(finish_y), keep_formula=True)
+            if keep_glue:
+                for name, value in (("BeginX", start_x), ("BeginY", start_y), ("EndX", finish_x), ("EndY", finish_y)):
+                    self._write_cell(name, v=xml_value(value), keep_formula=True)
+            else:
+                self.begin_x, self.begin_y = start_x, start_y
+                self.end_x, self.end_y = finish_x, finish_y
             width = finish_x - start_x
             height = finish_y - start_y if is_connector else 0.0
             self._write_cell("Width", v=xml_value(width), keep_formula=True)

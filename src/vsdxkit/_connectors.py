@@ -74,8 +74,12 @@ class _ConnectorPage(Protocol):
         """Append a ``Connect`` record to the page."""
         ...
 
-    def _remove_connect_records(self, connector_ids: Iterable[str | int]) -> None:
-        """Remove Connect records leading from any of these connectors."""
+    def _remove_connect_records(self, connector_ids: Iterable[str | int], *, from_cell: str | None = None) -> None:
+        """Remove Connect records leading from any of these connectors.
+
+        With `from_cell`, only a record whose ``FromCell`` equals it is
+        removed.
+        """
         ...
 
 
@@ -131,10 +135,10 @@ class _ConnectorShape(_EndShape, Protocol):
         """The y of the connector's end point. Behaves as `begin_x` does."""
         ...
 
-    def set_start_and_finish(
-        self, start: tuple[float | None, float | None], finish: tuple[float | None, float | None]
+    def _place_ends(
+        self, start: tuple[float | None, float | None], finish: tuple[float | None, float | None], *, keep_glue: bool
     ) -> None:
-        """Move the connector's endpoints to `start` and `finish`, so the file renders sensibly before Visio recalculates."""
+        """Place the connector's ends; the engine passes `keep_glue`, so the glue it has just written stays."""
         ...
 
     def _write_cell(self, name: str, *, v: str | None = None, f: str | None = None, keep_formula: bool = False) -> None:
@@ -311,7 +315,7 @@ def _glue_connector(connector: _ConnectorShape, begin: _End, end: _End, options:
     # endpoints so the file renders sensibly even before Visio recalculates
     start = begin[0].center_x_y if begin else (connector.begin_x, connector.begin_y)
     finish = end[0].center_x_y if end else (connector.end_x, connector.end_y)
-    connector.set_start_and_finish(start, finish)
+    connector._place_ends(start, finish, keep_glue=True)
 
 
 def _retarget_connector(
@@ -386,10 +390,20 @@ def _change_cell(connector: _ConnectorShape, change: CellChange) -> None:
         connector.xml.remove(cell.xml)
 
 
-# what kind of connector a shape is, which floating its ends does not change:
-# a masterless connector has no master to take them back from
-_CONNECTOR_KIND_CELLS = frozenset({"GlueType", "ObjType"})
-"""The cells `_float_ends` leaves alone: a connector's kind, not part of what glue it has."""
+_END_CELLS = {True: frozenset({"BegTrigger", "BeginX", "BeginY"}), False: frozenset({"EndTrigger", "EndX", "EndY"})}
+"""The cells that say how one end is glued, by whether it is the begin end: its trigger and its two coordinates."""
+
+
+def _float_end(connector: _ConnectorShape, *, begin: bool) -> None:
+    """Leave one end of a 1-D shape unglued: its trigger inherits, its coordinates keep their values without their formulas, and its record goes.
+
+    The other end, and the cells that say what kind of connector it is, are
+    left as they are, as dragging one end away in Visio leaves them.
+    """
+    for change in glue_cells(None, None):
+        if change.name in _END_CELLS[begin]:
+            _change_cell(connector, change)
+    connector._page._remove_connect_records({_id(connector)}, from_cell="BeginX" if begin else "EndX")
 
 
 def _float_ends(connector: _ConnectorShape) -> None:
@@ -399,7 +413,8 @@ def _float_ends(connector: _ConnectorShape) -> None:
     original is glued to, but none of its records, and Visio would pull it
     back to them.
     """
-    for change in glue_cells(None, None):
-        if change.name not in _CONNECTOR_KIND_CELLS:
-            _change_cell(connector, change)
+    _float_end(connector, begin=True)
+    _float_end(connector, begin=False)
+    # point glue before 1.0 wrote its begin trigger here; Visio has no such cell
+    _change_cell(connector, CellInherit("BeginTrigger"))
     connector._page._remove_connect_records({_id(connector)})
