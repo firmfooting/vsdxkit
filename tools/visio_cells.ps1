@@ -88,12 +88,18 @@ function Get-LeakedProcessIds {
     )
 }
 
+# CellExistsU's second argument: 0 asks "does this shape have this cell at all",
+# counting one inherited from a master. 1 would ask only about cells stated
+# locally, and a stencil instance states almost none of them. Kept in step
+# with tools/visio_observe.ps1's own $visExistsAnywhere.
+$visExistsAnywhere = 0
+
 function Get-CellRecord {
     param($Shape, $Page, [string]$Name)
 
     $record = [ordered]@{ page = [int]$Page; shape = [int]$Shape.ID; cell = $Name }
     try {
-        if ($Shape.CellExistsU($Name, 0) -eq 0) {
+        if ($Shape.CellExistsU($Name, $visExistsAnywhere) -eq 0) {
             $record.exists = $false
             return $record
         }
@@ -175,8 +181,14 @@ try {
     # unattended run that puts up a dialog does not fail, it hangs.
     $app.AlertResponse = 7
     foreach ($f in $files) {
-        $doc = $app.Documents.OpenEx([string]$f.path, $OpenFlags)
+        # The open and the whole per-file walk share one try/catch, as
+        # visio_observe.ps1's Get-DocumentRecord does: a locked or corrupt
+        # file must cost this file's record, not the batch - without this,
+        # an OpenEx that throws unwinds straight out of the foreach and no
+        # file after it, however clean, is ever reported.
+        $doc = $null
         try {
+            $doc = $app.Documents.OpenEx([string]$f.path, $OpenFlags)
             $cells = @()
             foreach ($c in $f.cells) {
                 $record = $null
@@ -191,8 +203,11 @@ try {
             }
             $out += [ordered]@{ path = [string]$f.path; cells = @($cells); connects = @(Get-ConnectRecords -Document $doc) }
         }
+        catch {
+            $out += [ordered]@{ path = [string]$f.path; error = $_.Exception.Message }
+        }
         finally {
-            try { $doc.Close() } catch { }
+            if ($null -ne $doc) { try { $doc.Close() } catch { } }
         }
     }
 }
@@ -220,7 +235,13 @@ finally {
     }
 }
 
-$out | ConvertTo-Json -Depth 10 -Compress
+# -InputObject @($out), not `$out | ConvertTo-Json`: piping unrolls the
+# array element by element, so a batch of exactly one file loses its
+# arrayness and ConvertTo-Json emits a bare object instead of a one-element
+# array - `-AsArray` would fix that but needs PowerShell 7, and this has to
+# run under Windows PowerShell 5.1 too. Passed as -InputObject, the whole
+# array binds as one argument and is never unrolled.
+ConvertTo-Json -InputObject @($out) -Depth 10 -Compress
 
 # Explicit, so that $LASTEXITCODE is always set for the caller to read: a
 # script that falls off its end otherwise leaves whatever code ran last

@@ -103,6 +103,40 @@ def test_judge_fails_a_case_visio_did_not_report():
     assert len(tool.judge(expected, [])) == 1
 
 
+def test_judge_fails_closed_on_a_case_with_no_checks():
+    """The check exists so a bad write can fail it; an empty case is one nothing Visio says can fail.
+
+    The payload reports the file cleanly, with nothing wrong: an empty case
+    must still fail on its own account, not merely inherit some other cause.
+    """
+    tool = _tool()
+    expected = {"a": tool.Case("a", ())}
+
+    [failure] = tool.judge(expected, [_payload("a", [])])
+    assert "a" in failure
+
+
+def test_judge_fails_every_check_when_visio_could_not_open_the_file():
+    """A locked or corrupt file costs every check of its case, each line naming the error."""
+    tool = _tool()
+    expected = {"a": tool.Case("a", (tool.CellCheck(1, 3, "Width", 2.5),), (tool.GlueCheck(1, 6, frozenset({("EndX", 2)})),))}
+    payload = [{"path": "C:\\x\\a.vsdx", "error": "the file is locked by another instance"}]
+
+    failures = tool.judge(expected, payload)
+
+    assert len(failures) == 2
+    assert all("locked" in failure for failure in failures)
+
+
+def test_judge_handles_a_single_document_collapsed_to_a_bare_dict():
+    """ConvertTo-Json collapses a one-element array into a bare object; `_documents` undoes that."""
+    tool = _tool()
+    expected = {"a": tool.Case("a", (tool.CellCheck(1, 3, "Width", 2.5),))}
+    payload = _payload("a", [_cell(1, 3, "Width", 2.5, 2.5)])
+
+    assert tool.judge(expected, tool._documents(payload)) == []
+
+
 def test_every_case_says_what_visio_must_show(tmp_path):
     """A case with no checks is a case the check cannot fail on."""
     tool = _tool()
