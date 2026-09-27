@@ -6,6 +6,8 @@ row of its own and leave the master's row, which every other instance reads,
 as it was.
 """
 
+import xml.etree.ElementTree as ET
+
 import pytest
 
 from vsdxkit import namespace
@@ -88,6 +90,25 @@ def test_two_wrappers_of_one_inherited_row_write_one_override_row(conn_a):
     assert first.xml is second.xml is own[0]
     # the cell the first wrote is read through the second, and the master's Y still inherited
     assert (second.x, second.y) == (5.0, 0.0)
+    assert _master_row(conn_a, "1").attrib == {"T": "MoveTo", "IX": "1"}
+
+
+def test_clearing_del_bool_through_a_second_wrapper_clears_the_row_the_first_deleted(conn_a):
+    """The second wrapper still reads the master's row, which has no Del; the clear must reach the instance's row (#454).
+
+    It read the master's unset Del, took the no-op return, and left row 1
+    deleted, so a fresh wrapper no longer showed it.
+    """
+    other = conn_a.page.shapes.by_text("Conn A")
+    first, second = conn_a.geometry.rows["1"], other.geometry.rows["1"]
+
+    first.del_bool = True
+    second.del_bool = False
+
+    fresh = conn_a.page.shapes.by_text("Conn A")
+    assert "1" in fresh.geometry.rows
+    own = [row for row in conn_a.geometry.xml.findall(f"{namespace}Row") if row.get("IX") == "1"]
+    assert [row.get("Del") for row in own] == [None]
     assert _master_row(conn_a, "1").attrib == {"T": "MoveTo", "IX": "1"}
 
 
@@ -223,17 +244,77 @@ def test_a_moved_rows_inh_cell_takes_the_formula_from_up_the_whole_master_chain(
     assert _cell_attributes(moved) == {"X": ("10.90551181102363", "Width*1"), "Y": ("4.133858267716532", "Height*1")}
 
 
+def _own_rows(connector) -> list[tuple[dict[str, str], list[str | None]]]:
+    """Each Row element of the connector's own section, in document order: its attributes and its cells' names."""
+    return [
+        (dict(row.attrib), [cell.get("N") for cell in row.findall(f"{namespace}Cell")])
+        for row in connector.geometry.xml.findall(f"{namespace}Row")
+    ]
+
+
+def test_a_row_moved_away_and_back_reloads_as_it_was(vsdx_copy):
+    """Row 1 moved to 7 leaves a bare Del="1" row at 1; moving it back takes that row's place (#454).
+
+    The bare row counted as a row holding IX 1, so the move back raised, and
+    nothing in the API could remove it: a reindex could not be undone.
+    """
+    path = vsdx_copy("test9_rect_and_line.vsdx")
+    document = Document.open(path)
+    connector = document.pages[0].shapes.by_text("Conn A")
+    original = _rows_view(connector)
+    row = connector.geometry.rows["1"]
+
+    row.index = 7
+    row.index = 1
+    document.save(path)
+
+    reloaded = Document.open(path).pages[0].shapes.by_text("Conn A")
+    assert _rows_view(reloaded) == original
+    assert _own_rows(reloaded) == [
+        ({"T": "MoveTo", "IX": "1"}, ["X", "Y"]),
+        ({"T": "LineTo", "IX": "2"}, ["X", "Y"]),
+        ({"T": "LineTo", "IX": "3", "Del": "1"}, []),
+    ]
+
+
+def test_a_row_moved_onto_a_bare_deleted_row_overrides_the_masters_row_there(vsdx_copy):
+    """Conn A's own row IX 3 is a bare Del="1" row hiding the master's row 3: the index is free, and the moved row takes its place.
+
+    The moved row becomes the override of the master's row 3, so a cell of
+    the master's there that the moved row lacks, here one named ``A``, is
+    read through it, as Visio reads it.
+    """
+    path = vsdx_copy("test9_rect_and_line.vsdx")
+    document = Document.open(path)
+    connector = document.pages[0].shapes.by_text("Conn A")
+    _master_row(connector, "3").append(ET.Element(f"{namespace}Cell", {"N": "A", "V": "0.5"}))
+    view = _rows_view(connector)
+    assert "3" not in view
+    row_type, cells = view["2"]
+
+    connector.geometry.rows["2"].index = 3
+    written = _rows_view(connector)
+    document.save(path)
+
+    reloaded = Document.open(path).pages[0].shapes.by_text("Conn A")
+    assert written == {"1": view["1"], "3": (row_type, {**cells, "A": ("0.5", None)})}
+    assert _rows_view(reloaded) == written
+    assert _own_rows(reloaded) == [({"T": "LineTo", "IX": "2", "Del": "1"}, []), ({"T": "LineTo", "IX": "3"}, ["X", "Y"])]
+
+
 def test_moving_a_row_onto_an_index_a_deleted_row_holds_raises(conn_a):
-    """Conn A's own row IX 3 carries Del="1": hidden from `rows`, but the index is still taken (#273)."""
-    geometry = conn_a.geometry
-    assert "3" not in geometry.rows
+    """A Del="1" row that keeps its cells is a row the user deleted: hidden from `rows`, but the index is still taken (#273, #454)."""
+    conn_a.geometry.rows["2"].del_bool = True
+    geometry = conn_a.page.shapes.by_text("Conn A").geometry
+    assert "2" not in geometry.rows
     rows_before = [dict(row.attrib) for row in geometry.xml.findall(f"{namespace}Row")]
 
     with pytest.raises(InvalidOperationError):
-        geometry.rows["2"].index = 3
+        geometry.rows["1"].index = 2
 
     assert [dict(row.attrib) for row in geometry.xml.findall(f"{namespace}Row")] == rows_before
-    assert geometry.rows["2"].index == "2"
+    assert geometry.rows["1"].index == "1"
+    assert geometry.rows["1"].inherited
 
 
 def test_reindexing_a_row_onto_its_own_index_is_a_no_op(conn_a):
