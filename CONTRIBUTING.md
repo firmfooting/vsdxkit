@@ -140,6 +140,18 @@ cases, each beside the untouched fixture it started from as
 alone. It fails when Visio shows anything but the written value for a cell, on
 open or after it recalculates.
 
+To see what Visio draws, run `python tools/visio_shots.py run --against main`.
+It builds the cases with this tree's library and with `main`'s. Visio then
+exports each case's page, the `.before` file and `main`'s build beside it, as
+PNG and SVG. It exports once on open and once after the checked cells
+recalculate. The SVGs are compared shape by shape. The run fails when a case
+is drawn differently after recalculating, because the file's cached values
+were stale when it opened. Each run is recorded under `.hermes/visio-shots/`:
+commit its manifest, summary and SVGs with the change. The PNGs and an HTML
+report with every image go under `.hermes/visio-shots/local/`, which git
+ignores. `python tools/visio_shots.py diff-runs <run-a> <run-b>` lists the
+cases whose drawing changed between two runs.
+
 ##### The harness
 
 `tools/visio_verify.py` compares two accounts of the same document: what the
