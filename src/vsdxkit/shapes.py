@@ -668,9 +668,12 @@ class DataProperty(InheritedRow, ShapePart):
     def value(self, value: float | str | None) -> None:
         """Set the value of the data property, creating the cell if absent.
 
-        Writing is also where a placeholder ``No Formula`` formula is cleared:
-        leaving it beside a new value would make the cell disagree with itself,
-        and Visio may not show the value at all. Upstream dave-howard/vsdx#79.
+        The value wins: writing removes the ``Value`` cell's formula, whatever
+        it is, as typing into the Shape Data window does in Visio. Visio
+        recalculates a formula on open, so one left beside the value, a
+        ``GUARD`` or a ``CONTAINERSHEETREF`` included, would replace it. That
+        covers the placeholder ``No Formula`` as well, which left beside a
+        value makes the cell disagree with itself. Upstream dave-howard/vsdx#79.
 
         The cell's declared unit is left alone. Stamping ``STR`` over it would
         retype a date or numeric property as a string, and a cell created here
@@ -696,8 +699,7 @@ class DataProperty(InheritedRow, ShapePart):
             value_cell.text = text  # this row carries its value as inner text
         else:
             value_cell.attrib["V"] = text
-        if value_cell.attrib.get("F") == "No Formula":
-            del value_cell.attrib["F"]
+        value_cell.attrib.pop("F", None)  # the value wins, as in Visio (#300)
 
     def get_attribute(self, name: str, attrib: str) -> str | None:
         """Get the attribute value of the cell element"""
