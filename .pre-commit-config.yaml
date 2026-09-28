@@ -1,8 +1,9 @@
 # Git hooks, run by prek (https://prek.j178.dev/). The file keeps the
 # `.pre-commit-config.yaml` name because that is the format prek reads.
 # Install once with `uv run prek install`; run everything with
-# `uv run prek run --all-files`. The pre-push shim also runs the test suite. CI runs the same command through firmfooting/.github's
-# prek.yml, so a hook can never disagree with CI.
+# `uv run prek run --all-files`. The pre-push shim also runs the test suite.
+# CI runs the same command in .github/workflows/prek.yml, so a hook can never
+# disagree with CI.
 #
 # The lint, type and workflow hooks are local and call the tools pinned in the
 # `lint` group through `uv run`, so a hook cannot drift from the version CI uses.

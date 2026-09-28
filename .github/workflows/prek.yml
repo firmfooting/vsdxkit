@@ -1,7 +1,7 @@
 # Every pre-commit-stage hook in .pre-commit-config.yaml over the whole tree,
 # so CI and `uv run prek run --all-files` are the same check. The same job as
-# firmfooting/.github's shared prek.yml, written out here because
-# tools/check_action_pins.py accepts only a tagged reusable-workflow pin.
+# firmfooting/.github's shared prek.yml, written out here because the shared
+# job runs whatever uv is current, and this repository pins uv in every job.
 name: prek
 
 on:
