@@ -1,44 +1,91 @@
 # #89 Byte-Preserving Atomic Save — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make `PackageStore` the one authoritative copy of an open package, so a save writes every member exactly once through a single atomic writer: untouched parts go out as the bytes they arrived as, and changed parts are serialised once.
+**Goal:** Make `PackageStore` the one authoritative copy of an open package, so
+a save writes every member exactly once through a single atomic writer:
+untouched parts go out as the bytes they arrived as, and changed parts are
+serialised once.
 
-**Architecture:** `PackageStore` (landed in #355) gains `remove` and `save`. `VisioFile` opens a `PackageStore` and reads every XML part through `read_xml`, so the trees it mutates *are* the store's trees. `zip_file_contents` becomes a transitional `MutableMapping` view over the store (#91 deletes it). The re-serialise-everything block in `save_vsdx` goes, along with the eager `masters.xml` writes. Wholesale tree replacements (`page.xml = …`, `vis.app_xml = …`) write through to the store.
+**Architecture:** `PackageStore` (landed in #355) gains `remove` and `save`.
+`VisioFile` opens a `PackageStore` and reads every XML part through `read_xml`,
+so the trees it mutates *are* the store's trees. `zip_file_contents` becomes a
+transitional `MutableMapping` view over the store (#91 deletes it). The
+re-serialise-everything block in `save_vsdx` goes, along with the eager
+`masters.xml` writes. Wholesale tree replacements (`page.xml = …`,
+`vis.app_xml = …`) write through to the store.
 
-**Tech Stack:** Python ≥3.10, `xml.etree.ElementTree`, `zipfile`, pytest, ruff, pyrefly (strict), uv.
+**Tech Stack:** Python ≥3.10, `xml.etree.ElementTree`, `zipfile`, pytest, ruff,
+pyrefly (strict), uv.
 
-**Spec:** issue #89 (scope + acceptance criteria), `.hermes/plans/2026-09-12_simplification-usability-refactor.md` §"Authoritative package representation" and §"Phase 1 — PackageStore". Read #360's resolution and the #89 comment first. Removing the unconditional rewrites unmasks any part serialised outside `xmlio`, and #364 fixed the two known ones.
+**Spec:** issue #89 (scope + acceptance criteria),
+`.hermes/plans/2026-09-12_simplification-usability-refactor.md` §"Authoritative
+package representation" and §"Phase 1 — PackageStore". Read #360's resolution
+and the #89 comment first. Removing the unconditional rewrites unmasks any part
+serialised outside `xmlio`, and #364 fixed the two known ones.
 
 ## Global Constraints
 
-- Every tree becomes archive bytes through `xmlio.serialise_part` and nowhere else (#360/#364).
-- `PackageStore` names are OPC part names (`/visio/document.xml`). They are never repaired: a name without the leading slash raises `ValueError`.
-- An explicit save target does not rebind the source: `store.source` and `VisioFile.filename` are unchanged by `save(target)`.
-- The save is atomic: a same-directory temporary file, then `os.replace`, and the source's mode is kept (existing `test_save_destinations.py` must pass unmodified, including the `zipfile.ZipFile.writestr` monkeypatch test, so members are written with `writestr`).
-- The public API is unchanged: `zip_file_contents` keeps working as a mapping of `f"{vis.directory}/{member}"` → `io.BytesIO` until #91.
-- Gate before every commit: `uv run --no-sync python -m pytest tests -q`, `uv run --no-sync ruff check src tests tools`, `uv run --no-sync ruff format --check src tests tools`, `uv run --no-sync pyrefly check src/vsdxkit --min-severity warn --output-format min-text`.
-- House style: docstrings say *why*, in full sentences, the way `package.py` does. Tests carry a docstring saying which production change would make them fail. Conventional-commit subjects (`feat:`, `fix:`, `refactor:`, `test:`).
-- **Check Codex's inline comments before merging any PR in this stack:** `gh api repos/firmfooting/vsdxkit/pulls/<n>/comments`, and confirm the review ran on the head commit.
+- Every tree becomes archive bytes through `xmlio.serialise_part` and nowhere
+  else (#360/#364).
+- `PackageStore` names are OPC part names (`/visio/document.xml`). They are
+  never repaired: a name without the leading slash raises `ValueError`.
+- An explicit save target does not rebind the source: `store.source` and
+  `VisioFile.filename` are unchanged by `save(target)`.
+- The save is atomic: a same-directory temporary file, then `os.replace`, and
+  the source's mode is kept (existing `test_save_destinations.py` must pass
+  unmodified, including the `zipfile.ZipFile.writestr` monkeypatch test, so
+  members are written with `writestr`).
+- The public API is unchanged: `zip_file_contents` keeps working as a mapping of
+  `f"{vis.directory}/{member}"` → `io.BytesIO` until #91.
+- Gate before every commit: `uv run --no-sync python -m pytest tests -q`, `uv
+  run --no-sync ruff check src tests tools`, `uv run --no-sync ruff format
+  --check src tests tools`, `uv run --no-sync pyrefly check src/vsdxkit
+  --min-severity warn --output-format min-text`.
+- House style: docstrings say *why*, in full sentences, the way `package.py`
+  does. Tests carry a docstring saying which production change would make them
+  fail. Conventional-commit subjects (`feat:`, `fix:`, `refactor:`, `test:`).
+- **Check Codex's inline comments before merging any PR in this stack:** `gh api
+  repos/firmfooting/vsdxkit/pulls/<n>/comments`, and confirm the review ran on
+  the head commit.
 
 ## Decisions made here (flag in review if you disagree)
 
-1. **Members are written `ZIP_DEFLATED`.** Today's writer uses `zipfile`'s default, `ZIP_STORED`. Every fixture arrives deflated (307/307 members), and saving `test1.vsdx` grows it from 15 KB to 59 KB. Byte preservation is about member *bytes*, and this only changes the container. Task 2 pins it.
-2. **Page objects keep their `_xml` reference** instead of looking the tree up in the store on every access. A caller who still holds a removed `Page` keeps a working, detached tree, and the setter writes through only while the page's own part is still in the package.
-3. **`#366` folds in here** (`masters.xml.rels` becomes a tree). **`#367` does not:** `_bootstrap_masters` still has its test, and deciding whether it is redundant is separate.
+1. **Members are written `ZIP_DEFLATED`.** Today's writer uses `zipfile`'s
+   default, `ZIP_STORED`. Every fixture arrives deflated (307/307 members), and
+   saving `test1.vsdx` grows it from 15 KB to 59 KB. Byte preservation is about
+   member *bytes*, and this only changes the container. Task 2 pins it.
+2. **Page objects keep their `_xml` reference** instead of looking the tree up
+   in the store on every access. A caller who still holds a removed `Page` keeps
+   a working, detached tree, and the setter writes through only while the page's
+   own part is still in the package.
+3. **`#366` folds in here** (`masters.xml.rels` becomes a tree). **`#367` does
+   not:** `_bootstrap_masters` still has its test, and deciding whether it is
+   redundant is separate.
 
 ## Review Focus
 
-1. **A caller replaces a part wholesale** (`page.xml = tree` as Jinja rendering does, or `vis.app_xml = tree`). Once `save_vsdx` stops rewriting, only the write-through setters get that onto disk. → Task 5 tests.
-2. **A caller still holding a removed `Page`** sets `page.xml`. It must not put an orphan part back into the package. → Task 5 test.
-3. **Two saves with a mutation in between.** The second save must carry the second mutation, because comparing against a baseline must not "use up" the change. → Task 7 test.
-4. **Save-as then save in place.** The second save must write to the original source, not to the save-as target. → Task 2 (store) and Task 7 (`VisioFile`) tests.
-5. **A failure mid-write.** The target keeps its old bytes, and no `.tmp` file is left in the directory. → Task 2 test.
+1. **A caller replaces a part wholesale** (`page.xml = tree` as Jinja rendering
+   does, or `vis.app_xml = tree`). Once `save_vsdx` stops rewriting, only the
+   write-through setters get that onto disk. → Task 5 tests.
+2. **A caller still holding a removed `Page`** sets `page.xml`. It must not put
+   an orphan part back into the package. → Task 5 test.
+3. **Two saves with a mutation in between.** The second save must carry the
+   second mutation, because comparing against a baseline must not "use up" the
+   change. → Task 7 test.
+4. **Save-as then save in place.** The second save must write to the original
+   source, not to the save-as target. → Task 2 (store) and Task 7 (`VisioFile`)
+   tests.
+5. **A failure mid-write.** The target keeps its old bytes, and no `.tmp` file
+   is left in the directory. → Task 2 test.
 
 ## Stack layout (`gh stack`, based on `main`)
 
 | PR | Branch | Tasks | Closes |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | 1 | `feat/89-package-store-save` | 1–2 | — |
 | 2 | `refactor/89-visiofile-reads-through-store` | 3–4 | — |
 | 3 | `feat/89-byte-preserving-save` | 5–7 | #89, #366 |
@@ -53,20 +100,26 @@ gh stack add feat/89-byte-preserving-save
 gh stack submit --auto --open                     # then `gh pr edit <n> --title … --body-file …` per PR
 ```
 
-PR 2 is a pure refactor: behaviour is identical and the suite passes unchanged. PR 3 is the behavioural change, so it's the one to review hardest.
+PR 2 is a pure refactor: behaviour is identical and the suite passes unchanged.
+PR 3 is the behavioural change, so it's the one to review hardest.
 
 ---
 
 ### Task 1: `PackageStore.remove`
 
 **Files:**
+
 - Modify: `src/vsdxkit/package.py` (class `PackageStore`, after `write_xml`)
 - Test: `tests/test_package_store.py`
 
 **Interfaces:**
-- Produces: `PackageStore.remove(name: str) -> None`. Raises `ValueError` for a name that is not a part name, and `KeyError(name)` for an absent part.
 
-- [ ] **Step 1: Write the failing tests** (append to the "part names"/write section of `tests/test_package_store.py`, and add `remove` to the existing parametrised name-check test):
+- Produces: `PackageStore.remove(name: str) -> None`. Raises `ValueError` for a
+  name that is not a part name, and `KeyError(name)` for an absent part.
+
+- [ ] **Step 1: Write the failing tests** (append to the "part names"/write
+      section of `tests/test_package_store.py`, and add `remove` to the existing
+      parametrised name-check test):
 
 ```python
 # in test_every_way_into_the_store_checks_the_name's parametrize list, add:
@@ -95,8 +148,9 @@ def test_removing_an_absent_part_is_a_key_error(store: PackageStore):
 ```
 
 - [ ] **Step 2: Run to verify failure**
-Run: `uv run --no-sync python -m pytest tests/test_package_store.py -q -k "remove or checks_the_name"`
-Expected: FAIL with `AttributeError: 'PackageStore' object has no attribute 'remove'`
+Run: `uv run --no-sync python -m pytest tests/test_package_store.py -q -k
+"remove or checks_the_name"` Expected: FAIL with `AttributeError: 'PackageStore'
+object has no attribute 'remove'`
 
 - [ ] **Step 3: Implement**
 
@@ -122,12 +176,17 @@ Expected: FAIL with `AttributeError: 'PackageStore' object has no attribute 'rem
 ### Task 2: `PackageStore.save` — the single archive writer
 
 **Files:**
-- Modify: `src/vsdxkit/package.py` (imports: `contextlib`, `shutil`, `tempfile`; new method `save` on `PackageStore`)
+
+- Modify: `src/vsdxkit/package.py` (imports: `contextlib`, `shutil`, `tempfile`;
+  new method `save` on `PackageStore`)
 - Test: `tests/test_package_store_save.py` (new)
 
 **Interfaces:**
+
 - Consumes: `PackageStore.names()`, `PackageStore.read_bytes()`, `PackageStore.source`.
-- Produces: `PackageStore.save(target: str | os.PathLike[str] | None = None) -> Path`, which returns the absolute path it wrote. With `target=None` it writes over `self.source`. It never changes `self.source`.
+- Produces: `PackageStore.save(target: str | os.PathLike[str] | None = None) ->
+  Path`, which returns the absolute path it wrote. With `target=None` it writes
+  over `self.source`. It never changes `self.source`.
 
 - [ ] **Step 1: Write the failing tests** in `tests/test_package_store_save.py`:
 
@@ -272,7 +331,8 @@ def test_a_new_target_takes_the_source_mode(source, tmp_path):
 Run: `uv run --no-sync python -m pytest tests/test_package_store_save.py -q`
 Expected: FAIL, `AttributeError: 'PackageStore' object has no attribute 'save'`
 
-- [ ] **Step 3: Implement** (in `PackageStore`, after `remove`; add `import contextlib, shutil, tempfile` at the top of `package.py`):
+- [ ] **Step 3: Implement** (in `PackageStore`, after `remove`; add `import
+      contextlib, shutil, tempfile` at the top of `package.py`):
 
 ```python
     def save(self, target: str | os.PathLike[str] | None = None) -> Path:
@@ -308,26 +368,40 @@ Expected: FAIL, `AttributeError: 'PackageStore' object has no attribute 'save'`
         return destination
 ```
 
-Note: `test_save_with_no_target_writes_over_the_source` compares against `source.resolve()`. If `tmp_path` involves a symlink and `abspath` differs from `resolve`, compare `os.path.abspath(source)` instead. Don't change the method to `resolve()`, which would follow a symlinked target and replace the link's destination instead of the link.
+Note: `test_save_with_no_target_writes_over_the_source` compares against
+`source.resolve()`. If `tmp_path` involves a symlink and `abspath` differs from
+`resolve`, compare `os.path.abspath(source)` instead. Don't change the method to
+`resolve()`, which would follow a symlinked target and replace the link's
+destination instead of the link.
 
 - [ ] **Step 4: Run to verify pass**, then the full gate (Global Constraints).
-- [ ] **Step 5: Commit**: `feat: save the package store through one atomic archive writer`
-- [ ] **Step 6: Open PR 1** (`gh stack submit --auto --open`, then edit title/body). The body names the ZIP_DEFLATED decision and says nothing calls `save` yet.
+- [ ] **Step 5: Commit**: `feat: save the package store through one atomic
+      archive writer`
+- [ ] **Step 6: Open PR 1** (`gh stack submit --auto --open`, then edit
+      title/body). The body names the ZIP_DEFLATED decision and says nothing
+      calls `save` yet.
 
 ---
 
 ### Task 3: the transitional `zip_file_contents` view
 
 **Files:**
+
 - Create: `src/vsdxkit/zip_contents.py`
-- Modify: `src/vsdxkit/xmlio.py` (widen `file_to_xml`, `xml_to_file`, `require_xml_tree`, `require_root` to take `Mapping` / `MutableMapping` rather than `dict`)
+- Modify: `src/vsdxkit/xmlio.py` (widen `file_to_xml`, `xml_to_file`,
+  `require_xml_tree`, `require_root` to take `Mapping` / `MutableMapping` rather
+  than `dict`)
 - Test: `tests/test_zip_contents_view.py` (new)
 
 **Interfaces:**
+
 - Consumes: `PackageStore.names/part/read_bytes/write_bytes/remove`.
 - Produces:
-  - `part_name_for_path(directory: str, path: str) -> str | None`: `f"{directory}/visio/x.xml"` → `"/visio/x.xml"`, or None when `path` is not under `directory`.
-  - `class ZipFileContentsView(MutableMapping[str, io.BytesIO])` with `__init__(self, store: PackageStore, directory: str)`.
+  - `part_name_for_path(directory: str, path: str) -> str | None`:
+    `f"{directory}/visio/x.xml"` → `"/visio/x.xml"`, or None when `path` is not
+    under `directory`.
+  - `class ZipFileContentsView(MutableMapping[str, io.BytesIO])` with
+    `__init__(self, store: PackageStore, directory: str)`.
 
 - [ ] **Step 1: Write the failing tests** in `tests/test_zip_contents_view.py`:
 
@@ -418,7 +492,8 @@ def test_a_missing_key_is_a_key_error(view):
         view["/elsewhere/visio/document.xml"]
 ```
 
-- [ ] **Step 2: Run to verify failure.** Expected: `ModuleNotFoundError: No module named 'vsdxkit.zip_contents'`
+- [ ] **Step 2: Run to verify failure.** Expected: `ModuleNotFoundError: No
+      module named 'vsdxkit.zip_contents'`
 
 - [ ] **Step 3: Implement** `src/vsdxkit/zip_contents.py`:
 
@@ -498,29 +573,47 @@ class ZipFileContentsView(MutableMapping[str, io.BytesIO]):
         return len(self._store.names())
 ```
 
-In `xmlio.py`, change the annotations only: `file_to_xml(filename: str, zip_file_contents: Mapping[str, io.BytesIO])`, `require_xml_tree(..., zip_file_contents: Mapping[...])`, `require_root(..., Mapping[...])`, and `xml_to_file(..., zip_file_contents: MutableMapping[str, io.BytesIO])`, importing from `collections.abc`.
+In `xmlio.py`, change the annotations only: `file_to_xml(filename: str,
+zip_file_contents: Mapping[str, io.BytesIO])`, `require_xml_tree(...,
+zip_file_contents: Mapping[...])`, `require_root(..., Mapping[...])`, and
+`xml_to_file(..., zip_file_contents: MutableMapping[str, io.BytesIO])`,
+importing from `collections.abc`.
 
 - [ ] **Step 4: Run to verify pass**, then the full gate.
-- [ ] **Step 5: Commit** — `refactor: add a zip_file_contents view over the package store`
+- [ ] **Step 5: Commit** — `refactor: add a zip_file_contents view over the
+      package store`
 
 ---
 
 ### Task 4: `VisioFile` opens a `PackageStore` and reads its trees through it
 
-This task is behaviour-identical: `save_vsdx` keeps its rewrites, and only the storage underneath changes. The whole suite must pass **without editing any existing test**.
+This task is behaviour-identical: `save_vsdx` keeps its rewrites, and only the
+storage underneath changes. The whole suite must pass **without editing any
+existing test**.
 
 **Files:**
-- Modify: `src/vsdxkit/vsdxfile.py`: `__init__` (drop `self.zip_file_contents = {}`), `_load_zip_file_contents_to_memory`, `_save_zip_file_contents_to_disk` (delete; `save_vsdx` calls the store), `load_pages`, `load_master_pages`, `remove_page_by_index`, `save_vsdx`'s empty check. Add helpers `_part_name`, `_read_part_xml`, `_require_part_xml`.
-- Modify: `src/vsdxkit/masters.py`: the mixin annotation `zip_file_contents: MutableMapping[str, io.BytesIO]`, declare `_package: PackageStore` and `_read_part_xml`, and use `_read_part_xml` at the rels read (line ~91) and the new-master read (line ~147).
+
+- Modify: `src/vsdxkit/vsdxfile.py`: `__init__` (drop `self.zip_file_contents =
+  {}`), `_load_zip_file_contents_to_memory`, `_save_zip_file_contents_to_disk`
+  (delete; `save_vsdx` calls the store), `load_pages`, `load_master_pages`,
+  `remove_page_by_index`, `save_vsdx`'s empty check. Add helpers `_part_name`,
+  `_read_part_xml`, `_require_part_xml`.
+- Modify: `src/vsdxkit/masters.py`: the mixin annotation `zip_file_contents:
+  MutableMapping[str, io.BytesIO]`, declare `_package: PackageStore` and
+  `_read_part_xml`, and use `_read_part_xml` at the rels read (line ~91) and the
+  new-master read (line ~147).
 - Test: `tests/test_visiofile_package_store.py` (new)
 
 **Interfaces:**
+
 - Consumes: Task 1–3 APIs.
 - Produces (on `VisioFile`):
   - `self._package: PackageStore`
   - `self.zip_file_contents: ZipFileContentsView`
-  - `_part_name(self, path: str) -> str`: the pseudo-path to the part name. Raises `ValueError` if the path is not under `self.directory`.
-  - `_read_part_xml(self, path: str) -> ET.ElementTree[ET.Element] | None`: the store's own (promoted) tree.
+  - `_part_name(self, path: str) -> str`: the pseudo-path to the part name.
+    Raises `ValueError` if the path is not under `self.directory`.
+  - `_read_part_xml(self, path: str) -> ET.ElementTree[ET.Element] | None`: the
+    store's own (promoted) tree.
   - `_require_part_xml(self, path: str, description: str) -> ET.ElementTree[ET.Element]`
 
 - [ ] **Step 1: Write the failing tests** in `tests/test_visiofile_package_store.py`:
@@ -563,7 +656,8 @@ def test_zip_file_contents_is_a_view_of_the_store(vsdx_copy):
         assert list(vis.zip_file_contents) == [f"{vis.directory}{name}" for name in vis._package.names()]
 ```
 
-- [ ] **Step 2: Run to verify failure.** Expected: `AttributeError: 'VisioFile' object has no attribute '_package'`.
+- [ ] **Step 2: Run to verify failure.** Expected: `AttributeError: 'VisioFile'
+      object has no attribute '_package'`.
 
 - [ ] **Step 3: Implement.** Key edits:
 
@@ -599,33 +693,71 @@ from .zip_contents import ZipFileContentsView, part_name_for_path
         return tree
 ```
 
-Then, in `load_pages` / `load_master_pages`, replace every `file_to_xml(p, self.zip_file_contents)` with `self._read_part_xml(p)`, every `require_xml_tree(p, self.zip_file_contents, d)` with `self._require_part_xml(p, d)`, and every `require_root(p, self.zip_file_contents, d)` with `require_element(self._require_part_xml(p, d).getroot(), d)`. In `load_pages`, `rels` and `self.pages_xml_rels` must now be **one** tree, and likewise `pages` and `self.pages_xml`, so read each once and take `.getroot()`.
+Then, in `load_pages` / `load_master_pages`, replace every `file_to_xml(p,
+self.zip_file_contents)` with `self._read_part_xml(p)`, every
+`require_xml_tree(p, self.zip_file_contents, d)` with `self._require_part_xml(p,
+d)`, and every `require_root(p, self.zip_file_contents, d)` with
+`require_element(self._require_part_xml(p, d).getroot(), d)`. In `load_pages`,
+`rels` and `self.pages_xml_rels` must now be **one** tree, and likewise `pages`
+and `self.pages_xml`, so read each once and take `.getroot()`.
 
-In `remove_page_by_index`, use `self._package.remove(self._part_name(...))` for the page part, and for its rels part when `page.rels_xml_filename` names a present part.
+In `remove_page_by_index`, use `self._package.remove(self._part_name(...))` for
+the page part, and for its rels part when `page.rels_xml_filename` names a
+present part.
 
-In `save_vsdx`: `if not self._package.names(): raise ValueError("cannot save an empty package")`. The rewrites stay for now, and the final line becomes `self._package.save(target)`. Delete `_save_zip_file_contents_to_disk`, then `grep -rn _save_zip_file_contents_to_disk src tests` must be empty. Remove the `tempfile`, `shutil`, `contextlib` and `zipfile` imports if they're now unused (ruff will say).
+In `save_vsdx`: `if not self._package.names(): raise ValueError("cannot save an
+empty package")`. The rewrites stay for now, and the final line becomes
+`self._package.save(target)`. Delete `_save_zip_file_contents_to_disk`, then
+`grep -rn _save_zip_file_contents_to_disk src tests` must be empty. Remove the
+`tempfile`, `shutil`, `contextlib` and `zipfile` imports if they're now unused
+(ruff will say).
 
-`save_vsdx` must resolve `target` before `self._package.save(target)` exactly as today, so a refused extension still leaves everything untouched.
+`save_vsdx` must resolve `target` before `self._package.save(target)` exactly as
+today, so a refused extension still leaves everything untouched.
 
-- [ ] **Step 4: Run the new tests and then the full gate.** Every existing test must pass unmodified. If one fails, the refactor changed behaviour: fix the code, not the test. The one expected difference is output compression (Task 2); a test asserting file size or `ZIP_STORED` would be updated here, with the reason in the commit message.
+- [ ] **Step 4: Run the new tests and then the full gate.** Every existing test
+      must pass unmodified. If one fails, the refactor changed behaviour: fix
+      the code, not the test. The one expected difference is output compression
+      (Task 2); a test asserting file size or `ZIP_STORED` would be updated
+      here, with the reason in the commit message.
 - [ ] **Step 5: Commit** — `refactor: hold an open document in a PackageStore`
-- [ ] **Step 6: `gh stack add refactor/89-visiofile-reads-through-store` must already have been run before Step 1**, then open PR 2 (title as the commit subject). The body says it's behaviour-identical apart from deflate, and that `save_vsdx` still rewrites every part.
+- [ ] **Step 6: `gh stack add refactor/89-visiofile-reads-through-store` must
+      already have been run before Step 1**, then open PR 2 (title as the commit
+      subject). The body says it's behaviour-identical apart from deflate, and
+      that `save_vsdx` still rewrites every part.
 
 ---
 
 ### Task 5: replacing a part's tree writes through to the store
 
 **Files:**
-- Modify: `src/vsdxkit/vsdxfile.py`: turn `pages_xml`, `pages_xml_rels`, `content_types_xml`, `app_xml`, `document_xml`, `document_xml_rels`, `masters_xml` into properties backed by the store; add `_set_part_xml`; remove their `= None` initialisation in `__init__` and the assignments in `load_pages`/`load_master_pages` (the getters read the store).
-- Modify: `src/vsdxkit/pages.py`: the `Page.xml` setter writes through, and `Page.rels_xml` becomes a property (backing `_rels_xml`) whose setter writes through.
-- Modify: `src/vsdxkit/masters.py`, `src/vsdxkit/templating.py`: change mixin attribute declarations to property stubs if pyrefly requires it.
+
+- Modify: `src/vsdxkit/vsdxfile.py`: turn `pages_xml`, `pages_xml_rels`,
+  `content_types_xml`, `app_xml`, `document_xml`, `document_xml_rels`,
+  `masters_xml` into properties backed by the store; add `_set_part_xml`; remove
+  their `= None` initialisation in `__init__` and the assignments in
+  `load_pages`/`load_master_pages` (the getters read the store).
+- Modify: `src/vsdxkit/pages.py`: the `Page.xml` setter writes through, and
+  `Page.rels_xml` becomes a property (backing `_rels_xml`) whose setter writes
+  through.
+- Modify: `src/vsdxkit/masters.py`, `src/vsdxkit/templating.py`: change mixin
+  attribute declarations to property stubs if pyrefly requires it.
 - Test: `tests/test_visiofile_package_store.py` (extend)
 
 **Interfaces:**
+
 - Produces:
-  - `VisioFile._set_part_xml(self, name: str, tree: ET.ElementTree[ET.Element] | None) -> None`: writes `tree` to part `name` unless the store already holds that very tree object. `None` removes the part if present.
-  - Constants in `vsdxfile.py`: `_PAGES_PART = "/visio/pages/pages.xml"`, `_PAGES_RELS_PART = "/visio/pages/_rels/pages.xml.rels"`, `_CONTENT_TYPES_PART = "/[Content_Types].xml"`, `_APP_PART = "/docProps/app.xml"`, `_DOCUMENT_PART = "/visio/document.xml"`, `_DOCUMENT_RELS_PART = "/visio/_rels/document.xml.rels"`, `_MASTERS_PART = "/visio/masters/masters.xml"`.
-  - `Page._attached(self) -> bool`: True while the page's own part is in its document's package.
+  - `VisioFile._set_part_xml(self, name: str, tree: ET.ElementTree[ET.Element] |
+    None) -> None`: writes `tree` to part `name` unless the store already holds
+    that very tree object. `None` removes the part if present.
+  - Constants in `vsdxfile.py`: `_PAGES_PART = "/visio/pages/pages.xml"`,
+    `_PAGES_RELS_PART = "/visio/pages/_rels/pages.xml.rels"`,
+    `_CONTENT_TYPES_PART = "/[Content_Types].xml"`, `_APP_PART =
+    "/docProps/app.xml"`, `_DOCUMENT_PART = "/visio/document.xml"`,
+    `_DOCUMENT_RELS_PART = "/visio/_rels/document.xml.rels"`, `_MASTERS_PART =
+    "/visio/masters/masters.xml"`.
+  - `Page._attached(self) -> bool`: True while the page's own part is in its
+    document's package.
 
 - [ ] **Step 1: Write the failing tests** (append to `tests/test_visiofile_package_store.py`):
 
@@ -675,7 +807,10 @@ def test_reassigning_the_same_tree_keeps_the_promotion_baseline(vsdx_copy):
         assert vis._package.part("/docProps/app.xml") is before
 ```
 
-- [ ] **Step 2: Run to verify failure.** Expected: the first two fail on the marker assertion, and the "removed page" test passes already or fails on `_attached`. That's fine, since it pins a guard the setter is about to need.
+- [ ] **Step 2: Run to verify failure.** Expected: the first two fail on the
+      marker assertion, and the "removed page" test passes already or fails on
+      `_attached`. That's fine, since it pins a guard the setter is about to
+      need.
 
 - [ ] **Step 3: Implement.**
 
@@ -721,7 +856,9 @@ def test_reassigning_the_same_tree_keeps_the_promotion_baseline(vsdx_copy):
         self._set_part_xml(_MASTERS_PART, None if root is None else ET.ElementTree(root))
 ```
 
-`_pages_filename()` must equal `f"{self.directory}{_PAGES_PART}"`, so keep it and have `load_pages` use the constant's pseudo-path through it. `XmlPart` is imported from `.package`.
+`_pages_filename()` must equal `f"{self.directory}{_PAGES_PART}"`, so keep it
+and have `load_pages` use the constant's pseudo-path through it. `XmlPart` is
+imported from `.package`.
 
 In `pages.py`:
 
@@ -749,17 +886,24 @@ In `pages.py`:
             self.vis._set_part_xml(self.vis._part_name(self.rels_xml_filename), value)
 ```
 
-In `Page.__init__`, set `self._rels_xml = None` in place of `self.rels_xml = None`. The constructor must **not** write to the store: every caller either passes the store's own tree (load, master import) or writes the part itself first (`_create_page`, Task 6).
+In `Page.__init__`, set `self._rels_xml = None` in place of `self.rels_xml =
+None`. The constructor must **not** write to the store: every caller either
+passes the store's own tree (load, master import) or writes the part itself
+first (`_create_page`, Task 6).
 
 - [ ] **Step 4: Run to verify pass**, then the full gate.
-- [ ] **Step 5: Commit**: `feat: write a replaced part tree through to the package store`
+- [ ] **Step 5: Commit**: `feat: write a replaced part tree through to the
+      package store`
 
 ---
 
 ### Task 6: every mutation lands in the store without a save-time rewrite
 
 **Files:**
-- Modify: `src/vsdxkit/vsdxfile.py`, `_create_page`: write the new page part before constructing `Page`, and set `rels_xml_filename` *before* `rels_xml` for a copied page.
+
+- Modify: `src/vsdxkit/vsdxfile.py`, `_create_page`: write the new page part
+  before constructing `Page`, and set `rels_xml_filename` *before* `rels_xml`
+  for a copied page.
 - Modify: `src/vsdxkit/masters.py`: `_ensure_masters_for_shape` and `_bootstrap_masters`.
 - Modify: `src/vsdxkit/pages.py`, `_ensure_page_master_rel`: drop the trailing `xml_to_file`.
 - Test: `tests/test_visiofile_package_store.py` (extend)
@@ -804,13 +948,19 @@ def test_bootstrapping_masters_writes_trees(vsdx_copy):
         assert isinstance(vis._package.part("/visio/masters/_rels/masters.xml.rels"), XmlPart)
 ```
 
-(`VisioFile.copy_page(page, *, index=PagePosition.AFTER, name=None) -> Page` is the public copy API, and it passes `source_page` into `_create_page`.)
+(`VisioFile.copy_page(page, *, index=PagePosition.AFTER, name=None) -> Page` is
+the public copy API, and it passes `source_page` into `_create_page`.)
 
 - [ ] **Step 2: Run to verify failure.**
 
 - [ ] **Step 3: Implement.**
 
-`_create_page`: after building `new_page_xml`, call `self._package.write_xml(self._part_name(new_page_path), new_page_xml)` **before** `Page(...)`. For a copied page, set `new_page.rels_xml_filename` first, then `new_page.rels_xml = ET.ElementTree(copy.deepcopy(source_rels_root))`, whose setter writes it because the page part is already present.
+`_create_page`: after building `new_page_xml`, call
+`self._package.write_xml(self._part_name(new_page_path), new_page_xml)`
+**before** `Page(...)`. For a copied page, set `new_page.rels_xml_filename`
+first, then `new_page.rels_xml =
+ET.ElementTree(copy.deepcopy(source_rels_root))`, whose setter writes it because
+the page part is already present.
 
 `masters.py`, `_ensure_masters_for_shape`:
 
@@ -834,7 +984,10 @@ def test_bootstrapping_masters_writes_trees(vsdx_copy):
         master_page_xml = self._require_part_xml(part_path, "imported master part")
 ```
 
-The `or b""` is only there to satisfy the type. The earlier `source_master_page.filename not in src_vis.zip_file_contents` check guarantees presence, so switch that check to `src_vis._package.part(src_vis._part_name(...)) is None` as well.
+The `or b""` is only there to satisfy the type. The earlier
+`source_master_page.filename not in src_vis.zip_file_contents` check guarantees
+presence, so switch that check to
+`src_vis._package.part(src_vis._part_name(...)) is None` as well.
 
 `_bootstrap_masters`:
 
@@ -848,20 +1001,29 @@ The `or b""` is only there to satisfy the type. The earlier `source_master_page.
         )
 ```
 
-(Remove `self.masters_xml = masters_root`: the property reads it back. Remove the `io` import if it's unused.)
+(Remove `self.masters_xml = masters_root`: the property reads it back. Remove
+the `io` import if it's unused.)
 
-`pages.py`, `_ensure_page_master_rel`: delete the final `if self.rels_xml_filename: xml_to_file(...)` block and its comment. Creating the rels part goes through the `rels_xml` setter, since `rels_xml_filename` is assigned on the line before, which writes it into the store. Update the docstring: "the filename is registered so save_vsdx persists it" becomes "assigning it writes it into the package".
+`pages.py`, `_ensure_page_master_rel`: delete the final `if
+self.rels_xml_filename: xml_to_file(...)` block and its comment. Creating the
+rels part goes through the `rels_xml` setter, since `rels_xml_filename` is
+assigned on the line before, which writes it into the store. Update the
+docstring: "the filename is registered so save_vsdx persists it" becomes
+"assigning it writes it into the package".
 
 - [ ] **Step 4: Run to verify pass**, then the full gate.
-- [ ] **Step 5: Commit**: `fix: keep masters.xml and its rels as trees in the package store` (the body says it closes #366).
+- [ ] **Step 5: Commit**: `fix: keep masters.xml and its rels as trees in the
+      package store` (the body says it closes #366).
 
 ---
 
 ### Task 7: `save_vsdx` stops re-serialising and delegates to the store
 
 **Files:**
+
 - Modify: `src/vsdxkit/vsdxfile.py`, `save_vsdx`: delete every `xml_to_file` rewrite.
-- Modify: `tests/test_namespaces.py`: update docstrings that describe save "re-serialising every page". The assertions stay.
+- Modify: `tests/test_namespaces.py`: update docstrings that describe save
+  "re-serialising every page". The assertions stay.
 - Test: `tests/test_byte_preserving_save.py` (new)
 
 - [ ] **Step 1: Write the failing tests** in `tests/test_byte_preserving_save.py`:
@@ -960,9 +1122,13 @@ def test_a_rendered_template_reaches_disk(vsdx_copy, tmp_path):
     assert b"VsdxkitRendered" in pages
 ```
 
-(`Page.all_shapes` is a property. `test_jinja.vsdx` expects the context keys `date`, `scenario`, `x`, `y`; see `tests/test_jinja.py:15`.)
+(`Page.all_shapes` is a property. `test_jinja.vsdx` expects the context keys
+`date`, `scenario`, `x`, `y`; see `tests/test_jinja.py:15`.)
 
-- [ ] **Step 2: Run to verify failure.** `test_open_and_save_is_byte_identical` should fail for most fixtures, because the rewrites re-serialise pages, content types and so on. `test_one_edit_changes_one_member` fails for the same reason.
+- [ ] **Step 2: Run to verify failure.** `test_open_and_save_is_byte_identical`
+      should fail for most fixtures, because the rewrites re-serialise pages,
+      content types and so on. `test_one_edit_changes_one_member` fails for the
+      same reason.
 
 - [ ] **Step 3: Implement.** `save_vsdx` becomes:
 
@@ -981,7 +1147,22 @@ def test_a_rendered_template_reaches_disk(vsdx_copy, tmp_path):
 
 Then remove any now-unused imports (`xml_to_file`, `require_tree`) that ruff reports.
 
-- [ ] **Step 4: Run the new tests, then the full gate.** Treat any existing-test failure as a mutation site Task 6 missed. The symptom is a change that no longer reaches disk. Find the site with `grep -rn "ET.ElementTree(\|= ET.ElementTree\|xml_to_file\|zip_file_contents\[" src/vsdxkit` and route it through the store; don't weaken the test. `tests/test_interop_libreoffice.py` is skipped without LibreOffice; CI runs it.
-- [ ] **Step 5: Mutation check.** Temporarily make `XmlPart.current_bytes` always return `serialise_part(self.tree)`, and confirm `test_open_and_save_is_byte_identical` fails. Then temporarily delete the `Page.xml` setter's write-through, and confirm `test_a_rendered_template_reaches_disk` fails. Revert both.
-- [ ] **Step 6: Commit** — `feat!: save only what changed, byte for byte` if any public behaviour a caller could see changes (unchanged members keep their original spelling, and the container is deflated); otherwise `feat:`. The body says it closes #89.
-- [ ] **Step 7: Open PR 3.** In the body, give the before/after for `test1.vsdx` (size, and the members that changed on a no-op save). Link #91 as now unblocked, and #367 as untouched.
+- [ ] **Step 4: Run the new tests, then the full gate.** Treat any existing-test
+      failure as a mutation site Task 6 missed. The symptom is a change that no
+      longer reaches disk. Find the site with `grep -rn "ET.ElementTree(\|=
+      ET.ElementTree\|xml_to_file\|zip_file_contents\[" src/vsdxkit` and route
+      it through the store; don't weaken the test.
+      `tests/test_interop_libreoffice.py` is skipped without LibreOffice; CI
+      runs it.
+- [ ] **Step 5: Mutation check.** Temporarily make `XmlPart.current_bytes`
+      always return `serialise_part(self.tree)`, and confirm
+      `test_open_and_save_is_byte_identical` fails. Then temporarily delete the
+      `Page.xml` setter's write-through, and confirm
+      `test_a_rendered_template_reaches_disk` fails. Revert both.
+- [ ] **Step 6: Commit** — `feat!: save only what changed, byte for byte` if any
+      public behaviour a caller could see changes (unchanged members keep their
+      original spelling, and the container is deflated); otherwise `feat:`. The
+      body says it closes #89.
+- [ ] **Step 7: Open PR 3.** In the body, give the before/after for `test1.vsdx`
+      (size, and the members that changed on a no-op save). Link #91 as now
+      unblocked, and #367 as untouched.

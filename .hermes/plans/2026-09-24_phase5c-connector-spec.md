@@ -21,8 +21,8 @@ Authority: `.hermes/plans/2026-09-12_simplification-usability-refactor.md`,
   from_point=0, to_point=0) -> Connector`: the only way to create one.
 - `Page.connectors -> tuple[Connector, ...]`: every 1-D shape in `Page.shapes`,
   glued or not.
-- `Shape.connectors -> tuple[Connector, ...]`: every connector on the page with a
-  `Connect` record naming this shape.
+- `Shape.connectors -> tuple[Connector, ...]`: every connector on the page with
+  a `Connect` record naming this shape.
 - `Shape.connected_shapes -> tuple[Shape, ...]`: the other glued end of each of
   those, without repeats, in connector order. A floating end contributes nothing.
 
@@ -63,17 +63,21 @@ their removal belongs with the export pruning.
 ## Tests
 
 - `test_connector.py` (new):
-  - wrappers are `Connector` exactly for 1-D shapes, including a master instance whose only `BeginX` is on its master;
+  - wrappers are `Connector` exactly for 1-D shapes, including a master instance
+    whose only `BeginX` is on its master;
   - `Shape(e) == Connector(e)`;
   - `source`/`target`, including a floating end;
   - `Page.connectors` includes a floating connector;
   - `Shape.connectors`/`connected_shapes`;
   - `connect` keywords;
-  - `retarget` keeps or replaces glue, and refuses empty and invalid-point calls without writing anything;
+  - `retarget` keeps or replaces glue, and refuses empty and invalid-point calls
+    without writing anything;
   - the removed names are gone.
-- Call sites are migrated by an AST rewrite that turns each literal `route` into the equivalent keywords.
+- Call sites are migrated by an AST rewrite that turns each literal `route` into
+  the equivalent keywords.
 
 ## Docs
 
 - README, `create_connect.rst`, `classes.rst`.
-- Migration guide section "A connector is a shape", giving a before and after for every removed call.
+- Migration guide section "A connector is a shape", giving a before and after
+  for every removed call.

@@ -1,53 +1,89 @@
 # Writes Land Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** every value a user writes to a shape is the value Visio shows, a write to a master instance stays on the instance, and moving a shape moves the shape.
+**Goal:** every value a user writes to a shape is the value Visio shows, a write
+to a master instance stays on the instance, and moving a shape moves the shape.
 
-**Architecture:** one cell writer, `Shape._write_cell(name, *, v, f, keep_formula)`. A user's value write drops the cell's formula. A library write keeps it; the library's writes are the glue engine's and the formula cache's, and a 1-D shape's derived cells.
-- `Cell` and `GeometryCell` gain a private `_set_value(value, *, keep_formula)`, and their public `value` setters are the user's form.
+**Architecture:** one cell writer, `Shape._write_cell(name, *, v, f,
+keep_formula)`. A user's value write drops the cell's formula. A library write
+keeps it; the library's writes are the glue engine's and the formula cache's,
+and a 1-D shape's derived cells.
+
+- `Cell` and `GeometryCell` gain a private `_set_value(value, *, keep_formula)`,
+  and their public `value` setters are the user's form.
 - A coordinate written to a glued end first frees that end, through a per-end `_float_end`.
-- The glue engine places the ends it glues through a private `_place_ends(..., keep_glue=True)`, so the public `set_start_and_finish` can unglue.
+- The glue engine places the ends it glues through a private `_place_ends(...,
+  keep_glue=True)`, so the public `set_start_and_finish` can unglue.
 
-**Tech Stack:** Python 3.10–3.14, `xml.etree.ElementTree`, pytest, uv, ruff, pyrefly strict, mypy.
+**Tech Stack:** Python 3.10–3.14, `xml.etree.ElementTree`, pytest, uv, ruff,
+pyrefly strict, mypy.
 
-**Spec:** `.hermes/plans/2026-09-27_writes-land-spec.md`. Read it with this plan; the spec wins where they differ.
+**Spec:** `.hermes/plans/2026-09-27_writes-land-spec.md`. Read it with this
+plan; the spec wins where they differ.
 
 ## Global Constraints
 
-- **Imports:** absolute only (ruff `ban-relative-imports = "all"`), no `__all__`, no re-exports. Follow dignified-python (dagster-io).
-- **Private by default:** a new name is private (leading underscore on the name or its module) unless it is user API. The only new public behaviour is what the spec names.
-- **Docstrings:** every definition in `src/vsdxkit`, private or public, has one (`tools/check_docstrings.py`). A constant or field is documented by a string on the line after it, never `#:`.
-- **Errors:** a refused operation raises `vsdxkit.errors.InvalidOperationError`, with a message that names the shape and says what to do instead.
-- **Detached shapes:** a write to a detached shape raises `InvalidOperationError` before it writes anything.
-- **Test-first:** each behaviour gets a test that fails before the change, and fails for the reason given.
+- **Imports:** absolute only (ruff `ban-relative-imports = "all"`), no
+  `__all__`, no re-exports. Follow dignified-python (dagster-io).
+- **Private by default:** a new name is private (leading underscore on the name
+  or its module) unless it is user API. The only new public behaviour is what
+  the spec names.
+- **Docstrings:** every definition in `src/vsdxkit`, private or public, has one
+  (`tools/check_docstrings.py`). A constant or field is documented by a string
+  on the line after it, never `#:`.
+- **Errors:** a refused operation raises `vsdxkit.errors.InvalidOperationError`,
+  with a message that names the shape and says what to do instead.
+- **Detached shapes:** a write to a detached shape raises
+  `InvalidOperationError` before it writes anything.
+- **Test-first:** each behaviour gets a test that fails before the change, and
+  fails for the reason given.
 - **Gates, all green on every commit's PR head:**
-  - `uv run --no-sync python -m pytest tests -q` on 3.14 and `uv run --python 3.10 --isolated python -m pytest tests -q`;
-  - `uv run --no-sync ruff check src tests tools` and `uv run --no-sync ruff format --check src tests tools`;
+  - `uv run --no-sync python -m pytest tests -q` on 3.14 and `uv run --python
+    3.10 --isolated python -m pytest tests -q`;
+  - `uv run --no-sync ruff check src tests tools` and `uv run --no-sync ruff
+    format --check src tests tools`;
   - `uv run --no-sync pyrefly check src/vsdxkit --min-severity warn`;
-  - `uv run --no-sync python tools/check_public_annotations.py`, `tools/check_migration_guide.py` and `tools/check_docstrings.py`;
+  - `uv run --no-sync python tools/check_public_annotations.py`,
+    `tools/check_migration_guide.py` and `tools/check_docstrings.py`;
   - `uv run --no-sync sphinx-build -W --keep-going -b html docs docs/_build/html`.
 
   The controller also runs the sdist smoke, type completeness (100.0) and `tools/check_api_documented.py`.
 - **Commits:** Conventional Commits. Every commit message ends with:
-  ```
+
+  ```text
   Co-Authored-By: <the model that wrote it> <noreply@anthropic.com>
   Claude-Session: https://claude.ai/code/session_014SeJzNKgmmqyg4BHg7odRt
   ```
+
 - **Shell rules in this worktree:**
   - one plain command per call: no `cd x && y`, no `;`, no shell variables, no heredocs;
   - write scripts and commit messages to files, then run or use them;
   - `git commit -F <file>`.
-- **Fixtures:** in `tests/` and `tests/fixtures/com_reference/`. A test that saves works on a copy, through the `vsdx_copy` fixture or `tmp_path`.
-- **Line numbers** below are on `main` at 3575873. Find each symbol by name if they have moved.
+- **Fixtures:** in `tests/` and `tests/fixtures/com_reference/`. A test that
+  saves works on a copy, through the `vsdx_copy` fixture or `tmp_path`.
+- **Line numbers** below are on `main` at 3575873. Find each symbol by name if
+  they have moved.
 
 ## Review Focus
 
-1. **A connector the library glues stays glued.** `page.connect()` and `connector.retarget()` must still report `source` and `target` after 8a, even though the end setters now unglue. Pinned in Task 5.
-2. **A section-cell write on a shape without that row is refused, not created.** It must not leave a stray top-level `<Cell N="Control/...">`, and a refused write writes nothing. Pinned in Task 3.
-3. **An inherited property or row written through any setter leaves the master alone,** including `DataProperty.set_attribute` on a cell the instance does not have yet. That write must land, not return `False`. Pinned in Task 7.
-4. **`set_start_and_finish` on a diagonal plain line keeps its `SQRT` width formula,** so Visio still draws it between its ends. Pinned in Task 5 (8a) and Task 11 (8c).
-5. **A detached shape handed to `append_shape` or to `master_page_ID` is refused before anything moves.** Pinned in Task 9.
+1. **A connector the library glues stays glued.** `page.connect()` and
+   `connector.retarget()` must still report `source` and `target` after 8a, even
+   though the end setters now unglue. Pinned in Task 5.
+2. **A section-cell write on a shape without that row is refused, not created.**
+   It must not leave a stray top-level `<Cell N="Control/...">`, and a refused
+   write writes nothing. Pinned in Task 3.
+3. **An inherited property or row written through any setter leaves the master
+   alone,** including `DataProperty.set_attribute` on a cell the instance does
+   not have yet. That write must land, not return `False`. Pinned in Task 7.
+4. **`set_start_and_finish` on a diagonal plain line keeps its `SQRT` width
+   formula,** so Visio still draws it between its ends. Pinned in Task 5 (8a)
+   and Task 11 (8c).
+5. **A detached shape handed to `append_shape` or to `master_page_ID` is refused
+   before anything moves.** Pinned in Task 9.
 
 ---
 
@@ -58,15 +94,20 @@ Branch `fix/writes-land-a-writer`, stacked on `fix/writes-land-spec`.
 ### Task 1: One helper puts a row in `IX` order
 
 **Files:**
+
 - Modify: `src/vsdxkit/_xmlio.py` (add two functions)
-- Modify: `src/vsdxkit/geometry.py:63-65` (delete `_row_index_sort_key`) and `:312-343` (`GeometryRow._create_row_xml`)
-- Modify: `src/vsdxkit/shapes.py:1487-1504` (`_create_character_color_cell`; delete `_insert_character_row`)
+- Modify: `src/vsdxkit/geometry.py:63-65` (delete `_row_index_sort_key`) and
+  `:312-343` (`GeometryRow._create_row_xml`)
+- Modify: `src/vsdxkit/shapes.py:1487-1504` (`_create_character_color_cell`;
+  delete `_insert_character_row`)
 - Test: `tests/test_row_insertion.py` (new)
 
 **Interfaces:**
+
 - Produces:
   - `vsdxkit._xmlio.row_index_key(index: str) -> tuple[int, int, str]`
-  - `vsdxkit._xmlio.insert_row_in_index_order(section: Element, row: Element) -> None`
+  - `vsdxkit._xmlio.insert_row_in_index_order(section: Element, row: Element) ->
+    None`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -136,12 +177,17 @@ def test_text_colour_on_a_shape_whose_character_section_has_a_non_numeric_index(
 
 Run: `uv run --no-sync python -m pytest tests/test_row_insertion.py -q`
 Expected:
+
 - the three helper tests fail with `ImportError: cannot import name 'insert_row_in_index_order'`;
-- the text-colour test fails with `ValueError: invalid literal for int() with base 10: 'a'`.
+- the text-colour test fails with `ValueError: invalid literal for int() with
+  base 10: 'a'`.
 
 - [ ] **Step 3: Add the helpers to `src/vsdxkit/_xmlio.py`**
 
-Import `namespace` from `vsdxkit` if the module does not already. The import-graph test allows `_xmlio` to import the package root's constants, as `geometry` does. If it refuses, take `namespace` as the module already spells it.
+Import `namespace` from `vsdxkit` if the module does not already. The
+import-graph test allows `_xmlio` to import the package root's constants, as
+`geometry` does. If it refuses, take `namespace` as the module already spells
+it.
 
 ```python
 def row_index_key(index: str) -> tuple[int, int, str]:
@@ -169,8 +215,11 @@ def insert_row_in_index_order(section: Element, row: Element) -> None:
 - [ ] **Step 4: Use the helper in both places**
 
 In `geometry.py`:
+
 - delete `_row_index_sort_key`;
-- in `GeometryRow._create_row_xml`, replace everything from `children = list(self.geometry.xml)` to `self.geometry.xml.insert(first_row + indexes.index(IX), row)` with the block below;
+- in `GeometryRow._create_row_xml`, replace everything from `children =
+  list(self.geometry.xml)` to `self.geometry.xml.insert(first_row +
+  indexes.index(IX), row)` with the block below;
 - keep `self.geometry.rows[IX] = self` and `return row`;
 - import `insert_row_in_index_order` from `vsdxkit._xmlio`;
 - the docstring's second paragraph now says the helper places the row.
@@ -184,14 +233,18 @@ In `geometry.py`:
 ```
 
 In `shapes.py`:
+
 - delete `_insert_character_row`;
-- in `_create_character_color_cell`, replace `self._insert_character_row(section, row)` with `insert_row_in_index_order(section, row)`;
+- in `_create_character_color_cell`, replace
+  `self._insert_character_row(section, row)` with
+  `insert_row_in_index_order(section, row)`;
 - add the import from `vsdxkit._xmlio`.
 
 - [ ] **Step 5: Run the new tests and the geometry and text tests**
 
-Run: `uv run --no-sync python -m pytest tests/test_row_insertion.py tests/test_geometry.py tests/test_optional_element_setters.py -q`
-Expected: all pass.
+Run: `uv run --no-sync python -m pytest tests/test_row_insertion.py
+tests/test_geometry.py tests/test_optional_element_setters.py -q` Expected: all
+pass.
 
 - [ ] **Step 6: Run the full suite and the lint gates**
 
@@ -200,11 +253,14 @@ Expected: all green.
 
 - [ ] **Step 7: Commit**
 
-Stage `src/vsdxkit/_xmlio.py`, `src/vsdxkit/geometry.py`, `src/vsdxkit/shapes.py` and `tests/test_row_insertion.py`. Commit with the message `refactor: one helper puts a section row in IX order (#319)`.
+Stage `src/vsdxkit/_xmlio.py`, `src/vsdxkit/geometry.py`,
+`src/vsdxkit/shapes.py` and `tests/test_row_insertion.py`. Commit with the
+message `refactor: one helper puts a section row in IX order (#319)`.
 
 ### Task 2: A value written to a cell replaces its formula; the library's own writes keep it
 
 **Files:**
+
 - Modify: `src/vsdxkit/shapes.py`:
   - `Cell.value` setter (`:479-482`) and its docstring (`:470-477`);
   - `_refresh_formula_values` (`:1917`);
@@ -217,12 +273,18 @@ Stage `src/vsdxkit/_xmlio.py`, `src/vsdxkit/geometry.py`, `src/vsdxkit/shapes.py
 - Test: `tests/test_value_wins.py` (new)
 
 **Interfaces:**
+
 - Produces:
   - `Cell._set_value(self, value: float | str, *, keep_formula: bool) -> None`
-  - `GeometryCell._set_value(self, value: float | str, *, keep_formula: bool) -> None`
-  - `GeometryRow._write_coordinate(self, name: str, value: float | str, *, keep_formula: bool) -> None`, where `name` is `"X"` or `"Y"`
-  - `Geometry._move(self, x_delta: float, y_delta: float, *, keep_formula: bool) -> None`
-  - `Geometry._set_point(self, row_type: str, operation: str, x: float, y: float, position: int, *, keep_formula: bool) -> None`, where `row_type` is lower-case, `"moveto"` or `"lineto"`
+  - `GeometryCell._set_value(self, value: float | str, *, keep_formula: bool) ->
+    None`
+  - `GeometryRow._write_coordinate(self, name: str, value: float | str, *,
+    keep_formula: bool) -> None`, where `name` is `"X"` or `"Y"`
+  - `Geometry._move(self, x_delta: float, y_delta: float, *, keep_formula: bool)
+    -> None`
+  - `Geometry._set_point(self, row_type: str, operation: str, x: float, y:
+    float, position: int, *, keep_formula: bool) -> None`, where `row_type` is
+    lower-case, `"moveto"` or `"lineto"`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -298,8 +360,11 @@ def test_the_formula_cache_keeps_the_formula_it_evaluates(vsdx_copy):
 
 Run: `uv run --no-sync python -m pytest tests/test_value_wins.py -q`
 Expected:
-- the first four fail, with each formula still present (`assert ('2.5', 'GUARD(EndX-BeginX)') == ('2.5', None)` and the like);
-- `test_the_formula_cache_keeps_the_formula_it_evaluates` passes. It is the guard that the next step must keep green.
+
+- the first four fail, with each formula still present (`assert ('2.5',
+  'GUARD(EndX-BeginX)') == ('2.5', None)` and the like);
+- `test_the_formula_cache_keeps_the_formula_it_evaluates` passes. It is the
+  guard that the next step must keep green.
 
 - [ ] **Step 3: Give `Cell` and `GeometryCell` the two forms of a value write**
 
@@ -324,13 +389,21 @@ In `shapes.py`, `Cell`:
             self.xml.attrib.pop("F", None)
 ```
 
-The `value` docstring's second paragraph becomes: "Setting it writes ``str(value)`` to ``V`` and removes the formula, as typing a number into the ShapeSheet cell does in Visio, so the value is the one Visio shows. ``None`` raises :class:`TypeError`, and a write to a detached shape's cell raises :class:`~vsdxkit.errors.InvalidOperationError`."
+The `value` docstring's second paragraph becomes: "Setting it writes
+``str(value)`` to ``V`` and removes the formula, as typing a number into the
+ShapeSheet cell does in Visio, so the value is the one Visio shows. ``None``
+raises :class:`TypeError`, and a write to a detached shape's cell raises
+:class:`~vsdxkit.errors.InvalidOperationError`."
 
-In `geometry.py`, do the same for `GeometryCell`, with its own `_require_attached` message. Its docstring keeps the sentence saying that, on a cell inherited from a master, the write goes to the master's cell; Task 8 changes the cache refresh, not this setter.
+In `geometry.py`, do the same for `GeometryCell`, with its own
+`_require_attached` message. Its docstring keeps the sentence saying that, on a
+cell inherited from a master, the write goes to the master's cell; Task 8
+changes the cache refresh, not this setter.
 
 - [ ] **Step 4: Route the row and section writes through one private form each**
 
-In `geometry.py`, `GeometryRow`: the `x` setter becomes `self._write_coordinate("X", value, keep_formula=False)`, and `y` likewise. Add:
+In `geometry.py`, `GeometryRow`: the `x` setter becomes
+`self._write_coordinate("X", value, keep_formula=False)`, and `y` likewise. Add:
 
 ```python
     def _write_coordinate(self, name: str, value: float | str, *, keep_formula: bool) -> None:
@@ -348,9 +421,14 @@ In `geometry.py`, `GeometryRow`: the `x` setter becomes `self._write_coordinate(
 ```
 
 `Geometry`:
+
 - `move(x_delta, y_delta)` becomes `self._move(x_delta, y_delta, keep_formula=False)`.
-- `_move` holds today's body, with `r.x = x + x_delta` becoming `r._write_coordinate("X", x + x_delta, keep_formula=keep_formula)`, and Y likewise. It keeps `self._require_attached("Geometry.move()")`.
-- `set_move_to` becomes `self._set_point("moveto", "Geometry.set_move_to()", x, y, move_to_index, keep_formula=False)`, and `set_line_to` likewise with `"lineto"` and `"Geometry.set_line_to()"`.
+- `_move` holds today's body, with `r.x = x + x_delta` becoming
+  `r._write_coordinate("X", x + x_delta, keep_formula=keep_formula)`, and Y
+  likewise. It keeps `self._require_attached("Geometry.move()")`.
+- `set_move_to` becomes `self._set_point("moveto", "Geometry.set_move_to()", x,
+  y, move_to_index, keep_formula=False)`, and `set_line_to` likewise with
+  `"lineto"` and `"Geometry.set_line_to()"`.
 
 Add:
 
@@ -364,46 +442,67 @@ Add:
             rows[position]._write_coordinate("Y", y, keep_formula=keep_formula)
 ```
 
-The `set_move_to` docstring's last two sentences become: "A cell this shape already owns loses its formula, as typing a number into the ShapeSheet does in Visio, so the value is the one Visio shows."
+The `set_move_to` docstring's last two sentences become: "A cell this shape
+already owns loses its formula, as typing a number into the ShapeSheet does in
+Visio, so the value is the one Visio shows."
 
 - [ ] **Step 5: Mark the library's own value writes**
 
 In `shapes.py`:
+
 - `_refresh_formula_values`: `c.value = v` becomes `c._set_value(v, keep_formula=True)`.
-- `set_start_and_finish`: `txt_pin_x.value = text_x` and `txt_pin_y.value = text_y` become `_set_value(..., keep_formula=True)`. The geometry calls become `self.geometry._set_point("moveto", "Shape.set_start_and_finish()", 0.0, 0.0, 0, keep_formula=True)` and `self.geometry._set_point("lineto", "Shape.set_start_and_finish()", width, height, 0, keep_formula=True)`.
-- `move`: `self.geometry.move(x_delta, y_delta)` becomes `self.geometry._move(x_delta, y_delta, keep_formula=True)`. Task 10 removes this call.
+- `set_start_and_finish`: `txt_pin_x.value = text_x` and `txt_pin_y.value =
+  text_y` become `_set_value(..., keep_formula=True)`. The geometry calls become
+  `self.geometry._set_point("moveto", "Shape.set_start_and_finish()", 0.0, 0.0,
+  0, keep_formula=True)` and `self.geometry._set_point("lineto",
+  "Shape.set_start_and_finish()", width, height, 0, keep_formula=True)`.
+- `move`: `self.geometry.move(x_delta, y_delta)` becomes
+  `self.geometry._move(x_delta, y_delta, keep_formula=True)`. Task 10 removes
+  this call.
 
 - [ ] **Step 6: Run the tests**
 
-Run: `uv run --no-sync python -m pytest tests/test_value_wins.py tests/test_geometry.py tests/test_page.py tests/test_shape.py -q`
-Expected: `test_value_wins.py` all pass.
+Run: `uv run --no-sync python -m pytest tests/test_value_wins.py
+tests/test_geometry.py tests/test_page.py tests/test_shape.py -q` Expected:
+`test_value_wins.py` all pass.
 
-If `tests/test_page.py::test_copy_and_move_line` fails, that is the case Task 5 rewrites. It hand-writes a line's width and relies on the formula surviving to correct it. Leave it red only if it fails for that reason, and note it in the report. Nothing else may fail.
+If `tests/test_page.py::test_copy_and_move_line` fails, that is the case Task 5
+rewrites. It hand-writes a line's width and relies on the formula surviving to
+correct it. Leave it red only if it fails for that reason, and note it in the
+report. Nothing else may fail.
 
 - [ ] **Step 7: Commit**
 
-Commit with the message `fix!: a value written to a cell replaces its formula; the library's own writes keep it (#300)`.
+Commit with the message `fix!: a value written to a cell replaces its formula;
+the library's own writes keep it (#300)`.
 
 ### Task 3: One writer for every named cell
 
 **Files:**
+
 - Modify: `src/vsdxkit/shapes.py`:
   - `_write_cell` (`:1298-1341`), `set_cell_value` and `set_cell_formula` (`:1343-1349`);
   - `get_or_create_cell` (`:1716-1750`, to the end of the method);
   - `set_start_and_finish`'s derived-cell and `Control` writes (`:1863-1893`);
   - `move` (`:1709-1714`).
-- Modify: `src/vsdxkit/_connectors.py`: the `_ConnectorShape.get_or_create_cell` protocol member (`:140-142`) and `_change_cell` (`:375`).
-- Modify: `src/vsdxkit/pages.py`: `_drop_formula` (`:89-97`, delete), `_detach` (`:130`) and `create_shape` (`:901-911`).
+- Modify: `src/vsdxkit/_connectors.py`: the `_ConnectorShape.get_or_create_cell`
+  protocol member (`:140-142`) and `_change_cell` (`:375`).
+- Modify: `src/vsdxkit/pages.py`: `_drop_formula` (`:89-97`, delete), `_detach`
+  (`:130`) and `create_shape` (`:901-911`).
 - Modify: `src/vsdxkit/swimlanes.py` (`:261`, `:268-269`, `:302`).
 - Modify: `tests/test_page.py`, `test_copy_and_move_line` (`:641-646`).
 - Test: `tests/test_cell_writer_primitive.py` (extend)
 
 **Interfaces:**
+
 - Consumes: `Cell._set_value(value, *, keep_formula)` (Task 2).
 - Produces:
-  - `Shape._write_cell(self, name: str, *, v: str | None = None, f: str | None = None, keep_formula: bool = False) -> None`
-  - `Shape.get_or_create_cell(self, name: str, v: str | None = None, f: str | None = None) -> Cell` (unchanged signature)
-  - the `_ConnectorShape._write_cell` protocol member, with the same signature as `Shape._write_cell`.
+  - `Shape._write_cell(self, name: str, *, v: str | None = None, f: str | None =
+    None, keep_formula: bool = False) -> None`
+  - `Shape.get_or_create_cell(self, name: str, v: str | None = None, f: str |
+    None = None) -> Cell` (unchanged signature)
+  - the `_ConnectorShape._write_cell` protocol member, with the same signature
+    as `Shape._write_cell`.
 
 - [ ] **Step 1: Write the failing tests** (append to `tests/test_cell_writer_primitive.py`)
 
@@ -477,10 +576,13 @@ def test_the_glue_engine_keeps_the_formulas_it_writes(vsdx_copy):
 
 Run: `uv run --no-sync python -m pytest tests/test_cell_writer_primitive.py -q`
 Expected:
+
 - the colour tests fail with the formula still present;
 - the section test fails with `DID NOT RAISE`;
-- `test_a_section_cell_the_shape_has_is_written_in_its_row` fails on its formula (`('2.0', 'TextPosition')`);
-- `test_get_or_create_cell_is_the_same_writer` passes today, because both paths happen to drop F on a bare cell. Keep it as a guard;
+- `test_a_section_cell_the_shape_has_is_written_in_its_row` fails on its formula
+  (`('2.0', 'TextPosition')`);
+- `test_get_or_create_cell_is_the_same_writer` passes today, because both paths
+  happen to drop F on a bare cell. Keep it as a guard;
 - `test_the_glue_engine_keeps_the_formulas_it_writes` passes. It is a guard.
 
 - [ ] **Step 3: Write the one writer**
@@ -538,9 +640,12 @@ Replace `_write_cell`, and add `_new_cell_element`:
         return element
 ```
 
-`set_cell_value` and `set_cell_formula` stay one-liners over it. Their docstrings say that a value replaces the formula, and that a section cell the shape lacks is refused.
+`set_cell_value` and `set_cell_formula` stay one-liners over it. Their
+docstrings say that a value replaces the formula, and that a section cell the
+shape lacks is refused.
 
-`get_or_create_cell` becomes the lines below. Its docstring keeps the `:param:` lines, and says that a value without a formula replaces the cell's formula.
+`get_or_create_cell` becomes the lines below. Its docstring keeps the `:param:`
+lines, and says that a value without a formula replaces the cell's formula.
 
 ```python
         self._write_cell(name, v=v, f=f)
@@ -553,52 +658,88 @@ Replace `_write_cell`, and add `_new_cell_element`:
 - [ ] **Step 4: Move the engine and the other library writers onto it**
 
 - **`_connectors.py`:**
-  - The `_ConnectorShape` protocol member `get_or_create_cell` becomes `def _write_cell(self, name: str, *, v: str | None = None, f: str | None = None, keep_formula: bool = False) -> None:`, with docstring "Set or create the named cell; the engine passes `keep_formula`, so a half of the cell it does not name stays as it is."
-  - `_change_cell`'s write becomes `connector._write_cell(change.name, v=change.value, f=change.formula, keep_formula=True)`.
-- **`swimlanes.py`:** each `get_or_create_cell(NAME, v=VALUE)` becomes `_write_cell(NAME, v=VALUE, keep_formula=True)`. Swimlane layout is #337's package, and this package does not change what it writes.
+  - The `_ConnectorShape` protocol member `get_or_create_cell` becomes `def
+    _write_cell(self, name: str, *, v: str | None = None, f: str | None = None,
+    keep_formula: bool = False) -> None:`, with docstring "Set or create the
+    named cell; the engine passes `keep_formula`, so a half of the cell it does
+    not name stays as it is."
+  - `_change_cell`'s write becomes `connector._write_cell(change.name,
+    v=change.value, f=change.formula, keep_formula=True)`.
+- **`swimlanes.py`:** each `get_or_create_cell(NAME, v=VALUE)` becomes
+  `_write_cell(NAME, v=VALUE, keep_formula=True)`. Swimlane layout is #337's
+  package, and this package does not change what it writes.
 - **`pages.py`:**
   - Delete `_drop_formula`.
-  - In `_detach`, the call becomes `cell.xml.attrib.pop("F", None)`, where `cell` is the `shape._cell(name)` already in hand. That is a library write: it removes a formula naming a shape the copy left behind.
-  - In `create_shape`, `shape.get_or_create_cell("PinX", v=str(x))` and `PinY` already drop the formula through the rule, so delete the two `_drop_formula` calls after them. `shape.width = width` and `shape.height = height` go through the setters, which now drop it, so delete their `_drop_formula` calls too.
+  - In `_detach`, the call becomes `cell.xml.attrib.pop("F", None)`, where
+    `cell` is the `shape._cell(name)` already in hand. That is a library write:
+    it removes a formula naming a shape the copy left behind.
+  - In `create_shape`, `shape.get_or_create_cell("PinX", v=str(x))` and `PinY`
+    already drop the formula through the rule, so delete the two `_drop_formula`
+    calls after them. `shape.width = width` and `shape.height = height` go
+    through the setters, which now drop it, so delete their `_drop_formula`
+    calls too.
 - **`shapes.py`, `set_start_and_finish`:**
-  - Each of `self.x`, `self.y`, `self.width` and `self.height` becomes `self._write_cell("PinX", v=xml_value(start_x), keep_formula=True)`, and likewise for `PinY`, `Width` and `Height`. On a 1-D shape these are derived from its ends (spec ruling).
+  - Each of `self.x`, `self.y`, `self.width` and `self.height` becomes
+    `self._write_cell("PinX", v=xml_value(start_x), keep_formula=True)`, and
+    likewise for `PinY`, `Width` and `Height`. On a 1-D shape these are derived
+    from its ends (spec ruling).
   - Keep the end writes as they are for now; Task 5 changes them.
-  - Replace the four `Control/TextPosition` writes with the loop below. `set_start_and_finish` writes the Control/TextPosition cells X, Y, XDyn and YDyn only where the shape has them, as library writes, and creates no top-level cell.
+  - Replace the four `Control/TextPosition` writes with the loop below.
+    `set_start_and_finish` writes the Control/TextPosition cells X, Y, XDyn and
+    YDyn only where the shape has them, as library writes, and creates no
+    top-level cell.
 
     ```python
                     for cell_name, value in (("X", text_x), ("Y", text_y), ("XDyn", text_x), ("YDyn", text_y)):
                         if self._cell(f"Control/TextPosition/{cell_name}") is not None:
                             self._write_cell(f"Control/TextPosition/{cell_name}", v=xml_value(value), keep_formula=True)
     ```
-- **`shapes.py`, `move`:** each coordinate write becomes a library write, so 8a does not change what `move` writes, and Task 10 gives `move` its new rules. For example, `self.begin_x = self.begin_x + x_delta` becomes `self._write_cell("BeginX", v=xml_value(begin_x + x_delta), keep_formula=True)`, and likewise `PinX`, `BeginY` and `PinY`. Read each value once, into a local.
+
+- **`shapes.py`, `move`:** each coordinate write becomes a library write, so 8a
+  does not change what `move` writes, and Task 10 gives `move` its new rules.
+  For example, `self.begin_x = self.begin_x + x_delta` becomes
+  `self._write_cell("BeginX", v=xml_value(begin_x + x_delta),
+  keep_formula=True)`, and likewise `PinX`, `BeginY` and `PinY`. Read each value
+  once, into a local.
 
 - [ ] **Step 5: Rewrite `test_copy_and_move_line`'s body to use `set_start_and_finish`**
 
 In `tests/test_page.py`, `test_copy_and_move_line`:
-- Replace everything from `cp1.begin_x, cp1.begin_y = start` to the end of the formula re-evaluation loop with `cp1.set_start_and_finish(start, finish)`. Keep the lines before it, the save, and every assertion.
-- Delete the `is_connector` line only if nothing after the save reads it. The assertions do, so keep it.
-- Update the docstring. The test hand-wrote the derived cells and relied on their formulas surviving; `set_start_and_finish` is how a 1-D shape is placed by its ends, and it keeps them.
+
+- Replace everything from `cp1.begin_x, cp1.begin_y = start` to the end of the
+  formula re-evaluation loop with `cp1.set_start_and_finish(start, finish)`.
+  Keep the lines before it, the save, and every assertion.
+- Delete the `is_connector` line only if nothing after the save reads it. The
+  assertions do, so keep it.
+- Update the docstring. The test hand-wrote the derived cells and relied on
+  their formulas surviving; `set_start_and_finish` is how a 1-D shape is placed
+  by its ends, and it keeps them.
 
 - [ ] **Step 6: Run the tests and the full suite**
 
-Run: `uv run --no-sync python -m pytest tests/test_cell_writer_primitive.py tests/test_page.py tests/test_swimlanes.py tests/test_connector_engine.py tests/test_create_shape.py -q`
-Expected: all pass.
+Run: `uv run --no-sync python -m pytest tests/test_cell_writer_primitive.py
+tests/test_page.py tests/test_swimlanes.py tests/test_connector_engine.py
+tests/test_create_shape.py -q` Expected: all pass.
 
-Then run every gate in Global Constraints. The import-graph test must stay green: `pages` no longer imports anything new.
+Then run every gate in Global Constraints. The import-graph test must stay
+green: `pages` no longer imports anything new.
 
 - [ ] **Step 7: Commit**
 
-Commit with the message `fix!: one writer for every named cell; a section cell the shape lacks is refused (#319)`.
+Commit with the message `fix!: one writer for every named cell; a section cell
+the shape lacks is refused (#319)`.
 
 ### Task 4: `text_color` lands, and the pinned stale formula is inverted
 
 **Files:**
+
 - Modify: `src/vsdxkit/shapes.py` (the `text_color` setter, `:1550-1561`)
 - Modify: `tests/test_optional_element_setters.py:93-107`
 
 - [ ] **Step 1: Invert the pinned test**
 
 In `test_text_color_updates_the_existing_cell_in_place`:
+
 - replace the last comment and assertion with the lines below;
 - the docstring gains: "Its formula goes, so the colour is the one Visio shows (#300)."
 
@@ -611,12 +752,15 @@ In `test_text_color_updates_the_existing_cell_in_place`:
 
 - [ ] **Step 2: Run it and watch it fail**
 
-Run: `uv run --no-sync python -m pytest tests/test_optional_element_setters.py -q -k existing_cell_in_place`
-Expected: FAIL, `assert 'THEMEGUARD(RGB(255,0,0))' is None`.
+Run: `uv run --no-sync python -m pytest tests/test_optional_element_setters.py
+-q -k existing_cell_in_place` Expected: FAIL, `assert 'THEMEGUARD(RGB(255,0,0))'
+is None`.
 
 - [ ] **Step 3: Drop the formula in the setter**
 
-The setter's last line, `cell.attrib["V"] = text`, becomes the two lines below. The getter's docstring gains a paragraph: "Setting it writes the colour and removes the cell's formula, as :attr:`line_color` does."
+The setter's last line, `cell.attrib["V"] = text`, becomes the two lines below.
+The getter's docstring gains a paragraph: "Setting it writes the colour and
+removes the cell's formula, as :attr:`line_color` does."
 
 ```python
         cell.attrib["V"] = text
@@ -630,11 +774,13 @@ Expected: all pass.
 
 - [ ] **Step 5: Commit**
 
-Commit with the message `fix: text_color replaces the colour's formula, as line_color does (#300)`.
+Commit with the message `fix: text_color replaces the colour's formula, as
+line_color does (#300)`.
 
 ### Task 5: A coordinate written to a glued end frees that end; the engine's own placement keeps its glue
 
 **Files:**
+
 - Modify: `src/vsdxkit/_connectors.py`:
   - add `_float_end`, and rewrite `_float_ends` (`:395-405`);
   - the `_ConnectorPage._remove_connect_records` protocol member (`:77-79`);
@@ -648,11 +794,16 @@ Commit with the message `fix: text_color replaces the colour's formula, as line_
 - Test: `tests/test_glued_end_writes.py` (new)
 
 **Interfaces:**
-- Consumes: `Shape._write_cell(..., keep_formula=...)` (Task 3), and `Geometry._set_point` (Task 2).
+
+- Consumes: `Shape._write_cell(..., keep_formula=...)` (Task 3), and
+  `Geometry._set_point` (Task 2).
 - Produces:
-  - `vsdxkit._connectors._float_end(connector: _ConnectorShape, *, begin: bool) -> None`
-  - `Page._remove_connect_records(self, connector_ids, *, match: str = "from", from_cell: str | None = None) -> None`
-  - `Shape._place_ends(self, start: tuple[float | None, float | None], finish: tuple[float | None, float | None], *, keep_glue: bool) -> None`
+  - `vsdxkit._connectors._float_end(connector: _ConnectorShape, *, begin: bool)
+    -> None`
+  - `Page._remove_connect_records(self, connector_ids, *, match: str = "from",
+    from_cell: str | None = None) -> None`
+  - `Shape._place_ends(self, start: tuple[float | None, float | None], finish:
+    tuple[float | None, float | None], *, keep_glue: bool) -> None`
   - the `_ConnectorShape._place_ends` protocol member, with the same signature.
 
 - [ ] **Step 1: Write the failing tests**
@@ -742,12 +893,19 @@ def test_a_diagonal_plain_line_keeps_its_length_formula(vsdx_copy):
 
 Run: `uv run --no-sync python -m pytest tests/test_glued_end_writes.py -q`
 Expected:
+
 - the first three fail: the ends stay glued, and `source` is still shape 1;
-- `test_connect_still_glues_both_ends`, `test_retarget_still_glues` and `test_a_diagonal_plain_line_keeps_its_length_formula` pass. They are guards for Steps 3–5.
+- `test_connect_still_glues_both_ends`, `test_retarget_still_glues` and
+  `test_a_diagonal_plain_line_keeps_its_length_formula` pass. They are guards
+  for Steps 3–5.
 
 - [ ] **Step 3: Remove one end's records, and float one end**
 
-In `pages.py`, `_remove_connect_records` gains `from_cell: str | None = None`. When it is given, only records whose `FromCell` equals it are removed. The docstring says so, and the loop condition gains `and (from_cell is None or connect.attrib.get("FromCell") == from_cell)`. Mirror the keyword on the `_ConnectorPage` protocol member in `_connectors.py`.
+In `pages.py`, `_remove_connect_records` gains `from_cell: str | None = None`.
+When it is given, only records whose `FromCell` equals it are removed. The
+docstring says so, and the loop condition gains `and (from_cell is None or
+connect.attrib.get("FromCell") == from_cell)`. Mirror the keyword on the
+`_ConnectorPage` protocol member in `_connectors.py`.
 
 In `_connectors.py`:
 
@@ -784,7 +942,8 @@ def _float_ends(connector: _ConnectorShape) -> None:
 
 - [ ] **Step 4: The end setters free a glued end first**
 
-In `shapes.py`, import `_float_end` from `vsdxkit._connectors` beside `_glued_ends`. Each of the four setters becomes a call to one helper:
+In `shapes.py`, import `_float_end` from `vsdxkit._connectors` beside
+`_glued_ends`. Each of the four setters becomes a call to one helper:
 
 ```python
     @begin_x.setter
@@ -802,10 +961,18 @@ In `shapes.py`, import `_float_end` from `vsdxkit._connectors` beside `_glued_en
 ```
 
 Two docstrings change:
-- `begin_x`'s "Setting it writes the cell's value, as :attr:`x` does; the glue is left as it was." becomes: "Setting it writes the cell's value, as :attr:`x` does. A glued begin end is freed first: its ``Connect`` record, trigger and glue formulas go, as dragging the end away does in Visio. The other end stays glued."
+
+- `begin_x`'s "Setting it writes the cell's value, as :attr:`x` does; the glue
+  is left as it was." becomes: "Setting it writes the cell's value, as :attr:`x`
+  does. A glued begin end is freed first: its ``Connect`` record, trigger and
+  glue formulas go, as dragging the end away does in Visio. The other end stays
+  glued."
 - The other three say "as :attr:`begin_x` does, for its end".
 
-If pyrefly rejects `Shape` as a `_ConnectorShape` at the `_float_end(self, ...)` call, check which protocol member it names, and add that member. `_glue_connector` already passes `Connector` objects as `_ConnectorShape`. Do not cast.
+If pyrefly rejects `Shape` as a `_ConnectorShape` at the `_float_end(self, ...)`
+call, check which protocol member it names, and add that member.
+`_glue_connector` already passes `Connector` objects as `_ConnectorShape`. Do
+not cast.
 
 - [ ] **Step 5: Split `set_start_and_finish` into the user's form and the engine's**
 
@@ -840,7 +1007,9 @@ If pyrefly rejects `Shape` as a `_ConnectorShape` at the `_float_end(self, ...)`
         """
 ```
 
-The body is today's body from `if self.begin_x is not None:` down, with the Task 3 changes, and one more. The line `self.begin_x, self.begin_y = start_x, start_y` and the one for the end become:
+The body is today's body from `if self.begin_x is not None:` down, with the Task
+3 changes, and one more. The line `self.begin_x, self.begin_y = start_x,
+start_y` and the one for the end become:
 
 ```python
             if keep_glue:
@@ -852,31 +1021,46 @@ The body is today's body from `if self.begin_x is not None:` down, with the Task
 ```
 
 In `_connectors.py`:
-- the `_ConnectorShape` protocol member `set_start_and_finish` becomes `_place_ends`, with the same signature and docstring "Place the connector's ends; the engine passes `keep_glue`, so the glue it has just written stays";
+
+- the `_ConnectorShape` protocol member `set_start_and_finish` becomes
+  `_place_ends`, with the same signature and docstring "Place the connector's
+  ends; the engine passes `keep_glue`, so the glue it has just written stays";
 - `_glue_connector`'s last line becomes `connector._place_ends(start, finish, keep_glue=True)`.
 
 - [ ] **Step 6: Run the new tests, the connector suites and the full suite**
 
-Run: `uv run --no-sync python -m pytest tests/test_glued_end_writes.py tests/test_connector_engine.py tests/test_connector.py tests/test_reanchor.py tests/test_connector_atomicity.py tests/test_create_shape.py -q`
-Expected: all pass.
+Run: `uv run --no-sync python -m pytest tests/test_glued_end_writes.py
+tests/test_connector_engine.py tests/test_connector.py tests/test_reanchor.py
+tests/test_connector_atomicity.py tests/test_create_shape.py -q` Expected: all
+pass.
 
-Then run every gate in Global Constraints. `tests/test_shape_coordinates.py::test_connector_coordinates_reject_none_before_mutation` must still pass: the `None` check comes before any write.
+Then run every gate in Global Constraints.
+`tests/test_shape_coordinates.py::test_connector_coordinates_reject_none_before_mutation`
+must still pass: the `None` check comes before any write.
 
 - [ ] **Step 7: Commit**
 
-Commit with the message `fix!: a coordinate written to a glued end frees that end; the engine's own placement keeps its glue (#300)`.
+Commit with the message `fix!: a coordinate written to a glued end frees that
+end; the engine's own placement keeps its glue (#300)`.
 
 ### Task 6: The Visio-check script, the guide and the docstrings for 8a
 
 **Files:**
+
 - Create: `tools/writes_land_cases.py`
 - Create: `tests/test_writes_land_cases_tool.py`
 - Modify: `docs/migration-1.0.rst` (a new section)
-- Modify: the docstrings of `x`, `line_weight`, `line_color` and `fill_color`, and of every setter whose docstring says "keeps a formula the cell has" or "as :attr:`x` does" (`grep -n "formula the cell has\|leaves the formula" src/vsdxkit`)
+- Modify: the docstrings of `x`, `line_weight`, `line_color` and `fill_color`,
+  and of every setter whose docstring says "keeps a formula the cell has" or "as
+  :attr:`x` does" (`grep -n "formula the cell has\|leaves the formula"
+  src/vsdxkit`)
 
 **Interfaces:**
+
 - Produces:
-  - `tools/writes_land_cases.py` with `main(argv: list[str] | None = None) -> int` and `CASES: tuple[Callable[[Path], str], ...]`. Each case writes one `.vsdx` into the folder and returns one line saying what Visio must show.
+  - `tools/writes_land_cases.py` with `main(argv: list[str] | None = None) ->
+    int` and `CASES: tuple[Callable[[Path], str], ...]`. Each case writes one
+    `.vsdx` into the folder and returns one line saying what Visio must show.
   - Task 11 appends cases 4–6.
 
 - [ ] **Step 1: Write the failing tool test**
@@ -921,7 +1105,9 @@ Expected: FAIL, because the tool file does not exist.
 
 - [ ] **Step 3: Write the tool**
 
-The spec said each case records what it expects in the file's `Title`. There is no public writer for core properties, so the expectations go in `EXPECTED.txt` beside the files. This plan amends the spec there.
+The spec said each case records what it expects in the file's `Title`. There is
+no public writer for core properties, so the expectations go in `EXPECTED.txt`
+beside the files. This plan amends the spec there.
 
 ```python
 """Write the files the Visio harness checks the writes-land package against (#300, #319, #430).
@@ -1009,7 +1195,8 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ```
 
-If `shapes.require_id` or `Document.save(path)` is spelled differently, use the spelling the tests use (`grep -n "require_id\|\.save(" tests/test_shape.py`).
+If `shapes.require_id` or `Document.save(path)` is spelled differently, use the
+spelling the tests use (`grep -n "require_id\|\.save(" tests/test_shape.py`).
 
 - [ ] **Step 4: Run the tool test**
 
@@ -1018,7 +1205,9 @@ Expected: PASS.
 
 - [ ] **Step 5: The migration guide and the docstrings**
 
-Add a section to `docs/migration-1.0.rst`, after "A connector is a shape" and before "The ``<Connect>`` records are internal". Use the guide's own form: a heading underlined with `-`, then definition-list entries.
+Add a section to `docs/migration-1.0.rst`, after "A connector is a shape" and
+before "The ``<Connect>`` records are internal". Use the guide's own form: a
+heading underlined with `-`, then definition-list entries.
 
 ```rst
 A value written is the value Visio shows
@@ -1047,17 +1236,24 @@ Writing an end of a glued connector: ``begin_x``, ``begin_y``, ``end_x``, ``end_
    coordinate beside the glue, and Visio pulled the end back on open.
 ```
 
-Then change each docstring that promises the old rule. `x`'s "and keeps a formula the cell has" becomes "and replaces a formula the cell has, as typing a number into the ShapeSheet does in Visio". Do the same in `line_weight`, `line_color`, `fill_color` and each setter that says it. `grep -rn "formula the cell has\|leaves the formula" src/vsdxkit` must print nothing afterwards.
+Then change each docstring that promises the old rule. `x`'s "and keeps a
+formula the cell has" becomes "and replaces a formula the cell has, as typing a
+number into the ShapeSheet does in Visio". Do the same in `line_weight`,
+`line_color`, `fill_color` and each setter that says it. `grep -rn "formula the
+cell has\|leaves the formula" src/vsdxkit` must print nothing afterwards.
 
 - [ ] **Step 6: The full gates, and the sweeps (controller)**
 
-Run every gate in Global Constraints. The controller then runs the save sweep and the render sweep against `main`.
+Run every gate in Global Constraints. The controller then runs the save sweep
+and the render sweep against `main`.
+
 - **Expected save sweep:** 28 of 28 `same`.
 - **Expected render sweep:** 10 of 10 `same`.
 
 - [ ] **Step 7: Commit**
 
-Commit with the message `docs: the value-wins rule in the guide and the docstrings; the Visio-check cases (#300, #319)`.
+Commit with the message `docs: the value-wins rule in the guide and the
+docstrings; the Visio-check cases (#300, #319)`.
 
 ---
 
@@ -1068,7 +1264,9 @@ Branch `fix/writes-land-b-instance`, stacked on `fix/writes-land-a-writer`.
 ### Task 7: The row setters and `set_attribute` copy an inherited row down first
 
 **Files:**
-- Modify: `src/vsdxkit/geometry.py`: `GeometryRow.row_type`, `index` and `del_bool`, and their docstrings (`:345-438`)
+
+- Modify: `src/vsdxkit/geometry.py`: `GeometryRow.row_type`, `index` and
+  `del_bool`, and their docstrings (`:345-438`)
 - Modify: `src/vsdxkit/shapes.py`: `DataProperty.set_attribute` (`:694-701`)
 - Test: `tests/test_inherited_writes.py` (new)
 
@@ -1157,7 +1355,9 @@ def test_set_attribute_on_an_inherited_property_writes_the_instance_and_lands(vs
 
 Run: `uv run --no-sync python -m pytest tests/test_inherited_writes.py -q`
 Expected:
-- the row tests fail with the master's row changed (`assert 'LineTo' == 'MoveTo'` and the like);
+
+- the row tests fail with the master's row changed (`assert 'LineTo' ==
+  'MoveTo'` and the like);
 - the `del_bool` no-op test fails with `KeyError: 'Del'`;
 - the `set_attribute` test fails with `assert 'Changed' == 'Location'`.
 
@@ -1193,8 +1393,12 @@ In `geometry.py`:
 ```
 
 The three docstrings change:
-- "so on an inherited row it changes the master's row" becomes "on a row inherited from a master, the row is copied onto this shape first, and the master keeps its own";
-- `index`'s sentence about staying filed under its old key goes, because the row is refiled;
+
+- "so on an inherited row it changes the master's row" becomes "on a row
+  inherited from a master, the row is copied onto this shape first, and the
+  master keeps its own";
+- `index`'s sentence about staying filed under its old key goes, because the row
+  is refiled;
 - `del_bool`'s `KeyError` sentence goes.
 
 In `shapes.py`, `DataProperty.set_attribute`:
@@ -1223,22 +1427,27 @@ In `shapes.py`, `DataProperty.set_attribute`:
 
 - [ ] **Step 4: Run the tests and the geometry and property suites**
 
-Run: `uv run --no-sync python -m pytest tests/test_inherited_writes.py tests/test_geometry.py tests/test_data_property_reads.py tests/test_shape.py -q`
-Expected: all pass. A test that asserted the master changed, or that `KeyError` is raised, is asserting #273's bug: invert it, and say so in the report.
+Run: `uv run --no-sync python -m pytest tests/test_inherited_writes.py
+tests/test_geometry.py tests/test_data_property_reads.py tests/test_shape.py -q`
+Expected: all pass. A test that asserted the master changed, or that `KeyError`
+is raised, is asserting #273's bug: invert it, and say so in the report.
 
 - [ ] **Step 5: Commit**
 
-Commit with the message `fix: a row's type, index and Del flag, and a property's attributes, are written on the instance (#273)`.
+Commit with the message `fix: a row's type, index and Del flag, and a property's
+attributes, are written on the instance (#273)`.
 
 ### Task 8: The formula cache skips cells the shape only inherits
 
 **Files:**
+
 - Modify: `src/vsdxkit/shapes.py`: `_refresh_formula_values` (`:1896-1917`)
 - Test: `tests/test_inherited_writes.py` (append)
 
 - [ ] **Step 1: Write the failing test** (append)
 
-test9's master row 1 `X` is `{N: X, V: 0}` with no formula; the test gives it `Width*1`, a formula `vsdxkit._formulae` evaluates.
+test9's master row 1 `X` is `{N: X, V: 0}` with no formula; the test gives it
+`Width*1`, a formula `vsdxkit._formulae` evaluates.
 
 ```python
 def test_the_formula_cache_leaves_an_inherited_geometry_cell_alone(vsdx_copy):
@@ -1261,22 +1470,29 @@ Expected: FAIL, with `assert '3.543307044802283' == '0'` or the connector's widt
 - [ ] **Step 3: Skip what the shape does not own**
 
 In `_refresh_formula_values`:
+
 - after building `cells`, add `own = set(self.xml.iter(f"{namespace}Cell"))`;
-- the loop's first line becomes `if c.xml not in own: continue`, with the comment `# a cell only inherited is the master's; Visio recomputes it for this instance on open`;
-- the docstring gains: "A cell the shape only inherits is left alone: it is the master's, and Visio recomputes it for this shape on open."
+- the loop's first line becomes `if c.xml not in own: continue`, with the
+  comment `# a cell only inherited is the master's; Visio recomputes it for this
+  instance on open`;
+- the docstring gains: "A cell the shape only inherits is left alone: it is the
+  master's, and Visio recomputes it for this shape on open."
 
 - [ ] **Step 4: Run the test and the full suite**
 
-Run: `uv run --no-sync python -m pytest tests/test_inherited_writes.py tests/test_page.py tests/test_connector_engine.py -q`, then every gate.
+Run: `uv run --no-sync python -m pytest tests/test_inherited_writes.py
+tests/test_page.py tests/test_connector_engine.py -q`, then every gate.
 Expected: all pass.
 
 - [ ] **Step 5: Commit**
 
-Commit with the message `fix: the formula cache leaves a cell the shape only inherits to its master (#273)`.
+Commit with the message `fix: the formula cache leaves a cell the shape only
+inherits to its master (#273)`.
 
 ### Task 9: `DataProperty` reads its row each time; a property with no value matches nothing
 
 **Files:**
+
 - Modify: `src/vsdxkit/shapes.py`:
   - `DataProperty`'s class attributes and `__init__` (`:527-587`);
   - `_has_property` (`:2306-2313`).
@@ -1306,18 +1522,22 @@ def test_a_property_with_no_value_does_not_match_the_text_none(vsdx_copy):
     assert page.shapes.matching_property("my_property_label", "None") == ()
 ```
 
-Add `from vsdxkit import namespace` and `from vsdxkit.document import Document` to the file's imports if they are not there.
+Add `from vsdxkit import namespace` and `from vsdxkit.document import Document`
+to the file's imports if they are not there.
 
 - [ ] **Step 2: Run them and watch them fail**
 
 Run: `uv run --no-sync python -m pytest tests/test_data_property_reads.py -q`
 Expected:
+
 - the label test fails with `assert 'my_property_label' == 'renamed'`;
 - the `None` test fails with a one-shape tuple.
 
 - [ ] **Step 3: Four live properties**
 
-Remove the class-level annotations and docstrings for `value_type`, `label`, `prompt` and `sort_key`, and every line of `__init__` that sets them. `__init__` keeps `self.shape`, `self.xml` and `self.name`. Add:
+Remove the class-level annotations and docstrings for `value_type`, `label`,
+`prompt` and `sort_key`, and every line of `__init__` that sets them. `__init__`
+keeps `self.shape`, `self.xml` and `self.name`. Add:
 
 ```python
     @property
@@ -1364,21 +1584,27 @@ Remove the class-level annotations and docstrings for `value_type`, `label`, `pr
 ```
 
 In `_has_property`:
-- the last line becomes `return found is not None and (value is None or found.value == value)`;
-- the docstring's second paragraph becomes "A property with no value matches no `value`."
+
+- the last line becomes `return found is not None and (value is None or
+  found.value == value)`;
+- the docstring's second paragraph becomes "A property with no value matches no
+  `value`."
 
 - [ ] **Step 4: Run the property and finder suites, and the full gates**
 
-Run: `uv run --no-sync python -m pytest tests/test_data_property_reads.py tests/test_shape.py tests/test_shape_collection.py -q`, then every gate.
+Run: `uv run --no-sync python -m pytest tests/test_data_property_reads.py
+tests/test_shape.py tests/test_shape_collection.py -q`, then every gate.
 Expected: all pass. The docstring gate must still count every definition.
 
 - [ ] **Step 5: Commit**
 
-Commit with the message `fix: a property's label, type, prompt and sort key read the row each time; no value matches no text (#435, #432)`.
+Commit with the message `fix: a property's label, type, prompt and sort key read
+the row each time; no value matches no text (#435, #432)`.
 
 ### Task 10: A deleted shape stays deleted
 
 **Files:**
+
 - Modify: `src/vsdxkit/shapes.py`:
   - the `master_page_ID` setter (`:957-967`);
   - the `is_attached` docstring (`:839-842`);
@@ -1415,7 +1641,8 @@ def test_append_shape_refuses_a_deleted_shape(vsdx_copy):
     assert all(child.ID != "8" for child in group.children)
 ```
 
-Add `import pytest`, `from vsdxkit.document import Document` and `from vsdxkit.errors import InvalidOperationError` if the file lacks them.
+Add `import pytest`, `from vsdxkit.document import Document` and `from
+vsdxkit.errors import InvalidOperationError` if the file lacks them.
 
 - [ ] **Step 2: Run them and watch them fail**
 
@@ -1424,7 +1651,11 @@ Expected: both FAIL with `DID NOT RAISE`.
 
 - [ ] **Step 3: Guard both writes**
 
-`master_page_ID`'s setter first calls `self._require_attached("writing a shape's master_page_ID")`. Its docstring gains ":raises InvalidOperationError: if the shape is detached". `is_attached`'s docstring loses ", as does every write but one: the ``master_page_ID`` setter is not guarded, and writes to the detached element" and ends ", as does every write."
+`master_page_ID`'s setter first calls `self._require_attached("writing a shape's
+master_page_ID")`. Its docstring gains ":raises InvalidOperationError: if the
+shape is detached". `is_attached`'s docstring loses ", as does every write but
+one: the ``master_page_ID`` setter is not guarded, and writes to the detached
+element" and ends ", as does every write."
 
 In `append_shape`, directly after `self._require_attached("Shape.append_shape()")`:
 
@@ -1436,9 +1667,16 @@ In `append_shape`, directly after `self._require_attached("Shape.append_shape()"
             )
 ```
 
-The docstring's sentence "A shape whose element is not on the page, such as one built by hand or one deleted from this page, is placed, with IDs the page is not using." goes. The `:raises:` line gains "if ``append_shape`` is detached".
+The docstring's sentence "A shape whose element is not on the page, such as one
+built by hand or one deleted from this page, is placed, with IDs the page is not
+using." goes. The `:raises:` line gains "if ``append_shape`` is detached".
 
-Run `uv run --no-sync python -m pytest tests/test_shape.py tests/test_back_references.py tests/test_shape_id_single_store.py tests/test_errors.py -q`. A test that appends a shape built by hand (`Shape(xml=...)`) now fails. Change it to append a `copy()` of a shape on the page. `Shape` is reached through a document, never constructed (spec ruling). Name each change in the report.
+Run `uv run --no-sync python -m pytest tests/test_shape.py
+tests/test_back_references.py tests/test_shape_id_single_store.py
+tests/test_errors.py -q`. A test that appends a shape built by hand
+(`Shape(xml=...)`) now fails. Change it to append a `copy()` of a shape on the
+page. `Shape` is reached through a document, never constructed (spec ruling).
+Name each change in the report.
 
 - [ ] **Step 4: The guide**
 
@@ -1462,11 +1700,13 @@ Writes to a geometry row's ``row_type``, ``index`` or ``del_bool``, and ``DataPr
 
 - [ ] **Step 5: The full gates, and the sweeps (controller)**
 
-Every gate. The save and render sweeps against 8a's head: 28 of 28 and 10 of 10 `same`.
+Every gate. The save and render sweeps against 8a's head: 28 of 28 and 10 of 10
+`same`.
 
 - [ ] **Step 6: Commit**
 
-Commit with the message `fix!: a deleted shape refuses master_page_ID and append_shape, so delete is one-way (#434, #438)`.
+Commit with the message `fix!: a deleted shape refuses master_page_ID and
+append_shape, so delete is one-way (#434, #438)`.
 
 ---
 
@@ -1477,13 +1717,17 @@ Branch `fix/writes-land-c-move`, stacked on `fix/writes-land-b-instance`.
 ### Task 11: `move` moves the pin or the ends, never the geometry
 
 **Files:**
+
 - Modify: `src/vsdxkit/shapes.py`: `move` (`:1697-1714`)
-- Modify: `tests/test_geometry.py:283` and `:302`: `connector.move(` becomes `connector.geometry.move(`. Those tests are about `Geometry.move`'s copy-down.
+- Modify: `tests/test_geometry.py:283` and `:302`: `connector.move(` becomes
+  `connector.geometry.move(`. Those tests are about `Geometry.move`'s copy-down.
 - Test: `tests/test_move.py` (new)
 
-- [ ] **Step 1: Point the geometry tests at `Geometry.move`, and write the failing tests**
+- [ ] **Step 1: Point the geometry tests at `Geometry.move`, and write the
+      failing tests**
 
-Make the two `test_geometry.py` edits. Their docstrings already name `Geometry.move()`. Then:
+Make the two `test_geometry.py` edits. Their docstrings already name
+`Geometry.move()`. Then:
 
 ```python
 """Moving a shape moves the shape (#430).
@@ -1553,6 +1797,7 @@ def test_moving_a_glued_connector_frees_both_ends(vsdx_copy):
 
 Run: `uv run --no-sync python -m pytest tests/test_move.py -q`
 Expected:
+
 - the outline test and the 1-D test fail on the rows, and on the end not moving;
 - the pin-formula test fails with `'GUARD(1)'`;
 - the glued test fails because the ends stay glued.
@@ -1586,18 +1831,24 @@ Expected:
         self._refresh_formula_values()
 ```
 
-- [ ] **Step 4: Run the move tests, the geometry, shape and templating suites, and the full gates**
+- [ ] **Step 4: Run the move tests, the geometry, shape and templating suites,
+      and the full gates**
 
-Run: `uv run --no-sync python -m pytest tests/test_move.py tests/test_geometry.py tests/test_shape.py tests/test_jinja.py tests/test_jinja_nested_loop.py tests/test_render_document.py -q`, then every gate.
-Expected: all pass. A templating test that asserts a loop copy's geometry rows were shifted is asserting #430's bug: invert it, and say so in the report.
+Run: `uv run --no-sync python -m pytest tests/test_move.py
+tests/test_geometry.py tests/test_shape.py tests/test_jinja.py
+tests/test_jinja_nested_loop.py tests/test_render_document.py -q`, then every
+gate. Expected: all pass. A templating test that asserts a loop copy's geometry
+rows were shifted is asserting #430's bug: invert it, and say so in the report.
 
 - [ ] **Step 5: Commit**
 
-Commit with the message `fix!: move shifts the pin, or a 1-D shape's two ends, and never the geometry (#430)`.
+Commit with the message `fix!: move shifts the pin, or a 1-D shape's two ends,
+and never the geometry (#430)`.
 
 ### Task 12: A 1-D shape's text pin is local; `set_start_and_finish` refuses a 2-D shape; Visio cases 4–6
 
 **Files:**
+
 - Modify: `src/vsdxkit/shapes.py`: `_place_ends` (from Task 5)
 - Modify: `tools/writes_land_cases.py` (three cases)
 - Modify: `docs/migration-1.0.rst`, the section from Task 6
@@ -1632,15 +1883,18 @@ Add `from vsdxkit.errors import InvalidOperationError` to the file's imports.
 
 - [ ] **Step 2: Run them and watch them fail**
 
-Run: `uv run --no-sync python -m pytest tests/test_glued_end_writes.py -q -k "text_pin or 2d"`
-Expected:
+Run: `uv run --no-sync python -m pytest tests/test_glued_end_writes.py -q -k
+"text_pin or 2d"` Expected:
+
 - the text-pin test fails with the page-coordinate value (about 2.0), not 1.0;
 - the 2-D test fails with `DID NOT RAISE`.
 
 - [ ] **Step 3: The text pin and the refusal**
 
 In `_place_ends`:
-- the `if self.begin_x is not None:` block's condition is inverted into an early refusal:
+
+- the `if self.begin_x is not None:` block's condition is inverted into an early
+  refusal:
 
   ```python
           if self.begin_x is None:
@@ -1650,8 +1904,11 @@ In `_place_ends`:
   ```
 
   The body below it is dedented one level.
-- The text-pin branch becomes `text_x, text_y = width / 2, height / 2` for every 1-D shape. The `center_x_y` branch and its `InvalidOperationError` go.
-- The `is_connector` line stays, because it still chooses the height. Its comment becomes: "a dynamic connector's height is its y span; a plain line's is 0, its slope carried by its geometry".
+- The text-pin branch becomes `text_x, text_y = width / 2, height / 2` for every
+  1-D shape. The `center_x_y` branch and its `InvalidOperationError` go.
+- The `is_connector` line stays, because it still chooses the height. Its
+  comment becomes: "a dynamic connector's height is its y span; a plain line's
+  is 0, its slope carried by its geometry".
 - `set_start_and_finish`'s docstring `:raises:` gains "or it is a 2-D shape".
 
 - [ ] **Step 4: Visio cases 4–6**
@@ -1704,16 +1961,22 @@ Add to the section:
 
 - [ ] **Step 6: Run the tests, the tool test and the full gates; the sweeps (controller)**
 
-Run: `uv run --no-sync python -m pytest tests/test_glued_end_writes.py tests/test_writes_land_cases_tool.py tests/test_page.py -q`, then every gate.
+Run: `uv run --no-sync python -m pytest tests/test_glued_end_writes.py
+tests/test_writes_land_cases_tool.py tests/test_page.py -q`, then every gate.
 Expected: all pass.
 
 The controller runs the sweeps against 8b's head:
-- **Save sweep:** 28 of 28 `same`, unless the workload moves a shape; each difference is named.
-- **Render sweep:** the loop cases differ only in the loop copies. Their geometry rows are no longer shifted, and a moved 2-D copy's pin loses its formula. Every other case is `same`. The PR names each difference.
+
+- **Save sweep:** 28 of 28 `same`, unless the workload moves a shape; each
+  difference is named.
+- **Render sweep:** the loop cases differ only in the loop copies. Their
+  geometry rows are no longer shifted, and a moved 2-D copy's pin loses its
+  formula. Every other case is `same`. The PR names each difference.
 
 - [ ] **Step 7: Commit**
 
-Commit with the message `fix!: a 1-D shape's text pin is in its own coordinates, and set_start_and_finish refuses a 2-D shape (#301)`.
+Commit with the message `fix!: a 1-D shape's text pin is in its own coordinates,
+and set_start_and_finish refuses a 2-D shape (#301)`.
 
 ---
 
@@ -1722,6 +1985,9 @@ Commit with the message `fix!: a 1-D shape's text pin is in its own coordinates,
 1. Push the spec branch and the three PR branches.
 2. Open the stack with `gh stack`: the spec PR, then 8a, 8b and 8c.
 3. Put `needs-visio` on 8a, 8b and 8c.
-4. Each PR body gives `python tools/writes_land_cases.py out/`, then `python tools/visio_verify.py check out/<case>.vsdx` for each of the six files, with `EXPECTED.txt`.
+4. Each PR body gives `python tools/writes_land_cases.py out/`, then `python
+   tools/visio_verify.py check out/<case>.vsdx` for each of the six files, with
+   `EXPECTED.txt`.
 5. Watch CI on each pushed head, and read each head's inline comments.
-6. Ask the maintainer for the Visio run. Nothing merges until every case agrees, and until the maintainer says go.
+6. Ask the maintainer for the Visio run. Nothing merges until every case agrees,
+   and until the maintainer says go.

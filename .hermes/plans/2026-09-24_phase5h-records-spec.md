@@ -8,7 +8,7 @@ Authority: `.hermes/plans/2026-09-12_simplification-usability-refactor.md`,
 ## What goes
 
 | Removed | Use |
-|---|---|
+| --- | --- |
 | `vsdxkit.connectors.Connect` | `Connector`, `connector.source`, `connector.target` |
 | `Page.connects`, `Page.get_connects()` | `page.connectors` |
 | `Shape.connects` | `shape.connectors`, `shape.connected_shapes` |

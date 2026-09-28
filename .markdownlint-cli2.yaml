@@ -1,0 +1,46 @@
+# markdownlint-cli2 configuration, read by the `markdownlint-cli2` prek hook.
+# The same policy as firmfooting/dbml-sharepoint, whose copy records the
+# measurements behind each choice. CI lints through that hook as well (see
+# .github/workflows/prek.yml), so the hook's `rev:` is the only version.
+
+# The ruleset is markdownlint's default. Disabling a rule needs a reason
+# written here. What each rule means:
+# https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+
+# No `globs:` key: markdownlint-cli2 appends it to the files the hook passes,
+# which would lint the whole tree on every commit that touches markdown.
+
+# Emitted markdown in an ignored build directory is not ours to lint.
+gitignore: true
+
+ignores:
+  - "**/node_modules/**"
+  # Written by release-please from the squashed commit subjects, as in
+  # dbml-sharepoint: a violation there cannot be fixed without rewriting history.
+  - "CHANGELOG.md"
+  # Written by tools/visio_shots.py as the record of a run; a violation there
+  # is fixed in the tool, not in a past run's summary.
+  - ".hermes/visio-shots/runs/**"
+
+config:
+  # A table row cannot wrap and a fenced line is copied and run, so neither
+  # can be shortened without losing content. Prose and headings stay at 80.
+  MD013:
+    tables: false
+    code_blocks: false
+    # MEASURED 2026-09-29: 17 headings over 80, all titles and task headings in
+    # dated .hermes plans and specs. Shortening them would rewrite a dated
+    # record, so headings are exempt here only.
+    headings: false
+
+  # The shared firmfooting README header and footer need a `<picture>` for the
+  # dark-mode lockup, inside an `<h1>` so MD041 still sees a heading first,
+  # and a `<sub>` footer carrying a link. Any other element still fires.
+  MD033:
+    allowed_elements:
+      - h1
+      - picture
+      - source
+      - img
+      - sub
+      - a

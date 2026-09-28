@@ -5,7 +5,7 @@ Authority: `.hermes/plans/2026-09-12_simplification-usability-refactor.md`,
 Phase 5 acceptance and "Definition of done": the migration guide contains
 every removed documented call from the first breaking PR onward.
 
-#112 lands as two PRs:
+\#112 lands as two PRs:
 
 1. **This one:** the checker, and the guide entries for every name and
    behaviour already gone since 0.8.0.
@@ -59,7 +59,8 @@ everything since the `v0.8.0` tag is unreleased. The package imported as
 
 - The import package rename, and the root imports with one entry per
   `vsdx.__all__` name.
-- Errors are one hierarchy (#365), limited to package, document and operation errors; argument errors stay built-ins.
+- Errors are one hierarchy (#365), limited to package, document and operation
+  errors; argument errors stay built-ins.
 - A save writes only what changed, and document parts refuse `None` (#373).
 - Parts are named by part name, covering:
   - `filename` (#380);
