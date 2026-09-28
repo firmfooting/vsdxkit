@@ -25,9 +25,10 @@
     "cell" is a Visio universal cell name: PinX, LineColor, Geometry1.X2, ...
 
 .PARAMETER ProcessIdFile
-    Where to write the ID of the Visio process this script starts, as soon
-    as it has one. A caller that has to give up on the script kills that
-    process, and no other.
+    Where to write the Visio process this script starts, as soon as it has
+    one: its ID and start time, "ID ticks", since Windows reuses IDs. A
+    caller that has to give up on the script kills that process, and no
+    other.
 
 .PARAMETER AllowRunningVisio
     Proceed even if Visio is already running. Off by default, for the reasons
@@ -53,6 +54,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Register-OwnVisio and Stop-OwnVisio: which Visio this script started, and
+# how it is ended.
+. (Join-Path $PSScriptRoot 'visio_process.ps1')
+
 function Write-Refusal {
     # Not Write-Error, for the reason tools/visio_cells.ps1's Write-Refusal gives.
     param([string]$Message, [int]$Code)
@@ -61,53 +66,16 @@ function Write-Refusal {
     exit $Code
 }
 
-function Get-VisioProcessIds {
-    return @(Get-Process -Name VISIO -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
-}
-
-Add-Type -Namespace VsdxKit -Name Window -MemberDefinition @'
-[DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(System.IntPtr hWnd, out uint processId);
-'@
-
-function Get-VisioProcess {
-    # The Visio with ID $ProcessId, or $null: an ID a Visio has let go of can
-    # be another program's by the time it is looked at.
-    param([int]$ProcessId)
-
-    $process = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
-    if ($null -eq $process -or $process.ProcessName -ne 'VISIO') { return $null }
-    return $process
-}
-
-function Get-OwnProcessId {
-    <#
-      The ID of the Windows process $App runs in, or $null where it cannot be
-      told: the owner of Visio's main window, WindowHandle32, once it is seen
-      to be a Visio.
-
-      Not $App.ProcessID. On Visio 16 that names no process at all (199300,
-      against a VISIO.EXE of 39524), so killing by it would miss this Visio
-      and could kill whatever process had that ID.
-    #>
-    param($App)
-
-    [uint32]$owner = 0
-    [void][VsdxKit.Window]::GetWindowThreadProcessId([System.IntPtr][int64]$App.WindowHandle32, [ref]$owner)
-    $process = Get-Process -Id ([int]$owner) -ErrorAction SilentlyContinue
-    if ($owner -eq 0 -or $null -eq $process -or $process.ProcessName -ne 'VISIO') { return $null }
-    return [int]$owner
-}
-
 # CellExistsU's second argument: 0 counts a cell inherited from a master, as
 # tools/visio_cells.ps1's $visExistsAnywhere does.
 $visExistsAnywhere = 0
 
 # --- pre-flight -------------------------------------------------------------
 
-$preexisting = @(Get-VisioProcessIds)
+$preexisting = @(Get-VisioIdentities)
 if ($preexisting.Count -gt 0 -and -not $AllowRunningVisio) {
     Write-Refusal (
-        "Visio is already running (pid $($preexisting -join ', ')). It may hold a lock on the " +
+        "Visio is already running (pid $(($preexisting | ForEach-Object { $_.Id }) -join ', ')). It may hold a lock on the " +
         'files under test. Close it, or pass -AllowRunningVisio if it is wanted.'
     ) 3
 }
@@ -130,18 +98,12 @@ $visRasterPixelsPerInch = 0
 # --- run --------------------------------------------------------------------
 
 $app = $null
-$ownProcessId = $null
+$ownVisio = $null
 $out = @()
 $visio = [ordered]@{}
 try {
     $app = New-Object -ComObject Visio.InvisibleApp
-    # The one process this script may kill if Quit leaves it running. Not
-    # "any Visio started during the run": a Visio the developer opens while
-    # a long export is under way is theirs, with their unsaved work in it.
-    $ownProcessId = Get-OwnProcessId -App $app
-    if ($ProcessIdFile -and $null -ne $ownProcessId) {
-        Set-Content -Path $ProcessIdFile -Value $ownProcessId -Encoding ascii
-    }
+    $ownVisio = Register-OwnVisio -App $app -ProcessIdFile $ProcessIdFile
     $app.AlertResponse = 7
     $visio.version = [string]$app.Version
     $visio.build = [string]$app.Build
@@ -188,15 +150,13 @@ finally {
     [System.GC]::Collect()
     [System.GC]::WaitForPendingFinalizers()
 
-    if ($null -ne $ownProcessId) {
-        $deadline = (Get-Date).AddSeconds(15)
-        while ((Get-Date) -lt $deadline -and $null -ne (Get-VisioProcess -ProcessId $ownProcessId)) {
-            Start-Sleep -Milliseconds 250
-        }
-        $leftover = Get-VisioProcess -ProcessId $ownProcessId
-        if ($null -ne $leftover) {
-            try { $leftover | Stop-Process -Force -ErrorAction Stop } catch { }
-        }
+    if ($null -eq $ownVisio) {
+        # New-Object can start VISIO.EXE and fail before this script could name
+        # it; which Visio that is cannot be proven, so they are named, not ended
+        Write-StrandedVisio -Preexisting $preexisting
+    }
+    else {
+        Stop-OwnVisio -Visio $ownVisio
     }
 }
 

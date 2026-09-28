@@ -22,6 +22,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
+from typing import NamedTuple
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tests"))
 
@@ -194,37 +196,140 @@ def observe(paths: list[str], *, timeout: int | None = None, allow_running: bool
         return _observe_directory(root, timeout=budget, allow_running=allow_running)
 
 
-def _visio_pids() -> set[int]:
+PROCESS_ID_FILE = "visio.pid"
+"""The name each script's `-ProcessIdFile` is given in its staging directory: the ID of the Visio it started, once it has one."""
+
+
+class _Visio(NamedTuple):
+    """A VISIO process: its ID, and when it started, in UTC .NET ticks.
+
+    The ID alone does not name it. Windows reuses IDs, so once a Visio has
+    gone its ID can be a later process's, another Visio's among them.
+    """
+
+    id: int
+    started: int
+
+
+def _parse_visio(line: str) -> _Visio | None:
+    """A `_Visio` from the "ID ticks" a listing prints, and a `-ProcessIdFile` holds; None for anything else."""
+    fields = line.split()
+    if len(fields) != 2 or not all(field.isdigit() for field in fields):
+        return None
+    return _Visio(int(fields[0]), int(fields[1]))
+
+
+def _started_visio(path: Path) -> _Visio | None:
+    """The Visio process a script started, from the `-ProcessIdFile` it writes as soon as it has one; None before that."""
+    try:
+        return _parse_visio(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+
+
+_START_TICKS = "$_.StartTime.ToUniversalTime().Ticks"
+"""PowerShell for when the process `$_` started, as `_Visio.started` holds it; tools/visio_process.ps1 writes the same."""
+
+
+def _visio_processes(*, invisible_only: bool = False) -> set[_Visio]:
+    """The VISIO processes running now; with `invisible_only`, those with no visible main window.
+
+    A Visio a script starts is a `Visio.InvisibleApp`, whose process has no
+    visible main window (``MainWindowHandle`` 0); one a developer opens has.
+    """
+    pick = " | Where-Object { $_.MainWindowHandle -eq 0 }" if invisible_only else ""
     result = subprocess.run(
         [
             _shell(),
             "-NoProfile",
             "-NonInteractive",
             "-Command",
-            "Get-Process -Name VISIO -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }",
+            f'Get-Process -Name VISIO -ErrorAction SilentlyContinue{pick} | ForEach-Object {{ "$($_.Id) $({_START_TICKS})" }}',
         ],
         capture_output=True,
         text=True,
         timeout=60,
     )
-    return {int(line) for line in result.stdout.split() if line.strip().isdigit()}
+    return {visio for line in result.stdout.splitlines() if (visio := _parse_visio(line)) is not None}
 
 
-def _reap_visio(before: set[int]) -> list[int]:
-    """Kill Visio processes that were not running before we started."""
-    leaked = sorted(_visio_pids() - before)
-    for pid in leaked:
+def _stop_started_visio(process_id_file: Path, before: set[_Visio]) -> str:
+    """Kill the Visio a timed-out script started, and no other; what was done, as a clause to end the caller's message.
+
+    Killing PowerShell does not kill Visio: `New-Object -ComObject` starts
+    VISIO.EXE out of process, so the script's own cleanup never runs and an
+    invisible Visio is left holding the staged files. Only that one is
+    killed, never a developer's, which is theirs, with their unsaved work in
+    it (#463).
+
+    The script names its Visio in `process_id_file` as soon as it has one.
+    One killed before then, while COM activation hung, named none, and none
+    is killed: the new Visio with no window could as well be another
+    harness's InvisibleApp, which never shows one. The VISIO processes with
+    no visible window that were not running when the script was started,
+    `before`, are named instead, for whoever ran it to end.
+
+    A process is taken for the script's only while it is a VISIO with the
+    ID and start time the script's had: an ID a Visio has let go of can be
+    another program's, or a later Visio's. A kill is reported only once the
+    process is seen to be gone.
+
+    A machine wedged enough for the script to time out can leave these
+    PowerShell calls unanswered too; the clause then says the Visio may
+    still be running, so the caller's own message is not lost to a second
+    timeout.
+    """
+    try:
+        visio = _started_visio(process_id_file)
+        if visio is None:
+            started = sorted(_visio_processes(invisible_only=True) - before)
+            if not started:
+                return "; it had not started Visio"
+            named = ", ".join(str(process.id) for process in started)
+            return (
+                f"; it named no Visio as its own, so none was killed; invisible Visio "
+                f"{'process' if len(started) == 1 else 'processes'} {named} started while it ran: "
+                "end the one it left, if you can tell it from another program's"
+            )
+        if visio not in _visio_processes():
+            return f"; the Visio it started, process {visio.id}, had already ended"
+        # Stop-Process returns before Windows has ended the process, so the
+        # kill waits for the exit before the listing below judges it
         subprocess.run(
-            [_shell(), "-NoProfile", "-NonInteractive", "-Command", f"Stop-Process -Id {pid} -Force"],
+            [
+                _shell(),
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                f"$visio = Get-Process -Id {visio.id} -ErrorAction SilentlyContinue | Where-Object {{ "
+                f"$_.ProcessName -eq 'VISIO' -and {_START_TICKS} -eq {visio.started} }}; "
+                "if ($visio) { $visio | Stop-Process -Force; [void]$visio.WaitForExit(10000) }",
+            ],
             capture_output=True,
             text=True,
             timeout=60,
         )
-    return leaked
+        still_running = visio in _visio_processes()
+    except subprocess.TimeoutExpired:
+        return "; PowerShell did not answer while ending the Visio it started, which may still be running: end it before the next run"
+    if not still_running:
+        return f"; so was the Visio it started, process {visio.id}"
+    return f"; the Visio it started, process {visio.id}, could not be killed: end it before the next run"
+
+
+def _relay_diagnostics(stderr: str) -> None:
+    """Pass on what a Visio script that answered wrote to stderr: its lifecycle warnings.
+
+    A script that answered can still have left its Visio running, and says
+    so only there; a caller that read stderr only on failure reported the
+    run as clean (#464).
+    """
+    for line in stderr.splitlines():
+        if line.strip():
+            print(line.rstrip(), file=sys.stderr)
 
 
 def _observe_directory(root: str, *, timeout: int, allow_running: bool) -> dict:
-    before = _visio_pids()
     # -Command rather than -File: with -File every argument arrives as a separate
     # literal string, so a `string[]` parameter only ever receives its first
     # element and the rest fail to bind. -Command hands PowerShell one expression
@@ -238,26 +343,27 @@ def _observe_directory(root: str, *, timeout: int, allow_running: bool) -> dict:
     # that variable but not the shell's own status: without it every refusal
     # reaches Python as a generic exit 1, and the codes above would mean nothing.
     switches = " -AllowRunningVisio" if allow_running else ""
-    expression = f"& {_quote(_windows_path(OBSERVER))} -Path {_quote(_windows_path(root))}{switches}; exit $LASTEXITCODE"
+    # beside the files, not among them: the observer opens only .vsdx and .vsdm
+    process_id_file = Path(root) / PROCESS_ID_FILE
+    expression = (
+        f"& {_quote(_windows_path(OBSERVER))} -Path {_quote(_windows_path(root))}{switches} "
+        f"-ProcessIdFile {_quote(_windows_path(str(process_id_file)))}; exit $LASTEXITCODE"
+    )
     command = [_shell(), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", expression]
+    before = _visio_processes()
     try:
         result = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired as expired:
-        # Killing PowerShell does not kill Visio: `New-Object -ComObject` starts
-        # VISIO.EXE out of process, so the observer's own cleanup never runs and
-        # an invisible Visio is left holding the staged files. Every later run
-        # then refuses with "Visio is already running" - the exact misdiagnosis
-        # the lifecycle rules exist to prevent, self-inflicted. Reap it here.
-        killed = _reap_visio(before)
         raise VisioUnavailable(
-            f"Visio did not answer within {timeout}s and was killed"
-            + (f" (stranded process {', '.join(map(str, killed))} also killed)" if killed else "")
+            f"the Visio observer did not answer within {timeout}s and was killed"
+            + _stop_started_visio(process_id_file, before)
             + ". Raise --timeout if the corpus is large, or open one of the files by hand: a modal "
             "dialog Visio raises outside its alert mechanism blocks until something dismisses it."
         ) from expired
     payload = result.stdout.strip()
     if not payload:
         raise VisioUnavailable(_refusal(result.returncode, result.stderr.strip()))
+    _relay_diagnostics(result.stderr)
     try:
         return json.loads(payload)
     except json.JSONDecodeError as error:
