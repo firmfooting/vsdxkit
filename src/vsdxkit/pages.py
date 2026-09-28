@@ -281,7 +281,7 @@ class Page:
     xml: PartTree
     """The page's part, parsed: its shapes and its ``Connect`` records."""
 
-    def __init__(self, xml: PartTree, filename: str, page_name: str, page_id: str, rel_id: str, vis: _DocumentSeam):
+    def __init__(self, xml: PartTree, filename: str, page_name: str, page_id: str, rel_id: str, vis: _DocumentSeam) -> None:
         """Wrap `xml`, the part stored as `filename`, under the name, ID and relationship ID its document `vis` lists it with.
 
         A drawing page's come from pages.xml, a master's from masters.xml; the
