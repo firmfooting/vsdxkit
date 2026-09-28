@@ -16,6 +16,7 @@ from collections.abc import Mapping
 from logging import Logger
 from typing import Protocol
 
+from jinja2 import Template
 from jinja2.sandbox import SandboxedEnvironment
 
 from vsdxkit._logging_support import get_logger
@@ -78,7 +79,7 @@ class RenderTarget(Protocol):
         ...
 
 
-def _template(source: str):
+def _template(source: str) -> Template:
     """Compile document-supplied text in the sandbox. Never use jinja2.Template here."""
     return _ENVIRONMENT.from_string(source)
 
@@ -213,7 +214,7 @@ def _unescape_statements(jinja_source: str) -> str:
     """`jinja_source`, a page serialised to XML, with ``&gt;`` and ``&lt;`` inside each ``{% ... %}`` turned back into ``>`` and ``<`` for Jinja to read."""
     # unescape any text between {% ... %}
     jinja_source_out = jinja_source
-    matches = re.findall("{%(.*?)%}", jinja_source)  # non-greedy search for all {%...%} strings
+    matches: list[str] = re.findall("{%(.*?)%}", jinja_source)  # non-greedy search for all {%...%} strings
     for m in matches:
         unescaped = m.replace("&gt;", ">").replace("&lt;", "<")
         jinja_source_out = jinja_source_out.replace(m, unescaped)

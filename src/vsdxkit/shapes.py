@@ -481,7 +481,7 @@ class Cell(ShapePart):
     shape: Shape
     """The shape the cell belongs to. A write through the cell is refused once that shape is detached."""
 
-    def __init__(self, xml: Element, shape: Shape):
+    def __init__(self, xml: Element, shape: Shape) -> None:
         """Wrap `xml`, one of `shape`'s cell elements; `Shape.cells` and the cell writers make these."""
         self.xml = xml
         self.shape = shape
@@ -569,7 +569,7 @@ class DataProperty(InheritedRow, ShapePart):
     name: str | None
     """The row's ``N`` attribute, which an override row shares with its master's row; ``None`` for a row without one."""
 
-    def __init__(self, *, xml: Element, shape: Shape):
+    def __init__(self, *, xml: Element, shape: Shape) -> None:
         """init a DataProperty from a property xml element in a Shape object"""
         self.shape = shape  # reference back to Shape object
         self.xml = xml  # reference to xml used to create DataProperty
@@ -917,7 +917,7 @@ class Shape:
     _slot: int | None
     """Where the element last sat among its container's children, which `_held_by` tries first; None until found."""
 
-    def __init__(self, xml: Element, parent: _PageSeam | Shape, page: _PageSeam):
+    def __init__(self, xml: Element, parent: _PageSeam | Shape, page: _PageSeam) -> None:
         """Wrap `xml`, a shape element held by `parent` on `page`.
 
         The library builds every wrapper through `_wrap`, which picks

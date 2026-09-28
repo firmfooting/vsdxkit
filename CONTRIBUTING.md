@@ -33,7 +33,8 @@ uv run --no-sync sphinx-build -W --keep-going -b html docs docs/_build/html
 uv run --no-sync python -m build
 ```
 
-The package is held at pyrefly's `strict` preset.
+The package is held at pyrefly's `strict` preset plus the error kinds listed under
+`[tool.pyrefly.errors]` in `pyproject.toml`, the same configuration as dbml-sharepoint.
 
 The Sphinx source is in [`docs/`](docs/), and the build above writes the site to
 `docs/_build/html` (`python -m sphinx` in place of `sphinx-build` runs the same

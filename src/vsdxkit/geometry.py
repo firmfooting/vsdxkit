@@ -121,7 +121,7 @@ class Geometry(ShapePart):
     from the shape, because :mod:`vsdxkit.shapes` imports this module.
     """
 
-    def __init__(self, xml: Element, shape: _GeometryOwner):
+    def __init__(self, xml: Element, shape: _GeometryOwner) -> None:
         """Read `xml`, one of `shape`'s Geometry sections, merged over its master's; `Shape.geometry` makes these."""
         # get shape master geometry, and append/overwrite with actual shape instance data
 
@@ -301,7 +301,7 @@ class GeometryRow(InheritedRow, ShapePart):
         master_geometry_row: GeometryRow | None,
         T: str | None = None,
         IX: str | int | None = None,
-    ):
+    ) -> None:
         """Read `xml`, a row of `geometry`'s section, over `master_geometry_row`'s cells; without `xml`, add a row of type `T` at index `IX`.
 
         Adding one raises `ValueError` without a `T`, and `InvalidOperationError`
@@ -688,7 +688,7 @@ class GeometryCell(ShapePart):
         xml: Element | None,
         name: str | None = None,
         value: float | str | None = None,
-    ):
+    ) -> None:
         """Wrap `xml`, a cell of `parent`, or without it add a cell named `name` to `parent`; then write `name` and `value` where given."""
         self.parent = parent
         if type(xml) is Element:
