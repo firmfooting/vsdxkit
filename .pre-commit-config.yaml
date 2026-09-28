@@ -6,7 +6,8 @@
 # disagree with CI.
 #
 # The lint, type and workflow hooks are local and call the tools pinned in the
-# `lint` group through `uv run`, so a hook cannot drift from the version CI uses.
+# `lint` group through `uv run`, so a hook cannot drift from the version CI
+# uses.
 #
 # Line endings are governed by .gitattributes (eol=lf), so no hook rewrites
 # files; every hook below only checks.
