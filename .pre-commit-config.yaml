@@ -1,0 +1,71 @@
+# Git hooks, run by prek (https://prek.j178.dev/). The file keeps the
+# `.pre-commit-config.yaml` name because that is the format prek reads.
+# Install once with `uv run prek install`; run everything with
+# `uv run prek run --all-files`. The pre-push shim also runs the test suite. CI runs the same command through firmfooting/.github's
+# prek.yml, so a hook can never disagree with CI.
+#
+# The lint, type and workflow hooks are local and call the tools pinned in the
+# `lint` group through `uv run`, so a hook cannot drift from the version CI uses.
+#
+# Line endings are governed by .gitattributes (eol=lf), so no hook rewrites
+# files; every hook below only checks.
+minimum_pre_commit_version: "3.0.0"
+
+# No commit-msg hook: firmfooting repositories squash-merge, so only the PR
+# title reaches main, and pr-title.yml checks that.
+# Without pre-push, `prek install` writes only the pre-commit shim and the
+# pytest hook below is never installed.
+default_install_hook_types: [pre-commit, pre-push]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=1500]
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+
+  # Markdown style. Scope and rules live in .markdownlint-cli2.yaml. This `rev:`
+  # is the only place the version is held; CI lints through this hook too.
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.23.2
+    hooks:
+      - id: markdownlint-cli2
+
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff check
+        entry: uv run ruff check --force-exclude
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+      - id: ruff-format
+        name: ruff format --check
+        entry: uv run ruff format --check --force-exclude
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+      - id: pyrefly
+        name: pyrefly (strict)
+        entry: uv run pyrefly check src/vsdxkit --min-severity warn --output-format min-text
+        language: system
+        types: [python]
+        pass_filenames: false
+      # The workflow audit, from the lock like the other tools; zizmor.yml runs
+      # the same pinned zizmor online in CI.
+      - id: zizmor
+        name: zizmor
+        entry: uv run zizmor --no-progress
+        language: system
+        files: (^|/)(\.github/(workflows/[^/]+|dependabot)\.ya?ml|action\.ya?ml|\.pre-commit-(config|hooks)\.ya?ml)$
+        require_serial: true
+      - id: pytest
+        name: pytest
+        entry: uv run python -m pytest tests -q
+        language: system
+        pass_filenames: false
+        stages: [pre-push]

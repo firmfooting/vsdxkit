@@ -1,0 +1,40 @@
+# Every pre-commit-stage hook in .pre-commit-config.yaml over the whole tree,
+# so CI and `uv run prek run --all-files` are the same check. The same job as
+# firmfooting/.github's shared prek.yml, written out here because
+# tools/check_action_pins.py accepts only a tagged reusable-workflow pin.
+name: prek
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions: {}
+
+concurrency:
+  group: prek-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prek:
+    name: every hook over the whole tree
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      UV_PYTHON: '3.12'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4  # v10.1.0
+        with:
+          enable-cache: false
+          version: "0.12.7"
+      # The markdownlint hook is a node package; declared so it does not run on
+      # whatever node the runner image happens to ship.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: 24
+      - name: Run every hook
+        run: uv run --locked prek run --all-files --show-diff-on-failure

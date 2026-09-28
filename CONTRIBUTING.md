@@ -1,14 +1,14 @@
-# Contributions are welcome!
+# Contributions are welcome
 
 This repository is `vsdxkit`. The distribution
 installs as `vsdxkit` and imports as `vsdxkit`. Python 3.10 or later is required.
 
-#### Development environment
+## Development environment
 
 The repository uses [uv](https://docs.astral.sh/uv/) with a committed lockfile.
 Clone it and sync the development environment:
 
-```
+```bash
 git clone https://github.com/firmfooting/vsdxkit.git
 cd vsdxkit
 uv sync --locked                 # the dev group: test, lint, build and coverage
@@ -20,9 +20,9 @@ pinned in the `docs` dependency group, which requires Python 3.12 or later, so
 run the documentation build on a 3.12+ interpreter. Drop `--group docs` from the
 sync to work on the library itself under Python 3.10 or 3.11.
 
-#### Checks to run before submitting
+## Checks to run before submitting
 
-```
+```bash
 uv run --no-sync python -m pytest tests -q
 uv run --no-sync ruff check src tests tools
 uv run --no-sync ruff format --check src tests tools
@@ -31,7 +31,14 @@ uv run --no-sync zizmor .github/workflows
 uv run --no-sync python tools/check_docstrings.py
 uv run --no-sync sphinx-build -W --keep-going -b html docs docs/_build/html
 uv run --no-sync python -m build
+uv run --no-sync prek run --all-files
 ```
+
+The last line runs `.pre-commit-config.yaml` through prek, which is pinned in
+the `lint` group: ruff, ruff format, pyrefly and zizmor again, plus
+merge-conflict, large-file, YAML, TOML and JSON checks and markdownlint under
+`.markdownlint-cli2.yaml`. `uv run prek install` once runs them on every commit
+and the test suite on every push.
 
 The package is held at pyrefly's `strict` preset plus the error kinds listed under
 `[tool.pyrefly.errors]` in `pyproject.toml`, the same configuration as dbml-sharepoint.
@@ -58,8 +65,10 @@ a LibreOffice import test, a coverage threshold, a mypy consumer fixture, and
 `tools/check_action_pins.py`, `tools/check_public_annotations.py`, and
 `tools/check_docstrings.py`, which fails on any definition in `src/vsdxkit`
 without a docstring (a constant or field is documented by a string on the line
-after it). zizmor runs as its own workflow rather than inside CI. You do not
-need to run those locally; the list above is what to run before submitting.
+after it). zizmor and prek run as workflows of their own rather than inside
+CI, and `pr-title.yml` holds pull request titles to conventional commits. You
+do not need to run those locally; the list above is what to run before
+submitting.
 
 Every definition in `src/vsdxkit` has a docstring, private ones included, and
 the API reference is generated from them by sphinx-autoapi: there is no list
@@ -71,7 +80,7 @@ To run the type-completeness gate locally, build the wheel from a fresh
 `build/`: setuptools never deletes from `build/lib`, so a stale one ships
 modules `src/` no longer has.
 
-```
+```bash
 rm -rf build dist
 uv build --wheel
 uv run python tools/check_type_completeness.py 'dist/*.whl' --fail-under 100.0
@@ -82,7 +91,7 @@ which fails on an exported name the reference lacks), build the report the
 wheel step above skips, then build the docs and check the two against each
 other, as the CI build job does:
 
-```
+```bash
 rm -rf build dist
 uv build --wheel
 uv run python tools/check_type_completeness.py 'dist/*.whl' --fail-under 100.0 --report type-completeness.json
@@ -98,7 +107,8 @@ Commit messages follow Conventional Commits (`feat:`, `fix:`, `docs:`, `ci:`,
 `chore:`, `refactor:`, and the `!` breaking-change marker), matching the
 existing history.
 
-#### Ideas / Features
+## Ideas / Features
+
 If you have ideas for new features or improvements please raise a new
 issue (_though please do check existing issues_).
 
@@ -109,7 +119,8 @@ If you identify a problem - then please raise a new issue with details
 on how to recreate the problem so it can be resolved. If you are able
 to provide a failing test case that would be super helpful :)
 
-#### Code contributions
+## Code contributions
+
 If you want to work on an existing issue please comment your intent on
 the issue in case someone else is already actively working on it.
 
@@ -119,7 +130,7 @@ responsive - but apologies in advance if I am not!
 Please add new tests for any new features you create, and keep the
 existing type-checking and formatting gates green.
 
-#### When a change needs Visio
+## When a change needs Visio
 
 Nothing in this library can tell you what Visio will do with the file it wrote.
 Visio repairs some packages on open and silently discards parts of others: a
@@ -153,7 +164,7 @@ report with every image go under `.hermes/visio-shots/local/`, which git
 ignores. `python tools/visio_shots.py diff-runs <run-a> <run-b>` lists the
 cases whose drawing changed between two runs.
 
-##### The harness
+### The harness
 
 `tools/visio_verify.py` compares two accounts of the same document: what the
 package claims, read from its XML, and what Visio reports over COM. Where they
@@ -180,14 +191,15 @@ DIFFER broken.vsdx: 3 difference(s)
 ```
 
 Shape ids, grouping and glue are all identical when a shape moves and nothing
-else about it changes, so the placement cells — `PinX`, `PinY`, `Width`, `Height`, `Angle`, `LocPinX`,
-`LocPinY`, `FlipX`, `FlipY`, and on a 1-D shape `BeginX`, `BeginY`, `EndX`,
-`EndY` — are compared too. What is compared is that both sides have the cell,
-that both hold the same kind of formula, and, where that is a plain number, its
-value. The *text* of an expression is not compared: `FormulaU` is Visio's
-rendering of a formula rather than the text the file holds, and the two differ on
-correct files. A glued connector states all of its placement as expressions, so
-for that one kind of shape this says nothing about where it ended up. See
+else about it changes, so the placement cells — `PinX`, `PinY`, `Width`,
+`Height`, `Angle`, `LocPinX`, `LocPinY`, `FlipX`, `FlipY`, and on a 1-D shape
+`BeginX`, `BeginY`, `EndX`, `EndY` — are compared too. What is compared is that
+both sides have the cell, that both hold the same kind of formula, and, where
+that is a plain number, its value. The _text_ of an expression is not compared:
+`FormulaU` is Visio's rendering of a formula rather than the text the file
+holds, and the two differ on correct files. A glued connector states all of its
+placement as expressions, so for that one kind of shape this says nothing about
+where it ended up. See
 [the recordings' README](tests/fixtures/visio_observations/README.md) for why,
 and for the tolerance.
 
@@ -198,7 +210,7 @@ produces reads exactly like a corrupt file. Pass `--allow-running-visio` if you
 have Visio open and want to proceed anyway; the harness only ever shuts down
 instances it started itself.
 
-##### Recording, so that CI can check it too
+### Recording, so that CI can check it too
 
 Visio exists on one Windows desktop and CI runs on Linux, so a Visio run is
 worth keeping:
@@ -212,7 +224,7 @@ What gets recorded is Visio's view of the file **vsdxkit wrote** from that
 fixture, not of the fixture itself. `tests/test_visio_harness_replay.py` then
 re-runs the writer on every run and compares its output to that recording, with
 no Visio involved — so a change to what we write that Visio would reject fails
-in ordinary CI. What this cannot catch is a change in what *Visio* does with
+in ordinary CI. What this cannot catch is a change in what _Visio_ does with
 unchanged bytes; only re-running `check` on Windows catches that.
 
 A recording stores the hash of its input fixture. Edit that fixture and replay
@@ -229,7 +241,8 @@ The connector and swimlane ground truth the engine was built against lives in
 [that directory's README](tests/fixtures/com_reference/README.md) before
 changing a fixture or adding a scenario.
 
-#### Releases
+## Releases
+
 Releases are cut by [release-please](https://github.com/googleapis/release-please),
 not by hand. You do not bump a version, write a changelog entry, or push a tag.
 
@@ -238,7 +251,7 @@ not by hand. You do not bump a version, write a changelog entry, or push a tag.
 enforced by the `PR title` check, because this repository squash-merges and the
 title becomes the commit subject on `main` — which is what release-please reads.
 
-```
+```text
 fix: remap every Sheet reference in a formula when copying shapes
 feat(pages): add Page.background
 docs: document the COM reference corpus
@@ -283,16 +296,18 @@ The version lives in one place, `src/vsdxkit/__init__.py`, marked with an
 `uv.lock` on every bump and fail the `uv sync --locked` gate.
 
 **First release only:** the manifest already records `0.7.0`, so release-please
-manages releases *after* it. `v0.7.0` is tagged by hand and published with a
+manages releases _after_ it. `v0.7.0` is tagged by hand and published with a
 manual run of the Publish workflow.
 
-#### The project this one descends from
+## The project this one descends from
+
 vsdxkit began as a fork of [dave-howard/vsdx](https://github.com/dave-howard/vsdx)
 and is now developed independently — it does not track that project. If a change
 you are making is a plain bug fix that would help users of the original too,
 offering it there as well is a kindness, but nothing here depends on it.
 
-#### Security
+## Security
+
 Please report vulnerabilities privately — see [SECURITY.md](SECURITY.md).
 
 Thank you :)
