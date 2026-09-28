@@ -42,7 +42,6 @@ the checking into layers by how much each costs and what each can prove:
 | The suite | everywhere, always | the library's own expectations | what we know to assert |
 | `PackageManifest` | everywhere, always | a parser that does not share ours | round-trip drift in the bytes and the canonical XML |
 | Replay of this corpus | everywhere, always | a recorded Visio | a change to what we write that Visio would reject |
-
 | `visio_verify.py check` | one Windows desktop, by hand | Visio, live | everything above, plus a change in Visio itself |
 
 Only the last row can observe Visio. The third row is what makes the last one

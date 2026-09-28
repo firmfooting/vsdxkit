@@ -11,7 +11,8 @@ Palette-name strings leave the public API.
 
 - `vsdxkit.shape_kind.ShapeKind(Enum)`: `PROCESS`, `DECISION`, `START_END`,
   `PARALLELOGRAM`, `DATABASE`, `RECTANGLE`, `CIRCLE`, `LINE`.
-- `Page.create_shape(kind_or_prototype, *, x, y, width=None, height=None, text=None) -> Shape`
+- `Page.create_shape(kind_or_prototype, *, x, y, width=None, height=None,
+  text=None) -> Shape`
   - `ShapeKind`: copies the bundled shape for that kind; text defaults to "".
   - `Shape`: copies the prototype (with its text) onto this page. A prototype
     from another document raises `InvalidOperationError` before anything changes.

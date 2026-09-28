@@ -1,6 +1,9 @@
 # Phase 7, part 2 Implementation Plan: the public surface is decided, documented and generated
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use
+> superpowers:subagent-driven-development (recommended) or
+> superpowers:executing-plans to implement this plan task-by-task. Steps use
+> checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Every name the wheel exports is user API on purpose and every other
 name starts with an underscore; every definition in `src/vsdxkit` has a
@@ -10,6 +13,7 @@ it; and the points owed from Phase 6 are closed (`PageView` writable, F2, F3,
 the copy source check, F1 filed).
 
 **Architecture:** Three PRs stacked on the spec branch.
+
 - **7d** closes Phase 6's open points. `PageView` gains `Page`'s five setters. A
   page's `{% showif %}` is judged with `compile_expression`, as `{% if %}`
   judges it, and a kept page's name is rendered as a template. `Shape.copy`
@@ -38,41 +42,84 @@ consumer fixture), ruff, Sphinx 9.1.0 with `sphinx-autoapi` 3.8.1 (pulls in
 - Absolute imports only (`from vsdxkit.x import y`). No relative imports.
 - No `__all__`.
 - No re-exports: a name is imported from the module that defines it.
-- Follow dignified-python (dagster-io): LBYL, no bare `except`, explicit names, comments that say why.
-- Part names come only from `vsdxkit._partnames` once Task 5 lands (`vsdxkit.partnames` before it).
+- Follow dignified-python (dagster-io): LBYL, no bare `except`, explicit names,
+  comments that say why.
+- Part names come only from `vsdxkit._partnames` once Task 5 lands
+  (`vsdxkit.partnames` before it).
 - Tests keep calling the document `vis`.
-- One plain command per shell call: no `cd x &&`, no `;` chains, no shell variables, no heredocs into python. Scripts are written to files with the Write tool and run with `uv run --no-sync python <file>`.
-- Commit messages are written to `S/commit-msg.txt` with the Write tool and committed with `git commit -F S/commit-msg.txt`. Every message ends with these two lines, after a blank line:
-  ```
+- One plain command per shell call: no `cd x &&`, no `;` chains, no shell
+  variables, no heredocs into python. Scripts are written to files with the
+  Write tool and run with `uv run --no-sync python <file>`.
+- Commit messages are written to `S/commit-msg.txt` with the Write tool and
+  committed with `git commit -F S/commit-msg.txt`. Every message ends with these
+  two lines, after a blank line:
+
+  ```text
   Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
   Claude-Session: https://claude.ai/code/session_014SeJzNKgmmqyg4BHg7odRt
   ```
-- **Saved bytes:** the save sweep stays 28 of 28 `same` against `S/main-base/src` on every PR.
-- **The render sweep:** 10 cases once the controller has updated it (7d). In 7d, cases 0–6 are `same` and cases 7, 8 and 9 differ exactly as Task 2 names. In 7e and 7f, 10 of 10 are `same` against the PR's base.
-- **Type completeness:** 100.0% of what the wheel exports (`--fail-under 100.0`). The exported count falls from 380 to 222 in 7e (measured on the prototype); the gate measures the percentage.
+
+- **Saved bytes:** the save sweep stays 28 of 28 `same` against
+  `S/main-base/src` on every PR.
+- **The render sweep:** 10 cases once the controller has updated it (7d). In 7d,
+  cases 0–6 are `same` and cases 7, 8 and 9 differ exactly as Task 2 names. In
+  7e and 7f, 10 of 10 are `same` against the PR's base.
+- **Type completeness:** 100.0% of what the wheel exports (`--fail-under
+  100.0`). The exported count falls from 380 to 222 in 7e (measured on the
+  prototype); the gate measures the percentage.
 - **Coverage:** at or above `fail_under = 97`.
-- `from vsdxkit.<public module> import <public name>` keeps working for every public name that remains. Nothing public moves module.
-- Behaviour changes only where the spec names one: F2, F3 and the copy source check (7d). 7e and 7f change no saved byte.
-- Every name 0.8.0 had that goes private or is deleted gets a `docs/migration-1.0.rst` entry in the task that removes it; `tools/check_migration_guide.py` enforces it. Module-level names are written ``` ``module.name`` ```, class members ``` ``Class.member`` ```.
-- A docstring says what the thing is for and what a caller can rely on. It never just restates the name, and it renders as valid reST under `sphinx-build -W`.
-- Nothing merges, and #349 is never touched, without the maintainer's go. Read `pulls/<n>/comments` for each PR's head commit before asking to merge: Codex findings arrive there, and CI green is not enough.
+- `from vsdxkit.<public module> import <public name>` keeps working for every
+  public name that remains. Nothing public moves module.
+- Behaviour changes only where the spec names one: F2, F3 and the copy source
+  check (7d). 7e and 7f change no saved byte.
+- Every name 0.8.0 had that goes private or is deleted gets a
+  `docs/migration-1.0.rst` entry in the task that removes it;
+  `tools/check_migration_guide.py` enforces it. Module-level names are written
+  ``` ``module.name`` ```, class members ``` ``Class.member`` ```.
+- A docstring says what the thing is for and what a caller can rely on. It never
+  just restates the name, and it renders as valid reST under `sphinx-build -W`.
+- Nothing merges, and #349 is never touched, without the maintainer's go. Read
+  `pulls/<n>/comments` for each PR's head commit before asking to merge: Codex
+  findings arrive there, and CI green is not enough.
 
 ## Review Focus
 
-The five failure modes most likely to reach a user, each with the test that pins it:
+The five failure modes most likely to reach a user, each with the test that pins
+it:
 
-1. **A page behind `{% showif flag %}` with `flag="0"` or `"False"`**, as a context read from a CSV or the environment carries it. 1.0 before this part hid the page; it is now kept, as a shape behind the same showif always was. Test: Task 2, `test_a_page_showif_on_a_non_empty_string_keeps_the_page`.
-2. **Two page names that render to the same text.** The render sets both (the `Page.name` setter does not refuse a duplicate), and `document.pages.by_name(...)` then raises `PackageError("the document has 2 pages called 'Same'; ...")`. Test: Task 2, `test_two_page_names_that_render_alike_leave_two_pages_of_one_name`.
-3. **A page named `{% showif flag %}{{ quarter }} report`.** The showif is judged first, then comes out of the name, then the rest is rendered: `Q3 report`. Leaving the showif in would hand Jinja an unknown tag and raise. Test: Task 2, `test_a_page_name_with_a_showif_and_an_expression_is_judged_then_rendered`.
-4. **`shape.page.xml = tree` now type-checks.** The page's part is replaced and saved, and the shape the caller went through is detached: reading it raises `InvalidOperationError`, rather than answering from a tree that is no longer saved. Test: Task 1, `test_a_tree_assigned_through_shape_page_is_saved_and_detaches_the_shape_that_led_there`.
-5. **0.8/1.0-dev code that imports an internal module.** `from vsdxkit.xmlio import pretty_print_element` raises `ModuleNotFoundError`. `vsdxkit.media` was the trap: the bundled-donor folder `src/vsdxkit/media/` would have kept the name alive as an empty namespace package, so Task 4 renames the folder `_bundled/` as well, and `import vsdxkit.media` fails like the rest. Test: Task 4, `test_an_internal_module_is_private[media]`, which asserts `find_spec("vsdxkit.media") is None`.
+1. **A page behind `{% showif flag %}` with `flag="0"` or `"False"`**, as a
+   context read from a CSV or the environment carries it. 1.0 before this part
+   hid the page; it is now kept, as a shape behind the same showif always was.
+   Test: Task 2, `test_a_page_showif_on_a_non_empty_string_keeps_the_page`.
+2. **Two page names that render to the same text.** The render sets both (the
+   `Page.name` setter does not refuse a duplicate), and
+   `document.pages.by_name(...)` then raises `PackageError("the document has 2
+   pages called 'Same'; ...")`. Test: Task 2,
+   `test_two_page_names_that_render_alike_leave_two_pages_of_one_name`.
+3. **A page named `{% showif flag %}{{ quarter }} report`.** The showif is
+   judged first, then comes out of the name, then the rest is rendered: `Q3
+   report`. Leaving the showif in would hand Jinja an unknown tag and raise.
+   Test: Task 2,
+   `test_a_page_name_with_a_showif_and_an_expression_is_judged_then_rendered`.
+4. **`shape.page.xml = tree` now type-checks.** The page's part is replaced and
+   saved, and the shape the caller went through is detached: reading it raises
+   `InvalidOperationError`, rather than answering from a tree that is no longer
+   saved. Test: Task 1,
+   `test_a_tree_assigned_through_shape_page_is_saved_and_detaches_the_shape_that_led_there`.
+5. **0.8/1.0-dev code that imports an internal module.** `from vsdxkit.xmlio
+   import pretty_print_element` raises `ModuleNotFoundError`. `vsdxkit.media`
+   was the trap: the bundled-donor folder `src/vsdxkit/media/` would have kept
+   the name alive as an empty namespace package, so Task 4 renames the folder
+   `_bundled/` as well, and `import vsdxkit.media` fails like the rest. Test:
+   Task 4, `test_an_internal_module_is_private[media]`, which asserts
+   `find_spec("vsdxkit.media") is None`.
 
 ---
 
 ## Stack and branches
 
 | PR | Branch | Base | Tasks |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | docs | `refactor/phase7-surface-spec` | `refactor/phase7c-gates` (#425) | spec and this plan |
 | 7d | `refactor/phase7d-owed` | `refactor/phase7-surface-spec` | 1, 2, 3 |
 | 7e | `refactor/phase7e-surface` | 7d | 4, 5, 6, 7, 8, 9 |
@@ -88,7 +135,7 @@ plain command per call, from the worktree, with these paths written out in
 full wherever they appear below:
 
 | Short form | Full path |
-|---|---|
+| --- | --- |
 | `REPO` | `/home/shaunes/dev/firmfooting/vsdxkit/.claude/worktrees/89-byte-preserving-save` |
 | `S` | `/tmp/claude-1000/-home-shaunes-dev-firmfooting-vsdxkit/2d63fae9-cc29-434a-b868-44ee3b5c8f66/scratchpad` |
 
@@ -101,17 +148,24 @@ Run these before opening each PR, in this order. Each is one command.
 
 1. The gates: `bash S/gates.sh`
 
-   Expected: both pytest lines have `0 failed`; `ruff: All checks passed!`; `format: … files already formatted`; `pyrefly: … 0 errors`; `mypy: Success: …`; `annotations: ok…`; `guide: ok: every 0.8.0 name that 1.0 removes is in docs/migration-1.0.rst`; `sphinx: exit 0`; an `sdist:` line ending in PASS. From 7f's Task 15 on, also `docstrings: ok: every definition in 24 module(s) is documented`.
+   Expected: both pytest lines have `0 failed`; `ruff: All checks passed!`;
+   `format: … files already formatted`; `pyrefly: … 0 errors`; `mypy: Success:
+   …`; `annotations: ok…`; `guide: ok: every 0.8.0 name that 1.0 removes is in
+   docs/migration-1.0.rst`; `sphinx: exit 0`; an `sdist:` line ending in PASS.
+   From 7f's Task 15 on, also `docstrings: ok: every definition in 24 module(s)
+   is documented`.
 2. The save-equivalence sweep, against main's source:
 
-   `uv run --no-sync python S/canon_sweep.py REPO S/main-base/src S/sweep7<x>`, where `<x>` is `d`, `e` or `f`.
+   `uv run --no-sync python S/canon_sweep.py REPO S/main-base/src S/sweep7<x>`,
+   where `<x>` is `d`, `e` or `f`.
 
    Expected: 28 lines, each ending `: same`.
 3. The render sweep, against the PR's base snapshot (taken in the PR's first task):
 
    `uv run --no-sync python S/render_sweep.py REPO S/pre7<x>/src S/rsweep7<x>`
 
-   Expected in 7d: Task 2's "Render sweep" block. In 7e and 7f: 10 lines, `0 test_jinja.vsdx: same` through `9 test1.vsdx: same`, and no `pages:` line.
+   Expected in 7d: Task 2's "Render sweep" block. In 7e and 7f: 10 lines, `0
+   test_jinja.vsdx: same` through `9 test1.vsdx: same`, and no `pages:` line.
 4. The wheel smoke test, against a wheel built after deleting the stale `build/`:
    - `rm -rf REPO/build S/wheelcheck`
    - `uv build --wheel -q -o S/wheelcheck`
@@ -120,10 +174,13 @@ Run these before opening each PR, in this order. Each is one command.
    Expected: `ok: wheel modules match src/vsdxkit` and `distribution smoke: PASS`.
 5. From 7e on, type completeness of that wheel:
 
-   `uv run --no-sync python tools/check_type_completeness.py S/wheelcheck/vsdxkit-0.8.0-py3-none-any.whl --fail-under 100.0 --report S/tc7<x>.json`
+   `uv run --no-sync python tools/check_type_completeness.py
+   S/wheelcheck/vsdxkit-0.8.0-py3-none-any.whl --fail-under 100.0 --report
+   S/tc7<x>.json`
 
    Expected: `Type completeness: 100.00% (threshold 100.0%)` and `ok`.
-6. From 7f's Task 12 on, the documentation gate, against that report and a fresh docs build:
+6. From 7f's Task 12 on, the documentation gate, against that report and a fresh
+   docs build:
    - `rm -rf docs/_build`
    - `uv run --no-sync sphinx-build -W --keep-going -q -b html docs docs/_build/html`
    - `uv run --no-sync python tools/check_api_documented.py S/tc7f.json docs/_build/html/objects.inv`
@@ -140,13 +197,13 @@ strings they did not name, found by running each task's change against the
 prototype, and the task that handles each (line numbers at `899aa7a`):
 
 | Caller | What it needs | Task |
-|---|---|---|
+| --- | --- | --- |
 | `tests/test_logging.py:24` `_LOG_CALLS_IN_THE_PACKAGE = 17` | 16: `_page_is_shown` logged twice, now once | 2 |
 | `tests/test_views_agree.py:66-70` `test_the_views_are_read_only` | replaced by the setter tests | 1 |
 | `tools/smoke_wheel.py:106,114-115` `from vsdxkit import media`, `media._sentinel` | `_media` (the rename script) | 4 |
 | `src/vsdxkit/shape_kind.py:5` `:mod:\`vsdxkit.media\`` | "the library" | 4 |
 | `src/vsdxkit/document.py:478` `see :mod:\`vsdxkit.media\`` | names `vsdxkit._media` in prose | 4 |
-| `src/vsdxkit/geometry.py:61`, `shapes.py:354` `:attr:\`~vsdxkit.inheritance.InheritedRow.inherited\`` | `:attr:\`GeometryRow.inherited\``, `:attr:\`inherited\`` | 4 |
+| `src/vsdxkit/geometry.py:61`, `shapes.py:354` `:attr:\`~vsdxkit.inheritance.InheritedRow.inherited\`` | `:attr:\`GeometryRow.inherited\``,`:attr:\`inherited\`` | 4 |
 | `tests/test_master_catalog.py:312,317` docstring and subprocess script `vsdxkit.masters` | `vsdxkit._masters` (strings: by hand) | 4 |
 | `tests/test_namespaces.py:403-404` subprocess script `from vsdxkit import namespace, xmlio` | `_xmlio` (a string: by hand) | 5 |
 | `tests/test_shape_tree.py:1,162` docstring and `__module__ == "vsdxkit.shape_tree"` | `vsdxkit._shape_tree` (strings: by hand) | 5 |
@@ -163,7 +220,7 @@ prototype, and the task that handles each (line numbers at `899aa7a`):
 | `set_start_and_finish`'s local `is_connector` (`shapes.py:1513`) | left alone: the renamer skips a name a function binds itself | 8 |
 | `tests/test_shape_coordinates.py:13-14` params `"line_to_x"`, `"line_to_y"` | deleted | 9 |
 | `src/vsdxkit/_logging_support.py:3-15`, `swimlanes.py:6-17` (after 7e) | a blank line before each bullet list; `_logging_support`'s usage example names `get_logger` from `vsdxkit._logging_support` | 11 |
-| `src/vsdxkit/_shape_tree.py` `#: ` comment on `SHEET_REFERENCE` | a string on the line after (autoapi reads no comment) | 15 |
+| `src/vsdxkit/_shape_tree.py` `#:` comment on `SHEET_REFERENCE` | a string on the line after (autoapi reads no comment) | 15 |
 | `docs/templating.rst:89-92` `autofunction`/`autoclass` | deleted (the sentence above already cross-references both) | 11 |
 | `tests/test_views_agree.py:73-81` the `classes.rst` check, with `CLASSES_RST`, `re` and `Path` | deleted | 11 |
 
@@ -173,7 +230,7 @@ Tasks run in order. A later task works on the file as the earlier tasks left
 it: find a place by the named symbol, not by the line number.
 
 | File | Tasks |
-|---|---|
+| --- | --- |
 | `src/vsdxkit/shapes.py` | 1 (`PageView`), 3 (`copy`), 4–8 (imports, renames), 9 (`line_to_*`), 13 (docstrings) |
 | `src/vsdxkit/templating.py` | 2, 4, 5, 8, 14 |
 | `docs/migration-1.0.rst` | 1, 2, 3, 4, 5, 7, 8, 9 |
@@ -190,24 +247,32 @@ it: find a place by the named symbol, not by the line number.
 ### Task 1: `PageView` is writable
 
 **Files:**
+
 - Modify: `src/vsdxkit/shapes.py:34-101` (`PageView`: docstring and five setters)
 - Modify: `tests/type_fixture.py:9-14` (imports) and the end of the file
-- Modify: `tests/test_views_agree.py:9-17` (imports), `:54-58` (a docstring), `:66-70` (`test_the_views_are_read_only` is replaced)
+- Modify: `tests/test_views_agree.py:9-17` (imports), `:54-58` (a docstring),
+  `:66-70` (`test_the_views_are_read_only` is replaced)
 - Modify: `docs/migration-1.0.rst:457-464` (the `PageView` entry)
 
 **Interfaces:**
-- Produces: `PageView.name` (setter `(value: str) -> None`), `.background` (`bool`), `.width` and `.height` (`float | str | None`), and `.xml` (`PartTree`). `Page`'s `xml` setter takes `PartTree | None`; the view's is narrower on purpose.
+
+- Produces: `PageView.name` (setter `(value: str) -> None`), `.background`
+  (`bool`), `.width` and `.height` (`float | str | None`), and `.xml`
+  (`PartTree`). `Page`'s `xml` setter takes `PartTree | None`; the view's is
+  narrower on purpose.
 - Consumes: nothing new. `Page` already has all five setters.
 
 - [ ] **Step 1: Create the PR's branch and take its render base**
 
 Run each:
+
 - `gh stack add refactor/phase7d-owed`
 - `git archive --output=S/pre7d.tar HEAD src`
 - `mkdir -p S/pre7d`
 - `tar -xf S/pre7d.tar -C S/pre7d`
 
-Expected: the branch is checked out on top of `refactor/phase7-surface-spec`, and `S/pre7d/src/vsdxkit/shapes.py` exists.
+Expected: the branch is checked out on top of `refactor/phase7-surface-spec`,
+and `S/pre7d/src/vsdxkit/shapes.py` exists.
 
 - [ ] **Step 2: Write the failing tests**
 
@@ -238,11 +303,12 @@ def a_page_is_a_view(page: Page) -> PageView:
     return page
 ```
 
-In `tests/test_views_agree.py`, add `import copy` and
-`import xml.etree.ElementTree as ET` to the standard-library imports and
-`from vsdxkit.errors import InvalidOperationError` to the `vsdxkit` imports.
-Change the second paragraph of `test_each_view_member_has_the_concrete_signature`'s
-docstring from `No stub narrows today: each is the concrete member's signature exactly.` to:
+In `tests/test_views_agree.py`, add `import copy` and `import
+xml.etree.ElementTree as ET` to the standard-library imports and `from
+vsdxkit.errors import InvalidOperationError` to the `vsdxkit` imports. Change
+the second paragraph of `test_each_view_member_has_the_concrete_signature`'s
+docstring from `No stub narrows today: each is the concrete member's signature
+exactly.` to:
 
 ```python
     No getter or method narrows: each is the concrete member's signature
@@ -330,10 +396,17 @@ def test_a_tree_assigned_through_shape_page_is_saved_and_detaches_the_shape_that
 - [ ] **Step 3: Run them to see them fail**
 
 Run: `uv run --no-sync pytest tests/test_views_agree.py -q -p no:randomly`
-Expected: 1 failed, `test_each_view_can_set_exactly_what_its_class_can`, with `AssertionError: PageView` and `assert set() == {'background', ...}`. `test_each_view_setter_takes_what_its_class_setter_takes` passes vacuously while the view has no setter. The two runtime tests pass: they guard behaviour `Page` already has, and the mypy run below is what fails for them.
+Expected: 1 failed, `test_each_view_can_set_exactly_what_its_class_can`, with
+`AssertionError: PageView` and `assert set() == {'background', ...}`.
+`test_each_view_setter_takes_what_its_class_setter_takes` passes vacuously while
+the view has no setter. The two runtime tests pass: they guard behaviour `Page`
+already has, and the mypy run below is what fails for them.
 
-Run: `uv run --no-sync mypy --disallow-untyped-calls --follow-imports=silent --ignore-missing-imports tests/type_fixture.py`
-Expected: `Found 6 errors in 1 file`: `Property "name" defined in "PageView" is read-only  [misc]`, the same for `width`, `height`, `background` and `xml`, and `Incompatible types in assignment (expression has type "str", variable has type "float")` for `height`.
+Run: `uv run --no-sync mypy --disallow-untyped-calls --follow-imports=silent
+--ignore-missing-imports tests/type_fixture.py` Expected: `Found 6 errors in 1
+file`: `Property "name" defined in "PageView" is read-only  [misc]`, the same
+for `width`, `height`, `background` and `xml`, and `Incompatible types in
+assignment (expression has type "str", variable has type "float")` for `height`.
 
 - [ ] **Step 4: Add the setters and rewrite the docstring**
 
@@ -402,11 +475,13 @@ Leave `is_master_page` and everything after it as it is.
 Run: `uv run --no-sync pytest tests/test_views_agree.py -q -p no:randomly`
 Expected: all pass (the `classes.rst` check included: setters add no member name).
 
-Run: `uv run --no-sync mypy --disallow-untyped-calls --follow-imports=silent --ignore-missing-imports tests/type_fixture.py`
-Expected: `Success: no issues found in 1 source file`
+Run: `uv run --no-sync mypy --disallow-untyped-calls --follow-imports=silent
+--ignore-missing-imports tests/type_fixture.py` Expected: `Success: no issues
+found in 1 source file`
 
-Run: `uv run --no-sync pyrefly check src/vsdxkit --min-severity warn --output-format min-text`
-Expected: `0 errors` (the prototype printed `INFO 0 diagnostics`).
+Run: `uv run --no-sync pyrefly check src/vsdxkit --min-severity warn
+--output-format min-text` Expected: `0 errors` (the prototype printed `INFO 0
+diagnostics`).
 
 - [ ] **Step 6: Rewrite the guide's `PageView` entry**
 
@@ -433,11 +508,12 @@ Expected: `ok: every 0.8.0 name that 1.0 removes is in docs/migration-1.0.rst`
 Run: `bash S/gates.sh`
 Expected: as in "Every PR's verification", step 1.
 
-Run: `git add src/vsdxkit/shapes.py tests/type_fixture.py tests/test_views_agree.py docs/migration-1.0.rst`
+Run: `git add src/vsdxkit/shapes.py tests/type_fixture.py
+tests/test_views_agree.py docs/migration-1.0.rst`
 
 Write `S/commit-msg.txt`:
 
-```
+```text
 feat: PageView declares Page's five setters (#28)
 
 shape.page.name = "Summary" now type-checks. The xml setter takes PartTree,
@@ -455,16 +531,25 @@ Run: `git commit -F S/commit-msg.txt`
 ### Task 2: a page's `showif` is judged as a shape's is (F2), and its name is a template (F3)
 
 **Files:**
-- Modify: `src/vsdxkit/templating.py:54-56` (two patterns), `:86` (the call), `:263-281` (`_page_is_shown`, and `_render_page_name` after it)
+
+- Modify: `src/vsdxkit/templating.py:54-56` (two patterns), `:86` (the call),
+  `:263-281` (`_page_is_shown`, and `_render_page_name` after it)
 - Modify: `src/vsdxkit/document.py:1045-1052` (`Document.render`'s docstring)
 - Create: `tests/test_jinja_page_names.py`
 - Modify: `tests/test_logging.py:20-24`
-- Modify: `docs/templating.rst` (a "Page names" section before "Self assignments", `:50`)
-- Modify: `docs/migration-1.0.rst` (two entries after ``` ``VisioFile.jinja_render_vsdx(context)`` ```, `:100-102`)
+- Modify: `docs/templating.rst` (a "Page names" section before "Self
+  assignments", `:50`)
+- Modify: `docs/migration-1.0.rst` (two entries after ```
+  ``VisioFile.jinja_render_vsdx(context)`` ```, `:100-102`)
 
 **Interfaces:**
-- Consumes: `templating._ENVIRONMENT` (the sandboxed environment shapes render with) and its `compile_expression(source) -> TemplateExpression`; `templating._template(source) -> Template`; `Page.name`'s setter, which writes `Name` and `NameU` and calls `_rename_page_in_app_xml`.
-- Produces: `templating._page_is_shown(page, context) -> bool` (same signature, new semantics) and `templating._render_page_name(page, context) -> None`.
+
+- Consumes: `templating._ENVIRONMENT` (the sandboxed environment shapes render
+  with) and its `compile_expression(source) -> TemplateExpression`;
+  `templating._template(source) -> Template`; `Page.name`'s setter, which writes
+  `Name` and `NameU` and calls `_rename_page_in_app_xml`.
+- Produces: `templating._page_is_shown(page, context) -> bool` (same signature,
+  new semantics) and `templating._render_page_name(page, context) -> None`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -632,15 +717,20 @@ def test_two_page_names_that_render_alike_leave_two_pages_of_one_name(vsdx_copy)
 
 Run: `uv run --no-sync pytest tests/test_jinja_page_names.py -q -p no:randomly`
 Expected: 11 failed, 13 passed. Among the failures:
-- `test_a_page_showif_keeps_the_page_exactly_when_a_shape_showif_keeps_the_shape[None]`, `[0.0]` and `[set()]`: `assert True == False`;
+
+- `test_a_page_showif_keeps_the_page_exactly_when_a_shape_showif_keeps_the_shape[None]`,
+  `[0.0]` and `[set()]`: `assert True == False`;
 - `test_a_page_showif_on_a_non_empty_string_keeps_the_page['0']` and `['False']`;
 - `test_a_page_with_two_showifs_is_kept_only_when_both_are_true[False-True-False]`;
-- `test_a_page_name_is_rendered_as_a_template`: the names are `['{{ title }}', 'Page-2', 'Page-3']`;
-- `test_a_showif_anywhere_in_a_page_name_is_taken_out_of_it` for the two names the showif does not open;
+- `test_a_page_name_is_rendered_as_a_template`: the names are `['{{ title }}',
+  'Page-2', 'Page-3']`;
+- `test_a_showif_anywhere_in_a_page_name_is_taken_out_of_it` for the two names
+  the showif does not open;
 - `test_a_page_name_with_a_showif_and_an_expression_is_judged_then_rendered`;
 - `test_two_page_names_that_render_alike_leave_two_pages_of_one_name`.
 
-- [ ] **Step 3: Judge each showif with `compile_expression`, and render the kept name**
+- [ ] **Step 3: Judge each showif with `compile_expression`, and render the kept
+      name**
 
 In `src/vsdxkit/templating.py`, after `_SETTABLE = ("x", "y")` (`:54`), add:
 
@@ -653,7 +743,8 @@ _PAGE_SHOWIF_STATEMENT = re.compile(r"{% showif\s.*?\s%}")
 _PAGE_SHOWIF = re.compile(r"{% showif\s(.*?)\s%}")
 ```
 
-In `render_document`, directly under `if _page_is_shown(page, context):` (`:86`), add:
+In `render_document`, directly under `if _page_is_shown(page, context):`
+(`:86`), add:
 
 ```python
             _render_page_name(page, context)
@@ -693,7 +784,8 @@ def _render_page_name(page: Page, context: Mapping[str, object]) -> None:
         page.name = rendered
 ```
 
-In `src/vsdxkit/document.py`, replace `Document.render`'s docstring (`:1045-1052`) with:
+In `src/vsdxkit/document.py`, replace `Document.render`'s docstring
+(`:1045-1052`) with:
 
 ```python
         """Render the document as a Jinja template, in place.
@@ -711,8 +803,10 @@ In `src/vsdxkit/document.py`, replace `Document.render`'s docstring (`:1045-1052
 
 - [ ] **Step 4: Run the tests**
 
-Run: `uv run --no-sync pytest tests/test_jinja_page_names.py tests/test_jinja.py tests/test_logging.py -q -p no:randomly`
-Expected: every `test_jinja_page_names.py` test passes, and one failure in `test_logging.py`: the count of log calls is 16, not 17.
+Run: `uv run --no-sync pytest tests/test_jinja_page_names.py tests/test_jinja.py
+tests/test_logging.py -q -p no:randomly` Expected: every
+`test_jinja_page_names.py` test passes, and one failure in `test_logging.py`:
+the count of log calls is 16, not 17.
 
 - [ ] **Step 5: Update the log-call count**
 
@@ -749,7 +843,9 @@ name no other page renders to.
 
 ```
 
-In `docs/migration-1.0.rst`, after the ``` ``VisioFile.jinja_render_vsdx(context)`` ``` entry (`:100-102`, before ``` ``vsdx.templating.JinjaTemplatingMixin`` ```), insert:
+In `docs/migration-1.0.rst`, after the ```
+``VisioFile.jinja_render_vsdx(context)`` ``` entry (`:100-102`, before ```
+``vsdx.templating.JinjaTemplatingMixin`` ```), insert:
 
 ```rst
 A ``{% showif %}`` in a page name
@@ -778,12 +874,13 @@ Expected: `ok: every 0.8.0 name that 1.0 removes is in docs/migration-1.0.rst`
 
 - [ ] **Step 7: Render sweep**
 
-The controller updates `S/render_sweep.py` to ten cases before this step (see "Controller steps for 7d").
+The controller updates `S/render_sweep.py` to ten cases before this step (see
+"Controller steps for 7d").
 
 Run: `uv run --no-sync python S/render_sweep.py REPO S/pre7d/src S/rsweep7d`
 Expected (measured on the prototype):
 
-```
+```text
 0 test_jinja.vsdx: same
 1 test_jinja_loop.vsdx: same
 2 test_jinja_inner_loop.vsdx: same
@@ -799,18 +896,22 @@ Expected (measured on the prototype):
   pages: ['{{ title }}', 'Report{% showif flag %}', 'Page-3'] -> ['Quarterly', 'Report', 'Page-3']
 ```
 
-Case 7 (`show=None`) is F2 removing a page the string check kept; case 8 (`show="False"`) is F2 keeping a page the string check hid; case 9 is F3. Any other difference is a bug.
+Case 7 (`show=None`) is F2 removing a page the string check kept; case 8
+(`show="False"`) is F2 keeping a page the string check hid; case 9 is F3. Any
+other difference is a bug.
 
 - [ ] **Step 8: Commit**
 
 Run: `bash S/gates.sh`
 Expected: as in "Every PR's verification", step 1.
 
-Run: `git add src/vsdxkit/templating.py src/vsdxkit/document.py tests/test_jinja_page_names.py tests/test_logging.py docs/templating.rst docs/migration-1.0.rst`
+Run: `git add src/vsdxkit/templating.py src/vsdxkit/document.py
+tests/test_jinja_page_names.py tests/test_logging.py docs/templating.rst
+docs/migration-1.0.rst`
 
 Write `S/commit-msg.txt`:
 
-```
+```text
 fix!: a page's showif is judged as a shape's is, and its name is a template (#28)
 
 F2: the showif expression is evaluated with compile_expression and tested for
@@ -831,17 +932,25 @@ Run: `git commit -F S/commit-msg.txt`
 ### Task 3: `Shape.copy` refuses a source that is no longer in its document
 
 **Files:**
+
 - Modify: `src/vsdxkit/shapes.py:818-822` (`Shape.copy`'s docstring and first statement)
-- Modify: `tests/test_shape.py` (a test before `test_an_end_that_is_not_a_shape_is_refused`, `:986`)
-- Modify: `docs/migration-1.0.rst` (an entry after "Reading or writing a deleted shape", `:434-438`)
+- Modify: `tests/test_shape.py` (a test before
+  `test_an_end_that_is_not_a_shape_is_refused`, `:986`)
+- Modify: `docs/migration-1.0.rst` (an entry after "Reading or writing a deleted
+  shape", `:434-438`)
 
 **Interfaces:**
-- Consumes: `Shape._require_attached(operation: str) -> None`, which raises `InvalidOperationError(f"{operation} refused: shape {ID} on page {name!r} is no longer in the document")`. `Page.create_shape(prototype)` already calls it.
+
+- Consumes: `Shape._require_attached(operation: str) -> None`, which raises
+  `InvalidOperationError(f"{operation} refused: shape {ID} on page {name!r} is
+  no longer in the document")`. `Page.create_shape(prototype)` already calls it.
 - Produces: nothing new.
 
 - [ ] **Step 1: Write the failing test**
 
-In `tests/test_shape.py`, insert before `@pytest.mark.parametrize("end", ["source", "target"])` (the decorator of `test_an_end_that_is_not_a_shape_is_refused`):
+In `tests/test_shape.py`, insert before `@pytest.mark.parametrize("end",
+["source", "target"])` (the decorator of
+`test_an_end_that_is_not_a_shape_is_refused`):
 
 ```python
 @pytest.mark.parametrize("onto", ["its own page", "a live page"])
@@ -876,19 +985,24 @@ def test_copying_a_shape_no_longer_in_its_document_is_refused_and_writes_nothing
 
 - [ ] **Step 2: Run it to see it fail**
 
-Run: `uv run --no-sync pytest tests/test_shape.py -q -p no:randomly -k no_longer_in_its_document`
-Expected: 4 failed. Three with `Failed: DID NOT RAISE <class 'vsdxkit.errors.InvalidOperationError'>`; `[on a removed page-its own page]` with a regex mismatch against `page 'Page-3' is no longer in its document, so nothing can be copied onto it` (the Phase 6 destination check).
+Run: `uv run --no-sync pytest tests/test_shape.py -q -p no:randomly -k
+no_longer_in_its_document` Expected: 4 failed. Three with `Failed: DID NOT
+RAISE <class 'vsdxkit.errors.InvalidOperationError'>`; `[on a removed page-its
+own page]` with a regex mismatch against `page 'Page-3' is no longer in its
+document, so nothing can be copied onto it` (the Phase 6 destination check).
 
 - [ ] **Step 3: Check the source first**
 
-In `src/vsdxkit/shapes.py`, `Shape.copy`, replace the `:raises InvalidOperationError:` line (`:818`) with:
+In `src/vsdxkit/shapes.py`, `Shape.copy`, replace the `:raises
+InvalidOperationError:` line (`:818`) with:
 
 ```python
         :raises InvalidOperationError: if this shape has been deleted or its page removed, or if the
             destination page is no longer in its document; nothing is written
 ```
 
-and insert, as the first statements after the docstring (before `dst_page = ...`, `:822`):
+and insert, as the first statements after the docstring (before `dst_page =
+...`, `:822`):
 
 ```python
         # the source first: a deleted shape, or one on a removed page, is read
@@ -903,7 +1017,8 @@ Expected: `0 failed`.
 
 - [ ] **Step 5: The guide entry**
 
-In `docs/migration-1.0.rst`, after the "Reading or writing a deleted shape" entry (it ends `:438`, before ``` ``shape.cells`` ```), insert:
+In `docs/migration-1.0.rst`, after the "Reading or writing a deleted shape"
+entry (it ends `:438`, before ``` ``shape.cells`` ```), insert:
 
 ```rst
 ``deleted_shape.copy()``, ``shape.copy(removed_page)``
@@ -929,7 +1044,7 @@ Run: `git add src/vsdxkit/shapes.py tests/test_shape.py docs/migration-1.0.rst`
 
 Write `S/commit-msg.txt`:
 
-```
+```text
 fix!: Shape.copy refuses a deleted shape, or one on a removed page (#28)
 
 deleted_shape.copy() brought the shape back, and a shape on a removed page
@@ -953,7 +1068,7 @@ These are the controller's, not a task subagent's.
   It differs from the current file in three ways: `CASES` are 4-tuples
   `(fixture, context, shape edit, page names)`; `probe` sets the page names
   before rendering and prints the page names it leaves; and `main` prints
-  `  pages: <old> -> <new>` under a case whose page names differ. The three
+  `pages: <old> -> <new>` under a case whose page names differ. The three
   cases it adds:
 
   ```python
@@ -969,15 +1084,32 @@ These are the controller's, not a task subagent's.
   Command: `cp S/p7d/plan-work/render_sweep_7d.py S/render_sweep.py`
 
 - **After Task 3: F1 goes to its issues** (the spec's "F1 goes to its issues";
-  reproductions in `S/p7d/item4_style_by_id.py`, notes in `S/p7d/phase6-owed.md`, "Item 4"):
-  - **#125** "[110-B1] StyleSheet import by name with deduplication": comment that the check now lives at `src/vsdxkit/document.py:493-499` (`Document._copy_connector`, moved there by #417). Add case A: `tests/test_master_multiple_child_shapes.vsdx` has StyleSheet 7 = "Default Svg Style", so after `connect` the connector's master resolves Line, Fill and Text to it, "Connector" is never imported, and it survives the save (`LinePattern=0`, `EndArrow=0`; that it draws no line needs Visio). Add case B: a target whose "Connector" is ID 12 gets a second "Connector" appended as ID 7. Note that the fix must repoint all three style attributes on the imported master, and that only `LineStyle` is checked today.
-  - **#126** "[110-B2] Cross-document shape and page copy": add case C. Copying a test4 connector into test1 imports the Dynamic connector master, which names `LineStyle` 7, and no style is imported: the saved test1 has StyleSheets 0–6, so the master names one the file lacks. `Shape.copy` crosses documents in 1.0 today, so this is live, not future scope. `tests/helpers/package_validator.py` has no style-reference check.
-  - Use `gh issue comment <n> --body-file <file>`, with each body written to a file first.
+  reproductions in `S/p7d/item4_style_by_id.py`, notes in
+  `S/p7d/phase6-owed.md`, "Item 4"):
+  - **#125** "[110-B1] StyleSheet import by name with deduplication": comment
+    that the check now lives at `src/vsdxkit/document.py:493-499`
+    (`Document._copy_connector`, moved there by #417). Add case A:
+    `tests/test_master_multiple_child_shapes.vsdx` has StyleSheet 7 = "Default
+    Svg Style", so after `connect` the connector's master resolves Line, Fill
+    and Text to it, "Connector" is never imported, and it survives the save
+    (`LinePattern=0`, `EndArrow=0`; that it draws no line needs Visio). Add case
+    B: a target whose "Connector" is ID 12 gets a second "Connector" appended as
+    ID 7. Note that the fix must repoint all three style attributes on the
+    imported master, and that only `LineStyle` is checked today.
+  - **#126** "[110-B2] Cross-document shape and page copy": add case C. Copying
+    a test4 connector into test1 imports the Dynamic connector master, which
+    names `LineStyle` 7, and no style is imported: the saved test1 has
+    StyleSheets 0–6, so the master names one the file lacks. `Shape.copy`
+    crosses documents in 1.0 today, so this is live, not future scope.
+    `tests/helpers/package_validator.py` has no style-reference check.
+  - Use `gh issue comment <n> --body-file <file>`, with each body written to a
+    file first.
 
 ### Open 7d
 
 Run every command in "Every PR's verification" with `<x>` = `d` (steps 1–4).
-Expected: all green, 28 of 28 `same`, and the render sweep as Task 2 Step 7 prints it.
+Expected: all green, 28 of 28 `same`, and the render sweep as Task 2 Step 7
+prints it.
 
 Open the PR with `gh stack` on top of the spec PR. Its body lists the three
 behaviour changes (F2, F3, the copy source check), links #28 and #29, and
@@ -1005,21 +1137,38 @@ extended as each task adds modules. An informal mention of `xmlio` or
 `media` import no other module this part renames, so they go first.
 
 **Files:**
+
 - Create: `tests/test_public_surface.py`
 - Create: `S/p7e/imports.py` (the import rewriter; outside the repository)
-- Rename: `src/vsdxkit/{formulae,inheritance,logging_support,shape_part,masters,media}.py` → `src/vsdxkit/_<module>.py`, and the folder `src/vsdxkit/media/` → `src/vsdxkit/_bundled/`
-- Modify (by hand, for the folder): `src/vsdxkit/_media.py` (`media_path`), `pyproject.toml` (package data), `tools/smoke_wheel.py`, `tests/test_smoke_wheel_modules.py`, `tests/test_media.py` (`MEDIA_DIR`)
-- Modify (by the script): `src/vsdxkit/_formulae.py`, `document.py`, `geometry.py`, `shapes.py`, `templating.py`; `tests/test_create_shape.py`, `test_document.py`, `test_errors.py`, `test_formulae.py`, `test_master_catalog.py`, `test_media.py`, `test_media_reuse.py`, `test_page.py`, `test_part_names.py`; `tools/smoke_wheel.py`
-- Modify (by hand): `src/vsdxkit/geometry.py:61`, `shapes.py:354`, `shape_kind.py:5`, `document.py:478`; `tests/test_master_catalog.py:312,317`
+- Rename:
+  `src/vsdxkit/{formulae,inheritance,logging_support,shape_part,masters,media}.py`
+  → `src/vsdxkit/_<module>.py`, and the folder `src/vsdxkit/media/` →
+  `src/vsdxkit/_bundled/`
+- Modify (by hand, for the folder): `src/vsdxkit/_media.py` (`media_path`),
+  `pyproject.toml` (package data), `tools/smoke_wheel.py`,
+  `tests/test_smoke_wheel_modules.py`, `tests/test_media.py` (`MEDIA_DIR`)
+- Modify (by the script): `src/vsdxkit/_formulae.py`, `document.py`,
+  `geometry.py`, `shapes.py`, `templating.py`; `tests/test_create_shape.py`,
+  `test_document.py`, `test_errors.py`, `test_formulae.py`,
+  `test_master_catalog.py`, `test_media.py`, `test_media_reuse.py`,
+  `test_page.py`, `test_part_names.py`; `tools/smoke_wheel.py`
+- Modify (by hand): `src/vsdxkit/geometry.py:61`, `shapes.py:354`,
+  `shape_kind.py:5`, `document.py:478`; `tests/test_master_catalog.py:312,317`
 - Modify: `docs/migration-1.0.rst:40-44` and a new section at the end
 
 **Interfaces:**
-- Produces: `vsdxkit._formulae`, `vsdxkit._inheritance` (`InheritedRow`), `vsdxkit._logging_support` (`get_logger`), `vsdxkit._shape_part` (`ShapePart`, `AttachedShape`), `vsdxkit._masters` (`MasterCatalog`), `vsdxkit._media`. Every name keeps its own spelling; only the module moves.
-- Produces: `tests/test_public_surface.py` with `PRIVATE_MODULES` and `private_references(text) -> list[tuple[int, str]]`, which Tasks 5–9 extend.
+
+- Produces: `vsdxkit._formulae`, `vsdxkit._inheritance` (`InheritedRow`),
+  `vsdxkit._logging_support` (`get_logger`), `vsdxkit._shape_part` (`ShapePart`,
+  `AttachedShape`), `vsdxkit._masters` (`MasterCatalog`), `vsdxkit._media`.
+  Every name keeps its own spelling; only the module moves.
+- Produces: `tests/test_public_surface.py` with `PRIVATE_MODULES` and
+  `private_references(text) -> list[tuple[int, str]]`, which Tasks 5–9 extend.
 
 - [ ] **Step 1: Create the PR's branch and take its render base**
 
 Run each:
+
 - `gh stack add refactor/phase7e-surface`
 - `git archive --output=S/pre7e.tar HEAD src`
 - `mkdir -p S/pre7e`
@@ -1129,8 +1278,14 @@ def test_no_page_a_user_reads_names_a_private_module_or_name():
 
 Run: `uv run --no-sync pytest tests/test_public_surface.py -q -p no:randomly`
 Expected: 7 failed, 10 passed.
-- The six `test_an_internal_module_is_private[...]` cases fail with `assert (ModuleSpec(name='vsdxkit.formulae', ...) is None or '/…/src/vsdxkit/formulae.py' is None)` (the module named in each).
-- `test_no_page_a_user_reads_names_a_private_module_or_name` fails with the two guide lines that recommend them: `docs/migration-1.0.rst:41: ``from vsdxkit.formulae import calc_value``` and `docs/migration-1.0.rst:44: ``from vsdxkit.logging_support import get_logger```.
+
+- The six `test_an_internal_module_is_private[...]` cases fail with `assert
+  (ModuleSpec(name='vsdxkit.formulae', ...) is None or
+  '/…/src/vsdxkit/formulae.py' is None)` (the module named in each).
+- `test_no_page_a_user_reads_names_a_private_module_or_name` fails with the two
+  guide lines that recommend them: `docs/migration-1.0.rst:41: ``from
+  vsdxkit.formulae import calc_value``` and`docs/migration-1.0.rst:44: ``from
+  vsdxkit.logging_support import get_logger```.
 
 - [ ] **Step 4: Write the import rewriter**
 
@@ -1322,6 +1477,7 @@ if __name__ == "__main__":
 - [ ] **Step 5: Rename the six modules**
 
 Run each:
+
 - `git mv src/vsdxkit/formulae.py src/vsdxkit/_formulae.py`
 - `git mv src/vsdxkit/inheritance.py src/vsdxkit/_inheritance.py`
 - `git mv src/vsdxkit/logging_support.py src/vsdxkit/_logging_support.py`
@@ -1329,42 +1485,84 @@ Run each:
 - `git mv src/vsdxkit/masters.py src/vsdxkit/_masters.py`
 - `git mv src/vsdxkit/media.py src/vsdxkit/_media.py`
 
-The folder of bundled `.vsdx` donors moves too, so that nothing answers to `vsdxkit.media`. It becomes `_bundled/`, not `_donors/`, because `_media._donors` is already the name of the loaded-donor cache:
+The folder of bundled `.vsdx` donors moves too, so that nothing answers to
+`vsdxkit.media`. It becomes `_bundled/`, not `_donors/`, because
+`_media._donors` is already the name of the loaded-donor cache:
+
 - `git mv src/vsdxkit/media src/vsdxkit/_bundled`
-- In `src/vsdxkit/_media.py`, the `media_path` function: its docstring `"""Path to a bundled donor in the module-adjacent 'media' folder."""` becomes `"""Path to a bundled donor in the module-adjacent '_bundled' folder."""`, and `return str(Path(__file__).resolve().parent / "media" / filename)` becomes `return str(Path(__file__).resolve().parent / "_bundled" / filename)`.
-- In `pyproject.toml`, the package data `vsdxkit = ["media/*.vsdx", "py.typed"]` becomes `vsdxkit = ["_bundled/*.vsdx", "py.typed"]`.
+- In `src/vsdxkit/_media.py`, the `media_path` function: its docstring `"""Path
+  to a bundled donor in the module-adjacent 'media' folder."""` becomes `"""Path
+  to a bundled donor in the module-adjacent '_bundled' folder."""`, and `return
+  str(Path(__file__).resolve().parent / "media" / filename)` becomes `return
+  str(Path(__file__).resolve().parent / "_bundled" / filename)`.
+- In `pyproject.toml`, the package data `vsdxkit = ["media/*.vsdx", "py.typed"]`
+  becomes `vsdxkit = ["_bundled/*.vsdx", "py.typed"]`.
 - In `tools/smoke_wheel.py`:
-  - the wheel check `name.startswith("vsdxkit/media/")` becomes `name.startswith("vsdxkit/_bundled/")`, and its messages say `bundled .vsdx members` rather than `media .vsdx members`;
-  - the installed check `os.path.join(package_dir, "media", member_name)` becomes `os.path.join(package_dir, "_bundled", member_name)`, and its two messages say `_bundled/{member_name}`;
-  - the sample document `glob.glob(os.path.join(package_dir, "media", "*.vsdx"))` becomes `glob.glob(os.path.join(package_dir, "_bundled", "*.vsdx"))`.
-- In `tests/test_smoke_wheel_modules.py`, the fake wheel's `"vsdxkit/media/media.vsdx"` becomes `"vsdxkit/_bundled/media.vsdx"`.
-- In `tests/test_media.py`, `MEDIA_DIR = Path(__file__).resolve().parents[1] / "src" / "vsdxkit" / "media"` becomes `... / "vsdxkit" / "_bundled"`.
+  - the wheel check `name.startswith("vsdxkit/media/")` becomes
+    `name.startswith("vsdxkit/_bundled/")`, and its messages say `bundled .vsdx
+    members` rather than `media .vsdx members`;
+  - the installed check `os.path.join(package_dir, "media", member_name)`
+    becomes `os.path.join(package_dir, "_bundled", member_name)`, and its two
+    messages say `_bundled/{member_name}`;
+  - the sample document `glob.glob(os.path.join(package_dir, "media",
+    "*.vsdx"))` becomes `glob.glob(os.path.join(package_dir, "_bundled",
+    "*.vsdx"))`.
+- In `tests/test_smoke_wheel_modules.py`, the fake wheel's
+  `"vsdxkit/media/media.vsdx"` becomes `"vsdxkit/_bundled/media.vsdx"`.
+- In `tests/test_media.py`, `MEDIA_DIR = Path(__file__).resolve().parents[1] /
+  "src" / "vsdxkit" / "media"` becomes `... / "vsdxkit" / "_bundled"`.
 
-Run: `grep -rnE "\"media\"|'media'|vsdxkit/media|media/\*" src tests tools pyproject.toml MANIFEST.in`
-Expected: no output. (`visio/media/...` part names in tests are Visio package paths, not this folder, and do not match.)
+Run: `grep -rnE "\"media\"|'media'|vsdxkit/media|media/\*" src tests tools
+pyproject.toml MANIFEST.in` Expected: no output. (`visio/media/...` part names
+in tests are Visio package paths, not this folder, and do not match.)
 
-Run: `uv run --no-sync python S/p7e/imports.py REPO rename formulae inheritance logging_support shape_part masters media`
-Expected: `changed` lines for `src/vsdxkit/_formulae.py`, `document.py`, `geometry.py`, `shapes.py`, `templating.py`, `tests/test_create_shape.py`, `test_document.py`, `test_errors.py`, `test_formulae.py`, `test_master_catalog.py`, `test_media.py`, `test_media_reuse.py`, `test_page.py`, `test_part_names.py` and `tools/smoke_wheel.py`, and no `refused` line.
+Run: `uv run --no-sync python S/p7e/imports.py REPO rename formulae inheritance
+logging_support shape_part masters media` Expected: `changed` lines for
+`src/vsdxkit/_formulae.py`, `document.py`, `geometry.py`, `shapes.py`,
+`templating.py`, `tests/test_create_shape.py`, `test_document.py`,
+`test_errors.py`, `test_formulae.py`, `test_master_catalog.py`, `test_media.py`,
+`test_media_reuse.py`, `test_page.py`, `test_part_names.py` and
+`tools/smoke_wheel.py`, and no `refused` line.
 
 Run: `uv run --no-sync ruff check --fix --select I src tests tools`
 Run: `uv run --no-sync ruff format src tests tools`
 
 - [ ] **Step 6: The strings and cross-references the script leaves**
 
-- `src/vsdxkit/geometry.py:61`: `:attr:\`~vsdxkit.inheritance.InheritedRow.inherited\`` → `:attr:\`GeometryRow.inherited\``. The sentence then reads `An inherited row reads the master's cells but is marked :attr:\`GeometryRow.inherited\`. The first write to it,`.
-- `src/vsdxkit/shapes.py:354`: `:attr:\`~vsdxkit.inheritance.InheritedRow.inherited\`` → `:attr:\`inherited\``.
-- `src/vsdxkit/shape_kind.py:4-5`: `Which document and which shape is private to` / `:mod:\`vsdxkit.media\`.` → `Which document and which shape is private to` / `the library.`
-- `src/vsdxkit/document.py:478`: the docstring `"""The bundled shape \`kind\` is copied from; see :mod:\`vsdxkit.media\`."""` → `"""The bundled shape \`kind\` is copied from, one of the donors \`vsdxkit._media\` loads."""`
-- `tests/test_master_catalog.py:312`: `Guards the seam: \`vsdxkit.masters\` must not import` → `Guards the seam: \`vsdxkit._masters\` must not import`.
-- `tests/test_master_catalog.py:317`: `script = "import sys, vsdxkit.masters; print('vsdxkit.document' in sys.modules)"` → `script = "import sys, vsdxkit._masters; print('vsdxkit.document' in sys.modules)"`. (A string, so the script left it; without the edit the subprocess fails with `ModuleNotFoundError`.)
+- `src/vsdxkit/geometry.py:61`:
+  `:attr:\`~vsdxkit.inheritance.InheritedRow.inherited\`` →
+  `:attr:\`GeometryRow.inherited\``. The sentence then reads`An inherited row
+  reads the master's cells but is marked :attr:\`GeometryRow.inherited\`. The
+  first write to it,`.
+- `src/vsdxkit/shapes.py:354`:
+  `:attr:\`~vsdxkit.inheritance.InheritedRow.inherited\`` →
+  `:attr:\`inherited\``.
+- `src/vsdxkit/shape_kind.py:4-5`: `Which document and which shape is private
+  to` / `:mod:\`vsdxkit.media\`.` → `Which document and which shape is private
+  to` / `the library.`
+- `src/vsdxkit/document.py:478`: the docstring `"""The bundled shape \`kind\` is
+  copied from; see :mod:\`vsdxkit.media\`."""` → `"""The bundled shape \`kind\`
+  is copied from, one of the donors \`vsdxkit._media\` loads."""`
+- `tests/test_master_catalog.py:312`: `Guards the seam: \`vsdxkit.masters\` must
+  not import` → `Guards the seam: \`vsdxkit._masters\` must not import`.
+- `tests/test_master_catalog.py:317`: `script = "import sys, vsdxkit.masters;
+  print('vsdxkit.document' in sys.modules)"` → `script = "import sys,
+  vsdxkit._masters; print('vsdxkit.document' in sys.modules)"`. (A string, so
+  the script left it; without the edit the subprocess fails with
+  `ModuleNotFoundError`.)
 
-Run: `grep -rnE "vsdxkit\.(formulae|inheritance|logging_support|masters|media|shape_part)\b" src tests tools`
-Expected: no output.
+Run: `grep -rnE
+"vsdxkit\.(formulae|inheritance|logging_support|masters|media|shape_part)\b" src
+tests tools` Expected: no output.
 
 - [ ] **Step 7: The guide**
 
-Run: `uv run --no-sync python tools/check_migration_guide.py`
-Expected: `16 removed name(s) missing from the migration guide`, after `FAIL:` lines for the twelve `formulae` names (`width_x_1`, `width_x_0`, `middle_x`, `middle_y`, `center_x`, `center_y`, `diag_width`, `angle`, `width`, `height`, `func_map`, `calc_value`), `inheritance.InheritedRow`, `InheritedRow.inherited`, `InheritedRow.make_local` and `logging_support.get_logger`.
+Run: `uv run --no-sync python tools/check_migration_guide.py` Expected: `16
+removed name(s) missing from the migration guide`, after `FAIL:` lines for the
+twelve `formulae` names (`width_x_1`, `width_x_0`, `middle_x`, `middle_y`,
+`center_x`, `center_y`, `diag_width`, `angle`, `width`, `height`, `func_map`,
+`calc_value`), `inheritance.InheritedRow`, `InheritedRow.inherited`,
+`InheritedRow.make_local` and `logging_support.get_logger`.
 
 In `docs/migration-1.0.rst`, replace the two root entries at `:40-44`:
 
@@ -1378,7 +1576,8 @@ In `docs/migration-1.0.rst`, replace the two root entries at `:40-44`:
    ``VisioFile(path, debug=True)`` below.
 ```
 
-Append to the end of the file (after the `VisioFileDiff` list, with one blank line before):
+Append to the end of the file (after the `VisioFileDiff` list, with one blank
+line before):
 
 ```rst
 Internal modules are private
@@ -1407,18 +1606,21 @@ renamed with a leading underscore; nothing in them is supported.
    never configures a handler itself.
 ```
 
-Before writing "which it still does", confirm it: `grep -n "calc_value\|_refresh_formula_values()" src/vsdxkit/shapes.py` shows `_refresh_formula_values` calling `calc_value`, and `set_start_and_finish` calling `_refresh_formula_values()` last.
+Before writing "which it still does", confirm it: `grep -n
+"calc_value\|_refresh_formula_values()" src/vsdxkit/shapes.py` shows
+`_refresh_formula_values` calling `calc_value`, and `set_start_and_finish`
+calling `_refresh_formula_values()` last.
 
 Run: `uv run --no-sync python tools/check_migration_guide.py`
 Expected: `ok: every 0.8.0 name that 1.0 removes is in docs/migration-1.0.rst`
 
 - [ ] **Step 8: Run everything**
 
-Run: `uv run --no-sync pytest tests -q -p no:randomly`
-Expected: `0 failed` (the prototype: `1995 passed, 47 skipped` plus this file's 17).
+Run: `uv run --no-sync pytest tests -q -p no:randomly` Expected: `0 failed` (the
+prototype: `1995 passed, 47 skipped` plus this file's 17).
 
-Run: `uv run --no-sync pyrefly check src/vsdxkit --min-severity warn --output-format min-text`
-Expected: `0 errors`.
+Run: `uv run --no-sync pyrefly check src/vsdxkit --min-severity warn
+--output-format min-text` Expected: `0 errors`.
 
 - [ ] **Step 9: Commit**
 
@@ -1429,7 +1631,7 @@ Run: `git add -A src tests tools docs`
 
 Write `S/commit-msg.txt`:
 
-```
+```text
 refactor!: six internal modules become private (#424)
 
 formulae, inheritance, logging_support, shape_part, masters and media are
@@ -1449,51 +1651,89 @@ Run: `git commit -F S/commit-msg.txt`
 ### Task 5: `partnames`, `relationships`, `shape_tree` and `xmlio` become private
 
 **Files:**
+
 - Rename: `src/vsdxkit/{partnames,relationships,shape_tree,xmlio}.py` → `_<module>.py`
-- Modify (by the script): `src/vsdxkit/_masters.py`, `document.py`, `geometry.py`, `package.py`, `pages.py`, `shapes.py`, `templating.py`; `tests/test_byte_preserving_save.py`, `test_connector_atomicity.py`, `test_create_shape.py`, `test_errors.py`, `test_master_catalog.py`, `test_metamorphic.py`, `test_namespaces.py`, `test_page.py`, `test_part_names.py`, `test_partnames.py`, `test_relationships.py`, `test_shape.py`, `test_shape_tree.py`, `test_sheet_reference_remap.py`, `test_visiofile_package_store.py`
+- Modify (by the script): `src/vsdxkit/_masters.py`, `document.py`,
+  `geometry.py`, `package.py`, `pages.py`, `shapes.py`, `templating.py`;
+  `tests/test_byte_preserving_save.py`, `test_connector_atomicity.py`,
+  `test_create_shape.py`, `test_errors.py`, `test_master_catalog.py`,
+  `test_metamorphic.py`, `test_namespaces.py`, `test_page.py`,
+  `test_part_names.py`, `test_partnames.py`, `test_relationships.py`,
+  `test_shape.py`, `test_shape_tree.py`, `test_sheet_reference_remap.py`,
+  `test_visiofile_package_store.py`
 - Modify (by hand): `tests/test_namespaces.py:403-404`, `tests/test_shape_tree.py:1,162`
 - Modify: `docs/classes.rst:62-69` (the "Shape tree" section goes)
 - Modify: `docs/migration-1.0.rst` (nine existing entries, and two new ones)
 - Modify: `tests/test_public_surface.py` (`PRIVATE_MODULES`)
 
 **Interfaces:**
-- Produces: `vsdxkit._partnames`, `vsdxkit._relationships`, `vsdxkit._shape_tree`, `vsdxkit._xmlio`. The contributor rule becomes "part names come only from `vsdxkit._partnames`".
+
+- Produces: `vsdxkit._partnames`, `vsdxkit._relationships`,
+  `vsdxkit._shape_tree`, `vsdxkit._xmlio`. The contributor rule becomes "part
+  names come only from `vsdxkit._partnames`".
 
 - [ ] **Step 1: The failing test**
 
-In `tests/test_public_surface.py`, add `"partnames"`, `"relationships"`, `"shape_tree"` and `"xmlio"` to the end of `PRIVATE_MODULES`.
+In `tests/test_public_surface.py`, add `"partnames"`, `"relationships"`,
+`"shape_tree"` and `"xmlio"` to the end of `PRIVATE_MODULES`.
 
 Run: `uv run --no-sync pytest tests/test_public_surface.py -q -p no:randomly`
-Expected: 5 failed: four `test_an_internal_module_is_private` cases, and the docs test listing ten lines: `docs/classes.rst: .. automodule:: vsdxkit.shape_tree`, and nine in `docs/migration-1.0.rst`, which at `899aa7a` were `:51` (`from vsdxkit.xmlio import pretty_print_element`), `:221` (`vsdxkit.xmlio.parse_part`), `:229` (`vsdxkit.xmlio.require_tree`), `:234` (`vsdxkit.xmlio.to_float`), `:743` (`vsdxkit.xmlio.pretty_print_element(xml)`), `:789` and `:790` (`vsdxkit.shape_tree.parent_of`, `find_or_create_shapes_tag`), `:805` (`vsdxkit.shape_tree.remap_sheet_references`) and `:815` (`:mod:\`vsdxkit.partnames\``). Tasks 1–4 inserted entries above some of them, so the numbers printed are larger. (`test_a_private_reference_is_found` still passes: its lines name the Task 4 modules.)
+Expected: 5 failed: four `test_an_internal_module_is_private` cases, and the
+docs test listing ten lines: `docs/classes.rst: .. automodule::
+vsdxkit.shape_tree`, and nine in `docs/migration-1.0.rst`, which at `899aa7a`
+were `:51` (`from vsdxkit.xmlio import pretty_print_element`), `:221`
+(`vsdxkit.xmlio.parse_part`), `:229` (`vsdxkit.xmlio.require_tree`), `:234`
+(`vsdxkit.xmlio.to_float`), `:743` (`vsdxkit.xmlio.pretty_print_element(xml)`),
+`:789` and `:790` (`vsdxkit.shape_tree.parent_of`, `find_or_create_shapes_tag`),
+`:805` (`vsdxkit.shape_tree.remap_sheet_references`) and `:815`
+(`:mod:\`vsdxkit.partnames\``). Tasks 1–4 inserted entries above some of them,
+so the numbers printed are larger. (`test_a_private_reference_is_found` still
+passes: its lines name the Task 4 modules.)
 
 - [ ] **Step 2: Rename the four modules**
 
 Run each:
+
 - `git mv src/vsdxkit/partnames.py src/vsdxkit/_partnames.py`
 - `git mv src/vsdxkit/relationships.py src/vsdxkit/_relationships.py`
 - `git mv src/vsdxkit/shape_tree.py src/vsdxkit/_shape_tree.py`
 - `git mv src/vsdxkit/xmlio.py src/vsdxkit/_xmlio.py`
 
-Run: `uv run --no-sync python S/p7e/imports.py REPO rename partnames relationships shape_tree xmlio`
-Expected: `changed` lines for the files listed under **Files** "by the script", and no `refused` line.
+Run: `uv run --no-sync python S/p7e/imports.py REPO rename partnames
+relationships shape_tree xmlio` Expected: `changed` lines for the files listed
+under **Files** "by the script", and no `refused` line.
 
 Run: `uv run --no-sync ruff check --fix --select I src tests tools`
 Run: `uv run --no-sync ruff format src tests tools`
 
 - [ ] **Step 3: The strings the script leaves**
 
-- `tests/test_namespaces.py:403-404`, inside the subprocess script: `"from vsdxkit import namespace, xmlio\n"` → `"from vsdxkit import namespace, _xmlio\n"`, and `"print(xmlio.pretty_print_element(ET.Element(namespace + 'Shape')))\n"` → `"print(_xmlio.pretty_print_element(ET.Element(namespace + 'Shape')))\n"`.
-- `tests/test_shape_tree.py:1`: `"""\`vsdxkit.shape_tree\` is the one walk of a shape tree (Phase 3, #98).` → `"""\`vsdxkit._shape_tree\` is the one walk of a shape tree (Phase 3, #98).`
-- `tests/test_shape_tree.py:162`: `== "vsdxkit.shape_tree", name` → `== "vsdxkit._shape_tree", name`.
-- `docs/classes.rst`: delete the "Shape tree" section, `:62-69` (its heading, underline, prose and the `.. automodule:: vsdxkit.shape_tree` directive with its options), and the blank line after it.
+- `tests/test_namespaces.py:403-404`, inside the subprocess script: `"from
+  vsdxkit import namespace, xmlio\n"` → `"from vsdxkit import namespace,
+  _xmlio\n"`, and `"print(xmlio.pretty_print_element(ET.Element(namespace +
+  'Shape')))\n"` → `"print(_xmlio.pretty_print_element(ET.Element(namespace +
+  'Shape')))\n"`.
+- `tests/test_shape_tree.py:1`: `"""\`vsdxkit.shape_tree\` is the one walk of a
+  shape tree (Phase 3, #98).` → `"""\`vsdxkit._shape_tree\` is the one walk of a
+  shape tree (Phase 3, #98).`
+- `tests/test_shape_tree.py:162`: `== "vsdxkit.shape_tree", name` → `==
+  "vsdxkit._shape_tree", name`.
+- `docs/classes.rst`: delete the "Shape tree" section, `:62-69` (its heading,
+  underline, prose and the `.. automodule:: vsdxkit.shape_tree` directive with
+  its options), and the blank line after it.
 
-Run: `grep -rnE "vsdxkit\.(formulae|inheritance|logging_support|masters|media|shape_part|partnames|relationships|shape_tree|xmlio)\b" src tests tools`
-Expected: no output.
+Run: `grep -rnE
+"vsdxkit\.(formulae|inheritance|logging_support|masters|media|shape_part|partnames|relationships|shape_tree|xmlio)\b"
+src tests tools` Expected: no output.
 
 - [ ] **Step 4: The guide**
 
-Run: `uv run --no-sync python tools/check_migration_guide.py`
-Expected: `13 removed name(s) missing from the migration guide`: the seven `relationships` names (`all_of`, `find`, `allocate_id`, `append_if_absent`, `remove`, `ensure_override`, `remove_override`) and six `xmlio` names (`NAMESPACE_PREFIXES`, `register_namespaces`, `make_cell_element`, `adopt_prefixes`, `xml_value`, `require_element`).
+Run: `uv run --no-sync python tools/check_migration_guide.py` Expected: `13
+removed name(s) missing from the migration guide`: the seven `relationships`
+names (`all_of`, `find`, `allocate_id`, `append_if_absent`, `remove`,
+`ensure_override`, `remove_override`) and six `xmlio` names
+(`NAMESPACE_PREFIXES`, `register_namespaces`, `make_cell_element`,
+`adopt_prefixes`, `xml_value`, `require_element`).
 
 In `docs/migration-1.0.rst`, rewrite each of these entries' bodies (the term
 line stays). The line numbers are at `899aa7a`; find each entry by its term
@@ -1525,7 +1765,9 @@ line, because Tasks 1–4 inserted entries above some of them.
       ``shape.xml``, and read a saved part's bytes with :mod:`zipfile`.
    ```
 
-3. ``` ``xmlio.require_xml_tree``, ``xmlio.require_root`` ``` (`:224-231`): keep the first three lines, and replace `page.xml``, and compose the two checks 1.0 keeps.` and the three lines after it with:
+3. ``` ``xmlio.require_xml_tree``, ``xmlio.require_root`` ``` (`:224-231`): keep
+   the first three lines, and replace `page.xml``, and compose the two checks
+   1.0 keeps.` and the three lines after it with:
 
    ```rst
       ``page.xml``, and its root with ``page.xml.getroot()``.
@@ -1546,7 +1788,8 @@ line, because Tasks 1–4 inserted entries above some of them.
       above.
    ```
 
-6. ``` ``shapes.parent_of(root, element)``, ``shapes.find_or_create_shapes_tag(parent)`` ``` (`:788-792`):
+6. ``` ``shapes.parent_of(root, element)``,
+   ``shapes.find_or_create_shapes_tag(parent)`` ``` (`:788-792`):
 
    ```rst
       Internal in 1.0. For a shape, ``shape.parent`` is its page or group,
@@ -1562,7 +1805,8 @@ line, because Tasks 1–4 inserted entries above some of them.
       shape it renumbers, as above.
    ```
 
-8. The "Package internals are private" paragraph (`:812-817`): delete the sentence `The part names are in :mod:\`vsdxkit.partnames\`.`, so it reads:
+8. The "Package internals are private" paragraph (`:812-817`): delete the
+   sentence `The part names are in :mod:\`vsdxkit.partnames\`.`, so it reads:
 
    ```rst
    The document keeps its package parts in step itself, and a page's
@@ -1571,9 +1815,12 @@ line, because Tasks 1–4 inserted entries above some of them.
    :mod:`zipfile`. If you need one of these, open an issue asking for an API.
    ```
 
-Before writing entry 6, confirm `Shape.append_shape` creates the group's `<Shapes>` when it has none: `grep -n "find_or_create_shapes_tag(\|def append_shape" src/vsdxkit/shapes.py` shows the call inside `append_shape`.
+Before writing entry 6, confirm `Shape.append_shape` creates the group's
+`<Shapes>` when it has none: `grep -n "find_or_create_shapes_tag(\|def
+append_shape" src/vsdxkit/shapes.py` shows the call inside `append_shape`.
 
-Append to the "Internal modules are private" section (after the `logging_support` entry):
+Append to the "Internal modules are private" section (after the
+`logging_support` entry):
 
 ```rst
 
@@ -1591,7 +1838,8 @@ Append to the "Internal modules are private" section (after the `logging_support
    above shows the standard library's printer.
 ```
 
-(``` ``xmlio.require_tree`` ``` and ``` ``xmlio.pretty_print_element`` ``` are listed here because the rewrites above drop the literals that covered them.)
+(``` ``xmlio.require_tree`` ``` and ``` ``xmlio.pretty_print_element`` ``` are
+listed here because the rewrites above drop the literals that covered them.)
 
 Run: `uv run --no-sync python tools/check_migration_guide.py`
 Expected: `ok: …`
@@ -1601,8 +1849,8 @@ Expected: `ok: …`
 Run: `uv run --no-sync pytest tests -q -p no:randomly`
 Expected: `0 failed`.
 
-Run: `uv run --no-sync pyrefly check src/vsdxkit --min-severity warn --output-format min-text`
-Expected: `0 errors`.
+Run: `uv run --no-sync pyrefly check src/vsdxkit --min-severity warn
+--output-format min-text` Expected: `0 errors`.
 
 Run: `rm -rf docs/_build`
 Run: `uv run --no-sync sphinx-build -W --keep-going -q -b html docs docs/_build/html`
@@ -1617,7 +1865,7 @@ Run: `git add -A src tests tools docs`
 
 Write `S/commit-msg.txt`:
 
-```
+```text
 refactor!: partnames, relationships, shape_tree and xmlio become private (#424)
 
 The raw-XML helpers and the part names are internal (Phase 7, decision 1).
@@ -1635,20 +1883,37 @@ Run: `git commit -F S/commit-msg.txt`
 ### Task 6: `package`'s store and `glue`'s planners move to `_package` and `_glue`
 
 **Files:**
+
 - Create: `S/p7e/split.py` (outside the repository)
 - Create (by the script): `src/vsdxkit/_package.py`, `src/vsdxkit/_glue.py`
 - Modify (by the script): `src/vsdxkit/package.py`, `src/vsdxkit/glue.py`
-- Modify (by `imports.py move`): `src/vsdxkit/_masters.py`, `document.py`, `pages.py`, `connectors.py` (renamed only in Task 7); `tests/test_document.py`, `test_errors.py`, `test_media_reuse.py`, `test_package_limits.py`, `test_package_store.py`, `test_package_store_save.py`, `test_review_findings_fixes.py`, `test_visiofile_package_store.py`, `test_glue.py`
-- Modify (by hand): the two public modules' docstrings, `_glue.py`'s first line; `tests/test_errors.py:18-23,678-686`; `tests/test_package_store_save.py:21,235`; `tests/test_glue.py:1`
+- Modify (by `imports.py move`): `src/vsdxkit/_masters.py`, `document.py`,
+  `pages.py`, `connectors.py` (renamed only in Task 7);
+  `tests/test_document.py`, `test_errors.py`, `test_media_reuse.py`,
+  `test_package_limits.py`, `test_package_store.py`,
+  `test_package_store_save.py`, `test_review_findings_fixes.py`,
+  `test_visiofile_package_store.py`, `test_glue.py`
+- Modify (by hand): the two public modules' docstrings, `_glue.py`'s first line;
+  `tests/test_errors.py:18-23,678-686`;
+  `tests/test_package_store_save.py:21,235`; `tests/test_glue.py:1`
 - Modify: `tests/test_public_surface.py`
 
 **Interfaces:**
-- Produces: `vsdxkit.package` defines only `PackageLimits`; `vsdxkit._package` defines the store (`PackageStore`, `XmlPart`, `BytesPart`, `PartValue`, `canonical_hash`, `check_relationship_target`, `read_archive_members` and the private helpers) and imports `PackageLimits` from `vsdxkit.package`.
-- Produces: `vsdxkit.glue` defines only `Glue`, `Routing` and `ConnectorOptions`; `vsdxkit._glue` defines `EndGlue`, `CellWrite`, `CellFreeze`, `CellInherit`, `CellChange`, `ConnectionRecord`, `glue_cells`, `routing_cells`, `connection_records`, `record_element` and the private helpers, and imports `Routing` from `vsdxkit.glue`.
+
+- Produces: `vsdxkit.package` defines only `PackageLimits`; `vsdxkit._package`
+  defines the store (`PackageStore`, `XmlPart`, `BytesPart`, `PartValue`,
+  `canonical_hash`, `check_relationship_target`, `read_archive_members` and the
+  private helpers) and imports `PackageLimits` from `vsdxkit.package`.
+- Produces: `vsdxkit.glue` defines only `Glue`, `Routing` and
+  `ConnectorOptions`; `vsdxkit._glue` defines `EndGlue`, `CellWrite`,
+  `CellFreeze`, `CellInherit`, `CellChange`, `ConnectionRecord`, `glue_cells`,
+  `routing_cells`, `connection_records`, `record_element` and the private
+  helpers, and imports `Routing` from `vsdxkit.glue`.
 
 - [ ] **Step 1: The failing test**
 
-In `tests/test_public_surface.py`, add `import ast` to the imports and, after `private_references`, add:
+In `tests/test_public_surface.py`, add `import ast` to the imports and, after
+`private_references`, add:
 
 ```python
 def _top_level_names(module: str) -> set[str]:
@@ -1679,8 +1944,11 @@ def test_a_split_module_defines_only_its_user_api(module, public):
     assert importlib.util.find_spec(f"vsdxkit._{module}") is not None
 ```
 
-Run: `uv run --no-sync pytest tests/test_public_surface.py -q -p no:randomly -k split`
-Expected: 2 failed: `package` with `Extra items in the left set:` naming `PackageStore`, `XmlPart`, `BytesPart`, `PartValue`, `canonical_hash`, `check_relationship_target` and `read_archive_members`; `glue` naming the ten planners and records.
+Run: `uv run --no-sync pytest tests/test_public_surface.py -q -p no:randomly -k
+split` Expected: 2 failed: `package` with `Extra items in the left set:` naming
+`PackageStore`, `XmlPart`, `BytesPart`, `PartValue`, `canonical_hash`,
+`check_relationship_target` and `read_archive_members`; `glue` naming the ten
+planners and records.
 
 - [ ] **Step 2: Write the splitter**
 
@@ -1761,19 +2029,35 @@ if __name__ == "__main__":
 - [ ] **Step 3: Split the two modules**
 
 Run: `uv run --no-sync python S/p7e/split.py REPO package PackageLimits`
-Expected: `moved to _package.py: _check_member_names, _MemberReader, _read_bounded, _preflight_eocd, read_archive_members, _members_within, _member_bytes, _REJECTED_SEGMENTS, _checked, check_relationship_target, _part_name_for_member, _canonical_hash_of, canonical_hash, BytesPart, XmlPart, PartValue, _promoted, PackageStore` (in source order; the exact order does not matter).
+Expected: `moved to _package.py: _check_member_names, _MemberReader,
+_read_bounded, _preflight_eocd, read_archive_members, _members_within,
+_member_bytes, _REJECTED_SEGMENTS, _checked, check_relationship_target,
+_part_name_for_member, _canonical_hash_of, canonical_hash, BytesPart, XmlPart,
+PartValue, _promoted, PackageStore` (in source order; the exact order does not
+matter).
 
-Run: `uv run --no-sync python S/p7e/split.py REPO glue Glue Routing ConnectorOptions`
-Expected: `moved to _glue.py: _CONNECT_TAG, _WALKGLUE_BEGIN, _WALKGLUE_END, _ROUTE_STYLE, EndGlue, CellWrite, CellFreeze, CellInherit, CellChange, ConnectionRecord, _coordinate_formula, _trigger, _coordinate, glue_cells, _any_dynamic, routing_cells, connection_records, record_element`
+Run: `uv run --no-sync python S/p7e/split.py REPO glue Glue Routing
+ConnectorOptions` Expected: `moved to _glue.py: _CONNECT_TAG, _WALKGLUE_BEGIN,
+_WALKGLUE_END, _ROUTE_STYLE, EndGlue, CellWrite, CellFreeze, CellInherit,
+CellChange, ConnectionRecord, _coordinate_formula, _trigger, _coordinate,
+glue_cells, _any_dynamic, routing_cells, connection_records, record_element`
 
-Run: `uv run --no-sync ruff check --fix --select F401,I src/vsdxkit/package.py src/vsdxkit/_package.py src/vsdxkit/glue.py src/vsdxkit/_glue.py`
-Expected: `Found N errors (N fixed, 0 remaining).`
+Run: `uv run --no-sync ruff check --fix --select F401,I src/vsdxkit/package.py
+src/vsdxkit/_package.py src/vsdxkit/glue.py src/vsdxkit/_glue.py` Expected:
+`Found N errors (N fixed, 0 remaining).`
 
-Run: `uv run --no-sync python S/p7e/imports.py REPO move package PackageStore XmlPart BytesPart PartValue canonical_hash check_relationship_target read_archive_members _read_bounded _preflight_eocd`
-Expected: `changed` lines for `src/vsdxkit/_masters.py`, `document.py`, `pages.py`, `tests/test_document.py`, `test_errors.py`, `test_media_reuse.py`, `test_package_limits.py`, `test_package_store.py`, `test_package_store_save.py`, `test_review_findings_fixes.py` and `test_visiofile_package_store.py`.
+Run: `uv run --no-sync python S/p7e/imports.py REPO move package PackageStore
+XmlPart BytesPart PartValue canonical_hash check_relationship_target
+read_archive_members _read_bounded _preflight_eocd` Expected: `changed` lines
+for `src/vsdxkit/_masters.py`, `document.py`, `pages.py`,
+`tests/test_document.py`, `test_errors.py`, `test_media_reuse.py`,
+`test_package_limits.py`, `test_package_store.py`, `test_package_store_save.py`,
+`test_review_findings_fixes.py` and `test_visiofile_package_store.py`.
 
-Run: `uv run --no-sync python S/p7e/imports.py REPO move glue EndGlue CellWrite CellFreeze CellInherit CellChange ConnectionRecord glue_cells routing_cells connection_records record_element`
-Expected: `changed src/vsdxkit/connectors.py` and `changed tests/test_glue.py`.
+Run: `uv run --no-sync python S/p7e/imports.py REPO move glue EndGlue CellWrite
+CellFreeze CellInherit CellChange ConnectionRecord glue_cells routing_cells
+connection_records record_element` Expected: `changed src/vsdxkit/connectors.py`
+and `changed tests/test_glue.py`.
 
 Run: `uv run --no-sync ruff check --fix --select I src tests tools`
 Run: `uv run --no-sync ruff format src tests tools`
@@ -1808,30 +2092,45 @@ own formulas.
 """
 ```
 
-Before writing the `glue` docstring, confirm the two signatures it names: `grep -n "def connect\|def retarget" src/vsdxkit/pages.py src/vsdxkit/shapes.py`.
+Before writing the `glue` docstring, confirm the two signatures it names: `grep
+-n "def connect\|def retarget" src/vsdxkit/pages.py src/vsdxkit/shapes.py`.
 
-`src/vsdxkit/_glue.py`, first line: `"""Connector glue as data: the options a connector is glued with, and what they write.` → `"""Connector glue as data: the cells and records each of a connector's options writes.`
+`src/vsdxkit/_glue.py`, first line: `"""Connector glue as data: the options a
+connector is glued with, and what they write.` → `"""Connector glue as data: the
+cells and records each of a connector's options writes.`
 
-`tests/test_glue.py:1`: `"""\`vsdxkit.glue\` builds connector glue as data, with no document to hand.` → `"""\`vsdxkit._glue\` builds connector glue as data, from the options in \`vsdxkit.glue\`, with no document to hand.`
+`tests/test_glue.py:1`: `"""\`vsdxkit.glue\` builds connector glue as data, with
+no document to hand.` → `"""\`vsdxkit._glue\` builds connector glue as data,
+from the options in \`vsdxkit.glue\`, with no document to hand.`
 
 `tests/test_errors.py`:
-- beside `import vsdxkit.package` (`:23`), which stays (`:857` uses `vsdxkit.package.PackageLimits`), add `import vsdxkit._package`; `ruff check --fix --select I` places it;
-- in `test_memory_exhausted_while_reading_a_member_is_not_blamed_on_the_package` (`:678-686`): `from vsdxkit import package` → `from vsdxkit import _package`, `monkeypatch.setattr(package, "_read_bounded", exhausted)` → `monkeypatch.setattr(_package, "_read_bounded", exhausted)`, and `package.PackageStore.open(...)` → `_package.PackageStore.open(...)`.
 
-`tests/test_package_store_save.py:21` and `:235`: `import vsdxkit.package as package_module` → `import vsdxkit._package as package_module`. (Its tests patch `package_module.tempfile` and `package_module.os`, which the new `package.py` no longer imports.)
+- beside `import vsdxkit.package` (`:23`), which stays (`:857` uses
+  `vsdxkit.package.PackageLimits`), add `import vsdxkit._package`; `ruff check
+  --fix --select I` places it;
+- in `test_memory_exhausted_while_reading_a_member_is_not_blamed_on_the_package`
+  (`:678-686`): `from vsdxkit import package` → `from vsdxkit import _package`,
+  `monkeypatch.setattr(package, "_read_bounded", exhausted)` →
+  `monkeypatch.setattr(_package, "_read_bounded", exhausted)`, and
+  `package.PackageStore.open(...)` → `_package.PackageStore.open(...)`.
+
+`tests/test_package_store_save.py:21` and `:235`: `import vsdxkit.package as
+package_module` → `import vsdxkit._package as package_module`. (Its tests patch
+`package_module.tempfile` and `package_module.os`, which the new `package.py` no
+longer imports.)
 
 Run: `uv run --no-sync ruff check --fix --select I tests/test_errors.py`
 
 - [ ] **Step 5: Run everything**
 
-Run: `uv run --no-sync pytest tests -q -p no:randomly`
-Expected: `0 failed` (the prototype: 2 more passed than after Task 5, the two new cases).
+Run: `uv run --no-sync pytest tests -q -p no:randomly` Expected: `0 failed` (the
+prototype: 2 more passed than after Task 5, the two new cases).
 
-Run: `uv run --no-sync pyrefly check src/vsdxkit --min-severity warn --output-format min-text`
-Expected: `0 errors`.
+Run: `uv run --no-sync pyrefly check src/vsdxkit --min-severity warn
+--output-format min-text` Expected: `0 errors`.
 
-Run: `uv run --no-sync python tools/check_migration_guide.py`
-Expected: `ok: …`. Nothing moved module that 0.8.0 had: the store and the planners are 1.0 names.
+Run: `uv run --no-sync python tools/check_migration_guide.py` Expected: `ok: …`.
+Nothing moved module that 0.8.0 had: the store and the planners are 1.0 names.
 
 Run: `uv run --no-sync python tools/check_public_annotations.py`
 Expected: `ok: …`
@@ -1845,7 +2144,7 @@ Run: `git add -A src tests tools docs`
 
 Write `S/commit-msg.txt`:
 
-```
+```text
 refactor!: the package store and the glue planners move to private modules (#424)
 
 package.py keeps PackageLimits; the store moves to _package.py. glue.py keeps
@@ -1864,19 +2163,24 @@ Run: `git commit -F S/commit-msg.txt`
 ### Task 7: the namespace copies go, and `connectors` becomes private
 
 **Files:**
-- Modify: `src/vsdxkit/connectors.py:107` (its `namespace` copy), then rename it `_connectors.py`
+
+- Modify: `src/vsdxkit/connectors.py:107` (its `namespace` copy), then rename it
+  `_connectors.py`
 - Modify: `src/vsdxkit/geometry.py:42` (its `namespace` copy)
 - Modify (by the script): `src/vsdxkit/pages.py`, `src/vsdxkit/shapes.py`
 - Modify (by hand): `tests/test_connector.py:340-342`, `src/vsdxkit/_glue.py:3`
 - Modify: `docs/migration-1.0.rst`, `tests/test_public_surface.py`
 
 **Interfaces:**
+
 - Consumes: `vsdxkit.namespace`, the one Visio namespace constant.
-- Produces: `vsdxkit._connectors`, whose names keep their spelling (`_Connect`, `_ConnectorPage`, `_glue_connector`, ...).
+- Produces: `vsdxkit._connectors`, whose names keep their spelling (`_Connect`,
+  `_ConnectorPage`, `_glue_connector`, ...).
 
 - [ ] **Step 1: The failing tests**
 
-In `tests/test_public_surface.py`, add `"connectors"` to the end of `PRIVATE_MODULES`, and append:
+In `tests/test_public_surface.py`, add `"connectors"` to the end of
+`PRIVATE_MODULES`, and append:
 
 ```python
 
@@ -1890,37 +2194,50 @@ def test_only_the_root_defines_the_visio_namespace():
 ```
 
 Run: `uv run --no-sync pytest tests/test_public_surface.py -q -p no:randomly`
-Expected: 2 failed: `test_an_internal_module_is_private[connectors]`, and `test_only_the_root_defines_the_visio_namespace` with `assert ['connectors.py', 'geometry.py'] == []`.
+Expected: 2 failed: `test_an_internal_module_is_private[connectors]`, and
+`test_only_the_root_defines_the_visio_namespace` with `assert ['connectors.py',
+'geometry.py'] == []`.
 
 - [ ] **Step 2: Import the root's constant**
 
-In `src/vsdxkit/connectors.py`, delete the line
-`namespace = "{http://schemas.microsoft.com/office/visio/2012/main}"` (`:107`,
-with the blank line after it) and add `from vsdxkit import namespace` to its
-`vsdxkit` imports. In `src/vsdxkit/geometry.py`, delete
-`namespace = "{http://schemas.microsoft.com/office/visio/2012/main}"  # visio file name space`
-(`:42`, and the two blank lines after it) and add `from vsdxkit import namespace`.
+In `src/vsdxkit/connectors.py`, delete the line `namespace =
+"{http://schemas.microsoft.com/office/visio/2012/main}"` (`:107`, with the blank
+line after it) and add `from vsdxkit import namespace` to its `vsdxkit` imports.
+In `src/vsdxkit/geometry.py`, delete `namespace =
+"{http://schemas.microsoft.com/office/visio/2012/main}"  # visio file name
+space` (`:42`, and the two blank lines after it) and add `from vsdxkit import
+namespace`.
 
 Run each:
+
 - `git mv src/vsdxkit/connectors.py src/vsdxkit/_connectors.py`
 - `uv run --no-sync python S/p7e/imports.py REPO rename connectors`
 
-Expected: `changed src/vsdxkit/pages.py`, `changed src/vsdxkit/shapes.py`, and `refused tests/test_connector.py: \`from vsdxkit import connectors\` and another binding of \`connectors\`` on stderr, exit 1. The refusal is expected: that file uses `connectors` as a variable elsewhere.
+Expected: `changed src/vsdxkit/pages.py`, `changed src/vsdxkit/shapes.py`, and
+`refused tests/test_connector.py: \`from vsdxkit import connectors\` and another
+binding of \`connectors\`` on stderr, exit 1. The refusal is expected: that file
+uses `connectors` as a variable elsewhere.
 
-In `tests/test_connector.py`, `test_the_connection_record_class_is_gone` (`:339-342`): `from vsdxkit import connectors` → `from vsdxkit import _connectors`, and `assert not hasattr(connectors, "Connect")` → `assert not hasattr(_connectors, "Connect")`.
+In `tests/test_connector.py`, `test_the_connection_record_class_is_gone`
+(`:339-342`): `from vsdxkit import connectors` → `from vsdxkit import
+_connectors`, and `assert not hasattr(connectors, "Connect")` → `assert not
+hasattr(_connectors, "Connect")`.
 
-In `src/vsdxkit/_glue.py:3`: `` `vsdxkit.connectors` resolves each`` → `` `vsdxkit._connectors` resolves each``.
+In `src/vsdxkit/_glue.py:3`: `` `vsdxkit.connectors` resolves each`` → ``
+`vsdxkit._connectors` resolves each``.
 
 Run: `uv run --no-sync ruff check --fix --select I src tests tools`
 Run: `uv run --no-sync ruff format src tests tools`
 
-Run: `grep -rnE "vsdxkit\.(formulae|inheritance|logging_support|masters|media|shape_part|partnames|relationships|shape_tree|xmlio|connectors)\b" src tests tools`
-Expected: no output.
+Run: `grep -rnE
+"vsdxkit\.(formulae|inheritance|logging_support|masters|media|shape_part|partnames|relationships|shape_tree|xmlio|connectors)\b"
+src tests tools` Expected: no output.
 
 - [ ] **Step 3: The guide**
 
-Run: `uv run --no-sync python tools/check_migration_guide.py`
-Expected: `2 removed name(s) missing from the migration guide`: `connectors.namespace` and `geometry.namespace`.
+Run: `uv run --no-sync python tools/check_migration_guide.py` Expected: `2
+removed name(s) missing from the migration guide`: `connectors.namespace` and
+`geometry.namespace`.
 
 Append to the "Internal modules are private" section:
 
@@ -1940,8 +2257,8 @@ Expected: `ok: …`
 Run: `uv run --no-sync pytest tests -q -p no:randomly`
 Expected: `0 failed`.
 
-Run: `uv run --no-sync pyrefly check src/vsdxkit --min-severity warn --output-format min-text`
-Expected: `0 errors`.
+Run: `uv run --no-sync pyrefly check src/vsdxkit --min-severity warn
+--output-format min-text` Expected: `0 errors`.
 
 Run: `bash S/gates.sh`
 Expected: as in "Every PR's verification", step 1.
@@ -1950,7 +2267,7 @@ Run: `git add -A src tests tools docs`
 
 Write `S/commit-msg.txt`:
 
-```
+```text
 refactor!: one Visio namespace constant; connectors becomes private (#424)
 
 connectors and geometry each kept a copy of vsdxkit.namespace; both import the
@@ -1968,17 +2285,29 @@ Run: `git commit -F S/commit-msg.txt`
 ### Task 8: the internals of public modules are underscored in place
 
 **Files:**
+
 - Create: `S/p7e/names.py` (outside the repository)
-- Modify (by the script): `src/vsdxkit/_formulae.py`, `document.py`, `geometry.py`, `pages.py`, `shapes.py`, `swimlanes.py`, `templating.py`; `tests/test_errors.py`
+- Modify (by the script): `src/vsdxkit/_formulae.py`, `document.py`,
+  `geometry.py`, `pages.py`, `shapes.py`, `swimlanes.py`, `templating.py`;
+  `tests/test_errors.py`
 - Modify (by hand): `src/vsdxkit/geometry.py` (two error messages)
 - Modify: `docs/migration-1.0.rst`, `tests/test_public_surface.py`
 
 **Interfaces:**
-- Produces: `_logger` in every module that had `logger`; `geometry._GeometryOwner`; `GeometryRow._create_row_xml`, `GeometryRow._inherited_by`, `GeometryCell._create_cell_xml`, `GeometryCell._parent_xml`, `DataProperty._inherited_by`; `shapes._is_connector`, `shapes._substitute`; `pages._PageLifecycle`; `swimlanes._CONTAINER_NAME`; `document._DRAWING_CONTENT_TYPE`, `document._MACRO_ENABLED_CONTENT_TYPE`. `Geometry.shape` stays public, typed `_GeometryOwner`.
+
+- Produces: `_logger` in every module that had `logger`;
+  `geometry._GeometryOwner`; `GeometryRow._create_row_xml`,
+  `GeometryRow._inherited_by`, `GeometryCell._create_cell_xml`,
+  `GeometryCell._parent_xml`, `DataProperty._inherited_by`;
+  `shapes._is_connector`, `shapes._substitute`; `pages._PageLifecycle`;
+  `swimlanes._CONTAINER_NAME`; `document._DRAWING_CONTENT_TYPE`,
+  `document._MACRO_ENABLED_CONTENT_TYPE`. `Geometry.shape` stays public, typed
+  `_GeometryOwner`.
 
 - [ ] **Step 1: The failing test**
 
-In `tests/test_public_surface.py`, add `import inspect` to the standard-library imports, and after the third-party imports:
+In `tests/test_public_surface.py`, add `import inspect` to the standard-library
+imports, and after the third-party imports:
 
 ```python
 import vsdxkit.document
@@ -2032,10 +2361,12 @@ def test_an_internal_name_in_a_public_module_is_private(owner, name):
     assert _has(owner, f"_{name}")
 ```
 
-(`GeometryCell.parent_xml` is a class-level annotation assigned in `__init__`, so `_has` reads the annotations as well as the attributes.)
+(`GeometryCell.parent_xml` is a class-level annotation assigned in `__init__`,
+so `_has` reads the annotations as well as the attributes.)
 
-Run: `uv run --no-sync pytest tests/test_public_surface.py -q -p no:randomly -k internal_name`
-Expected: 16 failed, each `assert not True` from the first assertion.
+Run: `uv run --no-sync pytest tests/test_public_surface.py -q -p no:randomly -k
+internal_name` Expected: 16 failed, each `assert not True` from the first
+assertion.
 
 - [ ] **Step 2: Write the renamer**
 
@@ -2160,26 +2491,44 @@ synthetic pyright report and stay as they are. Nothing reads a module's
 
 Run (one command):
 
-`uv run --no-sync python S/p7e/names.py logger=_logger GeometryOwner=_GeometryOwner create_row_xml=_create_row_xml inherited_by=_inherited_by create_cell_xml=_create_cell_xml parent_xml=_parent_xml is_connector=_is_connector substitute=_substitute PageLifecycle=_PageLifecycle CONTAINER_NAME=_CONTAINER_NAME DRAWING_CONTENT_TYPE=_DRAWING_CONTENT_TYPE MACRO_ENABLED_CONTENT_TYPE=_MACRO_ENABLED_CONTENT_TYPE -- src/vsdxkit/_formulae.py src/vsdxkit/document.py src/vsdxkit/geometry.py src/vsdxkit/pages.py src/vsdxkit/shapes.py src/vsdxkit/swimlanes.py src/vsdxkit/templating.py tests/test_errors.py`
+`uv run --no-sync python S/p7e/names.py logger=_logger
+GeometryOwner=_GeometryOwner create_row_xml=_create_row_xml
+inherited_by=_inherited_by create_cell_xml=_create_cell_xml
+parent_xml=_parent_xml is_connector=_is_connector substitute=_substitute
+PageLifecycle=_PageLifecycle CONTAINER_NAME=_CONTAINER_NAME
+DRAWING_CONTENT_TYPE=_DRAWING_CONTENT_TYPE
+MACRO_ENABLED_CONTENT_TYPE=_MACRO_ENABLED_CONTENT_TYPE --
+src/vsdxkit/_formulae.py src/vsdxkit/document.py src/vsdxkit/geometry.py
+src/vsdxkit/pages.py src/vsdxkit/shapes.py src/vsdxkit/swimlanes.py
+src/vsdxkit/templating.py tests/test_errors.py`
 
 Expected: `changed` for each of the eight files.
 
-`set_start_and_finish`'s own local variable `is_connector` (`shapes.py`, in that method) is left alone: the method assigns it, so the renamer treats it as another variable. Check: `grep -n "is_connector = " src/vsdxkit/shapes.py` still shows it unrenamed.
+`set_start_and_finish`'s own local variable `is_connector` (`shapes.py`, in that
+method) is left alone: the method assigns it, so the renamer treats it as
+another variable. Check: `grep -n "is_connector = " src/vsdxkit/shapes.py` still
+shows it unrenamed.
 
 In `src/vsdxkit/geometry.py`, the two refusal messages are strings:
-`self._require_attached("GeometryRow.create_row_xml()")` → `self._require_attached("GeometryRow._create_row_xml()")`, and
-`self._require_attached("GeometryCell.create_cell_xml()")` → `self._require_attached("GeometryCell._create_cell_xml()")`.
+`self._require_attached("GeometryRow.create_row_xml()")` →
+`self._require_attached("GeometryRow._create_row_xml()")`, and
+`self._require_attached("GeometryCell.create_cell_xml()")` →
+`self._require_attached("GeometryCell._create_cell_xml()")`.
 
 Run: `uv run --no-sync ruff check --fix --select I src tests tools`
-(`pages.py`'s `from vsdxkit.shapes import (...)` needs re-sorting once `is_connector` is `_is_connector`.)
-Run: `uv run --no-sync ruff format src tests tools`
+(`pages.py`'s `from vsdxkit.shapes import (...)` needs re-sorting once
+`is_connector` is `_is_connector`.) Run: `uv run --no-sync ruff format src tests
+tools`
 
 - [ ] **Step 4: The guide**
 
-Run: `uv run --no-sync python tools/check_migration_guide.py`
-Expected: `6 removed name(s) missing from the migration guide`: `GeometryRow.create_row_xml`, `GeometryRow.inherited_by`, `GeometryCell.create_cell_xml`, `GeometryCell.parent_xml`, `DataProperty.inherited_by` and `shapes.substitute`.
+Run: `uv run --no-sync python tools/check_migration_guide.py` Expected: `6
+removed name(s) missing from the migration guide`: `GeometryRow.create_row_xml`,
+`GeometryRow.inherited_by`, `GeometryCell.create_cell_xml`,
+`GeometryCell.parent_xml`, `DataProperty.inherited_by` and `shapes.substitute`.
 
-Rewrite the ``` ``vsdx.vsdxfile.DRAWING_CONTENT_TYPE``, ``vsdxfile.MACRO_ENABLED_CONTENT_TYPE`` ``` entry's body (`:237-238`):
+Rewrite the ``` ``vsdx.vsdxfile.DRAWING_CONTENT_TYPE``,
+``vsdxfile.MACRO_ENABLED_CONTENT_TYPE`` ``` entry's body (`:237-238`):
 
 ```rst
    Internal in 1.0. ``document.is_macro_enabled`` answers the question they
@@ -2215,8 +2564,8 @@ Expected: `ok: …`
 Run: `uv run --no-sync pytest tests -q -p no:randomly`
 Expected: `0 failed`.
 
-Run: `uv run --no-sync pyrefly check src/vsdxkit --min-severity warn --output-format min-text`
-Expected: `0 errors`.
+Run: `uv run --no-sync pyrefly check src/vsdxkit --min-severity warn
+--output-format min-text` Expected: `0 errors`.
 
 Run: `uv run --no-sync python tools/check_public_annotations.py`
 Expected: `ok: …`
@@ -2228,7 +2577,7 @@ Run: `git add -A src tests tools docs`
 
 Write `S/commit-msg.txt`:
 
-```
+```text
 refactor!: internals of public modules take a leading underscore (#424)
 
 Every module logger, the geometry owner seam, the row and cell element
@@ -2247,16 +2596,20 @@ Run: `git commit -F S/commit-msg.txt`
 ### Task 9: the three dead names go
 
 **Files:**
-- Modify: `src/vsdxkit/shapes.py:1321-1335` (`line_to_x`, `line_to_y` and their setters)
+
+- Modify: `src/vsdxkit/shapes.py:1321-1335` (`line_to_x`, `line_to_y` and their
+  setters)
 - Modify: `src/vsdxkit/swimlanes.py:53` (`ROW_SWIMLANE_GUID`)
 - Modify: `tests/test_shape_coordinates.py:13-14`
 - Modify: `docs/migration-1.0.rst`, `tests/test_public_surface.py`
 
-**Interfaces:** none. Nothing in `src/` or `tests/` reads the three names but the two coordinate params.
+**Interfaces:** none. Nothing in `src/` or `tests/` reads the three names but
+the two coordinate params.
 
 - [ ] **Step 1: The failing test**
 
-In `tests/test_public_surface.py`, change `from vsdxkit.shapes import DataProperty` to `from vsdxkit.shapes import DataProperty, Shape`, and append:
+In `tests/test_public_surface.py`, change `from vsdxkit.shapes import
+DataProperty` to `from vsdxkit.shapes import DataProperty, Shape`, and append:
 
 ```python
 
@@ -2270,12 +2623,15 @@ def test_a_dead_name_is_gone(owner, name):
     assert not _has(owner, f"_{name}")
 ```
 
-Run: `uv run --no-sync pytest tests/test_public_surface.py -q -p no:randomly -k dead`
-Expected: 3 failed, `assert not True`.
+Run: `uv run --no-sync pytest tests/test_public_surface.py -q -p no:randomly -k
+dead` Expected: 3 failed, `assert not True`.
 
 - [ ] **Step 2: Delete them**
 
-- `src/vsdxkit/shapes.py`: delete the four definitions `line_to_x` (property and setter) and `line_to_y` (property and setter), from `@property` above `def line_to_x` to the end of `line_to_y`'s setter, and one of the two blank lines left.
+- `src/vsdxkit/shapes.py`: delete the four definitions `line_to_x` (property and
+  setter) and `line_to_y` (property and setter), from `@property` above `def
+  line_to_x` to the end of `line_to_y`'s setter, and one of the two blank lines
+  left.
 - `src/vsdxkit/swimlanes.py`: delete `ROW_SWIMLANE_GUID = "SwimlaneListGUID"`.
 - `tests/test_shape_coordinates.py`: delete the two params `"line_to_x",` and `"line_to_y",`.
 
@@ -2284,12 +2640,16 @@ Expected: no output.
 
 - [ ] **Step 3: The guide**
 
-Run: `uv run --no-sync python tools/check_migration_guide.py`
-Expected: `2 removed name(s) missing from the migration guide`: `Shape.line_to_x` and `Shape.line_to_y`. (`ROW_SWIMLANE_GUID`'s literal is still in its entry.)
+Run: `uv run --no-sync python tools/check_migration_guide.py` Expected: `2
+removed name(s) missing from the migration guide`: `Shape.line_to_x` and
+`Shape.line_to_y`. (`ROW_SWIMLANE_GUID`'s literal is still in its entry.)
 
-Before writing the entry, confirm the replacement's signature: `grep -n "def set_line_to" src/vsdxkit/geometry.py` → `def set_line_to(self, x: float, y: float, line_to_index: int = 0) -> None:`.
+Before writing the entry, confirm the replacement's signature: `grep -n "def
+set_line_to" src/vsdxkit/geometry.py` → `def set_line_to(self, x: float, y:
+float, line_to_index: int = 0) -> None:`.
 
-After the ``` ``page.master_base_id`` ``` entry (`:776-777`, in the section of names with no caller), insert:
+After the ``` ``page.master_base_id`` ``` entry (`:776-777`, in the section of
+names with no caller), insert:
 
 ```rst
 
@@ -2300,7 +2660,9 @@ After the ``` ``page.master_base_id`` ``` entry (`:776-777`, in the section of n
    with ``shape.geometry.set_line_to(x, y)``.
 ```
 
-Rewrite the body of ``` ``vsdx.containers.LANE_PITCH_INCHES``, ``containers.ROW_HEADING_TEXT``, ``containers.ROW_SWIMLANE_GUID`` ``` (`:721-722`):
+Rewrite the body of ``` ``vsdx.containers.LANE_PITCH_INCHES``,
+``containers.ROW_HEADING_TEXT``, ``containers.ROW_SWIMLANE_GUID`` ```
+(`:721-722`):
 
 ```rst
    ``vsdxkit.swimlanes.LANE_PITCH_INCHES`` and ``ROW_HEADING_TEXT``.
@@ -2315,8 +2677,8 @@ Expected: `ok: …`
 Run: `uv run --no-sync pytest tests -q -p no:randomly`
 Expected: `0 failed` (the prototype, with all of 7e: `2028 passed, 47 skipped`).
 
-Run: `uv run --no-sync pyrefly check src/vsdxkit --min-severity warn --output-format min-text`
-Expected: `0 errors`.
+Run: `uv run --no-sync pyrefly check src/vsdxkit --min-severity warn
+--output-format min-text` Expected: `0 errors`.
 
 Run: `bash S/gates.sh`
 Expected: as in "Every PR's verification", step 1.
@@ -2325,7 +2687,7 @@ Run: `git add -A src tests tools docs`
 
 Write `S/commit-msg.txt`:
 
-```
+```text
 refactor!: Shape.line_to_x, line_to_y and ROW_SWIMLANE_GUID go (#424)
 
 No caller. The getters read the last LineTo row while set_line_to defaults to
@@ -2352,7 +2714,8 @@ Run: `git commit -F S/commit-msg.txt`
 ### Open 7e
 
 Run every command in "Every PR's verification" with `<x>` = `e` (steps 1–5).
-Expected: all green; 28 of 28 `same`; 10 of 10 `same`; `ok: wheel modules match src/vsdxkit`; `distribution smoke: PASS`; `Type completeness: 100.00%`.
+Expected: all green; 28 of 28 `same`; 10 of 10 `same`; `ok: wheel modules match
+src/vsdxkit`; `distribution smoke: PASS`; `Type completeness: 100.00%`.
 
 The exported public count (222 on the prototype, from 380) is printed in 7f by
 `tools/check_api_documented.py`; 7e needs only the percentage.
@@ -2368,17 +2731,33 @@ deletions and the 39 guide entries, and links #424 and #29.
 ### Task 10: `tools/check_docstrings.py`
 
 **Files:**
+
 - Create: `tests/test_docstrings_tool.py`
 - Create: `tools/check_docstrings.py`
 
 **Interfaces:**
-- Produces: `check_docstrings.Gap(path: Path, line: int, kind: str, name: str)`, frozen, whose `str()` is `f"{path}:{line} {kind} {name}"`; `gaps_in(path: Path) -> list[Gap]`, in source order; `main(argv: list[str] | None = None) -> int`, which checks `src/vsdxkit/*.py`, or the files named, prints one `Gap` per line and a count, and returns 1 on a gap, 0 on none, 2 when there is no module to check. `kind` is one of `module`, `class`, `function`, `method`, `property`, `constant`, `attribute`. A nested definition's name is `<outer>.<locals>.<inner>`.
-- What counts as documented: a docstring that is not blank, on a module, class, function, method or property; and, for a name bound by an assignment or annotation in a module or class body, a non-blank string literal as the next statement. A `#:` comment does not count: `sphinx-autoapi` 3.8.1 reads the string after an assignment (`autoapi/_parser.py`, `node.next_sibling()`) and no comment, which a probe build confirmed.
-- Exempt: `@<prop>.setter`, `@<prop>.deleter`, `@overload`, imports, and the body of `if TYPE_CHECKING:` (its `else:` is checked).
+
+- Produces: `check_docstrings.Gap(path: Path, line: int, kind: str, name: str)`,
+  frozen, whose `str()` is `f"{path}:{line} {kind} {name}"`; `gaps_in(path:
+  Path) -> list[Gap]`, in source order; `main(argv: list[str] | None = None) ->
+  int`, which checks `src/vsdxkit/*.py`, or the files named, prints one `Gap`
+  per line and a count, and returns 1 on a gap, 0 on none, 2 when there is no
+  module to check. `kind` is one of `module`, `class`, `function`, `method`,
+  `property`, `constant`, `attribute`. A nested definition's name is
+  `<outer>.<locals>.<inner>`.
+- What counts as documented: a docstring that is not blank, on a module, class,
+  function, method or property; and, for a name bound by an assignment or
+  annotation in a module or class body, a non-blank string literal as the next
+  statement. A `#:` comment does not count: `sphinx-autoapi` 3.8.1 reads the
+  string after an assignment (`autoapi/_parser.py`, `node.next_sibling()`) and
+  no comment, which a probe build confirmed.
+- Exempt: `@<prop>.setter`, `@<prop>.deleter`, `@overload`, imports, and the
+  body of `if TYPE_CHECKING:` (its `else:` is checked).
 
 - [ ] **Step 1: Create the PR's branch and take its render base**
 
 Run each:
+
 - `gh stack add refactor/phase7f-docs`
 - `git archive --output=S/pre7f.tar HEAD src`
 - `mkdir -p S/pre7f`
@@ -2547,7 +2926,8 @@ def test_the_gate_passes_a_documented_module(tmp_path, capsys):
 ```
 
 Run: `uv run --no-sync pytest tests/test_docstrings_tool.py -q -p no:randomly`
-Expected: `1 error` during collection: `FileNotFoundError: [Errno 2] No such file or directory: '…/tools/check_docstrings.py'`.
+Expected: `1 error` during collection: `FileNotFoundError: [Errno 2] No such
+file or directory: '…/tools/check_docstrings.py'`.
 
 - [ ] **Step 3: Write the tool**
 
@@ -2739,27 +3119,31 @@ under 3.10 to prove it.)
 Run: `uv run --no-sync pytest tests/test_docstrings_tool.py -q -p no:randomly`
 Expected: `22 passed`.
 
-Run: `uv run --python 3.10 --isolated python -m pytest tests/test_docstrings_tool.py -q -p no:randomly`
-Expected: `22 passed`.
+Run: `uv run --python 3.10 --isolated python -m pytest
+tests/test_docstrings_tool.py -q -p no:randomly` Expected: `22 passed`.
 
 Run: `uv run --no-sync python tools/check_docstrings.py tools/check_docstrings.py`
 Expected: `ok: every definition in 1 module(s) is documented`.
 
-Run: `uv run --no-sync ruff check tools tests`
-Expected: `All checks passed!` (ruff's SIM108 rejects an `if`/`else` that assigns `kind`, which is why `_function_kind` is a function).
+Run: `uv run --no-sync ruff check tools tests` Expected: `All checks passed!`
+(ruff's SIM108 rejects an `if`/`else` that assigns `kind`, which is why
+`_function_kind` is a function).
 
 - [ ] **Step 5: Measure the gap**
 
-Run: `uv run --no-sync python tools/check_docstrings.py`
-Expected: exit 1, ending `395 definition(s) without documentation` (measured on the prototype of 7e). By module:
+Run: `uv run --no-sync python tools/check_docstrings.py` Expected: exit 1,
+ending `395 definition(s) without documentation` (measured on the prototype of
+7e). By module:
 
 | Module | Gaps | Task |
-|---|---|---|
+| --- | --- | --- |
 | `shapes.py` | 102 | 13 |
 | `pages.py` 49, `geometry.py` 31, `document.py` 27, `swimlanes.py` 13, `templating.py` 11, `glue.py` 8, `shape_kind.py` 8, `__init__.py` 7, `package.py` 5, `errors.py` 3 | 162 | 14 |
 | `_connectors.py` 32, `_glue.py` 22, `_formulae.py` 20, `_masters.py` 11, `_package.py` 11, `_media.py` 10, `_xmlio.py` 9, `_shape_tree.py` 6, `_partnames.py` 5, `_shape_part.py` 2, `_logging_support.py` 2, `_inheritance.py` 1 | 131 | 15 |
 
-By kind: 115 methods, 90 properties, 77 constants, 72 attributes, 33 functions, 6 modules, 2 classes. If the numbers differ, the tool's own list is the work; the table is a guide to its size.
+By kind: 115 methods, 90 properties, 77 constants, 72 attributes, 33 functions,
+6 modules, 2 classes. If the numbers differ, the tool's own list is the work;
+the table is a guide to its size.
 
 The gate is not in CI yet: it would fail until Task 15.
 
@@ -2772,7 +3156,7 @@ Run: `git add tools/check_docstrings.py tests/test_docstrings_tool.py`
 
 Write `S/commit-msg.txt`:
 
-```
+```text
 feat: tools/check_docstrings.py finds every undocumented definition (#424)
 
 An AST walk of src/vsdxkit: a docstring on every module, class, function,
@@ -2792,6 +3176,7 @@ Run: `git commit -F S/commit-msg.txt`
 ### Task 11: the reference is generated; `classes.rst` goes
 
 **Files:**
+
 - Modify: `pyproject.toml:40-43` (the `docs` group), `uv.lock`
 - Modify: `docs/conf.py:16-18` (extensions and the autoapi settings)
 - Delete: `docs/classes.rst`
@@ -2802,7 +3187,11 @@ Run: `git commit -F S/commit-msg.txt`
 - Modify: `tests/test_views_agree.py` (the `classes.rst` check goes)
 
 **Interfaces:**
-- Produces: a built `docs/_build/html/objects.inv` that lists every public module, class, function, method, property, attribute and constant; `autoapi_root = "api"`, so pages are at `api/vsdxkit/<module>/index.html`. `docs/api/` is never written to the source tree (`autoapi_keep_files` is off).
+
+- Produces: a built `docs/_build/html/objects.inv` that lists every public
+  module, class, function, method, property, attribute and constant;
+  `autoapi_root = "api"`, so pages are at `api/vsdxkit/<module>/index.html`.
+  `docs/api/` is never written to the source tree (`autoapi_keep_files` is off).
 
 - [ ] **Step 1: Pin `sphinx-autoapi`**
 
@@ -2846,9 +3235,10 @@ defines it, for example ``from vsdxkit.document import Document``", which is
 `classes.rst`'s other paragraph.
 
 Run each:
+
 - `git rm -q docs/classes.rst`
 
-In `docs/index.rst`, delete the toctree line `   classes`.
+In `docs/index.rst`, delete the toctree line `classes`.
 
 In `docs/templating.rst`, delete the two directives at the end of "Rendering
 as a function", with the blank lines before them, so the file ends with
@@ -2863,11 +3253,12 @@ as a function", with the blank lines before them, so the file ends with
 
 The sentence above them already cross-references both.
 
-In `tests/test_views_agree.py`, delete `test_the_reference_documents_every_page_member_the_view_lists`,
-the constant `CLASSES_RST`, the imports `re` and `from pathlib import Path`,
-and, in the module docstring, the sentence `` `docs/classes.rst` lists `Page`'s members by hand, a third copy.``
-(the paragraph then ends `a smaller view, or one with another default, still does.`).
-The documentation gate (Task 12) replaces it.
+In `tests/test_views_agree.py`, delete
+`test_the_reference_documents_every_page_member_the_view_lists`, the constant
+`CLASSES_RST`, the imports `re` and `from pathlib import Path`, and, in the
+module docstring, the sentence `` `docs/classes.rst` lists `Page`'s members by
+hand, a third copy.`` (the paragraph then ends `a smaller view, or one with
+another default, still does.`). The documentation gate (Task 12) replaces it.
 
 - [ ] **Step 3: Switch `conf.py` to autoapi, and see it fail**
 
@@ -2903,7 +3294,7 @@ Run: `rm -rf docs/_build`
 Run: `uv run --no-sync sphinx-build -W --keep-going -q -b html docs docs/_build/html`
 Expected: exit 1, with
 
-```
+```text
 …/docs/api/vsdxkit/swimlanes/index.rst:15: ERROR: Unexpected indentation. [docutils]
 …/docs/api/vsdxkit/swimlanes/index.rst:10: WARNING: Block quote ends without a blank line; unexpected unindent. [docutils]
 ```
@@ -2914,11 +3305,13 @@ rendered, but it is fixed too.)
 
 - [ ] **Step 4: Fix the two docstrings**
 
-`src/vsdxkit/swimlanes.py`: after `Model (verified against the capture):`, insert one blank line.
+`src/vsdxkit/swimlanes.py`: after `Model (verified against the capture):`,
+insert one blank line.
 
-`src/vsdxkit/_logging_support.py`: after `Standards (Python logging HOWTO, library authorship):`, insert one blank line; and replace the stale usage block
+`src/vsdxkit/_logging_support.py`: after `Standards (Python logging HOWTO,
+library authorship):`, insert one blank line; and replace the stale usage block
 
-```
+```text
 Usage in a vsdx module:
 
     from .logging_support import get_logger
@@ -2927,7 +3320,7 @@ Usage in a vsdx module:
 
 with
 
-```
+```text
 Usage in a vsdxkit module::
 
     from vsdxkit._logging_support import get_logger
@@ -2944,9 +3337,10 @@ Expected: no `docs/api/` entry: autoapi wrote its pages under `docs/_build` only
 
 - [ ] **Step 5: Check what `inherited-members` adds**
 
-Run: `uv run --no-sync python -m sphinx.ext.intersphinx docs/_build/html/objects.inv > S/inv7f.txt`
-Run: `grep -cE "vsdxkit\.(geometry\.GeometryRow|shapes\.DataProperty)\.(inherited|make_local) " S/inv7f.txt`
-Expected: `4`.
+Run: `uv run --no-sync python -m sphinx.ext.intersphinx
+docs/_build/html/objects.inv > S/inv7f.txt` Run: `grep -cE
+"vsdxkit\.(geometry\.GeometryRow|shapes\.DataProperty)\.(inherited|make_local) "
+S/inv7f.txt` Expected: `4`.
 
 Measured on the prototype, `inherited-members` added 62 entries, none from a
 builtin base (no `with_traceback`, `add_note` or `capitalize` anywhere):
@@ -2969,13 +3363,15 @@ Expected: `0 failed`.
 Run: `bash S/gates.sh`
 Expected: as in "Every PR's verification", step 1.
 
-Run: `git add pyproject.toml uv.lock docs/conf.py docs/index.rst docs/templating.rst src/vsdxkit/errors.py src/vsdxkit/swimlanes.py src/vsdxkit/_logging_support.py tests/test_views_agree.py`
+Run: `git add pyproject.toml uv.lock docs/conf.py docs/index.rst
+docs/templating.rst src/vsdxkit/errors.py src/vsdxkit/swimlanes.py
+src/vsdxkit/_logging_support.py tests/test_views_agree.py`
 
 (`docs/classes.rst`'s deletion is staged already, by `git rm`.)
 
 Write `S/commit-msg.txt`:
 
-```
+```text
 docs: the API reference is generated by sphinx-autoapi; classes.rst goes (#424)
 
 autoapi reads src/vsdxkit statically and documents every public module and
@@ -2995,14 +3391,25 @@ Run: `git commit -F S/commit-msg.txt`
 ### Task 12: `tools/check_api_documented.py`, in CI's build job
 
 **Files:**
+
 - Create: `tests/test_api_documented_tool.py`
 - Create: `tools/check_api_documented.py`
 - Modify: `.github/workflows/ci.yml:190-209` (the build job)
 - Modify: `CONTRIBUTING.md:20-28`
 
 **Interfaces:**
-- Consumes: pyright's report as `tools/check_type_completeness.py --report` writes it: `{"typeCompleteness": {"symbols": [{"name": str, "isExported": bool, ...}, ...]}}`; and `sphinx.util.inventory.InventoryFile.loads(content: bytes, *, uri: str) -> _Inventory`, whose `.data` is `dict[role, dict[name, _InventoryItem]]` (Sphinx 9.1.0; `InventoryFile.load(stream, uri, joinfunc)` returns the same `.data`).
-- Produces: `exported_names(report: dict[str, object]) -> set[str]`, `documented_names(inventory: bytes) -> set[str]`, `verdict(exported: set[str], documented: set[str]) -> tuple[int, list[str]]`, `main(argv: list[str] | None = None) -> int`. `verdict` returns 2 on an empty report or inventory, 1 on a missing name, 0 otherwise.
+
+- Consumes: pyright's report as `tools/check_type_completeness.py --report`
+  writes it: `{"typeCompleteness": {"symbols": [{"name": str, "isExported":
+  bool, ...}, ...]}}`; and `sphinx.util.inventory.InventoryFile.loads(content:
+  bytes, *, uri: str) -> _Inventory`, whose `.data` is `dict[role, dict[name,
+  _InventoryItem]]` (Sphinx 9.1.0; `InventoryFile.load(stream, uri, joinfunc)`
+  returns the same `.data`).
+- Produces: `exported_names(report: dict[str, object]) -> set[str]`,
+  `documented_names(inventory: bytes) -> set[str]`, `verdict(exported: set[str],
+  documented: set[str]) -> tuple[int, list[str]]`, `main(argv: list[str] |
+  None = None) -> int`. `verdict` returns 2 on an empty report or inventory, 1
+  on a missing name, 0 otherwise.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -3200,19 +3607,25 @@ Run: `uv run --no-sync pytest tests/test_api_documented_tool.py -q -p no:randoml
 Expected: `7 passed`.
 
 Run each (the wheel, its report, a fresh build):
+
 - `rm -rf REPO/build S/wheelcheck`
 - `uv build --wheel -q -o S/wheelcheck`
-- `uv run --no-sync python tools/check_type_completeness.py S/wheelcheck/vsdxkit-0.8.0-py3-none-any.whl --fail-under 100.0 --report S/tc7f.json`
+- `uv run --no-sync python tools/check_type_completeness.py
+  S/wheelcheck/vsdxkit-0.8.0-py3-none-any.whl --fail-under 100.0 --report
+  S/tc7f.json`
 - `rm -rf docs/_build`
 - `uv run --no-sync sphinx-build -W --keep-going -q -b html docs docs/_build/html`
 - `uv run --no-sync python tools/check_api_documented.py S/tc7f.json docs/_build/html/objects.inv`
 
-Expected: `ok` from the type-completeness tool, then `ok: all 222 exported public names are in the API reference`.
+Expected: `ok` from the type-completeness tool, then `ok: all 222 exported
+public names are in the API reference`.
 
 To see it bite, give it the report measured at 7c, before 7e made 158 names private:
 
-Run: `uv run --no-sync python tools/check_api_documented.py S/p7/tc.json docs/_build/html/objects.inv`
-Expected: exit 1; the first line `FAIL: vsdxkit.connectors.namespace is exported but not in the API reference`, and the last `158 exported name(s) undocumented` (380 − 222).
+Run: `uv run --no-sync python tools/check_api_documented.py S/p7/tc.json
+docs/_build/html/objects.inv` Expected: exit 1; the first line `FAIL:
+vsdxkit.connectors.namespace is exported but not in the API reference`, and the
+last `158 exported name(s) undocumented` (380 − 222).
 
 - [ ] **Step 4: Run it in CI's build job**
 
@@ -3243,19 +3656,23 @@ Run: `uv run --no-sync python tools/check_action_pins.py`
 Expected: its `ok` line (no action was added).
 
 In `CONTRIBUTING.md`, in the paragraph listing CI's other gates (`:20-28`),
-after `a type-completeness threshold on the built wheel (\`tools/check_type_completeness.py\`, pyright \`--verifytypes\`, at 100.0%),`
-insert `a check that every name the wheel exports is in the generated API reference (\`tools/check_api_documented.py\`, against that report and the docs build's \`objects.inv\`),`.
+after `a type-completeness threshold on the built wheel
+(\`tools/check_type_completeness.py\`, pyright \`--verifytypes\`, at 100.0%),`
+insert `a check that every name the wheel exports is in the generated API
+reference (\`tools/check_api_documented.py\`, against that report and the docs
+build's \`objects.inv\`),`.
 
 - [ ] **Step 5: Commit**
 
 Run: `bash S/gates.sh`
 Expected: as in "Every PR's verification", step 1.
 
-Run: `git add tools/check_api_documented.py tests/test_api_documented_tool.py .github/workflows/ci.yml CONTRIBUTING.md`
+Run: `git add tools/check_api_documented.py tests/test_api_documented_tool.py
+.github/workflows/ci.yml CONTRIBUTING.md`
 
 Write `S/commit-msg.txt`:
 
-```
+```text
 ci: fail when an exported name is missing from the API reference (#424)
 
 tools/check_api_documented.py reads pyright's export report and the docs
@@ -3277,15 +3694,38 @@ Docstring prose is the one thing this plan does not spell out. These rules
 govern it, and each task's reviewer checks them.
 
 **Rules.**
-1. **Say what it is for, or what a caller can rely on.** Never restate the name. A property is a noun phrase (`The page's width, in inches.`); a `bool` is `Whether …`; a method that does something is a verb phrase (`Render a kept page's name …`); one that answers is a noun phrase (`The shape with this page-scoped ID, or None.`).
-2. **Give the facts a caller needs:** units (inches), what `None` means, what a setter accepts (the getter's docstring covers the setter, which is exempt), and what it raises. Public methods that raise say so with `:raises X: …`, as the existing ones do.
-3. **A constant, field, enum member or Protocol attribute** gets a string literal on the line after it, never a `#:` comment. A trailing `# comment` on the assignment may stay, but does not count.
-4. **A Protocol member** says what the seam asks of whoever satisfies it. Keep the `...` body after the docstring. Where the concrete member's docstring already says it, reuse its first line.
-5. **A private definition** may name the seam it serves, the invariant it keeps, or the caller it exists for. It is still for a reader: "Helper." fails rule 1.
-6. **A dunder** says what the object does under that protocol when it is not obvious (`__iter__` on a live collection says it is read afresh); `__repr__` says what it shows.
-7. **reST, valid under `-W`:** a blank line before any list or literal block; ``` ``code`` ``` for literals in public docstrings; `:class:`, `:meth:`, `:attr:`, `:func:` for cross-references; a literal block opens with `::`. Single backticks are allowed (they are the default role, rendered as a title reference) and are the house style in private docstrings.
-8. **Change nothing else.** No code, no reflow of an existing docstring, no reordering. A docstring that already exists is left alone unless it is wrong about the code; say so in the report if one is.
-9. Check each claim against the code before writing it. If the code does something surprising, write what it does and report it; do not change it.
+
+1. **Say what it is for, or what a caller can rely on.** Never restate the name.
+   A property is a noun phrase (`The page's width, in inches.`); a `bool` is
+   `Whether …`; a method that does something is a verb phrase (`Render a kept
+   page's name …`); one that answers is a noun phrase (`The shape with this
+   page-scoped ID, or None.`).
+2. **Give the facts a caller needs:** units (inches), what `None` means, what a
+   setter accepts (the getter's docstring covers the setter, which is exempt),
+   and what it raises. Public methods that raise say so with `:raises X: …`, as
+   the existing ones do.
+3. **A constant, field, enum member or Protocol attribute** gets a string
+   literal on the line after it, never a `#:` comment. A trailing `# comment` on
+   the assignment may stay, but does not count.
+4. **A Protocol member** says what the seam asks of whoever satisfies it. Keep
+   the `...` body after the docstring. Where the concrete member's docstring
+   already says it, reuse its first line.
+5. **A private definition** may name the seam it serves, the invariant it keeps,
+   or the caller it exists for. It is still for a reader: "Helper." fails
+   rule 1.
+6. **A dunder** says what the object does under that protocol when it is not
+   obvious (`__iter__` on a live collection says it is read afresh); `__repr__`
+   says what it shows.
+7. **reST, valid under `-W`:** a blank line before any list or literal block;
+   ``` ``code`` ``` for literals in public docstrings; `:class:`, `:meth:`,
+   `:attr:`, `:func:` for cross-references; a literal block opens with `::`.
+   Single backticks are allowed (they are the default role, rendered as a title
+   reference) and are the house style in private docstrings.
+8. **Change nothing else.** No code, no reflow of an existing docstring, no
+   reordering. A docstring that already exists is left alone unless it is wrong
+   about the code; say so in the report if one is.
+9. Check each claim against the code before writing it. If the code does
+   something surprising, write what it does and report it; do not change it.
 
 **Examples.** Good:
 
@@ -3334,13 +3774,21 @@ _logger: Logger = get_logger(__name__)
 ```
 
 **Each docstring task runs the same loop:**
+
 1. `uv run --no-sync python tools/check_docstrings.py <files>` lists the gaps (red).
 2. Write the docstrings.
 3. The same command prints `ok: every definition in N module(s) is documented` (green).
-4. `rm -rf docs/_build`, then `uv run --no-sync sphinx-build -W --keep-going -q -b html docs docs/_build/html`: exit 0, no output.
-5. `uv run --no-sync pyrefly check src/vsdxkit --min-severity warn --output-format min-text`: `0 errors`; `uv run --no-sync mypy --disallow-untyped-calls --follow-imports=silent --ignore-missing-imports tests/type_fixture.py`: `Success`. (A docstring on a Protocol stub, with `...` kept after it, passes both: checked on the prototype with `PageView.name`.)
+4. `rm -rf docs/_build`, then `uv run --no-sync sphinx-build -W --keep-going -q
+   -b html docs docs/_build/html`: exit 0, no output.
+5. `uv run --no-sync pyrefly check src/vsdxkit --min-severity warn
+   --output-format min-text`: `0 errors`; `uv run --no-sync mypy
+   --disallow-untyped-calls --follow-imports=silent --ignore-missing-imports
+   tests/type_fixture.py`: `Success`. (A docstring on a Protocol stub, with
+   `...` kept after it, passes both: checked on the prototype with
+   `PageView.name`.)
 6. `uv run --no-sync pytest tests -q -p no:randomly`: `0 failed`.
-7. `git diff --stat` shows only the task's files, and `git diff` only added docstring lines (and the one `#:` conversion in Task 15).
+7. `git diff --stat` shows only the task's files, and `git diff` only added
+   docstring lines (and the one `#:` conversion in Task 15).
 
 ### Task 13: docstrings for `shapes.py`
 
@@ -3351,9 +3799,20 @@ _logger: Logger = get_logger(__name__)
 - [ ] **Step 1: The gaps**
 
 Run: `uv run --no-sync python tools/check_docstrings.py src/vsdxkit/shapes.py`
-Expected: exit 1, `102 definition(s) without documentation`: among them `module shapes`, `constant _logger`, `PageView`'s getters and methods, `_PageSeam`'s sixteen members, `Cell`'s and `DataProperty`'s attributes and members, `Shape`'s class-level annotations (`xml`, `_parent`, `_page`, `_geometry`, …), `Shape.__init__`, `__repr__`, the coordinate and style properties (`x`, `y`, `loc_x`, `begin_x`, …, `line_style_id`, `fill_color`), `ShapeCollection`'s dunders, and two nested functions (`_drop_unreachable_master_shapes.<locals>.check`, `Shape._incidence.<locals>.resolve`).
+Expected: exit 1, `102 definition(s) without documentation`: among them `module
+shapes`, `constant _logger`, `PageView`'s getters and methods, `_PageSeam`'s
+sixteen members, `Cell`'s and `DataProperty`'s attributes and members, `Shape`'s
+class-level annotations (`xml`, `_parent`, `_page`, `_geometry`, …),
+`Shape.__init__`, `__repr__`, the coordinate and style properties (`x`, `y`,
+`loc_x`, `begin_x`, …, `line_style_id`, `fill_color`), `ShapeCollection`'s
+dunders, and two nested functions
+(`_drop_unreachable_master_shapes.<locals>.check`,
+`Shape._incidence.<locals>.resolve`).
 
-The module docstring is the one that matters most here: `shapes` has none. It says what the module holds (a shape, a connector, a cell, a data property, a shape collection, and `PageView`, the page as a shape sees it) and where to reach them (`page.children`, `page.shapes`, never by construction).
+The module docstring is the one that matters most here: `shapes` has none. It
+says what the module holds (a shape, a connector, a cell, a data property, a
+shape collection, and `PageView`, the page as a shape sees it) and where to
+reach them (`page.children`, `page.shapes`, never by construction).
 
 - [ ] **Step 2: Write them**, following "Writing the docstrings".
 
@@ -3365,7 +3824,7 @@ Run: `git add src/vsdxkit/shapes.py`
 
 Write `S/commit-msg.txt`:
 
-```
+```text
 docs: every definition in shapes.py has a docstring (#424)
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
@@ -3378,21 +3837,37 @@ Run: `git commit -F S/commit-msg.txt`
 
 ### Task 14: docstrings for the other public modules
 
-**Files:** Modify `src/vsdxkit/__init__.py`, `document.py`, `errors.py`, `geometry.py`, `glue.py`, `package.py`, `pages.py`, `shape_kind.py`, `swimlanes.py`, `templating.py`.
+**Files:** Modify `src/vsdxkit/__init__.py`, `document.py`, `errors.py`,
+`geometry.py`, `glue.py`, `package.py`, `pages.py`, `shape_kind.py`,
+`swimlanes.py`, `templating.py`.
 
 **Interfaces:** none change.
 
 - [ ] **Step 1: The gaps**
 
-Run: `uv run --no-sync python tools/check_docstrings.py src/vsdxkit/__init__.py src/vsdxkit/document.py src/vsdxkit/errors.py src/vsdxkit/geometry.py src/vsdxkit/glue.py src/vsdxkit/package.py src/vsdxkit/pages.py src/vsdxkit/shape_kind.py src/vsdxkit/swimlanes.py src/vsdxkit/templating.py`
+Run: `uv run --no-sync python tools/check_docstrings.py src/vsdxkit/__init__.py
+src/vsdxkit/document.py src/vsdxkit/errors.py src/vsdxkit/geometry.py
+src/vsdxkit/glue.py src/vsdxkit/package.py src/vsdxkit/pages.py
+src/vsdxkit/shape_kind.py src/vsdxkit/swimlanes.py src/vsdxkit/templating.py`
 Expected: exit 1, `162 definition(s) without documentation`. Among them:
-- `__init__.py`: the six namespace constants and `__version__`. Each namespace string replaces its trailing `# visio file name space` comment's job; `__version__`'s trailing `# x-release-please-version` comment **stays on its line** (release-please finds the version by it) and the docstring goes on the next line.
-- `document.py`, `geometry.py`, `pages.py`: the module docstrings, which none of the three has.
-- `errors.py`: `PackageLimitError.reason` and `PartParseError.msg` (spec: public, now documented).
-- `geometry.py`: `Geometry`, `GeometryRow` and `GeometryCell`'s data members, including `GeometryRow.del_bool` (spec: documented, not renamed), and `Geometry.shape`, whose docstring says it is the `Shape` the section belongs to, typed with the private `_GeometryOwner` seam.
+
+- `__init__.py`: the six namespace constants and `__version__`. Each namespace
+  string replaces its trailing `# visio file name space` comment's job;
+  `__version__`'s trailing `# x-release-please-version` comment **stays on its
+  line** (release-please finds the version by it) and the docstring goes on the
+  next line.
+- `document.py`, `geometry.py`, `pages.py`: the module docstrings, which none of
+  the three has.
+- `errors.py`: `PackageLimitError.reason` and `PartParseError.msg` (spec:
+  public, now documented).
+- `geometry.py`: `Geometry`, `GeometryRow` and `GeometryCell`'s data members,
+  including `GeometryRow.del_bool` (spec: documented, not renamed), and
+  `Geometry.shape`, whose docstring says it is the `Shape` the section belongs
+  to, typed with the private `_GeometryOwner` seam.
 - `glue.py`: `Routing`'s members, `ConnectorOptions`' four fields and `__post_init__`.
 - `shape_kind.py`: the eight `ShapeKind` members, each saying what shape it makes.
-- `swimlanes.py`: `LANE_PITCH_INCHES` and `ROW_HEADING_TEXT` (spec: public, now documented).
+- `swimlanes.py`: `LANE_PITCH_INCHES` and `ROW_HEADING_TEXT` (spec: public, now
+  documented).
 - `templating.py`: `RenderTarget.pages` (spec: public, now documented).
 
 - [ ] **Step 2: Write them**, following "Writing the docstrings".
@@ -3404,11 +3879,14 @@ Expected: `0 failed` (it reads `__version__`'s line).
 
 - [ ] **Step 4: Commit**
 
-Run: `git add src/vsdxkit/__init__.py src/vsdxkit/document.py src/vsdxkit/errors.py src/vsdxkit/geometry.py src/vsdxkit/glue.py src/vsdxkit/package.py src/vsdxkit/pages.py src/vsdxkit/shape_kind.py src/vsdxkit/swimlanes.py src/vsdxkit/templating.py`
+Run: `git add src/vsdxkit/__init__.py src/vsdxkit/document.py
+src/vsdxkit/errors.py src/vsdxkit/geometry.py src/vsdxkit/glue.py
+src/vsdxkit/package.py src/vsdxkit/pages.py src/vsdxkit/shape_kind.py
+src/vsdxkit/swimlanes.py src/vsdxkit/templating.py`
 
 Write `S/commit-msg.txt`:
 
-```
+```text
 docs: every definition in the other public modules has a docstring (#424)
 
 Including the root's namespace constants, the error attributes, the geometry
@@ -3426,15 +3904,26 @@ Run: `git commit -F S/commit-msg.txt`
 ### Task 15: docstrings for the private modules; the gate joins CI
 
 **Files:**
-- Modify: `src/vsdxkit/_connectors.py`, `_formulae.py`, `_glue.py`, `_inheritance.py`, `_logging_support.py`, `_masters.py`, `_media.py`, `_package.py`, `_partnames.py`, `_shape_part.py`, `_shape_tree.py`, `_xmlio.py`
+
+- Modify: `src/vsdxkit/_connectors.py`, `_formulae.py`, `_glue.py`,
+  `_inheritance.py`, `_logging_support.py`, `_masters.py`, `_media.py`,
+  `_package.py`, `_partnames.py`, `_shape_part.py`, `_shape_tree.py`,
+  `_xmlio.py`
 - Modify: `.github/workflows/ci.yml` (the lint job), `CONTRIBUTING.md:20-28`
 
 **Interfaces:** none change.
 
 - [ ] **Step 1: The gaps**
 
-Run: `uv run --no-sync python tools/check_docstrings.py src/vsdxkit/_connectors.py src/vsdxkit/_formulae.py src/vsdxkit/_glue.py src/vsdxkit/_inheritance.py src/vsdxkit/_logging_support.py src/vsdxkit/_masters.py src/vsdxkit/_media.py src/vsdxkit/_package.py src/vsdxkit/_partnames.py src/vsdxkit/_shape_part.py src/vsdxkit/_shape_tree.py src/vsdxkit/_xmlio.py`
-Expected: exit 1, `131 definition(s) without documentation`, including the module docstrings of `_connectors` and `_formulae`, `_shape_part.ShapePart` (a class), and `_shape_tree.SHEET_REFERENCE`, whose `#:` comment above it does not count.
+Run: `uv run --no-sync python tools/check_docstrings.py
+src/vsdxkit/_connectors.py src/vsdxkit/_formulae.py src/vsdxkit/_glue.py
+src/vsdxkit/_inheritance.py src/vsdxkit/_logging_support.py
+src/vsdxkit/_masters.py src/vsdxkit/_media.py src/vsdxkit/_package.py
+src/vsdxkit/_partnames.py src/vsdxkit/_shape_part.py src/vsdxkit/_shape_tree.py
+src/vsdxkit/_xmlio.py` Expected: exit 1, `131 definition(s) without
+documentation`, including the module docstrings of `_connectors` and
+`_formulae`, `_shape_part.ShapePart` (a class), and
+`_shape_tree.SHEET_REFERENCE`, whose `#:` comment above it does not count.
 
 `SHEET_REFERENCE`: move its `#:` comment's text into a string on the line
 after the assignment, and delete the comment. That is the one `#:` in
@@ -3456,7 +3945,8 @@ Then the loop's steps 4–7.
 
 - [ ] **Step 4: The gate joins CI**
 
-In `.github/workflows/ci.yml`, the lint job, after the `Public type-completeness gate` step, add:
+In `.github/workflows/ci.yml`, the lint job, after the `Public type-completeness
+gate` step, add:
 
 ```yaml
       - name: Every definition has a docstring
@@ -3465,7 +3955,9 @@ In `.github/workflows/ci.yml`, the lint job, after the `Public type-completeness
 
 In `CONTRIBUTING.md`, in the same paragraph as Task 12's edit, after
 `\`tools/check_action_pins.py\` and \`tools/check_public_annotations.py\``,
-change `and` to a comma and add `and \`tools/check_docstrings.py\`, which fails on any definition in \`src/vsdxkit\` without a docstring (a constant or field is documented by a string on the line after it)`. Then add, after the paragraph:
+change`and` to a comma and add `and \`tools/check_docstrings.py\`, which fails
+on any definition in \`src/vsdxkit\` without a docstring (a constant or field is
+documented by a string on the line after it)`. Then add, after the paragraph:
 
 ```markdown
 Every definition in `src/vsdxkit` has a docstring, private ones included, and
@@ -3480,14 +3972,14 @@ Expected: its `ok` line.
 
 - [ ] **Step 5: Commit**
 
-Run: `bash S/gates.sh`
-Expected: as in "Every PR's verification", step 1 (the controller has added the `docstrings:` line; see below).
+Run: `bash S/gates.sh` Expected: as in "Every PR's verification", step 1 (the
+controller has added the `docstrings:` line; see below).
 
 Run: `git add src/vsdxkit .github/workflows/ci.yml CONTRIBUTING.md`
 
 Write `S/commit-msg.txt`:
 
-```
+```text
 docs: every private definition has a docstring; the gate joins CI (#424)
 
 The lint job runs tools/check_docstrings.py over src/vsdxkit, and
@@ -3515,7 +4007,10 @@ Run: `git commit -F S/commit-msg.txt`
 ### Open 7f
 
 Run every command in "Every PR's verification" with `<x>` = `f` (steps 1–6).
-Expected: all green; `docstrings: ok: every definition in 24 module(s) is documented`; 28 of 28 `same`; 10 of 10 `same`; `distribution smoke: PASS`; `Type completeness: 100.00%`; `ok: all 222 exported public names are in the API reference`.
+Expected: all green; `docstrings: ok: every definition in 24 module(s) is
+documented`; 28 of 28 `same`; 10 of 10 `same`; `distribution smoke: PASS`; `Type
+completeness: 100.00%`; `ok: all 222 exported public names are in the API
+reference`.
 
 Open the PR with `gh stack` on top of 7e. Its body names the two new gates,
 the deleted `classes.rst`, and the `Connector` repetition `inherited-members`
@@ -3525,12 +4020,22 @@ brings (Task 11 Step 5), and closes #424 with 7e.
 
 ## After the stack
 
-- **A whole-branch review** of 7d–7f, against the spec, after 7f (the spec's "a final whole-branch review follows 7f").
-- **CI on each pushed head:** watch the exact sha, not the branch; CI runs the tests from the sdist, which has no `docs/` apart from the migration guide. `tests/test_public_surface.py`'s docs test reads what is there (the README and the guide), and `tests/test_api_documented_tool.py` skips its inventory test where Sphinx is absent.
-- **Codex findings:** read `pulls/<n>/comments` for each PR's head commit before asking to merge. CI green is not enough.
-- **The handover:** update the newest "Session handover" issue with the three PR numbers, F1's two issue comments, the two new gates, the 222 exported names, and what the maintainer should look at: the `Connector` repetition, the `"0"`/`"False"` page-showif change, and duplicate page names after a render.
+- **A whole-branch review** of 7d–7f, against the spec, after 7f (the spec's "a
+  final whole-branch review follows 7f").
+- **CI on each pushed head:** watch the exact sha, not the branch; CI runs the
+  tests from the sdist, which has no `docs/` apart from the migration guide.
+  `tests/test_public_surface.py`'s docs test reads what is there (the README and
+  the guide), and `tests/test_api_documented_tool.py` skips its inventory test
+  where Sphinx is absent.
+- **Codex findings:** read `pulls/<n>/comments` for each PR's head commit before
+  asking to merge. CI green is not enough.
+- **The handover:** update the newest "Session handover" issue with the three PR
+  numbers, F1's two issue comments, the two new gates, the 222 exported names,
+  and what the maintainer should look at: the `Connector` repetition, the
+  `"0"`/`"False"` page-showif change, and duplicate page names after a render.
 - Nothing merges without the maintainer's go, and #349 is not touched.
-- Remove the scratch plan worktree if it still exists: `git -C REPO worktree remove --force S/p7d/plan-work/wt`.
+- Remove the scratch plan worktree if it still exists: `git -C REPO worktree
+  remove --force S/p7d/plan-work/wt`.
 
 ---
 
@@ -3539,7 +4044,7 @@ brings (Task 11 Step 5), and closes #424 with 7e.
 **1. Spec coverage.**
 
 | Spec item | Task |
-|---|---|
+| --- | --- |
 | `PageView` declares `name`, `background`, `width`, `height` and `xml` setters; `xml` typed `PartTree` | 1 |
 | `test_the_views_are_read_only` becomes "each view's setters are exactly its class's" | 1 |
 | `PageView`'s docstring and the guide's `PageView` entry | 1 |
@@ -3574,44 +4079,133 @@ brings (Task 11 Step 5), and closes #424 with 7e.
 | Save sweep 28/28, render sweep per PR, type completeness 100.0%, coverage ≥ 97, smokes | "Every PR's verification" |
 
 **2. Where the plan departs from the spec, and why.**
-- **A `#:` comment does not document a constant.** The spec accepts "a `#:` comment on the line above or a string literal on the line after". `sphinx-autoapi` 3.8.1 reads only the string after (`autoapi/_parser.py` takes `node.next_sibling()`), and a probe build showed a `#:` comment's text nowhere in the page. A gate that accepted it would pass constants the reference shows undocumented. The one `#:` in `src/`, on `SHEET_REFERENCE`, becomes a string (Task 15).
-- **The docs test is part of `tests/test_public_surface.py`, and skips no heading.** The spec's test skips "`migration-1.0.rst`'s 0.8.0 headings". The guide spells 0.8.0 names `vsdx.<module>`, so a `vsdxkit.<old module>` match anywhere in it, heading or not, is a 1.0 recommendation: at `899aa7a` it finds exactly the rewrites the spec lists, plus `classes.rst`'s `shape_tree` directive. Sharing `PRIVATE_MODULES` with the module test keeps one list of the renamed modules, and lets each rename task turn its own guide lines red.
-- **39 guide entries, not 38.** The simulation missed `DataProperty.inherited_by`, which the spec's own ruling underscores "for consistency with the row"; the checker reports it (Task 8).
-- **The bundled-donor folder is renamed `_bundled/`,** which the spec did not ask for. Left as `media/`, it would keep `vsdxkit.media` importable as an empty namespace package. The maintainer asked for the rename on reviewing the plan, and it is folded into Task 4, Step 5: the folder, `_media.media_path`, `pyproject.toml`'s package data, `tools/smoke_wheel.py`, and two test paths. The wheel smoke's contents and installed-file checks prove the donors still ship.
-- **`inherited-members` does repeat members.** It adds 56 of `Shape`'s members to `Connector` and `count`/`index` to `PageCollection`; nothing from a builtin base. It stays, because without it `GeometryRow.inherited`/`make_local` and `DataProperty`'s appear nowhere, and pyright exports them only under the private `InheritedRow`, so the documentation gate could not notice (Task 11, Step 5).
-- **The render sweep has ten cases, not seven.** The spec asks for "a case for each" intended 7d difference; the three new cases make it 10 of 10 from 7e on.
-- **Two page showifs must both be true.** The spec does not say; the old code read the last one. A shape with two showifs sits inside two `{% if %}` blocks, so a page judged "as a shape is" needs both.
-- **`_page_is_shown` logs once, not twice**, so `tests/test_logging.py`'s pinned count of log calls drops from 17 to 16 (Task 2).
-- **`check_api_documented.py` imports Sphinx inside `documented_names`.** The house rule against function-local imports is for `src/`; CI's test job runs the tool's tests without the docs group.
-- **The docstring tool counts 395 gaps, not 444.** The spec's 444 came from the investigation's census at `19f74ff`, before 7e deleted and moved names, and with its own rules; this tool, run on the prototype of 7e, counts 395. The tasks work from the tool's list.
-- **Two private-method names reach error messages.** `GeometryRow._create_row_xml()` and `GeometryCell._create_cell_xml()` name themselves in their refusals, which a caller reaches through public setters. The messages keep naming the method that refused (Task 8).
-- **`PageView`'s docstring also says what a master page's view refuses** (renaming it, or its `background`), which the spec does not ask for; it is what the runtime does.
+
+- **A `#:` comment does not document a constant.** The spec accepts "a `#:`
+  comment on the line above or a string literal on the line after".
+  `sphinx-autoapi` 3.8.1 reads only the string after (`autoapi/_parser.py` takes
+  `node.next_sibling()`), and a probe build showed a `#:` comment's text nowhere
+  in the page. A gate that accepted it would pass constants the reference shows
+  undocumented. The one `#:` in `src/`, on `SHEET_REFERENCE`, becomes a string
+  (Task 15).
+- **The docs test is part of `tests/test_public_surface.py`, and skips no
+  heading.** The spec's test skips "`migration-1.0.rst`'s 0.8.0 headings". The
+  guide spells 0.8.0 names `vsdx.<module>`, so a `vsdxkit.<old module>` match
+  anywhere in it, heading or not, is a 1.0 recommendation: at `899aa7a` it finds
+  exactly the rewrites the spec lists, plus `classes.rst`'s `shape_tree`
+  directive. Sharing `PRIVATE_MODULES` with the module test keeps one list of
+  the renamed modules, and lets each rename task turn its own guide lines red.
+- **39 guide entries, not 38.** The simulation missed
+  `DataProperty.inherited_by`, which the spec's own ruling underscores "for
+  consistency with the row"; the checker reports it (Task 8).
+- **The bundled-donor folder is renamed `_bundled/`,** which the spec did not
+  ask for. Left as `media/`, it would keep `vsdxkit.media` importable as an
+  empty namespace package. The maintainer asked for the rename on reviewing the
+  plan, and it is folded into Task 4, Step 5: the folder, `_media.media_path`,
+  `pyproject.toml`'s package data, `tools/smoke_wheel.py`, and two test paths.
+  The wheel smoke's contents and installed-file checks prove the donors still
+  ship.
+- **`inherited-members` does repeat members.** It adds 56 of `Shape`'s members
+  to `Connector` and `count`/`index` to `PageCollection`; nothing from a builtin
+  base. It stays, because without it `GeometryRow.inherited`/`make_local` and
+  `DataProperty`'s appear nowhere, and pyright exports them only under the
+  private `InheritedRow`, so the documentation gate could not notice (Task 11,
+  Step 5).
+- **The render sweep has ten cases, not seven.** The spec asks for "a case for
+  each" intended 7d difference; the three new cases make it 10 of 10 from 7e on.
+- **Two page showifs must both be true.** The spec does not say; the old code
+  read the last one. A shape with two showifs sits inside two `{% if %}` blocks,
+  so a page judged "as a shape is" needs both.
+- **`_page_is_shown` logs once, not twice**, so `tests/test_logging.py`'s pinned
+  count of log calls drops from 17 to 16 (Task 2).
+- **`check_api_documented.py` imports Sphinx inside `documented_names`.** The
+  house rule against function-local imports is for `src/`; CI's test job runs
+  the tool's tests without the docs group.
+- **The docstring tool counts 395 gaps, not 444.** The spec's 444 came from the
+  investigation's census at `19f74ff`, before 7e deleted and moved names, and
+  with its own rules; this tool, run on the prototype of 7e, counts 395. The
+  tasks work from the tool's list.
+- **Two private-method names reach error messages.**
+  `GeometryRow._create_row_xml()` and `GeometryCell._create_cell_xml()` name
+  themselves in their refusals, which a caller reaches through public setters.
+  The messages keep naming the method that refused (Task 8).
+- **`PageView`'s docstring also says what a master page's view refuses**
+  (renaming it, or its `background`), which the spec does not ask for; it is
+  what the runtime does.
 
 **3. Defects found in the spec.**
-- **F2 changes more than it names.** "`None`, `0.0`, `0.00`, `"none"` and `set()` are now judged the same way": `"none"` (a non-empty string) was kept before and is kept now, so it does not change; the strings `"0"` and `"False"` do, from removed to kept, and the spec does not say so. That is Review Focus 1, and the guide entry says it.
-- **The count of 38** misses `DataProperty.inherited_by` (above).
-- **"a `#:` comment on the line above"** documents nothing in the generated reference (above).
-- **"The plan confirms that it does not flood the other classes"**: it does repeat `Shape`'s members on `Connector` (above).
-- **"the render sweep at 7 of 7"** cannot hold in 7d once the spec's own cases are added; the plan states 7d's expected differences and 10 of 10 after.
-- **"The investigation's simulation … no page in `docs/` … skips `migration-1.0.rst`'s 0.8.0 headings"** assumes the headings name `vsdxkit.<module>`; they name `vsdx.<module>`.
 
-**4. Placeholder scan.** No step says "TBD", "similar to" or "add error handling". Docstring prose (Tasks 13–15) is the one thing not written out, by design: it is governed by "Writing the docstrings", with its rules and good and bad examples, and each task's gap list comes from the tool. Values that depend on the code as the earlier PRs leave it are given as the prototype measured them and marked so: the 395 gaps and their split, the 222 exported names, the test counts.
+- **F2 changes more than it names.** "`None`, `0.0`, `0.00`, `"none"` and
+  `set()` are now judged the same way": `"none"` (a non-empty string) was kept
+  before and is kept now, so it does not change; the strings `"0"` and `"False"`
+  do, from removed to kept, and the spec does not say so. That is Review Focus
+  1, and the guide entry says it.
+- **The count of 38** misses `DataProperty.inherited_by` (above).
+- **"a `#:` comment on the line above"** documents nothing in the generated
+  reference (above).
+- **"The plan confirms that it does not flood the other classes"**: it does
+  repeat `Shape`'s members on `Connector` (above).
+- **"the render sweep at 7 of 7"** cannot hold in 7d once the spec's own cases
+  are added; the plan states 7d's expected differences and 10 of 10 after.
+- **"The investigation's simulation … no page in `docs/` … skips
+  `migration-1.0.rst`'s 0.8.0 headings"** assumes the headings name
+  `vsdxkit.<module>`; they name `vsdx.<module>`.
+
+**4. Placeholder scan.** No step says "TBD", "similar to" or "add error
+handling". Docstring prose (Tasks 13–15) is the one thing not written out, by
+design: it is governed by "Writing the docstrings", with its rules and good and
+bad examples, and each task's gap list comes from the tool. Values that depend
+on the code as the earlier PRs leave it are given as the prototype measured them
+and marked so: the 395 gaps and their split, the 222 exported names, the test
+counts.
 
 **5. Type consistency.**
-- `PageView`'s five setters match `Page`'s signatures except `xml` (`PartTree` against `PartTree | None`), in Task 1's code, its test and its docstring comment.
-- `_page_is_shown(page: Page, context: Mapping[str, object]) -> bool` and `_render_page_name(page, context) -> None` are the same in Task 2's code and in the render-sweep narrative.
-- `PRIVATE_MODULES`, `private_references`, `_top_level_names` and `_has` are introduced once each (Tasks 4, 4, 6, 8) and reused as defined; the final file is what the prototype ran (44 tests passing).
-- `check_docstrings.Gap`, `gaps_in` and `main`, and `check_api_documented.exported_names`, `documented_names`, `verdict` and `main`, are the same in each tool and its tests.
-- The scripts' command lines (`imports.py <root> rename|move`, `split.py <root> <module> <kept…>`, `names.py old=new … -- files…`) match their docstrings.
+
+- `PageView`'s five setters match `Page`'s signatures except `xml` (`PartTree`
+  against `PartTree | None`), in Task 1's code, its test and its docstring
+  comment.
+- `_page_is_shown(page: Page, context: Mapping[str, object]) -> bool` and
+  `_render_page_name(page, context) -> None` are the same in Task 2's code and
+  in the render-sweep narrative.
+- `PRIVATE_MODULES`, `private_references`, `_top_level_names` and `_has` are
+  introduced once each (Tasks 4, 4, 6, 8) and reused as defined; the final file
+  is what the prototype ran (44 tests passing).
+- `check_docstrings.Gap`, `gaps_in` and `main`, and
+  `check_api_documented.exported_names`, `documented_names`, `verdict` and
+  `main`, are the same in each tool and its tests.
+- The scripts' command lines (`imports.py <root> rename|move`, `split.py
+  <root> <module> <kept…>`, `names.py old=new … -- files…`) match their
+  docstrings.
 
 **6. Review Focus.** Each of the five has its test in the owning task:
-- 1, 2 and 3 are in Task 2. 1 and 3 fail on `899aa7a`, which is the change; 2 fails there too, because the old code never rendered the names.
-- 4 is in Task 1. It passes on `899aa7a` at runtime (the setter existed on `Page`); what Task 1 changes is that mypy accepts the line, which `tests/type_fixture.py` pins.
-- 5 is in Task 4. `test_an_internal_module_is_private[media]` fails on `899aa7a`, and passes once both `media.py` and the `media/` folder are renamed. The folder rename was added after prototyping, so Task 4's run is its first proof, together with the wheel smoke.
+
+- 1, 2 and 3 are in Task 2. 1 and 3 fail on `899aa7a`, which is the change; 2
+  fails there too, because the old code never rendered the names.
+- 4 is in Task 1. It passes on `899aa7a` at runtime (the setter existed on
+  `Page`); what Task 1 changes is that mypy accepts the line, which
+  `tests/type_fixture.py` pins.
+- 5 is in Task 4. `test_an_internal_module_is_private[media]` fails on
+  `899aa7a`, and passes once both `media.py` and the `media/` folder are
+  renamed. The folder rename was added after prototyping, so Task 4's run is its
+  first proof, together with the wheel smoke.
 
 **7. What was prototyped.** Every task, in a scratch worktree at `899aa7a`
 (`S/p7d/plan-work/wt`, removed after writing):
-- 7d in full: `1995 passed, 47 skipped`; mypy's six errors before Task 1 and `Success` after; the render sweep's three expected differences; each new test's failures against the old code as listed.
-- 7e in full, with the three scripts as written here: `2028 passed, 47 skipped`; pyrefly `0 diagnostics`; `sphinx -W` exit 0; the checker's missing-name counts (16, 13, 0, 2, 6, 2) at each step; the wheel smoke `PASS` with `ok: wheel modules match src/vsdxkit`; type completeness `100.00%` with 222 public exported names.
-- 7f's tools and configuration: `tools/check_docstrings.py` (22 tests, on 3.14 and 3.10) and its 395-gap measurement; the autoapi build, its two reST failures, and clean after the fixes; `inherited-members` measured against a build without it (62 entries, listed in Task 11); `tools/check_api_documented.py` (7 tests) passing at 222 and failing at 158 with the 7c report; sample docstrings on a constant, an enum member, a property and a Protocol stub, rendered by autoapi, with pyrefly and mypy clean. A `#:` comment probe rendered nothing.
-- Not prototyped: the 395 docstrings themselves, the CI YAML on a runner, and the issue comments.
+
+- 7d in full: `1995 passed, 47 skipped`; mypy's six errors before Task 1 and
+  `Success` after; the render sweep's three expected differences; each new
+  test's failures against the old code as listed.
+- 7e in full, with the three scripts as written here: `2028 passed, 47 skipped`;
+  pyrefly `0 diagnostics`; `sphinx -W` exit 0; the checker's missing-name counts
+  (16, 13, 0, 2, 6, 2) at each step; the wheel smoke `PASS` with `ok: wheel
+  modules match src/vsdxkit`; type completeness `100.00%` with 222 public
+  exported names.
+- 7f's tools and configuration: `tools/check_docstrings.py` (22 tests, on 3.14
+  and 3.10) and its 395-gap measurement; the autoapi build, its two reST
+  failures, and clean after the fixes; `inherited-members` measured against a
+  build without it (62 entries, listed in Task 11);
+  `tools/check_api_documented.py` (7 tests) passing at 222 and failing at 158
+  with the 7c report; sample docstrings on a constant, an enum member, a
+  property and a Protocol stub, rendered by autoapi, with pyrefly and mypy
+  clean. A `#:` comment probe rendered nothing.
+- Not prototyped: the 395 docstrings themselves, the CI YAML on a runner, and
+  the issue comments.

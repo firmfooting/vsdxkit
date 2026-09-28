@@ -6,7 +6,7 @@ migration guide). Authority:
 ("remove all old exports and methods") and Collection semantics ("there is no
 ... separate `walk()` whose scope can disagree with iteration").
 
-#112 lands as five PRs:
+\#112 lands as five PRs:
 
 1. #409: the guide check.
 2. **This one:** the traversal names.
@@ -18,7 +18,7 @@ migration guide). Authority:
 ## Removed
 
 | 0.x | 1.0 |
-|---|---|
+| --- | --- |
 | `Page.child_shapes`, `Page.sub_shapes()` | `Page.children` |
 | `Page.all_shapes` | `Page.shapes` |
 | `Shape.child_shapes`, `Shape.sub_shapes()` | `Shape.children` |

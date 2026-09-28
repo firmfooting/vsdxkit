@@ -1,26 +1,29 @@
 # Plan: vsdx connector + swimlane feature build
 
-**Repo:** fork `shauneccles/vsdx` of `dave-howard/vsdx` (upstream master `6703e6c`, v0.6.1)
-**Date:** 2026-09-11
-**Status:** in progress
-**Ground truth:** `tests/fixtures/com_reference/` — 6 scenario .vsdx files + `manifest.json`, generated from live Visio 16.0 via `tools/com_reference.ps1`
+**Repo:** fork `shauneccles/vsdx` of `dave-howard/vsdx` (upstream master
+`6703e6c`, v0.6.1) **Date:** 2026-09-11 **Status:** in progress **Ground
+truth:** `tests/fixtures/com_reference/` — 6 scenario .vsdx files +
+`manifest.json`, generated from live Visio 16.0 via `tools/com_reference.ps1`
 
 ## Objective
 
-Take the connector and container story from "copy a template shape and hope" to a
-fully featured, Visio-faithful implementation: dynamic connectors with real glue
-semantics, route-style control, and swimlane/container support. Everything is
-written against the COM ground-truth corpus, not guesswork.
+Take the connector and container story from "copy a template shape and hope" to
+a fully featured, Visio-faithful implementation: dynamic connectors with real
+glue semantics, route-style control, and swimlane/container support. Everything
+is written against the COM ground-truth corpus, not guesswork.
 
 ## Ground-truth facts (from manifest.json, Visio 16.0)
 
 A real dynamic connector between two shapes carries:
 
-- `BeginX/BeginY = _WALKGLUE(BegTrigger,EndTrigger,WalkPreference)` and the EndX/EndY mirror
+- `BeginX/BeginY = _WALKGLUE(BegTrigger,EndTrigger,WalkPreference)` and the
+  EndX/EndY mirror
 - `BegTrigger = _XFTRIGGER(<from-sheet-id>!EventXFMod)`, `EndTrigger = _XFTRIGGER(<to-sheet-id>!EventXFMod)`
 - `GlueType = 2` (dynamic/static mix), `ObjType = 2`
-- Route styles: `ShapeRouteStyle = 1` right-angle, `16` straight, `17` + `ConLineRouteExt = 2` curved
-- `ConFixedCode = 6` default; point-glue scenarios show literal mm coordinates in Begin/End instead of _WALKGLUE
+- Route styles: `ShapeRouteStyle = 1` right-angle, `16` straight, `17` +
+  `ConLineRouteExt = 2` curved
+- `ConFixedCode = 6` default; point-glue scenarios show literal mm coordinates
+  in Begin/End instead of _WALKGLUE
 - Connection-point glue cells are named `Connections.X1` (not `ConnectionXY1`)
 - Swimlanes: `msvSDContainerStyle`, `msvSDListDirection`, `msvSDListItemMaster`,
   `msvSDContainerLocked` user cells; masters `CFF Container`, `Swimlane List`,
@@ -36,9 +39,12 @@ formula-exact connector construction:
 - [x] `_WALKGLUE` on BeginX/BeginY/EndX/EndY
 - [x] `_XFTRIGGER(Sheet.N!EventXFMod)` triggers referencing real from/to shape IDs
 - [x] `GlueType=2`, `ObjType=2` + explicit dynamic route cells (ShapeRouteStyle=0)
-- [x] route_style parameter: 0 default, 1 right-angle, 16 straight, 17+ext=2 curved (`route='straight'|'rightangle'|'curved'`)
-- [x] connection-point glue via `Connections.Xn` cell references (`route='point'`, ToPart=100+n, ValueError when CPs missing)
-- [x] remove debug print() from production paths (library-wide logging tracked in #2)
+- [x] route_style parameter: 0 default, 1 right-angle, 16 straight, 17+ext=2
+      curved (`route='straight'|'rightangle'|'curved'`)
+- [x] connection-point glue via `Connections.Xn` cell references
+      (`route='point'`, ToPart=100+n, ValueError when CPs missing)
+- [x] remove debug print() from production paths (library-wide logging tracked
+      in #2)
 - [ ] connector re-anchor helper: retarget an existing connector's from/to
 
 Accept: generated file opens in Visio and shows a routed dynamic connector. **Met:**
@@ -46,7 +52,8 @@ Accept: generated file opens in Visio and shows a routed dynamic connector. **Me
 
 ### WI-2 — shape deletion cascade (P0) ✅ done (commit 1a564ee)
 
-- [x] deleting a shape removes its incident connectors and their Connect records (`Page.delete_shape`)
+- [x] deleting a shape removes its incident connectors and their Connect records
+      (`Page.delete_shape`)
 
 Accept: delete_shape on a connected shape leaves a valid, openable file. **Met**
 (test_delete_shape_cascades_connectors + zip validity check).
@@ -61,7 +68,8 @@ Accept: delete_shape on a connected shape leaves a valid, openable file. **Met**
 
 ### WI-3 — shape creation from a richer template palette (P1)
 
-- [ ] media template gains decision/start-end/database shapes (drawn once via COM, then shipped as fixture)
+- [ ] media template gains decision/start-end/database shapes (drawn once via
+      COM, then shipped as fixture)
 - [ ] `VisioFile.create_shape(page, master_text, x, y, w, h, text)` public API
 - [ ] `Page.add_shape` remains as alias for compat
 
@@ -91,6 +99,7 @@ and XML reparenting were both wrong and were dropped.
   modified s05 opens in Visio with all four lanes incl. 'Test lane'
 
 DRY rules for this work item (all upheld):
+
 1. one cell-write primitive (`Shape.get_or_create_cell`) — no second
    cell-creation path
 2. one membership-semantics implementation (`containers.py`); Page methods
@@ -105,7 +114,8 @@ result and shows the membership. **Met** (harness lanes report).
 ### WI-5 — round-trip safety (P0)
 
 - [ ] every WI above adds pytest cases using the com_reference fixtures
-- [ ] Visio open-check harness (`tools/visio_check.ps1`) for local ground-truth validation
+- [ ] Visio open-check harness (`tools/visio_check.ps1`) for local ground-truth
+      validation
 
 ### WI-7 — connector re-anchor (P1) ✅ done (commit ad14dc0)
 
@@ -120,7 +130,7 @@ result and shows the membership. **Met** (harness lanes report).
 
 - [x] extended palette shipped as `vsdx/media/palette_extended.vsdx`
   (covered by the existing package_data glob); `Media.palette` lazy accessor
-  + `Media.close()`
+  - `Media.close()`
 - [x] `VisioFile.create_shape(page, palette_name, x, y, w, h, text)` —
   reuses `copy_shape` and existing setters; sentinel cleared when text None
 - [x] DRY: no new copy/id-rewrite/fixture code
@@ -133,8 +143,6 @@ result and shows the membership. **Met** (harness lanes report).
   retarget + new lane in ONE file — **PASS in real Visio**, 5 lanes reported
 - [x] tagged fork release `v0.6.2`, pushed master + tag
 - [x] upstream PRs #95/#96 remain open awaiting maintainer
-
-
 
 Goal: `Connect.create()` (and any master-carrying shape copy) works on
 documents that carry their own masters. Sub-steps:
@@ -152,7 +160,7 @@ documents that carry their own masters. Sub-steps:
 - [x] 6d tests: strict-xfail lifted (test3_house param passes); idempotency
   and single-master-import regression tests; 352 passed / 342 on upstream base
 - [x] 6e Visio ground-truth validation: test3_house + test8 both PASS with
-  the imported connector carrying _WALKGLUE
+  the imported connector carrying `_WALKGLUE`
 - [x] 6f upstream PR #96 opened (master-import + dedupe + state guard,
   scoped without the formula engine); curved-connector one-liner is PR #95
 
@@ -162,6 +170,7 @@ cut from the tested state. **Met.**
 ## Upstream posture (decided 2026-09-11)
 
 Fork-forward for capability; staged small PRs for universal bugs.
+
 - Issues filed upstream: #93 (corruption/duplicate masters), #94 (curved_connector).
 - PR #95 open upstream: curved-connector one-liner (probe for maintainer responsiveness).
 - Corruption fix PR waits on WI-6 (see above).
@@ -170,7 +179,8 @@ Fork-forward for capability; staged small PRs for universal bugs.
 ## Conventions
 
 - Branch per work item off `main` (named `feat/<wi>-<slug>`), single-concern commits
-- Tests must pass with NO Visio installed (pure python); COM checks are local-only extras
+- Tests must pass with NO Visio installed (pure python); COM checks are
+  local-only extras
 - Commit only coherent state; push to origin (shauneccles/vsdx) when a WI is green
 - Do not modify upstream tags; keep fork master == upstream master + release wiring
 

@@ -6,7 +6,7 @@ names). Authority:
 removed in 1.0" (`Shape.remove` and `Page.delete_shape` → `Shape.delete`) and
 Collection semantics (`PageCollection` is where pages change).
 
-#112 now lands as five PRs:
+\#112 now lands as five PRs:
 
 1. #409: the guide check.
 2. #410: the traversal names.
@@ -32,7 +32,7 @@ and every record naming them.
 ## Pages
 
 | Removed from `Document` | Use |
-|---|---|
+| --- | --- |
 | `get_page(n)` | `pages[n]` (`IndexError`, not `None`) |
 | `get_page_by_name(name)` | `pages.by_name(name)` / `require_name(name)` |
 | `get_page_names()` | `[page.name for page in pages]` |

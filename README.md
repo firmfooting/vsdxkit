@@ -1,31 +1,57 @@
+<h1>
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/firmfooting/branding/main/lockups/vsdxkit_dark.svg">
-  <img alt="vsdxkit, by firmfooting" src="https://raw.githubusercontent.com/firmfooting/branding/main/lockups/vsdxkit.svg" height="56">
+  <source media="(prefers-color-scheme: dark)"
+    srcset="https://raw.githubusercontent.com/firmfooting/branding/main/lockups/vsdxkit_dark.svg">
+  <img alt="vsdxkit, by firmfooting"
+    src="https://raw.githubusercontent.com/firmfooting/branding/main/lockups/vsdxkit.svg"
+    height="56">
 </picture>
+</h1>
 
-Create, edit and analyse Microsoft Visio `.vsdx` files with Python, with no Visio needed at runtime.
+Create, edit and analyse Microsoft Visio `.vsdx` files with Python, with no
+Visio needed at runtime.
 
-[![CI](https://github.com/firmfooting/vsdxkit/actions/workflows/ci.yml/badge.svg)](https://github.com/firmfooting/vsdxkit/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/vsdxkit?color=2A6B64)](https://pypi.org/project/vsdxkit/) [![Python 3.10–3.14](https://img.shields.io/badge/python-3.10%E2%80%933.14-2A6B64.svg)](https://www.python.org/) [![Licence: BSD-3-Clause](https://img.shields.io/badge/licence-BSD--3--Clause-2A6B64.svg)](https://github.com/firmfooting/vsdxkit/blob/main/LICENSE) [![Docs](https://img.shields.io/badge/docs-firmfooting.github.io-2A6B64.svg)](https://firmfooting.github.io/vsdxkit/)
+[![CI](https://github.com/firmfooting/vsdxkit/actions/workflows/ci.yml/badge.svg)](https://github.com/firmfooting/vsdxkit/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/vsdxkit?color=2A6B64)](https://pypi.org/project/vsdxkit/)
+[![Python 3.10–3.14](https://img.shields.io/badge/python-3.10%E2%80%933.14-2A6B64.svg)](https://www.python.org/)
+[![Licence: BSD-3-Clause](https://img.shields.io/badge/licence-BSD--3--Clause-2A6B64.svg)](https://github.com/firmfooting/vsdxkit/blob/main/LICENSE)
+[![Docs](https://img.shields.io/badge/docs-firmfooting.github.io-2A6B64.svg)](https://firmfooting.github.io/vsdxkit/)
 
-vsdxkit adds shape creation, Visio-faithful connectors, connector retargeting, cross-functional flowchart swimlanes, stricter package handling, current Python tooling and typed public APIs. It began as a fork of [`dave-howard/vsdx`](https://github.com/dave-howard/vsdx) and is now developed as its own project; see [Provenance and licence](#provenance-and-licence).
+vsdxkit adds shape creation, Visio-faithful connectors, connector retargeting,
+cross-functional flowchart swimlanes, stricter package handling, current Python
+tooling and typed public APIs. It began as a fork of
+[`dave-howard/vsdx`](https://github.com/dave-howard/vsdx) and is now developed
+as its own project; see [Provenance and licence](#provenance-and-licence).
 
-> **The 1.0 API.** This README describes the 1.0 API, which `main` carries and which is not yet released. Code written for 0.x will not run unchanged: [Migrating to 1.0](https://firmfooting.github.io/vsdxkit/migration-1.0.html) gives the replacement for every 0.x name 1.0 removes. [Install](#install) says which install gives you which API.
+> **The 1.0 API.** This README describes the 1.0 API, which `main` carries and
+> which is not yet released. Code written for 0.x will not run unchanged:
+> [Migrating to 1.0](https://firmfooting.github.io/vsdxkit/migration-1.0.html)
+> gives the replacement for every 0.x name 1.0 removes. [Install](#install) says
+> which install gives you which API.
 
-The distribution and the import package are both named **`vsdxkit`**. Import each name from the module that defines it, for example `from vsdxkit.document import Document`; the package root re-exports nothing.
+The distribution and the import package are both named **`vsdxkit`**. Import
+each name from the module that defines it, for example `from vsdxkit.document
+import Document`; the package root re-exports nothing.
 
 ## What it does
 
 - Opens, queries and edits existing `.vsdx` files without Microsoft Visio.
 - Finds shapes by ID, text or Shape Data, on a page or inside a group.
 - Creates common flowchart shapes, or copies a shape already on the page.
-- Creates dynamic or connection-point glue with straight, right-angle or curved routing.
+- Creates dynamic or connection-point glue with straight, right-angle or curved
+  routing.
 - Retargets either end of an existing connector.
 - Reads and extends Visio cross-functional flowchart swimlanes.
 - Copies shapes and pages while rewriting package-local IDs and importing masters.
 - Renders data into Visio templates with Jinja.
 - Saves to a new file or safely replaces the source file in place.
 
-The implementation edits the XML parts inside the Open Packaging Convention archive. It does not drive the Visio user interface. Generated files are checked against Microsoft Visio through COM before a change that Visio could silently repair is considered done, and what Visio reported is recorded so CI can replay it without Visio. The COM check itself is manual; no workflow runs Visio. See [When a change needs Visio](https://github.com/firmfooting/vsdxkit/blob/main/CONTRIBUTING.md#when-a-change-needs-visio).
+The implementation edits the XML parts inside the Open Packaging Convention
+archive. It does not drive the Visio user interface. Generated files are checked
+against Microsoft Visio through COM before a change that Visio could silently
+repair is considered done, and what Visio reported is recorded so CI can replay
+it without Visio. The COM check itself is manual; no workflow runs Visio. See
+[When a change needs Visio](https://github.com/firmfooting/vsdxkit/blob/main/CONTRIBUTING.md#when-a-change-needs-visio).
 
 ## Install
 
@@ -37,17 +63,28 @@ Python 3.10–3.14 is supported on Linux, Windows and macOS.
 python -m pip install "vsdxkit @ git+https://github.com/firmfooting/vsdxkit.git"
 ```
 
-That tracks `main`, so pin a commit if you need a reproducible install. Until 1.0 is released, an install from `main` reports its version as 0.8.0, because the version is only bumped when a release is cut.
+That tracks `main`, so pin a commit if you need a reproducible install. Until
+1.0 is released, an install from `main` reports its version as 0.8.0, because
+the version is only bumped when a release is cut.
 
-**The 0.x API is on PyPI.** `pip install vsdxkit` installs 0.8.0, the latest release, published on 2026-09-13. It has the 0.x names: it imports as `vsdx`, and its document class is `VisioFile`. The examples below do not run on it. Pin `vsdxkit<1` to stay on the 0.x names once 1.0 is released, and read [Migrating to 1.0](https://firmfooting.github.io/vsdxkit/migration-1.0.html) when you move.
+**The 0.x API is on PyPI.** `pip install vsdxkit` installs 0.8.0, the latest
+release, published on 2026-09-13. It has the 0.x names: it imports as `vsdx`,
+and its document class is `VisioFile`. The examples below do not run on it. Pin
+`vsdxkit<1` to stay on the 0.x names once 1.0 is released, and read
+[Migrating to 1.0](https://firmfooting.github.io/vsdxkit/migration-1.0.html)
+when you move.
 
-0.7.0 was withdrawn from PyPI because its Jinja rendering could run code from a crafted document. 0.7.1 and later render templates in Jinja's sandbox. The [changelog](https://github.com/firmfooting/vsdxkit/blob/main/CHANGELOG.md) has the details.
+0.7.0 was withdrawn from PyPI because its Jinja rendering could run code from a
+crafted document. 0.7.1 and later render templates in Jinja's sandbox. The
+[changelog](https://github.com/firmfooting/vsdxkit/blob/main/CHANGELOG.md) has
+the details.
 
 ## Quickstart
 
 ### Open, edit and save
 
-Opening reads the whole package into memory and holds no file, so there is nothing to close. Saving is explicit.
+Opening reads the whole package into memory and holds no file, so there is
+nothing to close. Saving is explicit.
 
 ```python
 from vsdxkit.document import Document
@@ -70,11 +107,18 @@ document.pages[0].name = "Current state"
 document.save()
 ```
 
-A save writes every part you did not change exactly as it arrived. A part you did change is written as equivalent XML, but not in Visio's own spelling: the XML declaration, attribute quotes, empty-element form and namespace declarations can differ, and a CRLF inside text becomes LF. Visio and LibreOffice open both.
+A save writes every part you did not change exactly as it arrived. A part you
+did change is written as equivalent XML, but not in Visio's own spelling: the
+XML declaration, attribute quotes, empty-element form and namespace declarations
+can differ, and a CRLF inside text becomes LF. Visio and LibreOffice open both.
 
 ### Find shapes
 
-`page.shapes` is every shape on the page, inside groups too; `page.children` is only the page's top-level shapes. A `require_*` lookup wants exactly one match and raises `NotFoundError` for none, a `by_*` lookup returns `None` for none, and a `matching_*` lookup returns every match. Any other test is a comprehension over a collection.
+`page.shapes` is every shape on the page, inside groups too; `page.children` is
+only the page's top-level shapes. A `require_*` lookup wants exactly one match
+and raises `NotFoundError` for none, a `by_*` lookup returns `None` for none,
+and a `matching_*` lookup returns every match. Any other test is a comprehension
+over a collection.
 
 ```python
 document = Document.open("diagram.vsdx")
@@ -88,11 +132,14 @@ wide = [s for s in page.shapes if (s.width or 0) > 2]
 assert missing is None and networked
 ```
 
-[Find pages and shapes](https://firmfooting.github.io/vsdxkit/find_shape.html) covers pages, the scopes a lookup can search, what happens when several shapes match, and shape identity.
+[Find pages and shapes](https://firmfooting.github.io/vsdxkit/find_shape.html)
+covers pages, the scopes a lookup can search, what happens when several shapes
+match, and shape identity.
 
 ### Create shapes and connectors
 
-Coordinates are Visio page units, normally inches, and `x` and `y` identify the shape centre. `page.connect(source, target)` returns a `Connector`.
+Coordinates are Visio page units, normally inches, and `x` and `y` identify the
+shape centre. `page.connect(source, target)` returns a `Connector`.
 
 ```python
 from vsdxkit.document import Document
@@ -111,11 +158,14 @@ page.connect(work, decision, routing=Routing.RIGHT_ANGLE)
 document.save("flow.vsdx")
 ```
 
-[Create shapes and connectors](https://firmfooting.github.io/vsdxkit/create_connect.html) lists the shape kinds and covers copying a shape, glue to connection points, routing, and finding connectors.
+[Create shapes and connectors](https://firmfooting.github.io/vsdxkit/create_connect.html)
+lists the shape kinds and covers copying a shape, glue to connection points,
+routing, and finding connectors.
 
 ### Retarget a connector
 
-Name only the end that should move; the other stays where it is. The connector keeps its glue and routing unless you pass `options`.
+Name only the end that should move; the other stays where it is. The connector
+keeps its glue and routing unless you pass `options`.
 
 ```python
 document = Document.open("flow.vsdx")
@@ -128,11 +178,16 @@ connector.retarget(target=store)
 document.save("retargeted.vsdx")
 ```
 
-`shape.delete()` also removes the connectors glued to the shape, and a group's members with it. [Retarget a connector](https://firmfooting.github.io/vsdxkit/create_connect.html#retarget-a-connector) covers connection points and `options`.
+`shape.delete()` also removes the connectors glued to the shape, and a group's
+members with it.
+[Retarget a connector](https://firmfooting.github.io/vsdxkit/create_connect.html#retarget-a-connector)
+covers connection points and `options`.
 
 ### Work with swimlanes
 
-Swimlane operations need a page that already holds a Visio cross-functional flowchart (CFF). `add_lane()` copies the top lane above it and grows the CFF container to match.
+Swimlane operations need a page that already holds a Visio cross-functional
+flowchart (CFF). `add_lane()` copies the top lane above it and grows the CFF
+container to match.
 
 ```python
 document = Document.open("cross-functional-flow.vsdx")
@@ -147,7 +202,10 @@ assert diagram.lane_for(check) == review_lane
 document.save("with-review-lane.vsdx")
 ```
 
-Lane membership is geometric: a shape is in the lane whose band contains its centre, and there is no separate membership field to write. [Cross-functional flowchart swimlanes](https://firmfooting.github.io/vsdxkit/swimlanes.html) has the rest.
+Lane membership is geometric: a shape is in the lane whose band contains its
+centre, and there is no separate membership field to write.
+[Cross-functional flowchart swimlanes](https://firmfooting.github.io/vsdxkit/swimlanes.html)
+has the rest.
 
 ### Render a Jinja template
 
@@ -161,14 +219,17 @@ document.render(
 document.save("rendered.vsdx")
 ```
 
-Rendering runs in Jinja's sandboxed environment. [Jinja templates](https://firmfooting.github.io/vsdxkit/templating.html) covers the group-shape loop and `showif` conventions, self assignments, and what the sandbox does not protect against.
+Rendering runs in Jinja's sandboxed environment.
+[Jinja templates](https://firmfooting.github.io/vsdxkit/templating.html) covers
+the group-shape loop and `showif` conventions, self assignments, and what the
+sandbox does not protect against.
 
 ## Documentation
 
 The full documentation is at <https://firmfooting.github.io/vsdxkit/>.
 
 | To | Read |
-|---|---|
+| --- | --- |
 | Install, open a document and save it | [Quick start](https://firmfooting.github.io/vsdxkit/quickstart.html) |
 | Select, add, copy and delete pages, and find shapes | [Find pages and shapes](https://firmfooting.github.io/vsdxkit/find_shape.html) |
 | Create, connect, retarget and delete shapes | [Create shapes and connectors](https://firmfooting.github.io/vsdxkit/create_connect.html) |
@@ -179,22 +240,54 @@ The full documentation is at <https://firmfooting.github.io/vsdxkit/>.
 
 ## Limits
 
-- The library starts from an existing `.vsdx`; it does not create a complete Visio document package from nothing.
-- `.vsdm` files can be read and saved, but only back to a `.vsdm` destination. The package kind is decided by the content type of `visio/document.xml`, not by the filename. So `save()` refuses a `.vsdx` destination for a macro-enabled package, and a `.vsdm` destination for one that is not. Either would produce a file whose extension and `[Content_Types].xml` disagree, which Visio reports as corrupt. Stripping macros to convert a `.vsdm` into a `.vsdx` is not supported. A destination with no extension, or with an unrelated one, gets the matching Visio extension appended.
-- Swimlane creation works on existing Visio CFF diagrams. It does not convert an ordinary page into a CFF diagram.
-- Visio may recalculate layout when a generated file opens. The library writes the glue and route cells but does not reproduce Visio's entire layout engine.
-- Loading enforces package expansion limits before any archive member is read: at most 512 members, 64 MiB per member, 256 MiB total uncompressed, and a 100:1 compression ratio, plus rejection of duplicate and path-unsafe member names. A hostile or accidental archive is refused with `vsdxkit.errors.PackageLimitError` instead of exhausting process memory. The defaults suit documents from unknown sources; trusted callers can relax the caps with `Document.open(filename, limits=PackageLimits(...))` or `limits_path="vsdxkit.limits.json"` (same keys, JSON object).
+- The library starts from an existing `.vsdx`; it does not create a complete
+  Visio document package from nothing.
+- `.vsdm` files can be read and saved, but only back to a `.vsdm` destination.
+  The package kind is decided by the content type of `visio/document.xml`, not
+  by the filename. So `save()` refuses a `.vsdx` destination for a macro-enabled
+  package, and a `.vsdm` destination for one that is not. Either would produce a
+  file whose extension and `[Content_Types].xml` disagree, which Visio reports
+  as corrupt. Stripping macros to convert a `.vsdm` into a `.vsdx` is not
+  supported. A destination with no extension, or with an unrelated one, gets the
+  matching Visio extension appended.
+- Swimlane creation works on existing Visio CFF diagrams. It does not convert an
+  ordinary page into a CFF diagram.
+- Visio may recalculate layout when a generated file opens. The library writes
+  the glue and route cells but does not reproduce Visio's entire layout engine.
+- Loading enforces package expansion limits before any archive member is read:
+  at most 512 members, 64 MiB per member, 256 MiB total uncompressed, and a
+  100:1 compression ratio, plus rejection of duplicate and path-unsafe member
+  names. A hostile or accidental archive is refused with
+  `vsdxkit.errors.PackageLimitError` instead of exhausting process memory. The
+  defaults suit documents from unknown sources; trusted callers can relax the
+  caps with `Document.open(filename, limits=PackageLimits(...))` or
+  `limits_path="vsdxkit.limits.json"` (same keys, JSON object).
 
 ## Contributing
 
-Contributions are welcome. [CONTRIBUTING.md](https://github.com/firmfooting/vsdxkit/blob/main/CONTRIBUTING.md) covers the development environment, the checks to run before a pull request, the documentation build, when a change needs Visio, and how releases are cut. Report vulnerabilities privately, as [SECURITY.md](https://github.com/firmfooting/vsdxkit/blob/main/SECURITY.md) describes.
+Contributions are welcome.
+[CONTRIBUTING.md](https://github.com/firmfooting/vsdxkit/blob/main/CONTRIBUTING.md)
+covers the development environment, the checks to run before a pull request, the
+documentation build, when a change needs Visio, and how releases are cut. Report
+vulnerabilities privately, as
+[SECURITY.md](https://github.com/firmfooting/vsdxkit/blob/main/SECURITY.md)
+describes.
 
 ## Provenance and licence
 
-vsdxkit descends from [`dave-howard/vsdx`](https://github.com/dave-howard/vsdx), originally written by Dave Howard and released under the BSD 3-Clause licence. That work is the foundation this library is built on, and its copyright notice is retained in [`LICENSE`](https://github.com/firmfooting/vsdxkit/blob/main/LICENSE) alongside our own.
+vsdxkit descends from [`dave-howard/vsdx`](https://github.com/dave-howard/vsdx),
+originally written by Dave Howard and released under the BSD 3-Clause licence.
+That work is the foundation this library is built on, and its copyright notice
+is retained in
+[`LICENSE`](https://github.com/firmfooting/vsdxkit/blob/main/LICENSE) alongside
+our own.
 
-vsdxkit is now developed independently: it is not a downstream of that project and does not track it. The import package is `vsdxkit`, not `vsdx`, and the licence remains BSD 3-Clause.
+vsdxkit is now developed independently: it is not a downstream of that project
+and does not track it. The import package is `vsdxkit`, not `vsdx`, and the
+licence remains BSD 3-Clause.
 
 ---
 
-<sub>Part of <a href="https://github.com/firmfooting">firmfooting</a>: safe, plain tooling for M365 and SharePoint operators. Not affiliated with or endorsed by Microsoft. Visio is a trademark of Microsoft.</sub>
+<sub>Part of <a href="https://github.com/firmfooting">firmfooting</a>: safe,
+plain tooling for M365 and SharePoint operators. Not affiliated with or endorsed
+by Microsoft. Visio is a trademark of Microsoft.</sub>

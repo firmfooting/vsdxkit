@@ -25,7 +25,7 @@ happened, including when the COM call failed. A failure note is ground truth
 too: it is how we know which Visio APIs do not do what their names suggest.
 
 | File | What Visio was asked to do | What came out |
-|---|---|---|
+| --- | --- | --- |
 | `s01_autoconnect_right.vsdx` | Two rectangles, `A.AutoConnect(B, 4)` (right) | One `Dynamic connector` master instance. Source of the `_WALKGLUE`/`_XFTRIGGER`/`GlueType=2`/`ObjType=2`/`ShapeRouteStyle=0` baseline. |
 | `s02_glue_pin.vsdx` | Connector from the connector tool, `BeginX.GlueTo(A!PinX)` and `EndX.GlueTo(B!PinX)` | Succeeded. Gluing to `PinX` produces the same dynamic shape glue as AutoConnect. |
 | `s03_route_variants.vsdx` | Three connectors between the same pair, `ShapeRouteStyle` set to 1, 16 and 17 (plus `ConLineRouteExt=2`) | All three took. Right-angle = 1, straight = 16, curved = 17 with `ConLineRouteExt=2` come from here. |
