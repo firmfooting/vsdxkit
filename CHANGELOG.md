@@ -8,6 +8,131 @@ From 0.7.1 onward this file is maintained by release-please, which writes a
 section per release from the conventional-commit subjects on `main`. Edit the
 release pull request rather than this file directly.
 
+## [0.9.0](https://github.com/firmfooting/vsdxkit/compare/v0.8.0...v0.9.0) (2026-09-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* moving a shape moves the shape, and a 1-D shape's text sits on it ([#455](https://github.com/firmfooting/vsdxkit/issues/455))
+* writes to an instance stay on the instance, and a deleted shape stays deleted ([#454](https://github.com/firmfooting/vsdxkit/issues/454))
+* one cell writer, and a value written is the value Visio shows ([#453](https://github.com/firmfooting/vsdxkit/issues/453))
+* the 1.0 public surface is only the user API; internal modules and names are private ([#424](https://github.com/firmfooting/vsdxkit/issues/424)) (#429)
+* PageView is writable; page showifs and names follow the template rules; Shape.copy checks its source ([#28](https://github.com/firmfooting/vsdxkit/issues/28)) (#428)
+* the package internals are private, and the page allocates shape IDs ([#116](https://github.com/firmfooting/vsdxkit/issues/116)) (#423)
+* the dead members go, and one read-a-part-or-raise ([#116](https://github.com/firmfooting/vsdxkit/issues/116)) (#422)
+* the back-references are read-only views, and every import points down ([#114](https://github.com/firmfooting/vsdxkit/issues/114)) (#419)
+* templating is a function; Document has no mixin base ([#113](https://github.com/firmfooting/vsdxkit/issues/113)) (#416)
+* the connection records are internal ([#412](https://github.com/firmfooting/vsdxkit/issues/412))
+* Shape.delete, and pages change only through the collection ([#411](https://github.com/firmfooting/vsdxkit/issues/411))
+* the 0.x traversal names go; collections are the one walk ([#410](https://github.com/firmfooting/vsdxkit/issues/410))
+* SwimlaneDiagram replaces Container ([#408](https://github.com/firmfooting/vsdxkit/issues/408))
+* Connector(Shape), Page.connect and graph queries ([#406](https://github.com/firmfooting/vsdxkit/issues/406))
+* ShapeKind and Page.create_shape ([#405](https://github.com/firmfooting/vsdxkit/issues/405))
+* Document replaces VisioFile ([#403](https://github.com/firmfooting/vsdxkit/issues/403))
+* a document has no close state ([#402](https://github.com/firmfooting/vsdxkit/issues/402))
+* one connector engine, glue as data ([#401](https://github.com/firmfooting/vsdxkit/issues/401))
+* one creation operation, and donors loaded once per process ([#398](https://github.com/firmfooting/vsdxkit/issues/398))
+* no synthetic <Shapes> wrapper, and each finder written once ([#397](https://github.com/firmfooting/vsdxkit/issues/397))
+* shapes and pages read their XML, and the one memo left has a counter ([#396](https://github.com/firmfooting/vsdxkit/issues/396))
+* a Shape is its element, and a deleted shape says so ([#395](https://github.com/firmfooting/vsdxkit/issues/395))
+* `VisioFile.pages` is a read-only `PageCollection` rather than a `list`. Use `pages.create`, `pages.copy` and `pages.delete` to change pages.
+* `Page.shapes` is now the recursive `ShapeCollection` of every shape on the page, not the deprecated list holding the page's `<Shapes>` wrapper.
+* `VisioFile` no longer inherits `MastersImportMixin`, and `master_pages` and `master_index` are read-only.
+* import every name from the module that defines it ([#383](https://github.com/firmfooting/vsdxkit/issues/383))
+* `VisioFile.zip_file_contents`, `VisioFile.directory`, the `vsdxkit.zip_contents` module and `PackageStore.write_bytes_keeping_tree` are removed. So are `vsdxkit.xmlio.file_to_xml`, `xml_to_file`, `require_xml_tree` and `require_root`, and `vsdxkit.vsdxfile.file_to_xml`. Work on a document through its object model; to read raw part bytes, open the saved file with `zipfile`. `parse_part(bytes)` and `serialise_part(tree)` replace the `xmlio` helpers.
+* `Page.filename` and `Page.rels_xml_filename` hold OPC part names such as `/visio/pages/page1.xml` instead of a path under the source file's name. `insert_shape`'s `page_path` takes the same part name.
+* the library's exceptions are now a hierarchy under `vsdxkit.VsdxError`, defined in `vsdxkit.errors`.
+    - `VisioFileNotOpen` now derives from `ValueError`, through
+    `InvalidOperationError`. A `try` with both `except ValueError:` and
+    `except VisioFileNotOpen:` takes the `ValueError` branch unless
+    `VisioFileNotOpen` is listed first.
+    - `PackageLimitError` and `VisioFileNotOpen` are defined in
+    `vsdxkit.errors`, so their `__module__` changed.
+    `vsdxkit.vsdxfile.PackageLimitError`,
+    `vsdxkit.package.PackageLimitError` and
+    `vsdxkit.vsdxfile.VisioFileNotOpen` still resolve to the same classes.
+    - Opening a package raises `vsdxkit.MalformedPackageError` where it used
+    to raise one of these builtins:
+      - `zipfile.BadZipFile`: not a zip, truncated, or a CRC mismatch
+    - `NotImplementedError`: an unsupported zip version or compression
+    method
+      - `RuntimeError`: an encrypted member
+    - `zlib.error`, `lzma.LZMAError`, or an `OSError` with no `errno`: a
+    corrupt compressed stream
+      - `UnicodeDecodeError`: a member name flagged UTF-8 that is not
+    - `LookupError`, or `ValueError`: a part declaring an encoding that
+    cannot be decoded or that the parser refuses
+    - `KeyError`: a `pages.xml`, `masters.xml` or relationship element
+    missing a required attribute
+* save only what changed, byte for byte ([#373](https://github.com/firmfooting/vsdxkit/issues/373))
+* move to a src layout and rename the import package to vsdxkit ([#350](https://github.com/firmfooting/vsdxkit/issues/350))
+
+### Features
+
+* a document has no close state ([#402](https://github.com/firmfooting/vsdxkit/issues/402)) ([dc5c6cb](https://github.com/firmfooting/vsdxkit/commit/dc5c6cb6473ccfddca09bb379bcab418a4a58e31))
+* a Shape is its element, and a deleted shape says so ([#395](https://github.com/firmfooting/vsdxkit/issues/395)) ([60872c5](https://github.com/firmfooting/vsdxkit/commit/60872c5c6366f5776f295f7cdcc642c05b722c1b))
+* Connector(Shape), Page.connect and graph queries ([#406](https://github.com/firmfooting/vsdxkit/issues/406)) ([449c0f7](https://github.com/firmfooting/vsdxkit/commit/449c0f7f0ed2d770c81d9a4e87ab7e9a0f8a5ca3))
+* Document replaces VisioFile ([#403](https://github.com/firmfooting/vsdxkit/issues/403)) ([ef717d7](https://github.com/firmfooting/vsdxkit/commit/ef717d76c1c4bfd3e6d854e23b895e81ba479315))
+* hold the package as parts addressed by OPC part name ([#355](https://github.com/firmfooting/vsdxkit/issues/355)) ([4ac48f9](https://github.com/firmfooting/vsdxkit/commit/4ac48f96b0d9d2de479be1f5eb5d82e9fcd7454c))
+* no synthetic &lt;Shapes&gt; wrapper, and each finder written once ([#397](https://github.com/firmfooting/vsdxkit/issues/397)) ([6b76e4e](https://github.com/firmfooting/vsdxkit/commit/6b76e4eee97b3f351bc83c5c05ba506d6c990956))
+* one connector engine, glue as data ([#401](https://github.com/firmfooting/vsdxkit/issues/401)) ([d95b64d](https://github.com/firmfooting/vsdxkit/commit/d95b64d26aa7645cbbf50c3f59d842998663b6cd))
+* one creation operation, and donors loaded once per process ([#398](https://github.com/firmfooting/vsdxkit/issues/398)) ([a2bb9e7](https://github.com/firmfooting/vsdxkit/commit/a2bb9e7f0838aa4d59c7fb979389af321935cb10))
+* PageCollection, a document's pages and the one place pages change ([#393](https://github.com/firmfooting/vsdxkit/issues/393)) ([07fd086](https://github.com/firmfooting/vsdxkit/commit/07fd086085bfe9fb6b0f90998bd3c95dedf8e121))
+* raise a named error hierarchy instead of bare ValueErrors ([#365](https://github.com/firmfooting/vsdxkit/issues/365)) ([6f17506](https://github.com/firmfooting/vsdxkit/commit/6f175069df16a928812e1e409a46feffc5ebae85))
+* save only what changed, byte for byte ([#373](https://github.com/firmfooting/vsdxkit/issues/373)) ([769fe87](https://github.com/firmfooting/vsdxkit/commit/769fe87c0e121f983f5d5bc2364b99c35ecf21a9))
+* save the package store through one atomic archive writer ([#370](https://github.com/firmfooting/vsdxkit/issues/370)) ([05b9cda](https://github.com/firmfooting/vsdxkit/commit/05b9cda6762d2feba4024daf6567d82873362a88))
+* Shape.delete, and pages change only through the collection ([#411](https://github.com/firmfooting/vsdxkit/issues/411)) ([6da9920](https://github.com/firmfooting/vsdxkit/commit/6da9920848dd0741619125d09d88dde14c9ccc29))
+* ShapeCollection, one scoped lookup that says how many shapes it expects ([#392](https://github.com/firmfooting/vsdxkit/issues/392)) ([ebf6fa8](https://github.com/firmfooting/vsdxkit/commit/ebf6fa8e8b7af5bc83594d1cfb2ba5e03009cbc3))
+* ShapeKind and Page.create_shape ([#405](https://github.com/firmfooting/vsdxkit/issues/405)) ([0d7eb5d](https://github.com/firmfooting/vsdxkit/commit/0d7eb5d5dfb8ff8db7138a84125589c4e28eda9f))
+* shapes and pages read their XML, and the one memo left has a counter ([#396](https://github.com/firmfooting/vsdxkit/issues/396)) ([04b0995](https://github.com/firmfooting/vsdxkit/commit/04b0995daf7c2d318585c8d7fdf12c6f35995316))
+* SwimlaneDiagram replaces Container ([#408](https://github.com/firmfooting/vsdxkit/issues/408)) ([565361f](https://github.com/firmfooting/vsdxkit/commit/565361f9eb312d0d8a429432cb8061334ac3be48))
+* templating is a function; Document has no mixin base ([#113](https://github.com/firmfooting/vsdxkit/issues/113)) ([#416](https://github.com/firmfooting/vsdxkit/issues/416)) ([e79d4d3](https://github.com/firmfooting/vsdxkit/commit/e79d4d3009c2f20abe36aa28fe09c12138262bfd))
+* the 0.x traversal names go; collections are the one walk ([#410](https://github.com/firmfooting/vsdxkit/issues/410)) ([fae67fe](https://github.com/firmfooting/vsdxkit/commit/fae67fe452564b27940716886fe73c3075b0c140))
+* the back-references are read-only views, and every import points down ([#114](https://github.com/firmfooting/vsdxkit/issues/114)) ([#419](https://github.com/firmfooting/vsdxkit/issues/419)) ([0d3cd9b](https://github.com/firmfooting/vsdxkit/commit/0d3cd9b59384f947578a4552979390e3a9cc29a4))
+* the connection records are internal ([#412](https://github.com/firmfooting/vsdxkit/issues/412)) ([7b3a376](https://github.com/firmfooting/vsdxkit/commit/7b3a3760867024b1b1c12b24bbf188b709ad7fda))
+* the dead members go, and one read-a-part-or-raise ([#116](https://github.com/firmfooting/vsdxkit/issues/116)) ([#422](https://github.com/firmfooting/vsdxkit/issues/422)) ([4e96a93](https://github.com/firmfooting/vsdxkit/commit/4e96a93df07aa9f2731fb8483107b74f5d89a64b))
+* the package internals are private, and the page allocates shape IDs ([#116](https://github.com/firmfooting/vsdxkit/issues/116)) ([#423](https://github.com/firmfooting/vsdxkit/issues/423)) ([31c863f](https://github.com/firmfooting/vsdxkit/commit/31c863f5170d4a2007d50e7bce72f8ceeb2c8160))
+
+
+### Bug Fixes
+
+* a formula with an unknown input has no value; the stack's open review comments are answered ([#28](https://github.com/firmfooting/vsdxkit/issues/28), [#29](https://github.com/firmfooting/vsdxkit/issues/29)) ([#451](https://github.com/firmfooting/vsdxkit/issues/451)) ([3575873](https://github.com/firmfooting/vsdxkit/commit/3575873edbd182621da67a68d06ab99e15afcb47))
+* count an app.xml change in the section it was made in ([#369](https://github.com/firmfooting/vsdxkit/issues/369)) ([8920d34](https://github.com/firmfooting/vsdxkit/commit/8920d3419d71041cb885d3ca70b72ed3511d2f7b))
+* find app.xml's page section on a file whose producer did not write English ([#363](https://github.com/firmfooting/vsdxkit/issues/363)) ([a9b6d77](https://github.com/firmfooting/vsdxkit/commit/a9b6d77da6fec6a101c365622b2ee7320faf32ab))
+* moving a shape moves the shape, and a 1-D shape's text sits on it ([#455](https://github.com/firmfooting/vsdxkit/issues/455)) ([df1e399](https://github.com/firmfooting/vsdxkit/commit/df1e399bc1eb60710be29f23cac7f6822c59212d))
+* name a new page in app.xml's Pages section, not among the masters ([#356](https://github.com/firmfooting/vsdxkit/issues/356)) ([014352e](https://github.com/firmfooting/vsdxkit/commit/014352e991851fe7e331f9acac5c40c43284f51d))
+* one cell writer, and a value written is the value Visio shows ([#453](https://github.com/firmfooting/vsdxkit/issues/453)) ([6ed09f8](https://github.com/firmfooting/vsdxkit/commit/6ed09f80a32b30a00f1b7c72c1e8cc5e9ff5b4ea))
+* one deletion operation, and a shape a showif hides is deleted like any other ([#399](https://github.com/firmfooting/vsdxkit/issues/399)) ([3d1dad5](https://github.com/firmfooting/vsdxkit/commit/3d1dad5d1257434887f802fd1122143c0a27b9ab))
+* PageView is writable; page showifs and names follow the template rules; Shape.copy checks its source ([#28](https://github.com/firmfooting/vsdxkit/issues/28)) ([#428](https://github.com/firmfooting/vsdxkit/issues/428)) ([e15c0f1](https://github.com/firmfooting/vsdxkit/commit/e15c0f11e01507ac7061097f33df8740332ae845))
+* read the whole attribute name in a {% set self.x %} reference ([#354](https://github.com/firmfooting/vsdxkit/issues/354)) ([2e82673](https://github.com/firmfooting/vsdxkit/commit/2e82673ceef5d229b4e164ea4c47947e99a75127))
+* serialise the page rels and masters parts through xmlio ([#364](https://github.com/firmfooting/vsdxkit/issues/364)) ([9b4b590](https://github.com/firmfooting/vsdxkit/commit/9b4b59088f9103a52dd58f569a0dbdde54dd2788))
+* **tools:** the Visio scripts kill only the Visio they started ([#463](https://github.com/firmfooting/vsdxkit/issues/463)) ([#464](https://github.com/firmfooting/vsdxkit/issues/464)) ([9bba3a4](https://github.com/firmfooting/vsdxkit/commit/9bba3a49b56866e8e88955e113c8b12873381398))
+* writes to an instance stay on the instance, and a deleted shape stays deleted ([#454](https://github.com/firmfooting/vsdxkit/issues/454)) ([e54cd29](https://github.com/firmfooting/vsdxkit/commit/e54cd29ba9f2e00754be9368f21a26b82c2a9a2e))
+
+
+### Documentation
+
+* a migration guide checked against 0.8.0's whole public surface ([#409](https://github.com/firmfooting/vsdxkit/issues/409)) ([f71a34f](https://github.com/firmfooting/vsdxkit/commit/f71a34fb49191c8732edfa08abfd4c4015549242))
+* apply the firmfooting brand ([#414](https://github.com/firmfooting/vsdxkit/issues/414)) ([5ef18b3](https://github.com/firmfooting/vsdxkit/commit/5ef18b3d85be04275e311b251f28346c0506a291))
+* every definition has a docstring, and the API reference is generated from them ([#424](https://github.com/firmfooting/vsdxkit/issues/424)) ([#446](https://github.com/firmfooting/vsdxkit/issues/446)) ([5ed4bf9](https://github.com/firmfooting/vsdxkit/commit/5ed4bf9b4ae3de3d99a512f60025fa09f6db596c))
+* Phase 6 spec and plan: templating as a function, every import arrow pointing down ([#415](https://github.com/firmfooting/vsdxkit/issues/415)) ([8039877](https://github.com/firmfooting/vsdxkit/commit/8039877089a39ce9baff5cdf4fe00325f4a8c3ec))
+* Phase 7 part 2 spec and plan: the public surface decided, documented and generated ([#424](https://github.com/firmfooting/vsdxkit/issues/424)) ([#427](https://github.com/firmfooting/vsdxkit/issues/427)) ([225d411](https://github.com/firmfooting/vsdxkit/commit/225d41169ce2a13a983cfbe876346c1711a2996f))
+* rework the README and docs landing page around the firmfooting brand ([#420](https://github.com/firmfooting/vsdxkit/issues/420)) ([e7ad0aa](https://github.com/firmfooting/vsdxkit/commit/e7ad0aa50221d48c32a37dad3dd1a1d810f6f365))
+* say what the 0.x line actually is ([#347](https://github.com/firmfooting/vsdxkit/issues/347)) ([280e8af](https://github.com/firmfooting/vsdxkit/commit/280e8af77284c655bb291b9e39d187e39252bd82))
+* the Phase 7 spec and plan: the 1.0 surface is only the user API ([#29](https://github.com/firmfooting/vsdxkit/issues/29)) ([#421](https://github.com/firmfooting/vsdxkit/issues/421)) ([f5e8a8c](https://github.com/firmfooting/vsdxkit/commit/f5e8a8cc659c35faeb93a5c3f47c929659042f16))
+* the README and the Sphinx pages describe 1.0 only ([#413](https://github.com/firmfooting/vsdxkit/issues/413)) ([58536ab](https://github.com/firmfooting/vsdxkit/commit/58536ab58436592aa02fc3a946940489b3157b09))
+* the writes-land spec and plan ([#452](https://github.com/firmfooting/vsdxkit/issues/452)) ([14b3955](https://github.com/firmfooting/vsdxkit/commit/14b3955e1e0a90c3de8958013e931efbb02b213e))
+
+
+### Code Refactoring
+
+* delete zip_file_contents and the helpers that served it ([#381](https://github.com/firmfooting/vsdxkit/issues/381)) ([c952e49](https://github.com/firmfooting/vsdxkit/commit/c952e49c008a78add326069b0d1a9515ee0215fa))
+* import every name from the module that defines it ([#383](https://github.com/firmfooting/vsdxkit/issues/383)) ([6a7b3fc](https://github.com/firmfooting/vsdxkit/commit/6a7b3fc7d6d046b25b890ced41bcf805c49718d7))
+* MasterCatalog owns every master, and VisioFile loses its mixin ([#388](https://github.com/firmfooting/vsdxkit/issues/388)) ([1c08713](https://github.com/firmfooting/vsdxkit/commit/1c08713045d9fe76277829b2aba9c0393788eada))
+* move to a src layout and rename the import package to vsdxkit ([#350](https://github.com/firmfooting/vsdxkit/issues/350)) ([75e7e7c](https://github.com/firmfooting/vsdxkit/commit/75e7e7c1d8f397f2747587dd376c19d29ce219d4))
+* name every part by its part name ([#380](https://github.com/firmfooting/vsdxkit/issues/380)) ([a260e80](https://github.com/firmfooting/vsdxkit/commit/a260e803fdee70f471db07d648a419a7429e2fe4))
+* the 1.0 public surface is only the user API; internal modules and names are private ([#424](https://github.com/firmfooting/vsdxkit/issues/424)) ([#429](https://github.com/firmfooting/vsdxkit/issues/429)) ([5abe4ff](https://github.com/firmfooting/vsdxkit/commit/5abe4ff67e76c51288257d9d1ea4006b92a6aa11))
+
 ## [0.8.0](https://github.com/firmfooting/vsdxkit/compare/v0.7.1...v0.8.0) (2026-09-13)
 
 
