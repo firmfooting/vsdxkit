@@ -255,16 +255,44 @@ _Size = tuple[float, float]
 """A width and a height in inches."""
 
 
-def _renew(value: float, sizes: Sequence[tuple[_Size, _Size]]) -> float | None:
+_AXIS_TERM = re.compile(r"(!?)\b(Width|Height)\b")
+"""A Width or Height in a formula; a leading ``!`` marks another shape's (``Sheet.5!Height``), none marks the shape's own."""
+
+
+def _axis_of(member: Shape, name: str, depth: int = 0) -> int | None:
+    """0 for width and 1 for height when the formula behind cell `name` of `member` names exactly one of them, else None.
+
+    The formula is the shape's own, or the master's where the shape only inherits (``Inh``). A bare term
+    (``Width*0.5``) is the shape's own cell, so it takes that cell's axis: a heading's width is its lane's height.
+    """
+    cell = member._cell(name)
+    formula = None if cell is None else cell.formula
+    if formula in (None, "Inh"):
+        master = member.master_shape
+        master_cell = None if master is None else master._cell(name)
+        formula = None if master_cell is None else master_cell.formula
+    found = set()
+    for bang, term in _AXIS_TERM.findall(formula or ""):
+        direct = (
+            bang or term == name or depth > 2
+        )  # a formula naming its own cell's name, or nested deeply, is taken as written
+        found.add((0 if term == "Width" else 1) if direct else _axis_of(member, term, depth + 1))
+    return found.pop() if len(found) == 1 else None
+
+
+def _renew(value: float, sizes: Sequence[tuple[_Size, _Size]], axis: int | None = None) -> float | None:
     """`value` as the resized shapes make it, or None where it is no dimension of theirs.
 
     `sizes` lists (size before, size after), the shape the value belongs to first. A value equal to a
     dimension, or half of one, becomes the same dimension afterwards; a value a short way under the top edge
-    of the first shape keeps that distance from the new top edge.
+    of the first shape keeps that distance from the new top edge. `axis` (0 width, 1 height), when the
+    value's formula says which dimension it comes from, limits the match to that dimension.
     """
-    # these matches hold only while the donor's dimensions stay distinct from each other and from their halves
+    # without an axis these matches hold only while the donor's dimensions stay distinct from each other and from their halves
     for (old_w, old_h), (new_w, new_h) in sizes:
-        for old, new in ((old_w, new_w), (old_h, new_h)):
+        for index, (old, new) in enumerate(((old_w, new_w), (old_h, new_h))):
+            if axis is not None and index != axis:
+                continue
             if math.isclose(value, old, abs_tol=1e-6):
                 return new
             if math.isclose(value, old / 2, abs_tol=1e-6):
@@ -329,7 +357,7 @@ def _resync(shape: Shape, sizes: Sequence[tuple[_Size, _Size]]) -> None:
         for name in _SIZED_CELLS:
             inherited = member._cell(name) is None
             raw = member.cell_value(name)
-            renewed = None if raw in (None, "") else _renew(float(raw), sizes)
+            renewed = None if raw in (None, "") else _renew(float(raw), sizes, _axis_of(member, name))
             if renewed is not None:
                 cell = member._write_cell(name, v=xml_value(renewed), keep_formula=True)
                 if inherited:

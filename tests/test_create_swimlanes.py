@@ -612,3 +612,15 @@ def test_add_lane_resizes_only_the_diagrams_own_phase_list_and_separator():
     diagram.add_lane("New")
     assert {s.ID: s.height for s in decoys} == {s.ID: before[s.ID] for s in decoys}
     assert all(s.height > before[s.ID] for s in own.values())
+
+
+def test_a_main_child_grows_with_its_container_when_the_container_is_as_wide_as_it_is_tall():
+    """#488: at 5.315 by 5.315 a cached height equal to the width was renewed as the width."""
+    page = _page(Document.new())
+    diagram = page.create_swimlanes(
+        [("A", LANE_PITCH_INCHES), ("B", LANE_PITCH_INCHES)], left=0.5, top=7.0, width=5.314960629921242
+    )
+    for _ in range(3):
+        diagram.add_lane()
+        child = next(iter(diagram.container.children))
+        assert child.height == pytest.approx(diagram.container.height)
