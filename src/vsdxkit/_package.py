@@ -36,6 +36,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import os
+import secrets
 import stat
 import tempfile
 import xml.etree.ElementTree as ET
@@ -495,6 +496,13 @@ class PackageStore:
             store._parts[_part_name_for_member(member)] = BytesPart(data)
         return store
 
+    @classmethod
+    def from_template(cls, template: Path, *, limits: PackageLimits | None = None) -> PackageStore:
+        """Read a bundled package that belongs to no file: the store's `source` is empty, so a save must name its target."""
+        store = cls.open(template, limits=limits)
+        store.source = Path()
+        return store
+
     def names(self) -> tuple[str, ...]:
         """Every part name, in the order the archive listed them.
 
@@ -692,13 +700,25 @@ class PackageStore:
         # but cannot undo that side effect. Read-only is the only mode bit that
         # means anything there, so a new target just misses the source's read-only.
         mode: int | None = None
+        # With no file to copy a mode from, the temporary file is created with 0o666 so the kernel applies the umask.
+        fresh = hasattr(os, "fchmod")
         if hasattr(os, "fchmod"):
             mode_source = destination if destination.exists() else self.source
-            if mode_source.exists():
+            if mode_source.is_file():
                 mode = stat.S_IMODE(os.stat(mode_source).st_mode)
+                fresh = False
 
         destination.parent.mkdir(parents=True, exist_ok=True)
-        fd, temporary = tempfile.mkstemp(prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent)
+        if fresh:
+            while True:
+                temporary = str(destination.parent / f".{destination.name}.{secrets.token_hex(8)}.tmp")
+                try:
+                    fd = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o666)
+                    break
+                except FileExistsError:
+                    continue
+        else:
+            fd, temporary = tempfile.mkstemp(prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent)
         try:
             with os.fdopen(fd, "wb") as handle:
                 # The ratio a member is stored at is the stricter of the opened limit

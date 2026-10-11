@@ -61,8 +61,9 @@ Format support
 * no Microsoft Visio dependency at runtime
 * generated connectors and swimlanes checked against real Visio through COM
 
-The library starts from an existing package. It does not construct a complete
-Visio document from an empty file. A macro-enabled ``.vsdm`` can be edited and
+:meth:`~vsdxkit.document.Document.new` starts a blank one-page drawing from a
+template shipped in the package. Every other document starts from an existing
+package; the library does not build one part by part. A macro-enabled ``.vsdm`` can be edited and
 saved, but only back to a ``.vsdm`` destination: the package kind is decided by
 the content type of ``visio/document.xml``, not by the filename, so saving one
 as ``.vsdx`` (or a plain drawing as ``.vsdm``) raises

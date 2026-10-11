@@ -37,6 +37,7 @@ import Document`; the package root re-exports nothing.
 
 - Opens, queries and edits existing `.vsdx` files without Microsoft Visio.
 - Finds shapes by ID, text or Shape Data, on a page or inside a group.
+- Starts a new document from a blank template with `Document.new()`.
 - Creates common flowchart shapes, or copies a shape already on the page.
 - Creates dynamic or connection-point glue with straight, right-angle or curved
   routing.
@@ -240,8 +241,8 @@ The full documentation is at <https://firmfooting.github.io/vsdxkit/>.
 
 ## Limits
 
-- The library starts from an existing `.vsdx`; it does not create a complete
-  Visio document package from nothing.
+- `Document.new()` starts from one blank page. Every other document starts from
+  an existing `.vsdx`; the library does not build a package part by part.
 - `.vsdm` files can be read and saved, but only back to a `.vsdm` destination.
   The package kind is decided by the content type of `visio/document.xml`, not
   by the filename. So `save()` refuses a `.vsdx` destination for a macro-enabled

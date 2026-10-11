@@ -9,6 +9,7 @@ Raises on any of:
 - vsdxkit not importable, or importable only via the checkout (source shadowing)
 - py.typed or the bundled media .vsdx files missing from the installation
 - loading the bundled donors, create_shape(), connector creation, save or reopen failing
+- Document.new() failing to make a document that saves and opens again
 - the wheel's top-level modules differing from the checkout's src/vsdxkit/*.py,
   as a wheel built over a stale build/lib does
 """
@@ -67,8 +68,8 @@ def main() -> int:
     with zipfile.ZipFile(wheel_path) as wheel:
         names = wheel.namelist()
     media_members = sorted(name for name in names if name.startswith("vsdxkit/_bundled/") and name.endswith(".vsdx"))
-    if len(media_members) < 2:
-        fail(f"wheel carries {len(media_members)} bundled .vsdx members, expected at least 2: {media_members}")
+    if len(media_members) < 3:
+        fail(f"wheel carries {len(media_members)} bundled .vsdx members, expected at least 3: {media_members}")
     else:
         ok(f"wheel bundled .vsdx members: {', '.join(media_members)}")
     if "vsdxkit/py.typed" not in names:
@@ -94,8 +95,8 @@ def main() -> int:
         return 1
     ok(f"vsdxkit installed at {package_dir}")
 
-    # 3. both bundled media files exist in the installed distribution
-    for member_name in ("media.vsdx", "palette_extended.vsdx"):
+    # 3. every bundled media file exists in the installed distribution
+    for member_name in ("media.vsdx", "palette_extended.vsdx", "blank.vsdx"):
         installed = os.path.join(package_dir, "_bundled", member_name)
         if not os.path.exists(installed):
             fail(f"installed distribution is missing _bundled/{member_name}")
@@ -118,7 +119,7 @@ def main() -> int:
         return 1
     ok("the bundled donors load from the installed wheel")
 
-    source = glob.glob(os.path.join(package_dir, "_bundled", "*.vsdx"))[0]
+    source = os.path.join(package_dir, "_bundled", "media.vsdx")
     with tempfile.TemporaryDirectory() as workdir:
         document = os.path.join(workdir, "smoke.vsdx")
         with open(source, "rb") as handle:
@@ -150,6 +151,18 @@ def main() -> int:
                 ok("save and reopen preserve created shapes")
         except Exception as error:  # smoke harness reports every failure mode
             fail(f"creation API exercise failed: {error}")
+            return 1
+
+        try:
+            created = Document.new(page_name="Smoke")
+            created.pages[0].create_shape(ShapeKind.PROCESS, x=2.0, y=2.0, text="new")
+            created_path = created.save(os.path.join(workdir, "new.vsdx"))
+            if [p.name for p in Document.open(created_path).pages] != ["Smoke"]:
+                fail("a document made by Document.new() lost its page on reopening")
+            else:
+                ok("Document.new() works from the installed wheel")
+        except Exception as error:  # smoke harness reports every failure mode
+            fail(f"Document.new() exercise failed: {error}")
             return 1
 
     if failures:
