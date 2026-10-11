@@ -52,9 +52,10 @@ checks what each one promises, and it pins how many examples there are. If you
 add, remove or re-fence a `python` block in the README, update that test too.
 
 CI runs the tests once, on Linux under Python 3.15. The ruff, pyrefly and Sphinx
-gates run once, on the same interpreter. There is more besides: a lowest-direct dependency-floor job, a
-distribution build-and-smoke-test, a type-completeness threshold on the built
-wheel (`tools/check_type_completeness.py`, pyright `--verifytypes`, at 100.0%),
+gates run once, on the same interpreter. There is more besides: a lowest-direct
+dependency-floor job, a distribution build-and-smoke-test, a type-completeness
+threshold on the built wheel (`tools/check_type_completeness.py`, pyright
+`--verifytypes`, at 100.0%),
 a check that every name the wheel exports is in the generated API reference
 (`tools/check_api_documented.py`, against that report and the docs build's
 `objects.inv`),
