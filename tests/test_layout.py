@@ -567,3 +567,75 @@ def test_scanning_for_shared_runs_counts_against_the_search_limit(monkeypatch):
 def test_sweeps_must_not_be_a_bool():
     with pytest.raises(GraphError, match="sweeps"):
         layered_layout((_n("a"),), (), options=LayoutOptions(sweeps=True))
+
+
+def _heading_sizes(seed, group_ids):
+    rng = random.Random(seed)
+    return tuple((g, rng.choice([0.8, 1.5, 3.0]), rng.choice([0.25, 0.5, 0.75])) for g in group_ids)
+
+
+def _check_headings(layout: Layout, nodes, parents, headings) -> None:
+    """A heading's group box is as wide as its text and clears it above every member and child box."""
+    parent = dict(parents)
+    for g, width, height in headings:
+        if g not in layout.groups:
+            continue
+        box = layout.groups[g]
+        assert box.width >= width - SHRINK, f"group {g} is narrower than its heading"
+        inside = []
+        for n in nodes:
+            h = n.group
+            while h is not None:
+                if h == g:
+                    inside.append(layout.nodes[n.id])
+                h = parent.get(h)
+        inside += [layout.groups[c] for c, p in parents if p == g and c in layout.groups]
+        top = max(b.y + b.height / 2 for b in inside)
+        # snapping moves each border by up to half a grid step
+        assert box.y + box.height / 2 - top >= height - 0.01 - SHRINK, f"group {g} does not clear its heading"
+
+
+@pytest.mark.parametrize("seed", range(40))
+@pytest.mark.parametrize(
+    ("lanes", "groups", "direction"),
+    [(0, 3, "left_to_right"), (3, 3, "left_to_right"), (0, 3, "top_down"), (0, 1, "top_down")],
+)
+def test_headings_get_room_in_random_graphs(seed, lanes, groups, direction):
+    rows, edges, lane_ids, group_ids, parents = random_graph(seed, 7, 10, lanes, groups)
+    edges = (*edges, edges[0], edges[0], (edges[1][0], edges[1][0]), edges[2][::-1])
+    nodes = tuple(LayoutNode(*row) for row in rows)
+    headings = _heading_sizes(seed, group_ids)
+    options = LayoutOptions(direction=direction, parents=parents, headings=headings)
+    layout = layered_layout(nodes, edges, lane_ids, group_ids, options)
+    _check(layout, nodes, parents)
+    _check_routes(layout)
+    _check_headings(layout, nodes, parents, headings)
+    assert layout == layered_layout(nodes, edges, lane_ids, group_ids, options)
+
+
+def test_a_group_heading_taller_and_wider_than_its_members_grows_the_box():
+    nodes = (LayoutNode("a", 1.5, 0.8, group="g"),)
+    headings = (("g", 4.0, 1.5),)
+    layout = layered_layout(nodes, (), (), ("g",), LayoutOptions(headings=headings))
+    _check_headings(layout, nodes, (), headings)
+    _check(layout, nodes, ())
+
+
+def test_a_heading_that_would_cover_a_node_outside_its_group_is_refused():
+    nodes = (LayoutNode("a", 1.5, 0.8, group="g"), LayoutNode("b", 1.5, 0.8, group="h"))
+    options = LayoutOptions(direction="top_down", headings=(("g", 9.0, 0.25),))
+    with pytest.raises(GraphError, match="heading of group 'g'"):
+        layered_layout(nodes, (), (), ("g", "h"), options)
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        LayoutOptions(headings=(("ghost", 1.0, 1.0),)),
+        LayoutOptions(headings=(("g", 1.0, float("nan")),)),
+        LayoutOptions(headings=(("g", 1.0, 1.0), ("g", 2.0, 1.0))),
+    ],
+)
+def test_a_heading_option_that_is_not_valid_is_refused(options):
+    with pytest.raises(GraphError):
+        layered_layout((LayoutNode("a", 1, 1, group="g"),), (), (), ("g",), options)

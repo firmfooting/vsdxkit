@@ -48,7 +48,9 @@ Node kinds are ``start``, ``end``, ``process``, ``decision``, ``data_store``,
 ``external``, ``document``, ``subprocess`` and ``off_page``. Edge kinds are
 ``flow``, ``yes-path``, ``no-path``, ``data``, ``call`` and ``page-link``. The
 ``no-path``, ``data`` and ``call`` edges are drawn dashed. An edge label is
-drawn on an opaque white background.
+drawn on an opaque white background. The layout leaves room for each group heading:
+the group box widens and grows at the top to hold it, and a heading that would
+make the box cover a node or group that is not its own is refused.
 
 :meth:`~vsdxkit.builder.Diagram.validate` refuses a description that cannot be
 drawn, naming the first thing wrong, as :class:`~vsdxkit.errors.GraphError`.
