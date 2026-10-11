@@ -571,11 +571,13 @@ class SwimlaneDiagram:
         The lane count the diagram keeps (the container's ``numLanes``, each lane's ``/stg4`` setting and the
         Swimlane List's ``Relationships``) is brought up to the new count, and the copy gets a UniqueID of its own.
 
+        The lane count is held to ``MAX_LANES``, the count Visio was checked on, as creation is.
+
         Whether the new lane can take ``label`` is settled on the lane it is
         copied from before anything is written, so a refused label leaves the
         page as it was (#330).
 
-        :raises InvalidOperationError: the diagram has no lanes, a lane is not one pitch (1.181 inches) tall, or the top lane cannot take a label
+        :raises InvalidOperationError: the diagram already has ``MAX_LANES`` lanes, none, a lane is not one pitch (1.181 inches) tall, or the top lane cannot take a label
         :returns: the new lane
         """
         lanes = self.lanes
@@ -586,6 +588,8 @@ class SwimlaneDiagram:
                 f"add_lane places a lane {LANE_PITCH_INCHES:.3f} inches above the top lane, so it needs every lane to be that "
                 f"tall; the lanes of the swimlane diagram on page {self._page.name!r} are not"
             )
+        if len(lanes) >= MAX_LANES:
+            raise InvalidOperationError(f"{len(lanes) + 1} lanes is more than the {MAX_LANES} that creation is checked on")
         top_lane = lanes[0]
         subject = f"shape {top_lane.ID} (copied to make the new lane)"
         if label is not None:

@@ -63,8 +63,9 @@ Add a lane
 
 :meth:`~vsdxkit.swimlanes.SwimlaneDiagram.add_lane` copies the top lane, places
 the copy one lane above it, sets its heading and grows the Swimlane List and CFF
-container to match. A label the lane cannot take is refused before anything is
-written.
+container to match. The five-lane limit applies here too: adding a lane to a
+diagram that has five raises :class:`~vsdxkit.errors.InvalidOperationError`. A
+label the lane cannot take is refused before anything is written.
 
 .. code-block:: python
 

@@ -26,7 +26,7 @@ from vsdxkit._drawing import (
     label_size,
 )
 from vsdxkit.document import Document
-from vsdxkit.errors import GraphError
+from vsdxkit.errors import GraphError, InvalidOperationError
 from vsdxkit.layout import Layout, LayoutNode, LayoutOptions, layered_layout, snap
 from vsdxkit.pages import Page as VisioPage
 from vsdxkit.swimlanes import DIAGRAM_WIDTHS, LABEL_CHARS_PER_INCH, LANE_HEIGHTS, MAX_LANES
@@ -467,12 +467,15 @@ def _draw_layout(
                 raise GraphError(
                     f"lane {lane.id!r} has a label of {len(lane.label)} characters, more than its {box.height:g} inch height holds"
                 )
-        diagram = target.create_swimlanes(
-            [(lane.label, box.height) for lane, box in zip(page.lanes, boxes, strict=True)],
-            left=_LANE_LEFT,
-            top=boxes[0].y + boxes[0].height / 2,
-            width=layout.width - 2 * _LANE_LEFT,
-        )
+        try:
+            diagram = target.create_swimlanes(
+                [(lane.label, box.height) for lane, box in zip(page.lanes, boxes, strict=True)],
+                left=_LANE_LEFT,
+                top=boxes[0].y + boxes[0].height / 2,
+                width=layout.width - 2 * _LANE_LEFT,
+            )
+        except InvalidOperationError as error:  # a limit the checks above missed must still leave the builder as a GraphError
+            raise GraphError(f"page {page.name!r} cannot draw its lanes: {error}") from error
         add_data_rows(diagram.container, {"Source": page.name, "Kind": "lane_container"})
         for lane, shape in zip(page.lanes, diagram.lanes, strict=True):
             add_data_rows(shape, {"Source": lane.id, "Kind": "lane"})

@@ -11,7 +11,7 @@ from vsdxkit import namespace
 from vsdxkit.document import Document
 from vsdxkit.errors import InvalidOperationError
 from vsdxkit.shape_kind import ShapeKind
-from vsdxkit.swimlanes import LANE_PITCH_INCHES, ROW_HEADING_TEXT, SwimlaneDiagram
+from vsdxkit.swimlanes import LANE_PITCH_INCHES, MAX_LANES, ROW_HEADING_TEXT, SwimlaneDiagram
 
 BANDS = [("Requester", 1.5), ("Reviewer", 2.0), ("Archive", 1.0)]
 
@@ -595,3 +595,15 @@ def test_the_lanes_are_listed_top_to_bottom_after_several_add_lane_calls():
     for _ in range(3):
         diagram.add_lane()
         assert _relationship_lanes(diagram) == [lane.ID for lane in diagram.lanes]
+
+
+def test_add_lane_refuses_a_lane_beyond_the_verified_count_and_leaves_the_page_as_it_was():
+    document = Document.new()
+    page = _page(document)
+    pitch = LANE_PITCH_INCHES
+    diagram = page.create_swimlanes([(f"L{i}", pitch) for i in range(MAX_LANES)], left=0.5, top=7.0, width=10.0)
+    shapes = len(page.shapes)
+    with pytest.raises(InvalidOperationError, match=rf"{MAX_LANES + 1} lanes is more than the {MAX_LANES}"):
+        diagram.add_lane("Extra")
+    assert len(page.shapes) == shapes
+    assert len(diagram.lanes) == MAX_LANES
