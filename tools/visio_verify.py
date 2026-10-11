@@ -469,7 +469,10 @@ def command_record(
         for path in paths:
             name = os.path.basename(path)
             subject = _apply_transform(transform, path, os.path.join(workspace, name))
-            subjects[os.path.basename(subject)] = (path, subject)
+            key = os.path.basename(subject)
+            if key in subjects:
+                raise VisioUnavailable(f"{subjects[key][0]} and {path} both produce {key}; record them in separate runs")
+            subjects[key] = (path, subject)
         payload = observe([subject for _, subject in subjects.values()], allow_running=allow_running)
 
         os.makedirs(into, exist_ok=True)

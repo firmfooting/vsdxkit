@@ -1,6 +1,7 @@
 """A deterministic save writes the same bytes whatever the clock, the platform, the zlib build or the hash seed."""
 
 import hashlib
+import io
 import os
 import subprocess
 import sys
@@ -11,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from vsdxkit.document import Document
+from vsdxkit.errors import InvalidOperationError
 from vsdxkit.shape_kind import ShapeKind
 
 HERE = Path(__file__).resolve().parent
@@ -27,8 +29,6 @@ def test_zipfile_stamps_the_clock_and_the_host_on_a_member_given_by_name(monkeyp
     stamps = []
     for moment in (1_000_000_000, 1_500_000_000):
         monkeypatch.setattr(zipfile.time, "localtime", lambda _t=None, moment=moment: time.gmtime(moment))
-        import io
-
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w") as archive:
             archive.writestr("a.xml", b"<a/>")
@@ -98,8 +98,6 @@ def test_the_bytes_do_not_depend_on_the_hash_seed(tmp_path):
 
 
 def test_a_new_document_with_no_target_has_nowhere_to_save(tmp_path):
-    from vsdxkit.errors import InvalidOperationError
-
     with pytest.raises(InvalidOperationError, match="pass target"):
         Document.new().save()
 

@@ -469,9 +469,9 @@ def _promoted(name: str, part: BytesPart) -> XmlPart:
 _FIXED_DATE = (1980, 1, 1, 0, 0, 0)
 """The earliest date a zip entry can hold, which every deterministic member carries."""
 _FIXED_CREATE_SYSTEM = 3
-"""The "created on" system of every deterministic member: 3, Unix, which is what a save on Linux or WSL already writes and Visio has opened."""
+"""The "created on" system of every deterministic member: 3 (Unix), which a save on Linux or WSL already writes."""
 _FIXED_EXTERNAL_ATTR = 0o600 << 16
-"""The attributes of every deterministic member: rw------- as zipfile writes them. ZipFile.open turns a zero here into this value anyway."""
+"""The attributes of every deterministic member: rw------- (0o600), the value zipfile writes by default."""
 
 
 def _write_deterministic(handle: IO[bytes], members: list[tuple[str, bytes]]) -> None:
