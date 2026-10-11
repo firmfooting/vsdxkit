@@ -74,6 +74,12 @@ def write(members: dict[str, bytes], target: Path) -> None:
             archive.writestr(info, data)
 
 
+def _read(path: Path) -> dict[str, bytes]:
+    """Return the non-directory parts of the zip at `path`, by name."""
+    with zipfile.ZipFile(path) as archive:
+        return {i.filename: archive.read(i) for i in archive.infolist() if not i.is_dir()}
+
+
 def main(argv: list[str] | None = None) -> int:
     """Clean RAW into OUT; exit 1, writing nothing, if a forbidden text survives."""
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -84,19 +90,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--empty-page", action="store_true", help="delete every shape on RAW's first page before cleaning")
     args = parser.parse_args(argv)
-    with tempfile.TemporaryDirectory() as tmp:  # removed on every exit, including an error
-        raw = args.raw
-        if args.empty_page:
-            from vsdxkit.document import Document
+    if args.empty_page:
+        from vsdxkit.document import Document
 
-            document = Document.open(raw)
+        with tempfile.TemporaryDirectory() as tmp:  # removed on every exit, including an error
+            document = Document.open(args.raw)
             for shape in list(document.pages[0].shapes):
                 if shape.is_attached:  # deleting a connector's end takes the connector with it
                     shape.delete()
-            raw = Path(tmp) / "emptied.vsdx"
-            document.save(raw)
-        with zipfile.ZipFile(raw) as archive:
-            members = {i.filename: archive.read(i) for i in archive.infolist() if not i.is_dir()}
+            emptied = Path(tmp) / "emptied.vsdx"
+            document.save(emptied)
+            members = _read(emptied)
+    else:
+        members = _read(args.raw)
     cleaned = clean(members)
     for name, data in cleaned.items():
         for text in args.forbid:

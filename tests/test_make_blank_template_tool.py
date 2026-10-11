@@ -40,3 +40,12 @@ def test_empty_page_failure_leaves_no_temporary_directory(tmp_path, monkeypatch)
     with pytest.raises(RuntimeError):
         _tool().main([str(RAW), str(tmp_path / "out.vsdx"), "--empty-page"])
     assert list(scratch.iterdir()) == []
+
+
+def test_plain_run_creates_no_temporary_directory(tmp_path, monkeypatch):
+    def boom(*args, **kwargs):
+        raise AssertionError("a run without --empty-page needs no temporary directory")
+
+    monkeypatch.setattr(tempfile, "TemporaryDirectory", boom)
+    monkeypatch.setattr(tempfile, "mkdtemp", boom)
+    assert _tool().main([str(RAW), str(tmp_path / "out.vsdx")]) == 0
