@@ -1,4 +1,4 @@
-"""Write the diagrams the Visio harness checks creation and the builder against (#40, #52, #53).
+"""Write the diagrams the Visio harness checks copied masters and created swimlanes against (#40).
 
 Usage:
     python tools/diagram_cases.py <out-dir>
@@ -7,11 +7,10 @@ Usage:
 
 Each case is one ``.vsdx`` built by a case file under ``tests/fixtures/diagrams``. For every shape on every
 page, ``expected.json`` asks Visio for the placement cells and for the X and Y of each row of the first
-geometry section, and ``writes_land_cases.py check`` reads each twice, on open and after ``Cell.Trigger()``
-recalculates it. A connector Visio rerouted, a node it moved, or an outline it rewrote shows as a number that
-differs from the one written. The run is not done until every check passes (CONTRIBUTING, "When a change
-needs Visio"). ``visio_shots.py`` photographs the same cases so a person can see whether the drawing
-reads correctly, which no number can say.
+geometry section. A case file may also define ``style_checks(document)``, which adds the style-dependent cells
+Visio must show. ``writes_land_cases.py check`` reads each cell twice, on open and after ``Cell.Trigger()``
+recalculates it, and ``visio_shots.py`` photographs the same cases. The run is not done until every check
+passes (CONTRIBUTING, "When a change needs Visio").
 """
 
 from __future__ import annotations
@@ -78,6 +77,14 @@ def _case(out: Path, stem: str, line: str) -> Case:
 
 
 LINES: tuple[tuple[str, str], ...] = (
+    (
+        "copy_style_clash",
+        "copy_style_clash: a shape copied from a document whose style 7 is another style; its sub-shapes show the source's line pattern and margins",
+    ),
+    (
+        "copy_style_absent",
+        "copy_style_absent: a shape copied into a document with no style 7; its sub-shapes show the source's line pattern and margins",
+    ),
     (
         "swimlanes",
         "swimlanes: a three-lane cross-functional flowchart from create_swimlanes, a process in each lane; every shape where it was written",

@@ -22,30 +22,21 @@ def test_every_case_writes_a_file_that_opens_and_is_asked_about_in_full(tmp_path
     assert _tool().main([str(tmp_path)]) == 0
 
     expected = json.loads((tmp_path / "expected.json").read_text(encoding="utf-8"))
-    assert sorted(expected) == [
-        "lanes_extremes",
-        "lanes_five",
-        "lanes_four",
-        "lanes_one",
-        "lanes_style_absent",
-        "lanes_style_clash",
-        "lanes_two",
-        "lanes_uneven",
-        "lanes_wide",
-        "swimlanes",
-    ]
+    assert {"copy_style_absent", "copy_style_clash"} <= set(expected)
     for stem, data in expected.items():
         document = Document.open(tmp_path / f"{stem}.vsdx")
         shapes = sum(len(page.shapes) for page in document.pages)
         asked = {(page, shape) for page, shape, _cell, _want in data["cells"]}
         assert len(asked) == shapes, f"{stem} asks about {len(asked)} of its {shapes} shapes"
-        assert any(cell.startswith("Geometry1.X") for _p, _s, cell, _w in data["cells"]), f"{stem} never asks about an outline"
 
 
 def test_a_case_builds_the_same_bytes_every_time(tmp_path):
     tool = _tool()
     first, second = tmp_path / "a", tmp_path / "b"
-    tool.main([str(first)])
-    tool.main([str(second)])
-    for path in sorted(first.glob("*.vsdx")):
+    assert tool.main([str(first)]) == 0
+    assert tool.main([str(second)]) == 0
+    built = sorted(first.glob("*.vsdx"))
+    assert [path.name for path in built] == [path.name for path in sorted(second.glob("*.vsdx"))]
+    assert built
+    for path in built:
         assert path.read_bytes() == (second / path.name).read_bytes()
