@@ -46,7 +46,15 @@ from vsdxkit.shapes import (
     _wrap_children,
     _wrap_descendants,
 )
-from vsdxkit.swimlanes import SwimlaneDiagram, _create_diagram, _diagram_on, _Donors
+from vsdxkit.swimlanes import (
+    SwimlaneDiagram,
+    _create_diagram,
+    _diagram_on,
+    _Donors,
+    _in_diagram,
+    _relate_step,
+    _resize_instance,
+)
 
 # the two places a Connect record names a shape: the connector it leads from,
 # and the shape that connector is glued to
@@ -258,8 +266,12 @@ class _DocumentSeam(DocumentView, Protocol):
         """This document's master for each of `master_ids`, as `source` numbers its masters."""
         ...
 
-    def _kind_source(self, kind: ShapeKind) -> Shape:
+    def _kind_source(self, kind: ShapeKind, *, in_diagram: bool = False) -> Shape:
         """The bundled shape `kind` is copied from, one of the donors `vsdxkit._media` loads."""
+        ...
+
+    def _declare_flowchart(self) -> None:
+        """Write the document-level rows and events of a cross-functional flowchart, unless it has them."""
         ...
 
     def _cff_sources(self) -> _Donors:
@@ -869,7 +881,9 @@ class Page:
             raise InvalidOperationError(f"page {self.name!r} is no longer in its document, so nothing can be created on it")
         if self.swimlanes is not None:
             raise InvalidOperationError(f"page {self.name!r} already has a swimlane diagram")
-        return _create_diagram(self, self._document._cff_sources(), bands, left=left, top=top, width=width)
+        diagram = _create_diagram(self, self._document._cff_sources(), bands, left=left, top=top, width=width)
+        self._document._declare_flowchart()
+        return diagram
 
     def create_shape(
         self,
@@ -901,8 +915,10 @@ class Page:
         """
         if not self._attached():
             raise InvalidOperationError(f"page {self.name!r} is no longer in its document, so nothing can be created on it")
+        in_diagram = False
         if isinstance(kind_or_prototype, ShapeKind):
-            source = self._document._kind_source(kind_or_prototype)
+            in_diagram = _in_diagram(self)
+            source = self._document._kind_source(kind_or_prototype, in_diagram=in_diagram)
         elif isinstance(kind_or_prototype, Shape):
             kind_or_prototype._require_attached("Page.create_shape()")
             if not self._same_document(kind_or_prototype._page):
@@ -922,6 +938,7 @@ class Page:
         left_behind = _left_behind(source, self)
         shape = source.copy(self)
         label = ("" if text is None else text) if isinstance(kind_or_prototype, ShapeKind) else text
+        was = (0.0, 0.0)
         if one_d:
             _place_one_d(shape, x, y, width)
         else:
@@ -929,6 +946,7 @@ class Page:
             shape.get_or_create_cell("PinX", v=str(x))
             shape.get_or_create_cell("PinY", v=str(y))
             _detach(shape, left_behind)
+            was = (shape.width or 0.0, shape.height or 0.0)
             if width is not None:
                 shape.width = width
         if height is not None:
@@ -939,6 +957,10 @@ class Page:
             shape._refresh_formula_values()
         if label is not None:
             shape.text = label
+        if in_diagram and shape.xml.attrib.get("Master"):
+            if width is not None or height is not None:
+                _resize_instance(shape, was)
+            _relate_step(shape, self)
         return shape
 
     def _delete(self, shapes: Iterable[Shape], gone_ids: set[str]) -> None:

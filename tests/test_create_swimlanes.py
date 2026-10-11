@@ -144,7 +144,7 @@ DRAWN = ("CFF Container", "Swimlane List", "Swimlane", "Phase List", "Separator"
 
 
 def _outline(page) -> list[tuple[str, tuple[str, ...]]]:
-    """Each drawn top-level shape's name and the names of its User rows, which is what Visio keys the ribbon tab on."""
+    """Each drawn top-level shape's name and the names of its User rows."""
     out = []
     for shape in page.children:
         name = re.sub(r"\.\d+$", "", shape.xml.attrib.get("NameU", ""))  # Visio numbers repeats: Swimlane.9
@@ -161,7 +161,7 @@ def _outline(page) -> list[tuple[str, tuple[str, ...]]]:
 
 
 def test_a_created_diagram_has_the_shapes_and_user_rows_of_the_diagram_visio_drew():
-    """The ribbon tab cannot be read back by a program; the shapes and rows it keys on can be compared with Visio's own."""
+    """The shapes the creation copies keep the names and User rows they have in Visio's own diagram."""
     _, diagram = _diagram()
     assert _outline(diagram.container.page) == _outline(Document.open(REFERENCE).pages[0])
 
@@ -719,3 +719,128 @@ def test_a_width_or_height_term_is_read_whatever_its_case(formula):
     shape = diagram.container
     shape.set_cell_formula("Width", formula)
     assert _axis_of(shape, "Width") == 1
+
+
+def _document_root(document: Document):
+    return document._part_root(document._document_xml, "document.xml")
+
+
+def _hooks(root) -> tuple[list[tuple[str, str]], list[dict[str, str]]]:
+    """The document-level User rows (name, value) and the EventList items of a document.xml root."""
+    sheet = root.find(f"{namespace}DocumentSheet")
+    rows = [
+        (row.attrib["N"], row.find(f"{namespace}Cell").attrib["V"])
+        for row in sheet.findall(f'{namespace}Section[@N="User"]/{namespace}Row')
+    ]
+    items = [dict(item.attrib) for item in root.findall(f"{namespace}EventList/{namespace}EventItem")]
+    return sorted(rows), items
+
+
+def test_a_created_diagram_writes_the_document_level_hooks_visio_wrote_for_its_own():
+    """Whether these make Visio's Cross-Functional Flowchart ribbon tab appear is unverified (not observable over COM, #518)."""
+    document, _ = _diagram()
+    assert _hooks(_document_root(document)) == _hooks(_document_root(Document.open(REFERENCE)))
+
+
+def test_the_hooks_are_written_once_when_a_document_already_has_them_or_a_page_is_added():
+    document, _ = _diagram()
+    before = _hooks(_document_root(document))
+    document.pages.create().create_swimlanes([("A", 1.0)], left=0.5, top=5.0, width=6.0)
+    assert _hooks(_document_root(document)) == before
+    opened = Document.open(REFERENCE)
+    reference_hooks = _hooks(_document_root(opened))
+    opened.pages.create().create_swimlanes([("A", 1.0)], left=0.5, top=5.0, width=6.0)
+    assert _hooks(_document_root(opened)) == reference_hooks
+
+
+def test_other_user_rows_and_events_already_in_the_document_are_kept():
+    document = Document.new()
+    root = _document_root(document)
+    sheet = root.find(f"{namespace}DocumentSheet")
+    sheet.append(
+        ET.fromstring(f"<Section xmlns='{namespace[1:-1]}' N='User'><Row N='mine'><Cell N='Value' V='7'/></Row></Section>")
+    )
+    root.append(
+        ET.fromstring(
+            f"<EventList xmlns='{namespace[1:-1]}'><EventItem ID='5' EventCode='3' Action='1' Enabled='1' Target='X' TargetArgs=''/></EventList>"
+        )
+    )
+    _page(document).create_swimlanes(BANDS, left=0.5, top=7.0, width=10.0)
+    rows, items = _hooks(_document_root(document))
+    assert ("mine", "7") in rows and ("visV14CFF", "1") in rows
+    assert [i["ID"] for i in items] == ["5", "0", "19"]
+
+
+def test_a_document_without_a_diagram_has_no_hooks():
+    document = Document.new()
+    _page(document).create_shape(ShapeKind.PROCESS, x=1.0, y=1.0)
+    root = _document_root(document)
+    assert root.find(f"{namespace}EventList") is None
+    assert root.find(f'{namespace}DocumentSheet/{namespace}Section[@N="User"]') is None
+
+
+def _step(document: Document, kind=ShapeKind.PROCESS, **sizes):
+    return _page(document).create_shape(kind, x=3.0, y=4.0, text="Step", **sizes)
+
+
+def _property_formula(shape, row: str) -> str | None:
+    cell = shape.xml.find(f'{namespace}Section[@N="Property"]/{namespace}Row[@N="{row}"]/{namespace}Cell[@N="Value"]')
+    return None if cell is None else cell.attrib.get("F")
+
+
+MASTER_ROWS = ("Cost", "ProcessNumber", "Owner", "Function", "StartDate", "EndDate", "Status")
+
+
+def test_a_step_in_a_diagram_is_an_instance_of_the_process_master_with_its_shape_data():
+    document, _ = _diagram()
+    step = _step(document)
+    assert any(m.name == "Process" and m._page_id == step.xml.attrib.get("Master") for m in document.master_pages)
+    drawn = next(s for s in Document.open(REFERENCE).pages[0].children if s.xml.attrib.get("NameU") == "Process")
+    assert _property_formula(step, "Function") == _property_formula(drawn, "Function")
+    rows = {r.attrib["N"] for r in step.master_shape.xml.iterfind(f'{namespace}Section[@N="Property"]/{namespace}Row')}
+    assert rows == set(MASTER_ROWS)
+
+
+def test_a_default_step_is_the_masters_height_and_fits_inside_the_smallest_lane():
+    document, diagram = _diagram()
+    step = _step(document)
+    assert step.height == pytest.approx(0.5905511811023622)
+    assert step.height < min(lane.height for lane in diagram.lanes)
+    assert step.xml.find(f'{namespace}Cell[@N="Height"]') is None, "the size is the master's formula, not a literal"
+
+
+def test_a_step_given_a_size_keeps_it():
+    document, _ = _diagram()
+    step = _step(document, width=3.0, height=0.8)
+    assert (step.width, step.height) == pytest.approx((3.0, 0.8))
+
+
+@pytest.mark.parametrize(("kind", "name"), [(ShapeKind.START_END, "Start/End"), (ShapeKind.DECISION, "Decision")])
+def test_start_end_and_decision_steps_are_instances_of_their_masters_too(kind, name):
+    document, _ = _diagram()
+    step = _step(document, kind)
+    assert any(m.name == name and m._page_id == step.xml.attrib["Master"] for m in document.master_pages)
+
+
+def test_a_step_outside_a_diagram_is_the_plain_shape_it_was():
+    step = _step(Document.new())
+    assert "Master" not in step.xml.attrib and (step.width, step.height) == (2.0, 1.0)
+
+
+def test_a_steps_relationships_name_the_list_its_lane_and_the_separator_of_its_page():
+    document, diagram = _diagram()
+    step = _step(document)
+    ids = re.findall(r"Sheet\.(\d+)!SheetRef", step.xml.find(f'{namespace}Cell[@N="Relationships"]').attrib["F"])
+    page = document.pages[0]
+    named = {s.xml.attrib.get("NameU"): str(s.ID) for s in page.children}
+    assert ids == [named["Swimlane List"], str(diagram.lane_for(step).ID), named["Separator"]]
+
+
+def test_a_sized_step_carries_the_cached_numbers_of_its_size_not_its_masters():
+    """Visio draws a master instance from the numbers cached in the file until something recalculates them (stale on open)."""
+    document, _ = _diagram()
+    step = _step(document, width=3.0, height=0.8)
+    assert (step.loc_x, step.loc_y) == pytest.approx((1.5, 0.4))
+    xs = [v for axis, v in _vertices(step) if axis == "X"]
+    ys = [v for axis, v in _vertices(step) if axis == "Y"]
+    assert max(xs) == pytest.approx(3.0) and max(ys) == pytest.approx(0.8)

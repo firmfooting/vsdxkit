@@ -197,6 +197,71 @@ def _diagram_on(page: _DiagramPage) -> SwimlaneDiagram | None:
     return SwimlaneDiagram(containers[0]) if containers else None
 
 
+def _in_diagram(page: _DiagramPage) -> bool:
+    """Whether the page holds a CFF container, as :func:`_diagram_on` finds one but without refusing a page that holds several."""
+    return any(_named(shape, _CONTAINER_NAME) for shape in page.children)
+
+
+_FLOWCHART_ROWS = (("msvNoAutoConnect", "0", None), ("visV14CFF", "1", None), ("visFlowchartType", "CrossFunctional", "STR"))
+"""The document-level User rows (name, value, unit) that Visio's cross-functional flowchart template writes."""
+_FLOWCHART_EVENTS = (("0", "1", ""), ("19", "2", "/cmd=2"))
+"""The EventList items (ID, EventCode, TargetArgs) that run Visio's CFF14 add-on on creating and on opening the document."""
+
+
+def _write_flowchart_hooks(root: ET.Element) -> None:
+    """Add to a document.xml root the User rows and EventList items of Visio's cross-functional flowchart that it lacks.
+
+    These are the only add-on hooks the Visio capture has. Whether they make Visio's ribbon tab appear is unverified: it
+    cannot be observed over COM, and the tab does not show for Visio's own template in the author's Visio (#518).
+    """
+    sheet = root.find(f"{namespace}DocumentSheet")
+    if sheet is None:
+        return
+    section = sheet.find(f'{namespace}Section[@N="User"]')
+    if section is None:
+        section = ET.SubElement(sheet, f"{namespace}Section", {"N": "User"})
+    held = {row.attrib.get("N") for row in section.findall(f"{namespace}Row")}
+    for name, value, unit in _FLOWCHART_ROWS:
+        if name in held:
+            continue
+        row = ET.SubElement(section, f"{namespace}Row", {"N": name})
+        ET.SubElement(row, f"{namespace}Cell", {"N": "Value", "V": value, **({"U": unit} if unit else {})})
+        ET.SubElement(row, f"{namespace}Cell", {"N": "Prompt", "V": ""})
+    events = root.find(f"{namespace}EventList")
+    if events is None:
+        events = ET.SubElement(root, f"{namespace}EventList")
+    held = {item.attrib.get("ID") for item in events.findall(f"{namespace}EventItem")}
+    for item_id, code, args in _FLOWCHART_EVENTS:
+        if item_id not in held:
+            attributes = {
+                "ID": item_id,
+                "EventCode": code,
+                "Action": "1",
+                "Enabled": "1",
+                "Target": "CFF14",
+                "TargetArgs": args,
+            }
+            ET.SubElement(events, f"{namespace}EventItem", attributes)
+
+
+def _relate_step(step: Shape, page: _DiagramPage) -> None:
+    """Point a step copied from the bundled diagram's ``Relationships`` at the Swimlane List, its lane and the Separator on `page`.
+
+    The copy names the donor's shapes, which `page` does not hold; Visio's own step names these three.
+    """
+    cell = step._cell("Relationships")
+    diagram = _diagram_on(page)
+    if cell is None or diagram is None:
+        return
+    lane = diagram.lane_for(step)
+    top_level = {
+        name: next((s for s in page.children if _named(s, name)), None) for name in (_SWIMLANE_LIST_NAME, "Separator")
+    }
+    related = [top_level[_SWIMLANE_LIST_NAME], lane, top_level["Separator"]]
+    refs = ",".join(f"Sheet.{shape.ID}!SheetRef()" for shape in related if shape is not None)
+    cell.xml.attrib["F"] = f"SUM(DEPENDSON(4,{refs}))"
+
+
 _NUM_LANES = "numLanes"
 """The User-section row of the container that counts the lanes, which Visio's own diagram has."""
 _SETTINGS = "visCFFSettings"
@@ -394,26 +459,49 @@ def _resync(shape: Shape, sizes: Sequence[tuple[_Size, _Size]]) -> None:
     of `shape` itself and of its sub-shapes are cached numbers of the same kind.
     """
     for member in shape.descendants:
-        for name in _SIZED_CELLS:
-            inherited = member._cell(name) is None
-            raw = member.cell_value(name)
-            renewed = None if raw in (None, "") else _renew(float(raw), sizes, _axis_of(member, name))
-            if renewed is not None:
-                cell = member._write_cell(name, v=xml_value(renewed), keep_formula=True)
-                if inherited:
-                    cell.formula = "Inh"  # the master's formula names its own shapes by Sheet.N; with Inh the oracle showed the right numbers
+        _renew_cells(member, _SIZED_CELLS, sizes)
     for member in (shape, *shape.descendants):
-        for section in member.xml.iterfind(f'{namespace}Section[@N="Geometry"]'):
-            for vertex in section.iter(f"{namespace}Cell"):
-                raw = vertex.attrib.get("V")
-                renewed = (
-                    None
-                    if vertex.attrib.get("N") not in ("X", "Y") or raw in (None, "")
-                    else _renew(float(raw), sizes, _vertex_axis(member, vertex.attrib["N"]))
+        _renew_vertices(member, sizes)
+
+
+def _renew_cells(member: Shape, names: Sequence[str], sizes: Sequence[tuple[_Size, _Size]]) -> None:
+    """Rewrite each cached number among the cells `names` of `member` that is a dimension of the resized shapes, as `_resync` does."""
+    for name in names:
+        inherited = member._cell(name) is None
+        raw = member.cell_value(name)
+        renewed = None if raw in (None, "") else _renew(float(raw), sizes, _axis_of(member, name))
+        if renewed is not None:
+            cell = member._write_cell(name, v=xml_value(renewed), keep_formula=True)
+            if inherited:
+                cell.formula = (
+                    "Inh"  # the master's formula names its own shapes by Sheet.N; with Inh the oracle showed the right numbers
                 )
-                if renewed is not None:
-                    vertex.attrib["V"] = xml_value(renewed)
-        _renew_inherited_vertices(member, sizes)
+
+
+def _renew_vertices(member: Shape, sizes: Sequence[tuple[_Size, _Size]]) -> None:
+    """Rewrite the outline vertices of `member`, its own and those it inherits, to the dimensions of the resized shapes."""
+    for section in member.xml.iterfind(f'{namespace}Section[@N="Geometry"]'):
+        for vertex in section.iter(f"{namespace}Cell"):
+            raw = vertex.attrib.get("V")
+            renewed = (
+                None
+                if vertex.attrib.get("N") not in ("X", "Y") or raw in (None, "")
+                else _renew(float(raw), sizes, _vertex_axis(member, vertex.attrib["N"]))
+            )
+            if renewed is not None:
+                vertex.attrib["V"] = xml_value(renewed)
+    _renew_inherited_vertices(member, sizes)
+
+
+def _resize_instance(step: Shape, was: _Size) -> None:
+    """Bring the numbers a step inherits from its master, which Visio draws from on open, to the size it was given from `was`.
+
+    Its own Width, Height and pin are written by the caller; what follows from them by the master's formulas
+    (the local pin, the text block and the outline) is cached at the master's size until something recalculates.
+    """
+    sizes = [(was, (step.width or 0.0, step.height or 0.0))]
+    _renew_cells(step, _SIZED_CELLS[4:], sizes)
+    _renew_vertices(step, sizes)
 
 
 def _user_value(shape: Shape, row: str) -> ET.Element:
