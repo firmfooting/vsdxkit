@@ -9,6 +9,7 @@ values, each named by an id the caller chooses. :meth:`Diagram.build` lays the p
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from itertools import pairwise
@@ -43,6 +44,8 @@ _LANE_MARGIN = 0.7
 """The least margin on a page with lanes: the diagram's title bar sits above its first lane and must stay on the page."""
 _RESERVED_DATA = ("Linked page", "Linked node")
 """The Shape Data names a page-link writes on an ``off_page`` node."""
+_XML_ILLEGAL = re.compile("[^\t\n\r\x20-\ud7ff\ue000-\ufffd\U00010000-\U0010ffff]")
+"""Characters XML 1.0 cannot carry, which the package writer would fail on at save."""
 _CORE_PART = "/docProps/core.xml"
 """The part holding the document's title."""
 _DC_TITLE = "{http://purl.org/dc/elements/1.1/}title"
@@ -62,7 +65,7 @@ class Node:
     sublabel: str | None = None
     """A second line of text, or None."""
     data: Mapping[str, str] = field(default_factory=dict)
-    """Shape Data rows, written after the ``Source`` and ``Kind`` rows, sorted by name. A ``Source`` entry replaces the default, the id. On an ``off_page`` node, ``Linked page`` and ``Linked node`` are reserved for page links and refused."""
+    """Shape Data rows, written after the ``Source`` and ``Kind`` rows, sorted by name. Names and values must be strings. A ``Source`` entry replaces the default, the id; a ``Kind`` entry is refused, because the node's kind is always written. On an ``off_page`` node, ``Linked page`` and ``Linked node`` are reserved for page links and refused."""
 
 
 @dataclass(frozen=True)
@@ -155,18 +158,23 @@ class Diagram:
     def validate(self) -> dict[str, dict[str, str]]:
         """Refuse a description that cannot be drawn, naming the first thing wrong; otherwise return the Shape Data rows each ``page-link`` end gets.
 
-        :raises GraphError: on a repeated, empty or non-string id or page name, an edge or member naming a node
+        :raises GraphError: on a title, page name, id, label, sublabel or Shape Data name or value that is not a string or
+            holds a character XML cannot carry (a control character other than tab and newline), a ``Kind`` entry in a
+            node's ``data``, a repeated or empty id or page name, an edge or member naming a node
             not on its page, a node in two lanes or two groups, a node outside every lane on a page with lanes,
             a group split across lanes or nested two deep, more lanes than a page draws, a blank lane label, an
             unknown kind, a label or sublabel that is not a string, an edge end that is not a string, an ``off_page``
             node that ends two ``page-link`` edges, or a ``page-link`` that does not join an ``off_page`` node on its
             own page to one on another, or an ``off_page`` node whose ``data`` uses the reserved ``Linked page`` or ``Linked node``. Whether a laned page fits is known only after layout, so :meth:`build` checks it.
         """
+        _text(self.title, "the diagram's title")
         if not self.pages:
             raise GraphError("a diagram needs at least one page")
         names = [p.name for p in self.pages]
         if not all(isinstance(n, str) and n.strip() for n in names):
             raise GraphError("every page needs a name with something in it")
+        for name in names:
+            _text(name, f"page name {name!r}")
         if len(set(names)) != len(names):
             raise GraphError(f"page names must be unique, and {sorted({n for n in names if names.count(n) > 1})} are not")
         where: dict[str, tuple[str, str]] = {}
@@ -197,9 +205,28 @@ class Diagram:
     def save(self, target: str | os.PathLike[str], *, layout: LayoutOptions | None = None) -> Path:
         """Build (see :meth:`build`) and write the document with a deterministic save: equal diagrams give equal bytes.
 
-        :raises GraphError: as :meth:`validate`
+        :raises GraphError: as :meth:`build`
         """
         return self.build(layout=layout).save(target, deterministic=True)
+
+
+def _text(value: object, what: str) -> None:
+    """Refuse `value` unless it is a string XML can carry, naming `what` it was found in."""
+    if not isinstance(value, str):
+        raise GraphError(f"{what} is {value!r}; it must be a string")
+    if match := _XML_ILLEGAL.search(value):
+        raise GraphError(f"{what} holds the control character {match.group()!r}, which a Visio file cannot carry")
+
+
+def _check_data(node: Node) -> None:
+    """Refuse Shape Data that is not a mapping of strings, or that names the reserved ``Kind`` row."""
+    if not isinstance(node.data, Mapping):
+        raise GraphError(f"node {node.id!r} has data that is {node.data!r}; it must be a mapping of strings")
+    for name, value in node.data.items():
+        _text(name, f"node {node.id!r} has a Shape Data name that")
+        _text(value, f"node {node.id!r} has Shape Data {name!r} that")
+    if "Kind" in node.data:
+        raise GraphError(f"node {node.id!r} sets Shape Data 'Kind', which is always written from its kind")
 
 
 def _register(page: Page, where: dict[str, tuple[str, str]]) -> None:
@@ -210,20 +237,23 @@ def _register(page: Page, where: dict[str, tuple[str, str]]) -> None:
         _claim(where, node.id, page.name, node.kind)
         for field_name in ("label", "sublabel"):
             value = getattr(node, field_name)
-            if not isinstance(value, str) and not (field_name == "sublabel" and value is None):
-                raise GraphError(f"node {node.id!r} has a {field_name} that is {value!r}; it must be a string")
+            if not (field_name == "sublabel" and value is None):
+                _text(value, f"node {node.id!r} has a {field_name} that")
+        _check_data(node)
         if node.kind == "off_page" and any(key in node.data for key in _RESERVED_DATA):
             raise GraphError(f"off_page node {node.id!r} uses {sorted(_RESERVED_DATA)}, which are reserved for page links")
     for lane in page.lanes:
         _claim(where, lane.id, page.name, "lane")
     for group in _all_groups(page):
         _claim(where, group.id, page.name, "group")
+        _text(group.label, f"group {group.id!r} has a label that")
 
 
 def _claim(where: dict[str, tuple[str, str]], id_: str, page: str, kind: str) -> None:
     """Record `id_` as belonging to `page`, or refuse it as used twice."""
     if not isinstance(id_, str) or not id_.strip():
         raise GraphError(f"id {id_!r} must be a string with something in it")
+    _text(id_, f"id {id_!r}")
     if id_ in where:
         raise GraphError(f"id {id_!r} is used twice")
     where[id_] = (page, kind)
@@ -270,6 +300,7 @@ def _check_lanes(page: Page) -> None:
     for lane in page.lanes:
         if not isinstance(lane.label, str) or not lane.label.strip():
             raise GraphError(f"lane {lane.id!r} needs a label with something in it")
+        _text(lane.label, f"lane {lane.id!r} has a label that")
 
 
 def _on_page(page: Page, node_id: str, where: Mapping[str, tuple[str, str]], what: str) -> None:
@@ -290,10 +321,8 @@ def _check_edges(page: Page, where: Mapping[str, tuple[str, str]]) -> None:
         for end in (edge.source, edge.target):
             if not isinstance(end, str):
                 raise GraphError(f"an edge on page {page.name!r} has an end {end!r}; ids are strings")
-        if edge.label is not None and not isinstance(edge.label, str):
-            raise GraphError(
-                f"edge {edge.source!r} -> {edge.target!r} has a label that is {edge.label!r}; it must be a string"
-            )
+        if edge.label is not None:
+            _text(edge.label, f"edge {edge.source!r} -> {edge.target!r} has a label that")
         source, target = where.get(edge.source), where.get(edge.target)
         if edge.kind == "page-link":
             if not (

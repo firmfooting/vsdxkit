@@ -55,6 +55,11 @@ drawn, naming the first thing wrong, as :class:`~vsdxkit.errors.GraphError`.
 :meth:`~vsdxkit.builder.Diagram.build` and :meth:`~vsdxkit.builder.Diagram.save`
 call it first.
 
+Text must be a string, and a control character other than tab and newline is
+refused, in the title, page names, ids, labels, sublabels and Shape Data. Shape
+Data names and values are strings, and a ``Kind`` entry is refused because the
+node's kind is always written.
+
 Build and save
 --------------
 

@@ -193,6 +193,41 @@ def test_a_description_that_cannot_be_drawn_is_refused_before_anything_is_built(
     assert not target.exists()
 
 
+@pytest.mark.parametrize(
+    ("diagram", "message"),
+    [
+        (Diagram("T", [Page("P", [Node("a", "process", "A", data={"x": 1})])]), "Shape Data 'x'"),  # type: ignore[dict-item]
+        (Diagram("T", [Page("P", [Node("a", "process", "A", data={"x": None})])]), "Shape Data 'x'"),  # type: ignore[dict-item]
+        (Diagram("T", [Page("P", [Node("a", "process", "A", data={1: "x"})])]), "Shape Data name that is 1"),  # type: ignore[dict-item]
+        (Diagram("T", [Page("P", [Node("a", "process", "A", data=None)])]), "data that is None"),  # type: ignore[arg-type]
+        (Diagram("T", [Page("P", [Node("a", "process", "A", data={"Kind": "x"})])]), "'Kind'"),
+        (Diagram("T", [Page("P", [Node("a", "process", "A", data={"N": "a\x01b"})])]), "control character"),
+        (Diagram("T", [Page("P", [Node("a", "process", "A", data={"N\x00": "b"})])]), "control character"),
+        (Diagram(None, [Page("P", [_node("a")])]), "title"),  # type: ignore[arg-type]
+        (Diagram("a\x00b", [Page("P", [_node("a")])]), "control character"),
+        (Diagram("T", [Page("P", [Node("a", "process", "a\x01b")])]), "control character"),
+        (Diagram("T", [Page("P", [Node("a", "process", "A", sublabel="a\x1fb")])]), "control character"),
+        (Diagram("T", [Page("P", [_node("a")], [Edge("a", "a", label="a\x02b")])]), "control character"),
+        (Diagram("T", [Page("P", [_node("a")], groups=[Group("g", "a\x03b", ["a"])])]), "control character"),
+        (Diagram("T", [Page("P", [_node("a")], groups=[Group("g", 4, ["a"])])]), "group 'g' has a label"),  # type: ignore[arg-type]
+        (Diagram("T", [Page("P", [_node("a")], lanes=[Lane("l", "a\x04b", ["a"])])]), "control character"),
+        (Diagram("T", [Page("a\x05b", [_node("a")])]), "control character"),
+        (Diagram("T", [Page("P", [_node("a\x06")])]), "control character"),
+    ],
+)
+def test_bad_text_and_shape_data_are_refused_by_validate_before_any_file_exists(diagram, message, tmp_path):
+    with pytest.raises(GraphError, match=message):
+        diagram.validate()
+    target = tmp_path / "never.vsdx"
+    with pytest.raises(GraphError, match=message):
+        diagram.save(target)
+    assert not target.exists()
+
+
+def test_tab_and_newline_stay_legal_in_text(tmp_path):
+    Diagram("T\tx", [Page("P", [Node("a", "process", "a\tb\nc", data={"N": "x\ty"})])]).validate()
+
+
 def test_a_document_without_a_title_property_is_refused(monkeypatch):
     monkeypatch.setattr(builder, "_DC_TITLE", "{http://purl.org/dc/elements/1.1/}absent")
     with pytest.raises(GraphError, match="no title property"):
