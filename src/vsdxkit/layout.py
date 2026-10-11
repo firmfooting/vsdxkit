@@ -90,6 +90,8 @@ class LayoutOptions:
     """How many up-and-down passes order the boxes within their layers."""
     parents: tuple[tuple[str, str], ...] = ()
     """Pairs of (child group id, parent group id): groups nest one level."""
+    headings: tuple[tuple[str, float, float], ...] = ()
+    """Per group, (group id, width, height) in inches of its heading text. The group's box is widened to the width and grows at the top to clear the height above its members; a box that then covers a node or group that is not its own is refused."""
 
 
 @dataclass(frozen=True)
@@ -616,6 +618,9 @@ def layered_layout(
             raise GraphError(f"option {name} is {value!r}; it must be a finite number of inches, zero or more")
     if not (isinstance(opts.sweeps, int) and not isinstance(opts.sweeps, bool) and opts.sweeps >= 1):
         raise GraphError(f"option sweeps is {opts.sweeps!r}; it must be a whole number, one or more")
+    for _g, *size in opts.headings:
+        if not (len(size) == 2 and all(math.isfinite(v) and v > 0 for v in size)):
+            raise GraphError(f"a heading size is {size!r}; both sides must be finite and positive")
     if opts.direction not in ("left_to_right", "top_down"):
         raise GraphError(f"option direction is {opts.direction!r}; it must be 'left_to_right' or 'top_down'")
     if lanes and top_down:
@@ -637,6 +642,9 @@ def layered_layout(
             raise GraphError(
                 f"group {child!r} nests in {parent!r}, which nests in {parent_of[parent]!r}; groups nest one level"
             )
+    heading_of = {g: (w, h) for g, w, h in opts.headings}
+    if len(heading_of) != len(opts.headings) or any(g not in group_index for g in heading_of):
+        raise GraphError("option headings names a group that is not declared, or names one twice")
     for kind, names in (("node", [n.id for n in nodes]), ("lane", lanes), ("group", groups)):
         for i, name in enumerate(names):
             if name in names[:i]:
@@ -733,7 +741,26 @@ def layered_layout(
     n_lanes = max(len(lanes), 1)
     # a lane band must contain the padding of the group boxes that touch its edges, and the snapping of their coordinates
     loop_reach = 0.2 + 0.1 * (most_loops - 1) + 2 * GRID if most_loops else 0.0
-    lane_pad = max(opts.lane_padding, opts.group_padding * (2 if parent_of else 1) + 2 * GRID, loop_reach) if lanes else 0.0
+    # a heading taller than a group's padding grows the box at its top, so the lane and the gap between tracks leave room
+    pad = opts.group_padding
+    base = pad * (2 if parent_of else 1)
+
+    def loops_above(g: str) -> float:
+        """How far a member's self-loops reach above it, where a heading must clear them: nothing in a top-down flow."""
+        counts = [loop_count[m] for m in members_of[g] if m in loop_count]
+        return 0.0 if top_down or not counts else 0.2 + 0.1 * (max(counts) - 1) + GRID
+
+    def reach(g: str) -> float:
+        """How far above its topmost member a group's box can reach: its padding or heading, and a parent's clears its children's."""
+        own = max(heading_of.get(g, (0.0, 0.0))[1] + loops_above(g), pad)
+        kids = [reach(c) for c, p in parent_of.items() if p == g and members_of[c]]
+        return max(2 * pad if kids else pad, max(kids, default=0.0) + own)
+
+    lifts = [reach(g) - base for g in groups if members_of[g]]
+    lift = _ceil(max([0.0, *lifts]))
+    lane_pad = (
+        max(opts.lane_padding, opts.group_padding * (2 if parent_of else 1) + 2 * GRID + lift, loop_reach) if lanes else 0.0
+    )
     track_keys = sorted({(s.lane, s.track) for s in slots.values()})
     track_height: dict[tuple[int, tuple[int, int]], float] = {}
     for key in track_keys:
@@ -753,7 +780,7 @@ def layered_layout(
         first = True
         for key in (k for k in track_keys if k[0] == lane):
             if not first:
-                cursor += v_gap + 4 * opts.group_padding
+                cursor += v_gap + 4 * opts.group_padding + (0.0 if top_down else lift)
             first = False
             track_top[key] = cursor
             cursor += track_height[key]
@@ -811,6 +838,47 @@ def layered_layout(
                 min(r[2] for r in rects),
                 max(r[3] for r in rects),
             )
+
+    # a heading widens its box and lifts its top clear of the members, children before parents so a parent holds them
+    top, across = (0, 2) if top_down else (2, 0)  # the index of the top border and of the left border in a _Rect
+    grown: set[str] = set()
+    for g in sorted(group_rect, key=lambda name: name in parent_of.values()):
+        r = list(group_rect[g])
+        kids = [c for c, p in parent_of.items() if p == g and c in group_rect]
+        for c in kids:
+            if c in grown:
+                pad = opts.group_padding
+                lo_a, hi_a, lo_b, hi_b = group_rect[c]
+                r = [min(r[0], lo_a - pad), max(r[1], hi_a + pad), min(r[2], lo_b - pad), max(r[3], hi_b + pad)]
+                grown.add(g)
+        if g in heading_of:
+            width, height = heading_of[g]
+            held = min(
+                [rect_of(m)[top] - (loops_above(g) if m in loop_count else 0.0) for m in members_of[g]]
+                + [group_rect[c][top] for c in kids]
+            )
+            if held - r[top] < height - _EPS:
+                r[top] -= _ceil(height - (held - r[top]))
+                grown.add(g)
+            if r[across + 1] - r[across] < width - _EPS:
+                wider = _even(width - (r[across + 1] - r[across]))
+                r[across] -= wider / 2
+                r[across + 1] += wider / 2
+                grown.add(g)
+        group_rect[g] = (r[0], r[1], r[2], r[3])
+    for g in sorted(grown):
+        ulo, uhi, vlo, vhi = group_rect[g]
+        for n in nodes:
+            if n.id not in members_of[g]:
+                a, b, c, d = rect_of(n.id)
+                if a < uhi - _EPS and b > ulo + _EPS and c < vhi - _EPS and d > vlo + _EPS:
+                    raise GraphError(f"the heading of group {g!r} makes its box cover node {n.id!r}; shorten the heading")
+        for other, (a, b, c, d) in group_rect.items():
+            related = {g, other} <= {*parent_of.keys(), *parent_of.values()} and (
+                parent_of.get(g) == other or parent_of.get(other) == g
+            )
+            if other != g and not related and a < uhi - _EPS and b > ulo + _EPS and c < vhi - _EPS and d > vlo + _EPS:
+                raise GraphError(f"the heading of group {g!r} makes its box cover group {other!r}; shorten the heading")
 
     # a group box can reach past the margin, so the page grows and shifts to hold it, plus a step for snapping
     lo_u = lo_v = 0.0
@@ -998,19 +1066,52 @@ def layered_layout(
         a, b = slots[chain[0]].lane, slots[chain[-1]].lane
         return lane_top[min(a, b)], lane_bottom[max(a, b)]
 
+    # the heading of a box is text no route may cross, whichever group the route belongs to
+    bands: list[_Rect] = []
+    for g in group_rect:
+        if g in heading_of:
+            r, text = group_rect[g], heading_of[g][0]
+            mid = (r[across] + r[across + 1]) / 2
+            lo, hi = (mid - text / 2, mid + text / 2)
+            bands.append((r[0], r[0] + heading_of[g][1], lo, hi) if top_down else (lo, hi, r[2], r[2] + heading_of[g][1]))
     foreign_of = [
         [
-            (r[0] - GRID, r[1] + GRID, r[2] - GRID, r[3] + GRID)
-            for g, r in group_rect.items()
-            if g not in groups_of[source] | groups_of[target]
+            *(
+                (r[0] - GRID, r[1] + GRID, r[2] - GRID, r[3] + GRID)
+                for g, r in group_rect.items()
+                if g not in groups_of[source] | groups_of[target]
+            ),
+            *bands,
         ]
         for _bends, source, target, _chain, _parallel in built
     ]
+    # a route that would arrive through a heading is moved to arrive at the side of its box instead
+    rerouted: set[int] = set()
+    for n, (bends, source, target, chain, _parallel) in enumerate(built):
+        pts = [bends[0], *(b for a, b in pairwise(bends) if a != b)]
+        if source == target or len(pts) < 2:
+            continue
+        for end in (0, -1):
+            a, b = (pts[0], pts[1]) if end == 0 else (pts[-2], pts[-1])
+            if any(_enters(a, b, band) for band in bands):
+                slot = slots[source if end == 0 else target]
+                far = pts[-1] if end == 0 else pts[0]
+                off = _spread(twins[(chain[0], chain[-1])], slot.u_extent, source if end == 0 else target)[twin_rank[n]]
+                # self-loops leave and arrive on the low side, so a node that has one is entered on the other
+                low = far[1] < slot.v and (source if end == 0 else target) not in loop_count
+                side = slot.v - slot.v_extent / 2 if low else slot.v + slot.v_extent / 2
+                pts[end] = (snap(centre_u(slot) - off), snap(side))
+                # one step outward gives the search the heading to leave or arrive with
+                out = (pts[end][0], side - 1 if low else side + 1)
+                pts = [pts[0], out, *pts[1:]] if end == 0 else [*pts[:-1], out, pts[-1]]
+                rerouted.add(n)
+        if n in rerouted:
+            built[n] = (pts, source, target, chain, _parallel)
     pending = []
     for n, (bends, source, target, _chain, _parallel) in enumerate(built):
         foreign = foreign_of[n]
         lines = [(a, b) for a, b in pairwise(bends) if a != b]
-        if source != target and any(_enters(a, b, r) for a, b in lines for r in foreign):
+        if source != target and (n in rerouted or any(_enters(a, b, r) for a, b in lines for r in foreign)):
             pending.append((n, foreign))
         else:
             occupy(bends, n)

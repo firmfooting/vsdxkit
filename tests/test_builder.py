@@ -599,6 +599,65 @@ def test_a_lane_height_the_drawing_cannot_take_is_a_graph_error_not_another_type
         Diagram("T", [page]).build()
 
 
+def _box(shape: Shape) -> Box:
+    return Box(shape.x or 0.0, shape.y or 0.0, shape.width or 0.0, shape.height or 0.0)
+
+
+def _meets(a: Box, b: Box) -> bool:
+    return abs(a.x - b.x) < (a.width + b.width) / 2 - 1e-6 and abs(a.y - b.y) < (a.height + b.height) / 2 - 1e-6
+
+
+def _kinds(document: Document, kind: str) -> list[Shape]:
+    return [s for s in document.pages[0].shapes if _rows(s).get("Kind") == kind]
+
+
+@pytest.mark.parametrize("label", ["x" * 400, "\n".join(["Review"] * 5), "A heading long enough to wrap " * 2])
+def test_a_group_box_holds_its_heading_above_its_members_and_on_the_page(tmp_path, label):
+    page = Page("P", [_node("a")], groups=[Group("g", label, ["a"])])
+    document = Document.open(Diagram("T", [page]).save(tmp_path / "g.vsdx"))
+    group, node = _box(_kinds(document, "group")[0]), _box(_by_source(document)["a"])
+    lines = label.split("\n")
+    assert group.width >= 0.09 * max(len(line) for line in lines) + 0.5 - 0.01
+    assert group.y + group.height / 2 - (node.y + node.height / 2) >= 0.25 * len(lines) - 0.01
+    assert group.x - group.width / 2 >= -1e-6 and group.x + group.width / 2 <= document.pages[0].width + 1e-6
+    assert group.y + group.height / 2 <= document.pages[0].height + 1e-6
+
+
+def test_a_group_heading_that_would_cover_a_neighbouring_group_is_refused():
+    page = Page("P", [_node("a"), _node("b")], groups=[Group("g", "x" * 80, ["a"]), Group("h", "H", ["b"])])
+    with pytest.raises(GraphError, match="heading of group"):
+        Diagram("T", [page]).build(layout=builder.LayoutOptions(direction="top_down"))
+
+
+@pytest.mark.parametrize("label", ["G", "\n".join(["Review"] * 3)], ids=["one line", "three lines"])
+@pytest.mark.parametrize("direction", ["left_to_right", "top_down"])
+def test_no_connector_is_drawn_through_a_group_heading(tmp_path, direction, label):
+    page = Page(
+        "P",
+        [_node("a"), _node("b")],
+        [Edge("a", "b"), Edge("b", "b")],
+        groups=[Group("g", label, ["b"])],
+    )
+    document = Document.open(
+        Diagram("T", [page]).build(layout=builder.LayoutOptions(direction=direction)).save(tmp_path / "h.vsdx")
+    )
+    group = _box(_kinds(document, "group")[0])
+    width, height = builder._heading_size(label)
+    band = Box(group.x, group.y + group.height / 2 - height / 2, min(width, group.width), height)
+    for path in _kinds(document, "flow"):
+        for p, q in pairwise(_absolute_points(path)):
+            assert not segment_enters(p, q, band)
+
+
+def test_a_long_label_on_an_empty_child_group_does_not_grow_the_page():
+    def build(label):
+        groups = [Group("p", "P", ["a"], [Group("c", label, [])])]
+        lane = Lane("l", "L", ["a"])
+        return Diagram("T", [Page("P", [_node("a")], groups=groups, lanes=[lane])]).build().pages[0].height
+
+    assert build("\n".join(["x"] * 30)) == build("c")
+
+
 def test_shapes_in_returns_only_the_nodes_not_the_builders_paths_labels_or_backdrops():
     nodes = [Node("a", "process", "A"), Node("b", "process", "B")]
     page = Page("Main", nodes, [Edge("a", "b", "go")], [Group("g", "Stage", ["a", "b"])], [Lane("l", "Role", ["a", "b"])])

@@ -193,7 +193,7 @@ class Diagram:
         :param layout: spacing and flow direction; the defaults flow left to right
         :raises GraphError: as :meth:`validate`, and when a laid-out page with lanes is wider than 60 inches of diagram,
             a lane is more than 6 inches tall, a lane label is longer than 11 characters for each inch of its lane, or
-            the layout refuses the graph
+            the layout refuses the graph, including a group heading with no room clear of the nodes and other groups
         """
         links = self.validate()
         options = layout if layout is not None else LayoutOptions()
@@ -401,7 +401,7 @@ def _draw_page(page: Page, target: VisioPage, options: LayoutOptions, links: Map
         tuple((e.source, e.target) for e in page.edges if e.kind != "page-link"),
         tuple(lane.id for lane in page.lanes),
         tuple(g.id for g in _all_groups(page)),
-        replace(options, parents=tuple(parents)),
+        replace(options, parents=tuple(parents), headings=tuple((g.id, *_heading_size(g.label)) for g in _all_groups(page))),
     )
     spots = _label_spots(page, layout)
     layout = replace(
@@ -429,6 +429,12 @@ def _draw_page(page: Page, target: VisioPage, options: LayoutOptions, links: Map
     target.width = layout.width
     target.height = layout.height
     _draw_layout(page, target, layout, sizes, links, spots)
+
+
+def _heading_size(text: str) -> tuple[float, float]:
+    """Width and height in inches a group's heading needs: wide enough for its longest line, tall enough for its lines."""
+    lines = text.split("\n")
+    return snap(0.09 * max(len(line) for line in lines) + 0.5), snap(0.25 * len(lines))
 
 
 def _label_spots(page: Page, layout: Layout) -> dict[int, tuple[float, float, float, float]]:
