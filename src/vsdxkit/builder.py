@@ -94,6 +94,8 @@ class Group:
 
     def __post_init__(self) -> None:
         """Hold the members as tuples, so a group compares by value."""
+        if isinstance(self.node_ids, str):
+            raise GraphError(f"group {self.id!r} has node_ids {self.node_ids!r}, a string; pass a list of ids")
         object.__setattr__(self, "node_ids", tuple(self.node_ids))
         object.__setattr__(self, "groups", tuple(self.groups))
 
@@ -111,6 +113,8 @@ class Lane:
 
     def __post_init__(self) -> None:
         """Hold the members as a tuple, so a lane compares by value."""
+        if isinstance(self.node_ids, str):
+            raise GraphError(f"lane {self.id!r} has node_ids {self.node_ids!r}, a string; pass a list of ids")
         object.__setattr__(self, "node_ids", tuple(self.node_ids))
 
 

@@ -465,3 +465,9 @@ def test_no_donor_shape_data_row_is_left_in_the_saved_file(tmp_path):
     document = Document.open(Diagram("T", [page]).save(tmp_path / "d.vsdx"))
     for shape in document.pages[0].shapes:
         assert not {"my_property_name", "my_second_property_name"} & set(_rows(shape)), _rows(shape)
+
+
+@pytest.mark.parametrize("make", [lambda: Group("g", "G", "abc"), lambda: Lane("l", "L", "abc")], ids=["group", "lane"])
+def test_a_bare_string_as_members_is_refused_not_split_into_characters(make):
+    with pytest.raises(GraphError, match="a string"):
+        make()
