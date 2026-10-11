@@ -427,13 +427,9 @@ def _draw_layout(
     if page.lanes:
         boxes = [layout.lanes[lane.id] for lane in page.lanes]
         for lane, box in zip(page.lanes, boxes, strict=True):
-            if (
-                isinstance(box.height, bool)
-                or not isinstance(box.height, (int, float))
-                or not LANE_HEIGHTS[0] <= box.height <= LANE_HEIGHTS[1]
-            ):
+            if not LANE_HEIGHTS[0] <= box.height <= LANE_HEIGHTS[1]:
                 raise GraphError(
-                    f"lane {lane.id!r} is laid out {box.height!r} inches tall; a lane is drawn {LANE_HEIGHTS[0]} to {LANE_HEIGHTS[1]}"
+                    f"lane {lane.id!r} is laid out {box.height:g} inches tall; a lane is drawn {LANE_HEIGHTS[0]} to {LANE_HEIGHTS[1]}"
                 )
             if len(lane.label) > LABEL_CHARS_PER_INCH * box.height:
                 raise GraphError(

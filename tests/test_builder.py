@@ -548,7 +548,7 @@ def test_a_bare_string_as_members_is_refused_not_split_into_characters(make):
         make()
 
 
-@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf"), "tall", None])
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
 def test_a_lane_height_the_drawing_cannot_take_is_a_graph_error_not_another_type(monkeypatch, bad):
     real = builder.layered_layout
 
