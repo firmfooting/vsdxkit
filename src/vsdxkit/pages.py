@@ -53,6 +53,7 @@ from vsdxkit.swimlanes import (
     _Donors,
     _in_diagram,
     _relate_step,
+    _renew_unique_ids,
     _resize_instance,
 )
 
@@ -918,6 +919,8 @@ class Page:
         in_diagram = False
         if isinstance(kind_or_prototype, ShapeKind):
             in_diagram = _in_diagram(self)
+            if in_diagram:
+                _diagram_on(self)  # refuses a page of several diagrams before anything is copied
             source = self._document._kind_source(kind_or_prototype, in_diagram=in_diagram)
         elif isinstance(kind_or_prototype, Shape):
             kind_or_prototype._require_attached("Page.create_shape()")
@@ -960,6 +963,7 @@ class Page:
         if in_diagram and shape.xml.attrib.get("Master"):
             if width is not None or height is not None:
                 _resize_instance(shape, was)
+            _renew_unique_ids(self, shape, self._taken_unique_ids())
             _relate_step(shape, self)
         return shape
 

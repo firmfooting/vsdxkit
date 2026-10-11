@@ -844,3 +844,84 @@ def test_a_sized_step_carries_the_cached_numbers_of_its_size_not_its_masters():
     xs = [v for axis, v in _vertices(step) if axis == "X"]
     ys = [v for axis, v in _vertices(step) if axis == "Y"]
     assert max(xs) == pytest.approx(3.0) and max(ys) == pytest.approx(0.8)
+
+
+def test_a_step_names_the_lane_it_is_in_in_the_cached_function_value_and_after_a_move():
+    document, diagram = _diagram()
+    step = _step(document)  # centred at y=4.0, in the Reviewer lane
+    assert step.data_properties["Function"].value == "Reviewer"
+    diagram.move_to_lane(step, diagram.lanes[0])
+    assert step.data_properties["Function"].value == "Requester"
+    refs = re.findall(r"Sheet\.(\d+)!SheetRef", step.xml.find(f'{namespace}Cell[@N="Relationships"]').attrib["F"])
+    assert str(diagram.lanes[0].ID) in refs and str(diagram.lanes[1].ID) not in refs
+
+
+def test_two_steps_of_one_kind_do_not_share_a_unique_id():
+    document, _ = _diagram()
+    page = _page(document)
+    ids = [page.create_shape(ShapeKind.PROCESS, x=1.0 + i, y=4.0).xml.attrib["UniqueID"] for i in range(2)]
+    taken = [s.xml.attrib["UniqueID"] for s in page.children]
+    assert ids[0] != ids[1] and len(set(taken)) == len(taken)
+
+
+def test_a_step_on_a_page_with_two_containers_is_refused_without_changing_the_page():
+    document, diagram = _diagram()
+    page = _page(document)
+    diagram.container.copy(page)
+    before, masters = len(page.children), len(document.master_pages)
+    with pytest.raises(InvalidOperationError):
+        page.create_shape(ShapeKind.PROCESS, x=3.0, y=4.0)
+    assert (len(page.children), len(document.master_pages)) == (before, masters)
+
+
+def test_a_decoy_swimlane_list_before_the_real_one_is_not_what_a_step_names():
+    document, diagram = _diagram()
+    page = _page(document)
+    real = next(s for s in page.children if s.xml.attrib.get("NameU") == "Swimlane List")
+    decoy = real.copy(page)
+    shapes = page.xml.getroot().find(f"{namespace}Shapes")
+    shapes.remove(real.xml)
+    shapes.append(real.xml)  # the decoy now comes first
+    step = _step(document)
+    refs = re.findall(r"Sheet\.(\d+)!SheetRef", step.xml.find(f'{namespace}Cell[@N="Relationships"]').attrib["F"])
+    assert refs[0] == str(real.ID) != str(decoy.ID)
+
+
+def test_the_hooks_replace_a_conflicting_value_and_keep_an_unrelated_event_with_a_colliding_id():
+    document = Document.new()
+    root = _document_root(document)
+    sheet = root.find(f"{namespace}DocumentSheet")
+    ns = namespace[1:-1]
+    sheet.append(
+        ET.fromstring(
+            f"<Section xmlns='{ns}' N='User'><Row N='msvNoAutoConnect'><Cell N='Value' V='1'/></Row><Row N='visV14CFF'><Cell N='Value' V='0'/></Row></Section>"
+        )
+    )
+    root.append(
+        ET.fromstring(
+            f"<EventList xmlns='{ns}'><EventItem ID='0' EventCode='1' Action='1' Enabled='1' Target='Other' TargetArgs=''/></EventList>"
+        )
+    )
+    _page(document).create_swimlanes(BANDS, left=0.5, top=7.0, width=10.0)
+    rows, items = _hooks(_document_root(document))
+    assert dict(rows)["msvNoAutoConnect"] == "0" and dict(rows)["visV14CFF"] == "1"
+    assert [i["Target"] for i in items].count("CFF14") == 2 and any(i["Target"] == "Other" for i in items)
+    assert len({i["ID"] for i in items}) == len(items)
+
+
+def test_a_sized_decision_and_start_end_carry_what_their_masters_formulas_give_at_that_size():
+    document, _ = _diagram()
+    decision = _step(document, ShapeKind.DECISION, width=3.0, height=0.8)
+    assert float(decision.cell_value("TxtWidth")) == pytest.approx(2.5, abs=1e-6)
+    assert float(decision.cell_value("TxtHeight")) == pytest.approx(0.6)
+    assert float(decision.cell_value("TxtLocPinX")) == pytest.approx(1.25, abs=1e-3)
+    ends = _step(document, ShapeKind.START_END, width=3.0, height=0.8)
+    rows = {
+        (row.attrib["IX"], cell.attrib["N"]): float(cell.attrib["V"])
+        for row in ends.xml.iterfind(f'{namespace}Section[@N="Geometry"]/{namespace}Row')
+        for cell in row.iterfind(f"{namespace}Cell")
+        if cell.attrib["N"] in ("X", "A") and cell.attrib.get("V")
+    }
+    assert rows[("1", "X")] == pytest.approx(0.4)  # MIN(Height/2, Width/4)
+    assert rows[("2", "X")] == pytest.approx(2.6)  # Width-Geometry1.X1
+    assert rows[("3", "A")] == pytest.approx(3.0)
