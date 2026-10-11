@@ -650,9 +650,9 @@ def test_an_edge_label_wider_than_the_gap_does_not_cover_either_end_node(tmp_pat
             assert not _meets(label, _box(node))
 
 
+@pytest.mark.parametrize("label", ["G", "\n".join(["Review"] * 3)], ids=["one line", "three lines"])
 @pytest.mark.parametrize("direction", ["left_to_right", "top_down"])
-def test_no_connector_is_drawn_through_a_group_heading(tmp_path, direction):
-    label = "\n".join(["Review"] * 3)
+def test_no_connector_is_drawn_through_a_group_heading(tmp_path, direction, label):
     page = Page(
         "P",
         [_node("a"), _node("b")],

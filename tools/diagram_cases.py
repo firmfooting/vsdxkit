@@ -121,6 +121,10 @@ LINES: tuple[tuple[str, str], ...] = (
     ),
     ("every_kind", "every_kind: nine node kinds, six edge kinds, a long edge, a self-loop; every shape where it was written"),
     ("groups_and_lanes", "groups_and_lanes: three lanes, a group holding a group; every shape where it was written"),
+    (
+        "group_heading_top_down",
+        "group_heading_top_down: a top-down edge into a grouped node, whose one-line heading must stay clear of the connector; every shape where it was written",
+    ),
     ("two_pages", "two_pages: two pages and a page link; every shape on both pages where it was written"),
 )
 """Every case file's name and what Visio must show for it."""
