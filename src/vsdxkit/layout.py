@@ -266,6 +266,22 @@ def _runs(
     return lines
 
 
+def _first_clash(
+    paths: list[list[tuple[float, float]]], ends: list[set[tuple[float, float]]]
+) -> tuple[int, int, int, int] | None:
+    """The first two segments (path, segment, path, segment) of different paths that run along one line, or None."""
+    lines = _runs(paths)
+    for key in sorted(lines):
+        runs = sorted(lines[key])
+        for x, (_lo, hi, n, i) in enumerate(runs):
+            for lo2, hi2, m, j in runs[x + 1 :]:
+                if lo2 >= hi - _EPS:
+                    break
+                if m != n and not ends[n] & ends[m] and min(hi, hi2) - lo2 > _EPS:
+                    return n, i, m, j
+    return None
+
+
 def _apart(
     paths: list[list[tuple[float, float]]],
     ends: list[set[tuple[float, float]]],
@@ -291,21 +307,7 @@ def _apart(
                 if again is not None and fits(n, again) and _clashes(again, n, rest, ends) < now:
                     paths[n] = again
     for _ in range(8 * len(paths) + 8):
-        lines = _runs(paths)
-        clash = None
-        for key in sorted(lines):
-            runs = sorted(lines[key])
-            for x, (_lo, hi, n, i) in enumerate(runs):
-                for lo2, hi2, m, j in runs[x + 1 :]:
-                    if lo2 >= hi - _EPS:
-                        break
-                    if m != n and not ends[n] & ends[m] and min(hi, hi2) - lo2 > _EPS:
-                        clash = (n, i, m, j)
-                        break
-                if clash:
-                    break
-            if clash:
-                break
+        clash = _first_clash(paths, ends)
         if clash is None:
             return
         n, i, m, j = clash
@@ -345,7 +347,10 @@ def _apart(
             else:
                 a, b = name(n), name(m)
                 raise GraphError(f"edge {a[0]!r} -> {a[1]!r} and edge {b[0]!r} -> {b[1]!r} cannot be kept apart")
-    raise GraphError("the routes cannot be kept apart")
+    clash = _first_clash(paths, ends)
+    if clash is not None:
+        a, b = name(clash[0]), name(clash[2])
+        raise GraphError(f"edge {a[0]!r} -> {a[1]!r} and edge {b[0]!r} -> {b[1]!r} cannot be kept apart")
 
 
 def _shifted(pts: list[tuple[float, float]], seg: int, delta: float) -> list[tuple[float, float]] | None:
@@ -429,65 +434,6 @@ _STEPS = ((1, 0), (-1, 0), (0, 1), (0, -1))
 def _heading(a: tuple[float, float], b: tuple[float, float]) -> int:
     """The index into _STEPS of the direction from a to b."""
     return 0 if b[0] > a[0] else 1 if b[0] < a[0] else 2 if b[1] > a[1] else 3
-
-
-def _enters(a: tuple[float, float], b: tuple[float, float], rect: _Rect) -> bool:
-    """Whether the axis-parallel segment a-b passes through the open inside of `rect`."""
-    left, right, bottom, top = rect[0] + _EPS, rect[1] - _EPS, rect[2] + _EPS, rect[3] - _EPS
-    if a[0] == b[0]:
-        return left < a[0] < right and max(min(a[1], b[1]), bottom) < min(max(a[1], b[1]), top)
-    return bottom < a[1] < top and max(min(a[0], b[0]), left) < min(max(a[0], b[0]), right)
-
-
-_NUDGES = (0.03, -0.03, 0.07, -0.07, 0.09, -0.09)
-"""Inches a dummy's row may move off its centre; none is zero, and the largest stays inside the dummy's 0.2 in slot."""
-
-_CORRIDOR = 0.5
-"""Inches of clear space kept round a group box, so a route has somewhere to go round it."""
-
-_LANE_STEP = 0.02
-"""Inches between the neighbouring lines a detour may use along one gap or corridor, so detours can run side by side."""
-
-_RETRY_BUDGET = 1_000_000
-"""Search steps after which a layout stops looking for a quieter line for a detour that runs along another route."""
-
-_NEAR = 2.0
-"""Inches round an edge's end points within which a detour first looks for lines to turn on."""
-
-_HURRY = 2.0
-"""How much the distance still to go outweighs the distance so far; above 1 the search is faster and the path a little longer."""
-
-_EPS = 1e-6
-"""Tolerance, in inches, for a line that lies on a border: it is not inside."""
-
-_SHARING = 1000.0
-"""Extra cost per inch of a detour that runs along another route, so a free line is preferred to a shared one."""
-
-_STEPS = ((1, 0), (-1, 0), (0, 1), (0, -1))
-"""Unit steps along the flow, against it, across it and back, indexed as a heading."""
-
-
-def _heading(a: tuple[float, float], b: tuple[float, float]) -> int:
-    """The index into _STEPS of the direction from a to b."""
-    return 0 if b[0] > a[0] else 1 if b[0] < a[0] else 2 if b[1] > a[1] else 3
-
-
-def _shared(
-    path: list[tuple[float, float]], occupied: dict[tuple[int, float], list[tuple[float, float]]]
-) -> set[tuple[int, float]]:
-    """The lines (axis, coordinate) along which `path` runs over other routes, not counting its first and last segments."""
-    pts = [path[0]]
-    for a, b in pairwise(path):
-        if a != b:
-            pts.append(b)
-    lines = set()
-    for a, b in list(pairwise(pts))[1:-1]:
-        horizontal = a[1] == b[1]
-        low, high = (min(a[0], b[0]), max(a[0], b[0])) if horizontal else (min(a[1], b[1]), max(a[1], b[1]))
-        key = (0, round(a[1], 4)) if horizontal else (1, round(a[0], 4))
-        if any(min(high, h) > max(low, lo) for lo, h in occupied.get(key, ())):
-            lines.add(key)
-    return lines
 
 
 def _detour(
@@ -637,16 +583,19 @@ def layered_layout(
 
     An edge that spans layers passes through a dummy slot in each one it crosses, so no route meets a node.
 
+    A dense graph may be refused: when routes cannot all be given lines of their own within a fixed number of search
+    steps, the layout raises instead of returning routes that overlap.
+
     :param edges: pairs of (source id, target id); a repeat is a parallel edge, a pair of one id a self-loop
     :param lanes: lane ids, top to bottom
     :param groups: every group id; a node names its innermost group
-    :raises GraphError: lanes with a top-down direction, an edge naming a missing node, a node in an unknown lane or group
-        or without a lane when lanes are declared, a node size that is not finite and positive, a repeated node, lane or
-        group id, a layout too crowded to give every route its own line (it stops after a fixed number of search steps,
-        and names two edges that could not be parted), an option that is not a finite non-negative number, a layer_gap too small for the edges that cross it,
-        a node too small to give each of its parallel edges a grid step of its border, an edge that cannot be routed
-        round the groups it does not belong to, a group whose members sit in different lanes, or a parent that is
-        undeclared, repeated for one child or nests more than one level
+    :raises GraphError: lanes with a top-down direction, an edge naming a missing node, a node in an unknown lane or
+        group or without a lane when lanes are declared, a node size that is not finite and positive, a repeated node,
+        lane or group id, an option that is not a finite non-negative number, a layer_gap too small for the edges that
+        cross it, a node too small to give each of its parallel edges a grid step of its border, an edge that cannot
+        be routed round the groups it does not belong to, two edges that cannot be kept on lines of their own, a
+        layout past the search limit, a group whose members sit in different lanes, or a parent that is undeclared,
+        repeated for one child or nests more than one level
     """
     opts = options if options is not None else LayoutOptions()
     top_down = opts.direction == "top_down"
