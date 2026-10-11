@@ -32,6 +32,8 @@ from vsdxkit.shapes import Shape
 
 MEDIA = "media.vsdx"
 """The bundled document holding the basic shapes and the two connectors."""
+BLANK = "blank.vsdx"
+"""The bundled document :meth:`vsdxkit.document.Document.new` starts from: one empty page and no shapes."""
 PALETTE = "palette_extended.vsdx"
 """The bundled document holding the flowchart palette's shapes."""
 

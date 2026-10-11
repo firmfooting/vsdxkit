@@ -495,6 +495,14 @@ class PackageStore:
             store._parts[_part_name_for_member(member)] = BytesPart(data)
         return store
 
+    @classmethod
+    def from_template(cls, template: Path) -> PackageStore:
+        """Read a bundled package that belongs to no file: the store's `source` is empty, so a save must name its target."""
+        store = cls(Path(), PackageLimits())
+        for member, data in read_archive_members(template, store._limits):
+            store._parts[_part_name_for_member(member)] = BytesPart(data)
+        return store
+
     def names(self) -> tuple[str, ...]:
         """Every part name, in the order the archive listed them.
 
@@ -694,7 +702,7 @@ class PackageStore:
         mode: int | None = None
         if hasattr(os, "fchmod"):
             mode_source = destination if destination.exists() else self.source
-            if mode_source.exists():
+            if mode_source.is_file():
                 mode = stat.S_IMODE(os.stat(mode_source).st_mode)
 
         destination.parent.mkdir(parents=True, exist_ok=True)

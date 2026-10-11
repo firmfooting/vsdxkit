@@ -27,7 +27,7 @@ from vsdxkit import (
 )
 from vsdxkit._logging_support import get_logger
 from vsdxkit._masters import MasterCatalog
-from vsdxkit._media import MEDIA, _connector_shape, _kind_shape, _style_copy
+from vsdxkit._media import BLANK, MEDIA, _connector_shape, _kind_shape, _style_copy, media_path
 from vsdxkit._package import PackageStore, XmlPart, check_relationship_target
 from vsdxkit._partnames import (
     APP_PART,
@@ -125,6 +125,18 @@ class Document:
         if limits_path is not None:
             limits = PackageLimits.from_json_file(os.fspath(limits_path))
         return cls(PackageStore.open(filename, limits=limits if limits is not None else PackageLimits()), filename)
+
+    @classmethod
+    def new(cls, *, page_name: str = "Page-1") -> Document:
+        """A blank drawing of one empty page, made from the template shipped in the package.
+
+        The document has no file behind it: :meth:`save` must be given a target.
+
+        :param page_name: the page's name
+        """
+        document = cls(PackageStore.from_template(Path(media_path(BLANK))), "")
+        document.pages[0].name = page_name
+        return document
 
     @property
     def filename(self) -> str:
@@ -1079,8 +1091,8 @@ class Document:
             match the package's own kind; any other name gets the matching
             extension appended. Omit it to save over the file the document
             was opened from; that name is checked the same way but never renamed.
-        :raises InvalidOperationError: if the extension contradicts the package kind, or the package
-            holds no parts
+        :raises InvalidOperationError: if the extension contradicts the package kind, the package
+            holds no parts, or no target is given for a document made by :meth:`new`
         :raises PackageLimitError: if the package has more members, a larger member, or more bytes in
             all than the limits it was opened with allow; nothing is written
         :raises ValueError: if ``zipfile`` would store a part under a different name; nothing is written
@@ -1090,6 +1102,10 @@ class Document:
         if not self._package.names():
             raise InvalidOperationError("cannot save an empty package")
 
+        if target is None and not self._filename:
+            raise InvalidOperationError(
+                "this document was not opened from a file, so there is nowhere to save it; pass target="
+            )
         if target is None:
             # the name it was opened under can only be refused, never rewritten:
             # silently renaming the caller's file would be a worse surprise than
