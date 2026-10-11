@@ -1,7 +1,10 @@
 """Turn a blank drawing Visio saved into the template Document.new() copies, with nothing of the machine that saved it.
 
-    python tools/make_blank_template.py RAW.vsdx src/vsdxkit/_bundled/blank.vsdx --forbid NAME [--forbid NAME ...]
+    python tools/make_blank_template.py RAW.vsdx src/vsdxkit/_bundled/blank.vsdx --forbid NAME [--forbid NAME ...] [--empty-page]
 
+The shipped blank.vsdx was made from tests/fixtures/com_reference/s01_autoconnect_right.vsdx with
+``--empty-page``, which deletes every shape on the first page (through vsdxkit, so the saved form is
+vsdxkit's) before cleaning. Without the flag RAW is used as it is, for a blank drawing saved by Visio.
 Drops the thumbnail and the custom properties, blanks the author, the company and every date, and
 refuses to write a file in which any ``--forbid`` text still appears in any part. Visio saves the
 machine's user name as the author, so pass it. The archive is written with the fixed member form
@@ -13,6 +16,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -78,7 +82,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--forbid", action="append", default=[], help="text that must not appear in any part, such as the saving user's name"
     )
+    parser.add_argument("--empty-page", action="store_true", help="delete every shape on RAW's first page before cleaning")
     args = parser.parse_args(argv)
+    if args.empty_page:
+        from vsdxkit.document import Document
+
+        document = Document.open(args.raw)
+        for shape in list(document.pages[0].shapes):
+            if shape.is_attached:  # deleting a connector's end takes the connector with it
+                shape.delete()
+        args.raw = Path(tempfile.mkdtemp()) / "emptied.vsdx"
+        document.save(args.raw)
     with zipfile.ZipFile(args.raw) as archive:
         members = {i.filename: archive.read(i) for i in archive.infolist() if not i.is_dir()}
     cleaned = clean(members)

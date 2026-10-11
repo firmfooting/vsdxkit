@@ -498,9 +498,8 @@ class PackageStore:
     @classmethod
     def from_template(cls, template: Path) -> PackageStore:
         """Read a bundled package that belongs to no file: the store's `source` is empty, so a save must name its target."""
-        store = cls(Path(), PackageLimits())
-        for member, data in read_archive_members(template, store._limits):
-            store._parts[_part_name_for_member(member)] = BytesPart(data)
+        store = cls.open(template)
+        store.source = Path()
         return store
 
     def names(self) -> tuple[str, ...]:
