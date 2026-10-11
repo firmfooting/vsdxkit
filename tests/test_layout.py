@@ -574,11 +574,10 @@ def _heading_sizes(seed, group_ids):
     return tuple((g, rng.choice([0.8, 1.5, 3.0]), rng.choice([0.25, 0.5, 0.75])) for g in group_ids)
 
 
-def _check_heading_bands(layout: Layout, headings, parents=()) -> None:
-    """No route enters the strip at the top of a box that grew for its heading, where the text is drawn."""
+def _check_heading_bands(layout: Layout, headings) -> None:
+    """No route enters the strip at the top of a group box, where its heading is drawn."""
     for g, width, height in headings:
-        padding = 0.5 if g in {parent for _child, parent in parents} else 0.25
-        if g not in layout.groups or height <= padding + 1e-9:
+        if g not in layout.groups:
             continue
         box = layout.groups[g]
         band = Box(box.x, box.y + box.height / 2 - height / 2, min(width, box.width), height)
@@ -623,7 +622,7 @@ def test_headings_get_room_in_random_graphs(seed, lanes, groups, direction):
     _check(layout, nodes, parents)
     _check_routes(layout)
     _check_headings(layout, nodes, parents, headings)
-    _check_heading_bands(layout, headings, parents)
+    _check_heading_bands(layout, headings)
     assert layout == layered_layout(nodes, edges, lane_ids, group_ids, options)
 
 
@@ -671,3 +670,11 @@ def test_the_heading_of_an_empty_child_group_reserves_nothing():
     plain = layered_layout(nodes, (), ("x",), ("p", "c"), LayoutOptions(**options))
     long = layered_layout(nodes, (), ("x",), ("p", "c"), LayoutOptions(**options, headings=(("c", 1.0, 6.0),)))
     assert long == plain
+
+
+def test_a_one_line_heading_that_fits_the_padding_still_keeps_routes_off_it():
+    nodes = (LayoutNode("a", 1.5, 0.8), LayoutNode("b", 1.5, 0.8, group="g"))
+    headings = (("g", 1.0, 0.25),)
+    layout = layered_layout(nodes, (("a", "b"),), (), ("g",), LayoutOptions(direction="top_down", headings=headings))
+    _check_routes(layout)
+    _check_heading_bands(layout, headings)

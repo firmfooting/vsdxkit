@@ -629,9 +629,9 @@ def test_a_group_heading_that_would_cover_a_neighbouring_group_is_refused():
         Diagram("T", [page]).build(layout=builder.LayoutOptions(direction="top_down"))
 
 
+@pytest.mark.parametrize("label", ["G", "\n".join(["Review"] * 3)], ids=["one line", "three lines"])
 @pytest.mark.parametrize("direction", ["left_to_right", "top_down"])
-def test_no_connector_is_drawn_through_a_group_heading(tmp_path, direction):
-    label = "\n".join(["Review"] * 3)
+def test_no_connector_is_drawn_through_a_group_heading(tmp_path, direction, label):
     page = Page(
         "P",
         [_node("a"), _node("b")],

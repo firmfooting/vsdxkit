@@ -1066,9 +1066,9 @@ def layered_layout(
         a, b = slots[chain[0]].lane, slots[chain[-1]].lane
         return lane_top[min(a, b)], lane_bottom[max(a, b)]
 
-    # the heading of a box that grew for it is text no route may cross, whichever group the route belongs to
+    # the heading of a box is text no route may cross, whichever group the route belongs to
     bands: list[_Rect] = []
-    for g in sorted(grown):
+    for g in group_rect:
         if g in heading_of:
             r, text = group_rect[g], heading_of[g][0]
             mid = (r[across] + r[across + 1]) / 2
