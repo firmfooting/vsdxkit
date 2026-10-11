@@ -10,16 +10,10 @@ constructing one: each is a view onto an element of the shape's XML.
 from __future__ import annotations
 
 import copy
-import sys
 import xml.etree.ElementTree as ET
 from logging import Logger
-from typing import Protocol
+from typing import Protocol, override
 from xml.etree.ElementTree import Element
-
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
 
 from vsdxkit import namespace
 from vsdxkit._inheritance import InheritedRow

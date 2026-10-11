@@ -13,7 +13,7 @@ Visio needed at runtime.
 
 [![CI](https://github.com/firmfooting/vsdxkit/actions/workflows/ci.yml/badge.svg)](https://github.com/firmfooting/vsdxkit/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/vsdxkit?color=2A6B64)](https://pypi.org/project/vsdxkit/)
-[![Python 3.11–3.14](https://img.shields.io/badge/python-3.11%E2%80%933.14-2A6B64.svg)](https://www.python.org/)
+[![Python 3.15+](https://img.shields.io/badge/python-3.15%2B-2A6B64.svg)](https://www.python.org/)
 [![Licence: BSD-3-Clause](https://img.shields.io/badge/licence-BSD--3--Clause-2A6B64.svg)](https://github.com/firmfooting/vsdxkit/blob/main/LICENSE)
 [![Docs](https://img.shields.io/badge/docs-firmfooting.github.io-2A6B64.svg)](https://firmfooting.github.io/vsdxkit/)
 
@@ -58,7 +58,7 @@ it without Visio. The COM check itself is manual; no workflow runs Visio. See
 
 ## Install
 
-Python 3.11–3.14 is supported on Linux, Windows and macOS.
+Python 3.15 or later is required. The tests run on Linux.
 
 **The 1.0 API is on `main`.** It is not on PyPI yet. Install it from GitHub:
 

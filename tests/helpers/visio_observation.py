@@ -901,7 +901,7 @@ def _connects_in(container: ET.Element | None) -> list[ConnectObservation]:
                     to_cell=connect.attrib.get("ToCell", ""),
                 )
             )
-        except (KeyError, ValueError):
+        except KeyError, ValueError:
             # a Connect without resolvable endpoints is itself a finding, but it
             # belongs to the package validator, not to a comparison of two views
             continue

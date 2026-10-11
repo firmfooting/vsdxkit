@@ -84,12 +84,10 @@ def _is_string(node: ast.stmt | None) -> bool:
     return isinstance(node.value.value, str) and bool(node.value.value.strip())
 
 
-def _assigned_names(node: ast.Assign | ast.AnnAssign) -> list[str]:
-    """The plain names an assignment binds; an attribute or subscript target binds none.
-
-    A ``type X = ...`` statement needs Python 3.12 and the package supports
-    3.11, so ``src/vsdxkit`` holds none, and this module runs on 3.11 too.
-    """
+def _assigned_names(node: ast.Assign | ast.AnnAssign | ast.TypeAlias) -> list[str]:
+    """The plain names an assignment binds; an attribute or subscript target binds none."""
+    if isinstance(node, ast.TypeAlias):
+        return [node.name.id]
     if isinstance(node, ast.Assign):
         return [target.id for target in node.targets if isinstance(target, ast.Name)]
     return [node.target.id] if isinstance(node.target, ast.Name) else []
@@ -115,7 +113,7 @@ def _gaps_in_body(path: Path, body: Sequence[ast.stmt], owner: str, in_class: bo
     """The gaps among the statements of a module or class body; `owner` prefixes their names."""
     for position, node in enumerate(body):
         following = body[position + 1] if position + 1 < len(body) else None
-        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+        if isinstance(node, (ast.Assign, ast.AnnAssign, ast.TypeAlias)):
             if not _is_string(following):
                 kind = "attribute" if in_class else "constant"
                 yield from (Gap(path, node.lineno, kind, f"{owner}{name}") for name in _assigned_names(node))

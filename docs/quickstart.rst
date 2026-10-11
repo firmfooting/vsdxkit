@@ -4,7 +4,7 @@ Quick start
 Installation
 ------------
 
-Python 3.11–3.14 is supported on Linux, Windows and macOS.
+Python 3.15 or later is required. The tests run on Linux.
 
 These pages describe the 1.0 API, which ``main`` carries. It is not on PyPI
 yet, so install it from GitHub:
