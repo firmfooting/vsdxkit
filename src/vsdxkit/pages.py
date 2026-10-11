@@ -855,7 +855,7 @@ class Page:
         :param left: the page x of the diagram's left edge, in inches
         :param top: the page y of the top edge of the first lane; the container's title bar sits above it
         :param width: the diagram's width in inches
-        :raises InvalidOperationError: if the page is no longer in its document, already has a diagram, ``bands`` is empty, a lane height or ``width`` is not positive, or the sizes are outside the limits above
+        :raises InvalidOperationError: if the page is no longer in its document, already has a diagram, ``bands`` is empty, a lane height or ``width`` is not positive, the sizes are outside the limits above, a number is not finite, or the page holds the flowchart shapes of a diagram whose container was deleted
         :returns: the new diagram
         """
         if not self._attached():

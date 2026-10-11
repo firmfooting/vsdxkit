@@ -21,6 +21,7 @@ import json
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from types import ModuleType
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -33,17 +34,14 @@ FIXTURES = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "diag
 """Where the case files are: each defines ``build()``, the same function ``visio_verify.py record --transform build`` runs."""
 
 
-def _build(name: str) -> Document:
-    """The document that case file `name` builds."""
+def _load(name: str) -> ModuleType:
+    """The case file `name` as a module."""
     spec = importlib.util.spec_from_file_location(f"diagram_case_{name}", FIXTURES / f"{name}.py")
     if spec is None or spec.loader is None:
         raise SystemExit(f"cannot load the case file {name}.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    built = module.build()
-    if not isinstance(built, Document):
-        raise SystemExit(f"{name}.py build() returned {type(built).__name__}, not a Document")
-    return built
+    return module
 
 
 def _checks(document: Document) -> tuple[CellCheck, ...]:
@@ -68,8 +66,15 @@ def _checks(document: Document) -> tuple[CellCheck, ...]:
 
 def _case(out: Path, stem: str, line: str) -> Case:
     """Build case file `stem` into `out`/`stem`.vsdx, deterministically, and say what Visio must show for it."""
-    path = _build(stem).save(out / f"{stem}.vsdx", deterministic=True)
-    return Case(line, _checks(Document.open(path)), stem=stem)
+    module = _load(stem)
+    built = module.build()
+    if not isinstance(built, Document):
+        raise SystemExit(f"{stem}.py build() returned {type(built).__name__}, not a Document")
+    path = built.save(out / f"{stem}.vsdx", deterministic=True)
+    extra = tuple(
+        CellCheck(1, shape, cell, want) for shape, cell, want in getattr(module, "style_checks", lambda _d: ())(built)
+    )
+    return Case(line, _checks(Document.open(path)) + extra, stem=stem)
 
 
 LINES: tuple[tuple[str, str], ...] = (
@@ -88,6 +93,14 @@ LINES: tuple[tuple[str, str], ...] = (
     (
         "lanes_uneven",
         "lanes_uneven: lanes of different heights, three processes in one and none in another; every shape where it was written",
+    ),
+    (
+        "lanes_style_clash",
+        "lanes_style_clash: a diagram in a document whose style 7 is another style; the Separator shows Flow Normal's margins",
+    ),
+    (
+        "lanes_style_absent",
+        "lanes_style_absent: a diagram in a document with no style 7; the Separator shows Flow Normal's margins",
     ),
     ("lanes_wide", "lanes_wide: a diagram 22 inches wide on a page widened to 24; every shape where it was written"),
 )

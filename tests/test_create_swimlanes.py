@@ -1,15 +1,17 @@
 """Page.create_swimlanes: a cross-functional flowchart made on a page, as Visio's own is."""
 
 import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
 from helpers.package_validator import validate_package
 
+from vsdxkit import namespace
 from vsdxkit.document import Document
 from vsdxkit.errors import InvalidOperationError
 from vsdxkit.shape_kind import ShapeKind
-from vsdxkit.swimlanes import ROW_HEADING_TEXT, SwimlaneDiagram
+from vsdxkit.swimlanes import LANE_PITCH_INCHES, ROW_HEADING_TEXT, SwimlaneDiagram
 
 BANDS = [("Requester", 1.5), ("Reviewer", 2.0), ("Archive", 1.0)]
 
@@ -284,3 +286,93 @@ def test_a_diagram_inside_the_sizes_visio_was_checked_on_is_made(bands, width):
 def test_a_diagram_just_outside_those_sizes_is_refused_naming_the_limit(bands, width, message):
     with pytest.raises(InvalidOperationError, match=message):
         _make(bands, width)
+
+
+@pytest.mark.parametrize("height", [0.5, 1.5, 6.0])
+def test_a_lane_cannot_be_added_to_a_diagram_whose_lanes_are_not_one_pitch_tall(height):
+    diagram = _make([("Top", height), ("Next", height)])
+    page = diagram.container.page
+    before = ET.tostring(page.xml.getroot())
+    with pytest.raises(InvalidOperationError, match="every lane to be that tall"):
+        diagram.add_lane("New")
+    assert ET.tostring(page.xml.getroot()) == before
+
+
+def test_a_lane_is_added_as_before_to_a_diagram_whose_lanes_are_one_pitch_tall():
+    diagram = _make([("Top", LANE_PITCH_INCHES), ("Next", LANE_PITCH_INCHES)])
+    diagram.add_lane("New")
+    assert len(diagram.lanes) == 3
+    assert diagram.lanes[0].bounds[3] == pytest.approx(7.0 + LANE_PITCH_INCHES)
+
+
+NAN, INF = float("nan"), float("inf")
+
+
+@pytest.mark.parametrize(
+    "bands, left, top, width",
+    [
+        ([("A", 1.0)], NAN, 7.0, 10.0),
+        ([("A", 1.0)], INF, 7.0, 10.0),
+        ([("A", 1.0)], 0.5, NAN, 10.0),
+        ([("A", 1.0)], 0.5, -INF, 10.0),
+        ([("A", 1.0)], 0.5, 7.0, NAN),
+        ([("A", 1.0)], 0.5, 7.0, INF),
+        ([("A", NAN)], 0.5, 7.0, 10.0),
+        ([("A", INF)], 0.5, 7.0, 10.0),
+    ],
+)
+def test_a_diagram_with_a_non_finite_number_is_refused_and_the_page_is_left_alone(bands, left, top, width):
+    page = _page(Document.new())
+    before = ET.tostring(page.xml.getroot())
+    with pytest.raises(InvalidOperationError):
+        page.create_swimlanes(bands, left=left, top=top, width=width)
+    assert ET.tostring(page.xml.getroot()) == before
+
+
+def test_a_page_holding_a_deleted_diagrams_lanes_is_refused_and_left_alone():
+    """Deleting the container leaves its flat sibling lanes behind, so the page has none and yet holds CFF shapes."""
+    document, diagram = _diagram()
+    page = document.pages[0]
+    diagram.container.delete()
+    before = ET.tostring(page.xml.getroot())
+    with pytest.raises(InvalidOperationError, match="without a container"):
+        page.create_swimlanes(BANDS, left=0.5, top=7.0, width=10.0)
+    assert ET.tostring(page.xml.getroot()) == before
+
+
+@pytest.mark.parametrize(
+    "bands",
+    [[(f"L{n}", 1.0) for n in range(6)], [("A", 0.4)], [("", 1.0)], [("a" * 12, 1.0)]],
+)
+def test_a_diagram_refused_for_its_size_leaves_the_page_byte_identical(bands):
+    page = _page(Document.new())
+    before = ET.tostring(page.xml.getroot())
+    with pytest.raises(InvalidOperationError):
+        page.create_swimlanes(bands, left=0.5, top=7.0, width=10.0)
+    assert ET.tostring(page.xml.getroot()) == before
+
+
+def _separator_style_names(document: Document) -> set[str | None]:
+    """The names of the styles the imported Separator master's sub-shapes take, as this document resolves their IDs."""
+    master = next(m for m in document._masters.pages if m.name == "Separator")
+    names = {s.attrib["ID"]: s.attrib.get("NameU") for s in document._style_sheets()}
+    return {
+        names.get(e.attrib["LineStyle"]) for e in master.xml.getroot().iter(f"{namespace}Shape") if "LineStyle" in e.attrib
+    }
+
+
+def test_a_masters_styles_are_imported_with_it_where_the_destination_means_another_style_by_the_id():
+    """The blank template's style 7 is Connector; the bundled flowchart's 7 is Flow Normal, which its Separator takes."""
+    _, diagram = _diagram()
+    document = diagram.container.page._document
+    assert "Flow Normal" in _separator_style_names(document)
+
+
+def test_a_masters_styles_are_imported_with_it_where_the_destination_lacks_the_id():
+    document = Document.new()
+    sheets = document._style_sheets()
+    for sheet in list(sheets):
+        if sheet.attrib.get("ID") == "7":
+            sheets.remove(sheet)
+    _page(document).create_swimlanes(BANDS, left=0.5, top=7.0, width=10.0)
+    assert "Flow Normal" in _separator_style_names(document)

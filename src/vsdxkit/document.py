@@ -56,6 +56,9 @@ from vsdxkit.shapes import Connector, Shape
 from vsdxkit.swimlanes import _Donors
 from vsdxkit.templating import render_document
 
+_STYLE_ATTRIBUTES = ("LineStyle", "FillStyle", "TextStyle")
+"""The attributes of a shape or style sheet that name a style by ID."""
+
 _logger: Logger = get_logger(__name__)
 """This module's logger, under the ``vsdxkit`` hierarchy the library never configures a handler for."""
 
@@ -327,10 +330,51 @@ class Document:
         known = {page._page_id for page in self._masters.pages}
         masters = self._masters.import_masters(source._masters, master_ids)
         for master in masters.values():
-            if lists_titles and master._page_id not in known:
+            if master._page_id in known:
+                continue
+            if lists_titles:
                 self._titles_of_parts_insert(master.name, self._MASTERS)
-                known.add(master._page_id)
+            self._settle_master_styles(source, master)
+            known.add(master._page_id)
         return masters
+
+    def _settle_master_styles(self, source: Document, master: Page) -> None:
+        """Make the styles a master just imported from `source` name the styles `source` meant by those IDs.
+
+        A style ID is per-document, so an ID `source` uses may be absent here or name another style: the
+        blank template's 7 is "Connector" where the bundled flowchart's 7 is "Flow Normal". A style this
+        document lacks is imported, as is one whose name differs, under a new ID when the ID is taken, and the
+        master's references follow. A style of the same name under the same ID is taken to be the same style.
+        """
+        settled: dict[str, str] = {}
+
+        def settle(style_id: str) -> str:
+            """The ID in this document of the style `source` knows as `style_id`."""
+            if style_id in settled:
+                return settled[style_id]
+            theirs = source._get_style_by_id(style_id)
+            if theirs is None:
+                return style_id
+            ours = self._get_style_by_id(style_id)
+            if ours is not None and ours.attrib.get("NameU") == theirs.attrib.get("NameU"):
+                settled[style_id] = style_id
+                return style_id
+            taken = [int(e.attrib["ID"]) for e in self._style_sheets() if e.attrib.get("ID", "").isdigit()]
+            new_id = style_id if ours is None else str(max(taken) + 1)
+            settled[style_id] = new_id
+            imported = copy.deepcopy(theirs)
+            imported.attrib["ID"] = new_id
+            self._style_sheets().append(imported)
+            for attribute in _STYLE_ATTRIBUTES:  # the style this one is based on comes with it
+                if attribute in imported.attrib:
+                    imported.attrib[attribute] = settle(imported.attrib[attribute])
+            return new_id
+
+        root = master.xml.getroot()
+        for shape in root.iter(f"{namespace}Shape"):
+            for attribute in _STYLE_ATTRIBUTES:
+                if attribute in shape.attrib:
+                    shape.attrib[attribute] = settle(shape.attrib[attribute])
 
     def _load_pages(self) -> None:
         """Build a `Page` for each entry in pages.xml, in order, over the part its relationship names; the open's first read.

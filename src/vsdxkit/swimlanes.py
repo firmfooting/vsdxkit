@@ -373,7 +373,14 @@ def _create_diagram(
         raise InvalidOperationError("a swimlane diagram needs at least one lane")
     if width <= 0 or any(height <= 0 for _label, height in bands):
         raise InvalidOperationError("the width and every lane height must be positive")
+    if not all(math.isfinite(value) for value in (left, top, width, *(height for _label, height in bands))):
+        raise InvalidOperationError("left, top, width and every lane height must be finite numbers")
     _require_checked(bands, width)
+    left_over = [str(shape.ID) for shape in page.children if any(_named(shape, name) for name in _CFF_MACHINERY)]
+    if left_over:
+        raise InvalidOperationError(
+            f"page {page.name!r} holds cross-functional flowchart shapes without a container (shapes {', '.join(left_over)}); delete them first"
+        )
     held = [int(shape.ID) for shape in page.shapes if shape.ID is not None]
     if max(held, default=0) + 4 + 3 * len(bands) + 3 >= ID_CEILING:
         raise InvalidOperationError(f"page {page.name!r} holds shapes with IDs too high to make room for a swimlane diagram")
@@ -434,7 +441,7 @@ def _create_diagram(
     _relate(swimlane_list, lanes)
     _user_value(container, _NUM_LANES).attrib["V"] = str(len(bands))
     diagram = SwimlaneDiagram(container)
-    for lane, (label, _height) in zip(diagram.lanes, bands, strict=True):
+    for lane, (label, _height) in zip(lanes, bands, strict=True):
         _user_value(lane, ROW_HEADING_TEXT).attrib["V"] = label
         for part in lane.children:
             if part.text:
@@ -527,12 +534,17 @@ class SwimlaneDiagram:
         copied from before anything is written, so a refused label leaves the
         page as it was (#330).
 
-        :raises InvalidOperationError: the diagram has no lanes, or the top lane cannot take a label
+        :raises InvalidOperationError: the diagram has no lanes, a lane is not one pitch (1.181 inches) tall, or the top lane cannot take a label
         :returns: the new lane
         """
         lanes = self.lanes
         if not lanes:
             raise InvalidOperationError(f"the swimlane diagram on page {self._page.name!r} has no lanes to copy")
+        if any(not math.isclose(lane.height or 0.0, LANE_PITCH_INCHES, abs_tol=1e-6) for lane in lanes):
+            raise InvalidOperationError(
+                f"add_lane places a lane {LANE_PITCH_INCHES:.3f} inches above the top lane, so it needs every lane to be that "
+                f"tall; the lanes of the swimlane diagram on page {self._page.name!r} are not"
+            )
         top_lane = lanes[0]
         subject = f"shape {top_lane.ID} (copied to make the new lane)"
         if label is not None:

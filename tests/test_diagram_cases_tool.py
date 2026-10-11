@@ -27,6 +27,8 @@ def test_every_case_writes_a_file_that_opens_and_is_asked_about_in_full(tmp_path
         "lanes_five",
         "lanes_four",
         "lanes_one",
+        "lanes_style_absent",
+        "lanes_style_clash",
         "lanes_two",
         "lanes_uneven",
         "lanes_wide",
