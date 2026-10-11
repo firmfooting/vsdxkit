@@ -478,3 +478,29 @@ def test_the_phase_list_and_separator_gain_one_pitch_at_the_top_after_add_lane_a
     diagram.add_lane()
     for shape, (left, bottom, right, top) in zip(phases, before, strict=True):
         assert shape.bounds == pytest.approx((left, bottom, right, top + LANE_PITCH_INCHES))
+
+
+def test_diagrams_on_two_pages_with_one_name_share_no_unique_id():
+    document = Document.new()
+    first = _page(document)
+    second = document.pages.create("Other")
+    second.width, second.height = 12.0, 8.0
+    second.name = first.name
+    assert first.name == second.name
+    first.create_swimlanes([("A", 1.0)], left=0.5, top=7.0, width=10.0)
+    second.create_swimlanes([("A", 1.0)], left=0.5, top=7.0, width=10.0)
+    ids = _unique_ids(first) + _unique_ids(second)
+    assert len(set(ids)) == len(ids)
+
+
+def test_a_diagrams_unique_ids_survive_a_save_and_reopen_and_a_later_diagram(tmp_path):
+    document, diagram = _diagram()
+    before = _unique_ids(diagram.container.page)
+    reopened = Document.open(document.save(tmp_path / "a.vsdx"))
+    assert _unique_ids(reopened.pages[0]) == before
+    other = reopened.pages.create("Later")
+    other.width, other.height = 12.0, 8.0
+    other.create_swimlanes(BANDS, left=0.5, top=7.0, width=10.0)
+    assert _unique_ids(reopened.pages[0]) == before
+    ids = _unique_ids(reopened.pages[0]) + _unique_ids(other)
+    assert len(set(ids)) == len(ids)

@@ -47,6 +47,11 @@ class _DiagramPage(PageView, Protocol):
         """Whether the page is still in its document: a page that is not has no swimlane diagram to read."""
         ...
 
+    @property
+    def _page_id(self) -> str:
+        """The page's ID in pages.xml, which no other page of the document has."""
+        ...
+
 
 # observed lane pitch in the Visio 16 CFF capture (inches)
 LANE_PITCH_INCHES = 1.18110236220472
@@ -442,7 +447,7 @@ def _create_diagram(
         sizes += [(old_sizes[o.ID], (n.width or 0.0, n.height or 0.0)) for o, n in tops if o is not old]
         _resync(new, sizes)
     for top_level in (container, swimlane_list, phase_list, separator, *lanes):
-        _renew_unique_ids(page.name, top_level)
+        _renew_unique_ids(page, top_level)
     _relate(swimlane_list, lanes)
     _user_value(container, _NUM_LANES).attrib["V"] = str(len(bands))
     diagram = SwimlaneDiagram(container)
@@ -456,15 +461,15 @@ def _create_diagram(
     return diagram
 
 
-def _renew_unique_ids(page_name: str, shape: Shape) -> None:
-    """Give `shape` and its sub-shapes UniqueIDs of their own, derived from the page's name and each shape's ID.
+def _renew_unique_ids(page: _DiagramPage, shape: Shape) -> None:
+    """Give `shape` and its sub-shapes UniqueIDs of their own, derived from the page's ID in pages.xml and each shape's ID.
 
     A copy keeps the UniqueID it was copied from, and Visio addresses a shape by it. Deriving it, rather than
     drawing a random one, keeps a saved document the same every time it is built.
     """
     for member in (shape, *shape.descendants):
         if "UniqueID" in member.xml.attrib:
-            derived = uuid.uuid5(_UNIQUE_ID_NAMESPACE, f"{page_name}/{member.ID}")
+            derived = uuid.uuid5(_UNIQUE_ID_NAMESPACE, f"{page._page_id}/{member.ID}")
             member.xml.attrib["UniqueID"] = "{" + str(derived).upper() + "}"
 
 
@@ -570,7 +575,7 @@ class SwimlaneDiagram:
         if label is not None:
             self._check_label(top_lane, label, subject=subject)
         new_lane = top_lane.copy(self._page)
-        _renew_unique_ids(self._page.name, new_lane)
+        _renew_unique_ids(self._page, new_lane)
         new_lane._write_cell("PinY", v=str((top_lane.y or 0.0) + LANE_PITCH_INCHES), keep_formula=True)
         if label is not None:
             self._write_label(new_lane, label, subject=subject)
