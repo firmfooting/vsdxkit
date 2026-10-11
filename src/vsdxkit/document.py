@@ -11,6 +11,7 @@ from __future__ import annotations
 import copy
 import logging
 import os
+import weakref
 import xml.etree.ElementTree as ET
 from collections.abc import Mapping
 from logging import Logger
@@ -102,6 +103,7 @@ class Document:
         self._load_pages()
         self._masters = MasterCatalog(self._package, self._master_page)
         self._masters.load()
+        self._style_maps: weakref.WeakKeyDictionary[Document, dict[str, str]] = weakref.WeakKeyDictionary()
         if _logger.isEnabledFor(logging.DEBUG):
             for master in self._masters.pages:
                 _logger.debug("Master(%s, id=%s)\n%s", master._filename, master._page_id, pretty_print_element(master.xml))
@@ -343,14 +345,22 @@ class Document:
 
         A style ID is per-document, so an ID `source` uses may be absent here or name another style: the
         blank template's 7 is "Connector" where the bundled flowchart's 7 is "Flow Normal". A style this
-        document lacks is imported, as is one whose name differs, under a new ID when the ID is taken, and the
-        master's references follow. A style of the same name under the same ID is taken to be the same style.
+        document lacks is imported, as is one the same ID names differently here, under a new ID when the ID is
+        taken; the style it is based on comes with it, and the master's references follow. What was settled is
+        remembered per `source`, so a second master that names the same style reuses it.
+
+        A style of the same ``NameU`` under the same ID is taken to be the same style, whatever its formatting
+        cells hold: documents made by Visio from one template share their built-in styles by name and ID, and
+        comparing the cells would import a copy of "Normal" for every small difference in theme values.
+
+        Only the master's own shapes are remapped. A shape copied across documents onto a page keeps the style
+        IDs it had in `source`; that is not changed here.
         """
-        settled: dict[str, str] = {}
+        settled = self._style_maps.setdefault(source, {})
 
         def settle(style_id: str) -> str:
             """The ID in this document of the style `source` knows as `style_id`."""
-            if style_id in settled:
+            if style_id in settled and self._get_style_by_id(settled[style_id]) is not None:
                 return settled[style_id]
             theirs = source._get_style_by_id(style_id)
             if theirs is None:
