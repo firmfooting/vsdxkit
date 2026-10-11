@@ -25,5 +25,5 @@ cont_types_namespace = "{http://schemas.openxmlformats.org/package/2006/content-
 # tool.setuptools.dynamic, so a static [project].version would go stale in
 # uv.lock on every bump and fail the `uv sync --locked` gate. release-please
 # rewrites the line below; the annotation is how it finds it.
-__version__ = "0.8.0"  # x-release-please-version
+__version__ = "0.9.0"  # x-release-please-version
 """This release's version string; the distribution's metadata takes its version from here."""
