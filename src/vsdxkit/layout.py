@@ -745,10 +745,15 @@ def layered_layout(
     pad = opts.group_padding
     base = pad * (2 if parent_of else 1)
 
+    def loops_above(g: str) -> float:
+        """How far a member's self-loops reach above it, where a heading must clear them: nothing in a top-down flow."""
+        counts = [loop_count[m] for m in members_of[g] if m in loop_count]
+        return 0.0 if top_down or not counts else 0.2 + 0.1 * (max(counts) - 1) + GRID
+
     def reach(g: str) -> float:
         """How far above its topmost member a group's box can reach: its padding or heading, and a parent's clears its children's."""
-        own = max(heading_of.get(g, (0.0, 0.0))[1], pad)
-        kids = [reach(c) for c, p in parent_of.items() if p == g]
+        own = max(heading_of.get(g, (0.0, 0.0))[1] + loops_above(g), pad)
+        kids = [reach(c) for c, p in parent_of.items() if p == g and members_of[c]]
         return max(2 * pad if kids else pad, max(kids, default=0.0) + own)
 
     lifts = [reach(g) - base for g in groups if members_of[g]]
@@ -848,7 +853,10 @@ def layered_layout(
                 grown.add(g)
         if g in heading_of:
             width, height = heading_of[g]
-            held = min([rect_of(m)[top] for m in members_of[g]] + [group_rect[c][top] for c in kids])
+            held = min(
+                [rect_of(m)[top] - (loops_above(g) if m in loop_count else 0.0) for m in members_of[g]]
+                + [group_rect[c][top] for c in kids]
+            )
             if held - r[top] < height - _EPS:
                 r[top] -= _ceil(height - (held - r[top]))
                 grown.add(g)
@@ -1058,19 +1066,52 @@ def layered_layout(
         a, b = slots[chain[0]].lane, slots[chain[-1]].lane
         return lane_top[min(a, b)], lane_bottom[max(a, b)]
 
+    # the heading of a box that grew for it is text no route may cross, whichever group the route belongs to
+    bands: list[_Rect] = []
+    for g in sorted(grown):
+        if g in heading_of:
+            r, text = group_rect[g], heading_of[g][0]
+            mid = (r[across] + r[across + 1]) / 2
+            lo, hi = (mid - text / 2, mid + text / 2)
+            bands.append((r[0], r[0] + heading_of[g][1], lo, hi) if top_down else (lo, hi, r[2], r[2] + heading_of[g][1]))
     foreign_of = [
         [
-            (r[0] - GRID, r[1] + GRID, r[2] - GRID, r[3] + GRID)
-            for g, r in group_rect.items()
-            if g not in groups_of[source] | groups_of[target]
+            *(
+                (r[0] - GRID, r[1] + GRID, r[2] - GRID, r[3] + GRID)
+                for g, r in group_rect.items()
+                if g not in groups_of[source] | groups_of[target]
+            ),
+            *bands,
         ]
         for _bends, source, target, _chain, _parallel in built
     ]
+    # a route that would arrive through a heading is moved to arrive at the side of its box instead
+    rerouted: set[int] = set()
+    for n, (bends, source, target, chain, _parallel) in enumerate(built):
+        pts = [bends[0], *(b for a, b in pairwise(bends) if a != b)]
+        if source == target or len(pts) < 2:
+            continue
+        for end in (0, -1):
+            a, b = (pts[0], pts[1]) if end == 0 else (pts[-2], pts[-1])
+            if any(_enters(a, b, band) for band in bands):
+                slot = slots[source if end == 0 else target]
+                far = pts[-1] if end == 0 else pts[0]
+                off = _spread(twins[(chain[0], chain[-1])], slot.u_extent, source if end == 0 else target)[twin_rank[n]]
+                # self-loops leave and arrive on the low side, so a node that has one is entered on the other
+                low = far[1] < slot.v and (source if end == 0 else target) not in loop_count
+                side = slot.v - slot.v_extent / 2 if low else slot.v + slot.v_extent / 2
+                pts[end] = (snap(centre_u(slot) - off), snap(side))
+                # one step outward gives the search the heading to leave or arrive with
+                out = (pts[end][0], side - 1 if low else side + 1)
+                pts = [pts[0], out, *pts[1:]] if end == 0 else [*pts[:-1], out, pts[-1]]
+                rerouted.add(n)
+        if n in rerouted:
+            built[n] = (pts, source, target, chain, _parallel)
     pending = []
     for n, (bends, source, target, _chain, _parallel) in enumerate(built):
         foreign = foreign_of[n]
         lines = [(a, b) for a, b in pairwise(bends) if a != b]
-        if source != target and any(_enters(a, b, r) for a, b in lines for r in foreign):
+        if source != target and (n in rerouted or any(_enters(a, b, r) for a, b in lines for r in foreign)):
             pending.append((n, foreign))
         else:
             occupy(bends, n)

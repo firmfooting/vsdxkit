@@ -574,6 +574,19 @@ def _heading_sizes(seed, group_ids):
     return tuple((g, rng.choice([0.8, 1.5, 3.0]), rng.choice([0.25, 0.5, 0.75])) for g in group_ids)
 
 
+def _check_heading_bands(layout: Layout, headings, parents=()) -> None:
+    """No route enters the strip at the top of a box that grew for its heading, where the text is drawn."""
+    for g, width, height in headings:
+        padding = 0.5 if g in {parent for _child, parent in parents} else 0.25
+        if g not in layout.groups or height <= padding + 1e-9:
+            continue
+        box = layout.groups[g]
+        band = Box(box.x, box.y + box.height / 2 - height / 2, min(width, box.width), height)
+        for key, points in layout.routes.items():
+            for p, q in pairwise(points):
+                assert not _segment_enters(p, q, band), f"{key} runs through the heading of group {g}"
+
+
 def _check_headings(layout: Layout, nodes, parents, headings) -> None:
     """A heading's group box is as wide as its text and clears it above every member and child box."""
     parent = dict(parents)
@@ -610,6 +623,7 @@ def test_headings_get_room_in_random_graphs(seed, lanes, groups, direction):
     _check(layout, nodes, parents)
     _check_routes(layout)
     _check_headings(layout, nodes, parents, headings)
+    _check_heading_bands(layout, headings, parents)
     assert layout == layered_layout(nodes, edges, lane_ids, group_ids, options)
 
 
@@ -639,3 +653,21 @@ def test_a_heading_that_would_cover_a_node_outside_its_group_is_refused():
 def test_a_heading_option_that_is_not_valid_is_refused(options):
     with pytest.raises(GraphError):
         layered_layout((LayoutNode("a", 1, 1, group="g"),), (), (), ("g",), options)
+
+
+@pytest.mark.parametrize("direction", ["left_to_right", "top_down"])
+def test_no_route_runs_through_a_heading_even_one_that_ends_inside_its_group(direction):
+    nodes = (LayoutNode("a", 1.5, 0.8), LayoutNode("b", 1.5, 0.8, group="g"))
+    headings = (("g", 1.0, 0.75),)
+    layout = layered_layout(nodes, (("a", "b"), ("b", "b")), (), ("g",), LayoutOptions(direction=direction, headings=headings))
+    _check(layout, nodes, ())
+    _check_routes(layout)
+    _check_heading_bands(layout, headings)
+
+
+def test_the_heading_of_an_empty_child_group_reserves_nothing():
+    nodes = (LayoutNode("a", 1.5, 0.8, lane="x", group="p"),)
+    options = dict(parents=(("c", "p"),))
+    plain = layered_layout(nodes, (), ("x",), ("p", "c"), LayoutOptions(**options))
+    long = layered_layout(nodes, (), ("x",), ("p", "c"), LayoutOptions(**options, headings=(("c", 1.0, 6.0),)))
+    assert long == plain
