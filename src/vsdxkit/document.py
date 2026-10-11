@@ -365,36 +365,60 @@ class Document:
         Only the master's own shapes and its page sheet are remapped. A shape copied across documents onto a page keeps the style
         IDs it had in `source`; that is not changed here.
         """
-        settled = self._style_maps.setdefault(source, {})
+        remembered = self._style_maps.setdefault(source, {})
+        settled = dict(remembered)
+        staged: dict[str, Element] = {}  # appended to this document only once every reference has been settled
+        table = self._part_root(self._document_xml, "document.xml").find(f"{namespace}StyleSheets")
+
+        def ours_by_id(style_id: str) -> Element | None:
+            """This document's style `style_id`, or one staged to join it, or None."""
+            if style_id in staged:
+                return staged[style_id]
+            return None if table is None else table.find(f"{namespace}StyleSheet[@ID = '{style_id}']")
 
         def settle(style_id: str) -> str:
             """The ID in this document of the style `source` knows as `style_id`."""
-            if style_id in settled and self._get_style_by_id(settled[style_id]) is not None:
+            if style_id in settled and ours_by_id(settled[style_id]) is not None:
                 return settled[style_id]
             theirs = source._get_style_by_id(style_id)
             if theirs is None:  # an ID missing from the source's own table is left as it is
                 return style_id
-            ours = self._get_style_by_id(style_id)
+            ours = ours_by_id(style_id)
             if ours is not None and _same_style_name(ours, theirs):
                 settled[style_id] = style_id
                 return style_id
             # a destination style of the same NameU under another ID is not looked for, so duplicates are possible
-            taken = [int(e.attrib["ID"]) for e in self._style_sheets() if e.attrib.get("ID", "").isdigit()]
-            new_id = style_id if ours is None else str(max(taken) + 1)
+            ids = [*staged, *(e.attrib.get("ID", "") for e in (table if table is not None else ()))]
+            new_id = style_id if ours is None else str(max((int(i) for i in ids if i.isdigit()), default=0) + 1)
             settled[style_id] = new_id
             imported = copy.deepcopy(theirs)
             imported.attrib["ID"] = new_id
-            self._style_sheets().append(imported)
+            staged[new_id] = imported
             for attribute in _STYLE_ATTRIBUTES:  # the style this one is based on comes with it
                 if attribute in imported.attrib:
                     imported.attrib[attribute] = settle(imported.attrib[attribute])
             return new_id
 
-        root = master.xml.getroot()
-        for element in (*root.iter(f"{namespace}Shape"), master._pagesheet_xml):
+        master_element = self._masters.element_by_id(master._page_id)
+        page_sheet = None if master_element is None else master_element.find(f"{namespace}PageSheet")
+        for element in (*master.xml.getroot().iter(f"{namespace}Shape"), *([] if page_sheet is None else [page_sheet])):
             for attribute in _STYLE_ATTRIBUTES:
                 if attribute in element.attrib:
                     element.attrib[attribute] = settle(element.attrib[attribute])
+        if staged:
+            if table is None:
+                table = self._add_style_sheets()
+            table.extend(staged.values())
+        remembered.update(settled)
+
+    def _add_style_sheets(self) -> Element:
+        """Create document.xml's `StyleSheets`, after the elements Visio's own files put before it (`DocumentSettings`, `Colors`, `FaceNames`)."""
+        root = self._part_root(self._document_xml, "document.xml")
+        before = {f"{namespace}{name}" for name in ("DocumentSettings", "Colors", "FaceNames")}
+        position = max((n for n, child in enumerate(root, start=1) if child.tag in before), default=0)
+        table = ET.Element(f"{namespace}StyleSheets")
+        root.insert(position, table)
+        return table
 
     def _load_pages(self) -> None:
         """Build a `Page` for each entry in pages.xml, in order, over the part its relationship names; the open's first read.

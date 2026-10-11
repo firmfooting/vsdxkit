@@ -1,6 +1,9 @@
 """The style IDs a master imported from another document names are settled in the destination."""
 
+import xml.etree.ElementTree as ET
 from pathlib import Path
+
+import pytest
 
 from vsdxkit import namespace
 from vsdxkit.document import Document
@@ -169,3 +172,50 @@ def test_the_page_sheet_of_an_imported_master_is_settled_too():
     destination._settle_master_styles(source, master)
     names = _names(destination)
     assert {names[master._pagesheet_xml.attrib[a]] for a in ("LineStyle", "FillStyle", "TextStyle")} == {"Mine"}
+
+
+def test_a_drawing_page_sharing_the_masters_id_keeps_its_page_sheet_and_the_masters_is_settled():
+    source, destination = Document.new(), Document.new()
+    _add_style(source, "30", "Mine")
+    _add_style(destination, "30", "Yours")
+    master = destination._masters.pages[0]
+    pages_root = destination._part_root(destination._pages_xml, "pages.xml")
+    page = ET.SubElement(pages_root, f"{namespace}Page", {"ID": master._page_id})
+    ET.SubElement(page, f"{namespace}PageSheet", {"LineStyle": "30"})
+    destination._settle_master_styles(source, master)
+    master_sheet = destination._masters.element_by_id(master._page_id).find(f"{namespace}PageSheet")
+    master_sheet.attrib["LineStyle"] = "30"
+    destination._settle_master_styles(source, master)
+    assert page.find(f"{namespace}PageSheet").attrib["LineStyle"] == "30"
+    assert _names(destination)[master_sheet.attrib["LineStyle"]] == "Mine"
+
+
+def test_a_destination_without_style_sheets_gets_them_between_face_names_and_the_document_sheet():
+    source, destination = Document.new(), Document.new()
+    _add_style(source, "20", "Mine")
+    root = destination._part_root(destination._document_xml, "document.xml")
+    root.remove(root.find(f"{namespace}StyleSheets"))
+    destination._settle_master_styles(source, _master_naming(destination, "20"))
+    tags = [child.tag.removeprefix(namespace) for child in root]
+    assert tags.index("FaceNames") < tags.index("StyleSheets") < tags.index("DocumentSheet")
+    assert _names(destination)["20"] == "Mine"
+
+
+def test_a_settle_that_fails_midway_leaves_the_document_and_the_memo_as_they_were(monkeypatch):
+    source, destination = Document.new(), Document.new()
+    _add_style(source, "20", "Outer", based_on="21")
+    _add_style(source, "21", "Inner")
+    master = _master_naming(destination, "20")
+    before = ET.tostring(destination._part_root(destination._document_xml, "document.xml"))
+    original = source._get_style_by_id
+
+    def fail_on_the_second(style_id: str):
+        if style_id == "21":
+            raise RuntimeError("source went away")
+        return original(style_id)
+
+    monkeypatch.setattr(source, "_get_style_by_id", fail_on_the_second)
+    with pytest.raises(RuntimeError):
+        destination._settle_master_styles(source, master)
+    assert ET.tostring(destination._part_root(destination._document_xml, "document.xml")) == before
+    assert not destination._style_maps.get(source)
