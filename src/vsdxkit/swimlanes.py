@@ -667,8 +667,24 @@ class SwimlaneDiagram:
         shape._write_cell("PinY", v=str(lane.y or 0.0), keep_formula=True)
 
     def _phase_shapes(self) -> list[Shape]:
-        """The Phase List and its Separator, which span the lanes' height and so grow with them."""
-        return [shape for shape in self._page.children if _named(shape, "Phase List") or _named(shape, "Separator")]
+        """The Phase List and its Separator, which span the lanes' height and so grow with them.
+
+        They are the shapes the diagram's own relationships name (the Swimlane List's ``DEPENDSON(11, ...)`` and
+        the Phase List's ``DEPENDSON(2, ...)``, as in the Visio capture), not any shape that shares their names.
+        """
+        phase_list = self._related(self._swimlane_list(), 11)
+        separator = self._related(phase_list, 2)
+        return [shape for shape in (phase_list, separator) if shape is not None]
+
+    def _related(self, shape: Shape | None, kind: int) -> Shape | None:
+        """The top-level shape that `shape`'s ``Relationships`` formula lists first under ``DEPENDSON(kind, ...)``, or None."""
+        if shape is None:
+            return None
+        for cell in shape.xml.findall(f'{namespace}Cell[@N="Relationships"]'):
+            call = re.search(rf"DEPENDSON\({kind},Sheet\.(\d+)!SheetRef\(\)", cell.attrib.get("F", ""))
+            if call:
+                return next((child for child in self._page.children if str(child.ID) == call.group(1)), None)
+        return None
 
     def _swimlane_list(self) -> Shape | None:
         """The page's first top-level Swimlane List shape, which `add_lane` grows, or None for a page without one."""

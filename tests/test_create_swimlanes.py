@@ -594,3 +594,21 @@ def test_add_lane_refuses_a_lane_beyond_the_verified_count_and_leaves_the_page_a
         diagram.add_lane("Extra")
     assert len(page.shapes) == shapes
     assert len(diagram.lanes) == MAX_LANES
+
+
+def test_add_lane_resizes_only_the_diagrams_own_phase_list_and_separator():
+    diagram = _make([("Top", LANE_PITCH_INCHES), ("Next", LANE_PITCH_INCHES)])
+    page = diagram.container.page
+    own = {s.shape_name: s for s in page.children if s.shape_name in ("Phase List", "Separator")}
+    decoys = []
+    for name, shape in own.items():
+        decoy = shape.copy(page)
+        decoy.name = name
+        for cell in decoy.xml.findall(f"{namespace}Cell"):
+            if cell.attrib.get("N") == "Relationships":
+                cell.attrib["F"] = "SUM(DEPENDSON(4))"
+        decoys.append(decoy)
+    before = {s.ID: s.height for s in (*decoys, *own.values())}
+    diagram.add_lane("New")
+    assert {s.ID: s.height for s in decoys} == {s.ID: before[s.ID] for s in decoys}
+    assert all(s.height > before[s.ID] for s in own.values())
