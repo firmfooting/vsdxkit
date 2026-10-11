@@ -572,6 +572,7 @@ def _evaluate_cell(master: Shape, cell: ET.Element, width: float, height: float,
     unresolved = False
 
     def number(match: re.Match[str]) -> str:
+        """The text a name in the formula is replaced by: its number, or MIN and MAX as Python's."""
         nonlocal unresolved
         word = match.group(0)
         if word in ("MIN", "MAX"):
