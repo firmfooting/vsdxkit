@@ -840,7 +840,7 @@ class Page:
     def _taken_unique_ids(self) -> set[str]:
         """Every UniqueID a shape of any page of this page's document holds, as :func:`vsdxkit.swimlanes._renew_unique_ids` avoids them."""
         return {
-            element.attrib["UniqueID"]
+            element.attrib["UniqueID"].upper()
             for page in self._document.pages
             for element in page.xml.getroot().iter(f"{namespace}Shape")
             if "UniqueID" in element.attrib

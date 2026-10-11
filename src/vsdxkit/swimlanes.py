@@ -624,9 +624,9 @@ class SwimlaneDiagram:
         swimlane_list = self._swimlane_list()
         if swimlane_list is not None:
             for cell in swimlane_list.xml.findall(f'{namespace}Cell[@N="Relationships"]'):
-                # appended, so the lanes keep the order the formula already lists them in
+                # first, because the new lane sits above the top one and the formula lists the lanes top to bottom
                 cell.attrib["F"] = _LANE_LIST.sub(
-                    lambda m: m.group(0)[:-1] + f",Sheet.{new_lane.ID}!SheetRef())", cell.attrib["F"]
+                    lambda m: m.group(0).replace("(2", f"(2,Sheet.{new_lane.ID}!SheetRef()", 1), cell.attrib["F"]
                 )
 
     def set_lane_label(self, lane: Shape, label: str) -> None:

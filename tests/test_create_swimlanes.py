@@ -427,7 +427,7 @@ def _check_metadata(diagram, count):
     assert len(diagram.lanes) == count
     assert _user(diagram.container, "numLanes") == str(count)
     assert all(f"/stg4={count}," in _user(lane, "visCFFSettings") for lane in diagram.lanes)
-    assert sorted(_relationship_lanes(diagram)) == sorted(lane.ID for lane in diagram.lanes)
+    assert _relationship_lanes(diagram) == [lane.ID for lane in diagram.lanes], "the lanes are listed top to bottom"
 
 
 def test_a_lane_added_to_a_created_diagram_is_counted_in_the_metadata_the_machinery_keeps():
@@ -444,7 +444,7 @@ def test_a_lane_added_to_a_diagram_visio_drew_is_counted_too():
     diagram.add_lane("New")
     assert _user(diagram.container, "numLanes") == "4"
     assert all("/stg4=4," in _user(lane, "visCFFSettings") for lane in diagram.lanes)
-    assert sorted(_relationship_lanes(diagram)) == sorted(lane.ID for lane in diagram.lanes)
+    assert _relationship_lanes(diagram) == [lane.ID for lane in diagram.lanes], "the lanes are listed top to bottom"
 
 
 def test_the_sub_shapes_of_the_grown_container_and_list_follow_them_after_add_lane():
@@ -539,13 +539,46 @@ def test_a_unique_id_held_on_another_page_is_not_given_again():
     assert wanted not in _unique_ids(first)
 
 
+def _derived(page, shape_id) -> str:
+    """The UniqueID the code first derives for the shape with this ID on this page."""
+    import uuid
+
+    from vsdxkit.swimlanes import _UNIQUE_ID_NAMESPACE
+
+    return "{" + str(uuid.uuid5(_UNIQUE_ID_NAMESPACE, f"{page._page_id}/{shape_id}")).upper() + "}"
+
+
 def test_two_equivalent_builds_that_avoided_a_held_unique_id_save_the_same_bytes(tmp_path):
     def build(name):
         document = Document.new()
         page = _page(document)
         held = page.create_shape(ShapeKind.PROCESS, x=1.0, y=1.0)
-        held.xml.attrib["UniqueID"] = "{00000000-0000-0000-0000-000000000001}"
-        page.create_swimlanes([("A", LANE_PITCH_INCHES)], left=0.5, top=7.0, width=10.0).add_lane()
+        held.xml.attrib["UniqueID"] = _derived(page, int(held.ID) + 1)  # the container's, which is next
+        diagram = page.create_swimlanes([("A", LANE_PITCH_INCHES)], left=0.5, top=7.0, width=10.0)
+        assert diagram.container.xml.attrib["UniqueID"] != held.xml.attrib["UniqueID"]
+        diagram.add_lane()
         return document.save(tmp_path / name, deterministic=True).read_bytes()
 
     assert build("a.vsdx") == build("b.vsdx")
+
+
+def test_the_salt_is_used_for_a_lane_added_by_add_lane_too():
+    document = Document.new()
+    page = _page(document)
+    diagram = page.create_swimlanes([("A", LANE_PITCH_INCHES)], left=0.5, top=7.0, width=10.0)
+    next_id = max(int(s.ID) for s in page.shapes) + 1
+    other = document.pages.create("Other")
+    held = other.create_shape(ShapeKind.PROCESS, x=1.0, y=1.0)
+    held.xml.attrib["UniqueID"] = _derived(page, next_id).lower()  # lower case: still the same ID
+    new_lane = diagram.add_lane()
+    assert int(new_lane.ID) == next_id
+    assert new_lane.xml.attrib["UniqueID"].upper() != held.xml.attrib["UniqueID"].upper()
+    ids = [i.upper() for i in _unique_ids(page) + _unique_ids(other)]
+    assert len(set(ids)) == len(ids)
+
+
+def test_the_lanes_are_listed_top_to_bottom_after_several_add_lane_calls():
+    diagram = _make([("A", LANE_PITCH_INCHES), ("B", LANE_PITCH_INCHES)])
+    for _ in range(3):
+        diagram.add_lane()
+        assert _relationship_lanes(diagram) == [lane.ID for lane in diagram.lanes]
