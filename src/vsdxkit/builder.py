@@ -29,7 +29,7 @@ from vsdxkit.document import Document
 from vsdxkit.errors import GraphError, InvalidOperationError
 from vsdxkit.layout import Layout, LayoutNode, LayoutOptions, layered_layout, snap
 from vsdxkit.pages import Page as VisioPage
-from vsdxkit.swimlanes import DIAGRAM_WIDTHS, LABEL_CHARS_PER_INCH, LANE_HEIGHTS, MAX_LANES
+from vsdxkit.swimlanes import DECORATION_ROW, DIAGRAM_WIDTHS, LABEL_CHARS_PER_INCH, LANE_HEIGHTS, MAX_LANES
 
 NodeKind = Literal["start", "end", "process", "decision", "data_store", "external", "document", "subprocess", "off_page"]
 """What a node looks like."""
@@ -494,7 +494,7 @@ def _draw_layout(
             box = layout.groups[group.id]
             add_data_rows(
                 draw_backdrop(target, box.x, box.y, box.width, box.height, group.label, dashed=True),
-                {"Source": group.id, "Kind": "group"},
+                {"Source": group.id, "Kind": "group", DECORATION_ROW: "1"},
                 clear=True,
             )
     for node in page.nodes:
@@ -511,9 +511,11 @@ def _draw_layout(
         source = f"{edge.source}->{edge.target}"
         add_data_rows(
             draw_path(target, points, arrow=True, dashed=edge.kind in _DASHED_EDGES),
-            {"Source": source, "Kind": edge.kind},
+            {"Source": source, "Kind": edge.kind, DECORATION_ROW: "1"},
             clear=True,
         )
         if edge.label:
             x, y, _width, _height = spots[number]
-            add_data_rows(draw_label(target, x, y, edge.label), {"Source": source, "Kind": "edge_label"}, clear=True)
+            add_data_rows(
+                draw_label(target, x, y, edge.label), {"Source": source, "Kind": "edge_label", DECORATION_ROW: "1"}, clear=True
+            )
