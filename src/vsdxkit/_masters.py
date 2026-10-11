@@ -186,6 +186,10 @@ class MasterCatalog:
                 return master
         return None
 
+    def _existing(self, source: MasterCatalog, master_id: str, element: Element) -> Page | None:
+        """This package's master for `source`'s `master_id`, if it has one: the one decision `import_masters` and `lacking` share."""
+        return self._imported_from(source, master_id) or self.matching(element)
+
     def lacking(self, source: MasterCatalog, master_ids: Iterable[str]) -> list[str]:
         """The IDs among `master_ids` that :meth:`import_masters` would add a master for, not counting masters it would treat as one."""
         found: list[str] = []
@@ -193,7 +197,7 @@ class MasterCatalog:
             element = source.element_by_id(master_id)
             if element is None or source.by_id(master_id) is None:
                 continue
-            if self._imported_from(source, master_id) is None and self.matching(element) is None:
+            if self._existing(source, master_id, element) is None:
                 found.append(master_id)
         return found
 
@@ -280,7 +284,7 @@ class MasterCatalog:
             source_page = source.by_id(master_id)
             if element is None or source_page is None:
                 continue
-            existing = self._imported_from(source, master_id) or self.matching(element)
+            existing = self._existing(source, master_id, element)
             if existing is not None:
                 found[master_id] = existing
                 continue

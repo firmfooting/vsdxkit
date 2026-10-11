@@ -380,27 +380,6 @@ class Document:
             known.add(master._page_id)
         return masters
 
-    def _settle_master_styles(self, source: Document, master: Page) -> None:
-        """Make the styles a master just imported from `source` name the styles `source` meant by those IDs.
-
-        A style ID is per-document, so an ID `source` uses may be absent here or name another style: the
-        blank template's 7 is "Connector" where another document's 7 may be "Default Svg Style". A style this
-        document lacks is imported, as is one the same ID names differently here, under a new ID when the ID is
-        taken; the style it is based on comes with it, and the master's references follow. What was settled is
-        remembered per `source`, so a second master that names the same style reuses it.
-
-        A style under the same ID is taken to be the same style when both have a ``NameU`` and they are equal, or
-        when either lacks one and both have a ``Name`` and they are equal, whatever its formatting
-        cells hold: documents made by Visio from one template share their built-in styles by name and ID, and
-        comparing the cells would import a copy of "Normal" for every small difference in theme values.
-
-        Only the master's own shapes and its page sheet are remapped. A shape copied across documents onto a page keeps the style
-        IDs it had in `source`; that is not changed here.
-        """
-        plan = self._plan_master_styles(source, [_style_holders(self, master)])
-        self._commit_master_styles(source, plan)
-        _remap_styles(_style_holders(self, master), plan[0])
-
     def _plan_master_styles(self, source: Document, holders: list[list[Element]]) -> tuple[dict[int, int], dict[str, Element]]:
         """The IDs here for the styles `holders` name in `source`, and the styles to add for them; changes nothing.
 

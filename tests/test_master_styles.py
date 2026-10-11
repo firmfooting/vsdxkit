@@ -11,6 +11,13 @@ from vsdxkit.document import Document
 from vsdxkit.pages import Page as Master
 
 
+def _settle(destination: Document, source: Document, master: Master) -> None:
+    """What `Document._masters_for` does for a master it has just imported, on a master the test made name `source`'s styles."""
+    plan = destination._plan_master_styles(source, [document_module._style_holders(destination, master)])
+    destination._commit_master_styles(source, plan)
+    document_module._remap_styles(document_module._style_holders(destination, master), plan[0])
+
+
 def _add_style(document: Document, style_id: str, name: str, based_on: str | None = None) -> None:
     """Add a style sheet with this ID and name to `document`, based on style `based_on` where given."""
     attributes = {"ID": style_id, "NameU": name, "Name": name}
@@ -40,7 +47,7 @@ def test_a_style_and_the_style_it_is_based_on_both_come_when_the_destination_has
     _add_style(source, "20", "Outer", based_on="21")
     _add_style(source, "21", "Inner")
     master = _master_naming(destination, "20")
-    destination._settle_master_styles(source, master)
+    _settle(destination, source, master)
     assert _line_styles(master) == {"20"}
     assert _names(destination)["20"] == "Outer" and _names(destination)["21"] == "Inner"
     based = next(s for s in destination._style_sheets() if s.attrib["ID"] == "20")
@@ -53,7 +60,7 @@ def test_the_style_a_style_is_based_on_follows_it_to_a_new_id_when_its_own_is_ta
     _add_style(source, "9", "Inner")
     _add_style(destination, "9", "Something else")
     master = _master_naming(destination, "20")
-    destination._settle_master_styles(source, master)
+    _settle(destination, source, master)
     names = _names(destination)
     new_inner = next(i for i, n in names.items() if n == "Inner")
     assert new_inner != "9" and names["9"] == "Something else"
@@ -65,7 +72,7 @@ def test_styles_that_are_based_on_each_other_are_settled_once_and_the_call_ends(
     source, destination = Document.new(), Document.new()
     _add_style(source, "20", "Ping", based_on="21")
     _add_style(source, "21", "Pong", based_on="20")
-    destination._settle_master_styles(source, _master_naming(destination, "20"))
+    _settle(destination, source, _master_naming(destination, "20"))
     assert sorted(n for n in _names(destination).values() if n in ("Ping", "Pong")) == ["Ping", "Pong"]
 
 
@@ -75,11 +82,11 @@ def test_a_second_master_naming_the_same_style_reuses_what_the_first_settled():
     _add_style(source, "30", "Flow Normal")
     _add_style(destination, "30", "Another style")
     master = _master_naming(destination, "30")
-    destination._settle_master_styles(source, master)
+    _settle(destination, source, master)
     settled, count = _line_styles(master), len(destination._style_sheets())
     assert settled != {"30"}
     _master_naming(destination, "30")
-    destination._settle_master_styles(source, master)
+    _settle(destination, source, master)
     assert len(destination._style_sheets()) == count
     assert _line_styles(master) == settled
 
@@ -122,7 +129,7 @@ def test_fill_and_text_style_references_are_settled_as_line_style_ones_are():
     master = destination._masters.pages[0]
     for shape in master.xml.getroot().iter(f"{namespace}Shape"):
         shape.attrib["FillStyle"], shape.attrib["TextStyle"] = "20", "21"
-    destination._settle_master_styles(source, master)
+    _settle(destination, source, master)
     names = _names(destination)
     shape = next(master.xml.getroot().iter(f"{namespace}Shape"))
     assert names[shape.attrib["FillStyle"]] == "Filler" and shape.attrib["FillStyle"] != "20"
@@ -138,7 +145,7 @@ def _settle_one(source_attributes: dict[str, str], destination_attributes: dict[
     _add_raw_style(source, ID="30", **source_attributes)
     _add_raw_style(destination, ID="30", **destination_attributes)
     master = _master_naming(destination, "30")
-    destination._settle_master_styles(source, master)
+    _settle(destination, source, master)
     return destination, master
 
 
@@ -170,7 +177,7 @@ def test_the_page_sheet_of_an_imported_master_is_settled_too():
     _add_style(destination, "30", "Yours")
     master = destination._masters.pages[0]
     master._pagesheet_xml.attrib.update(LineStyle="30", FillStyle="30", TextStyle="30")
-    destination._settle_master_styles(source, master)
+    _settle(destination, source, master)
     names = _names(destination)
     assert {names[master._pagesheet_xml.attrib[a]] for a in ("LineStyle", "FillStyle", "TextStyle")} == {"Mine"}
 
@@ -183,10 +190,10 @@ def test_a_drawing_page_sharing_the_masters_id_keeps_its_page_sheet_and_the_mast
     pages_root = destination._part_root(destination._pages_xml, "pages.xml")
     page = ET.SubElement(pages_root, f"{namespace}Page", {"ID": master._page_id})
     ET.SubElement(page, f"{namespace}PageSheet", {"LineStyle": "30"})
-    destination._settle_master_styles(source, master)
+    _settle(destination, source, master)
     master_sheet = destination._masters.element_by_id(master._page_id).find(f"{namespace}PageSheet")
     master_sheet.attrib["LineStyle"] = "30"
-    destination._settle_master_styles(source, master)
+    _settle(destination, source, master)
     assert page.find(f"{namespace}PageSheet").attrib["LineStyle"] == "30"
     assert _names(destination)[master_sheet.attrib["LineStyle"]] == "Mine"
 
@@ -196,7 +203,7 @@ def test_a_destination_without_style_sheets_gets_them_between_face_names_and_the
     _add_style(source, "20", "Mine")
     root = destination._part_root(destination._document_xml, "document.xml")
     root.remove(root.find(f"{namespace}StyleSheets"))
-    destination._settle_master_styles(source, _master_naming(destination, "20"))
+    _settle(destination, source, _master_naming(destination, "20"))
     tags = [child.tag.removeprefix(namespace) for child in root]
     assert tags.index("FaceNames") < tags.index("StyleSheets") < tags.index("DocumentSheet")
     assert _names(destination)["20"] == "Mine"
@@ -217,7 +224,7 @@ def test_a_settle_that_fails_midway_leaves_the_document_and_the_memo_as_they_wer
 
     monkeypatch.setattr(document_module, "_style_numbered", fail_on_the_second)
     with pytest.raises(RuntimeError):
-        destination._settle_master_styles(source, master)
+        _settle(destination, source, master)
     assert ET.tostring(destination._part_root(destination._document_xml, "document.xml")) == before
     assert not destination._style_maps.get(source)
 
@@ -252,7 +259,7 @@ def test_a_leading_zero_id_is_the_same_style_as_the_plain_number():
     seven = next(e for e in source._style_sheets() if e.attrib["ID"] == "7")
     seven.attrib.update(ID="07", NameU="Mine", Name="Mine")
     master = _master_naming(destination, "07")
-    destination._settle_master_styles(source, master)
+    _settle(destination, source, master)
     ids = [s.attrib["ID"] for s in destination._style_sheets()]
     assert len(ids) == len(set(int(i) for i in ids))
     (new,) = _line_styles(master)
@@ -263,7 +270,7 @@ def test_a_leading_zero_reference_to_a_matching_style_is_not_imported_again():
     source, destination = Document.new(), Document.new()
     _add_style(source, "7", "Connector")
     count = len(destination._style_sheets())
-    destination._settle_master_styles(source, _master_naming(destination, "07"))
+    _settle(destination, source, _master_naming(destination, "07"))
     assert len(destination._style_sheets()) == count
 
 
@@ -271,5 +278,19 @@ def test_a_style_reference_that_is_not_a_number_is_left_alone():
     source, destination = Document.new(), Document.new()
     master = _master_naming(destination, "x1")
     count = len(destination._style_sheets())
-    destination._settle_master_styles(source, master)
+    _settle(destination, source, master)
     assert _line_styles(master) == {"x1"} and len(destination._style_sheets()) == count
+
+
+def test_lacking_names_exactly_the_masters_import_masters_adds():
+    source = Document.open(SOURCE)
+    ids = [page._page_id for page in source._masters.pages]
+    fresh, same_name = Document.new(), Document.open(SOURCE)
+    for destination in (fresh, same_name):
+        before = {page._page_id for page in destination._masters.pages}
+        lacking = destination._masters.lacking(source._masters, ids)
+        destination._masters.import_masters(source._masters, ids)
+        after = {page._page_id for page in destination._masters.pages}
+        assert len(after - before) == len(lacking)
+    assert fresh._masters.lacking(source._masters, ids) == []
+    assert same_name._masters.lacking(source._masters, ids) == []
