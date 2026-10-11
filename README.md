@@ -188,8 +188,8 @@ covers connection points and `options`.
 
 ### Work with swimlanes
 
-Swimlane operations need a page that already holds a Visio cross-functional
-flowchart (CFF). `add_lane()` copies the top lane above it and grows the CFF
+Swimlane operations need a page that holds a Visio cross-functional flowchart
+(CFF), one Visio drew or one made with `Page.create_swimlanes()`. `add_lane()` copies the top lane above it and grows the CFF
 container to match.
 
 ```python
@@ -237,6 +237,7 @@ The full documentation is at <https://firmfooting.github.io/vsdxkit/>.
 | Select, add, copy and delete pages, and find shapes | [Find pages and shapes](https://firmfooting.github.io/vsdxkit/find_shape.html) |
 | Create, connect, retarget and delete shapes | [Create shapes and connectors](https://firmfooting.github.io/vsdxkit/create_connect.html) |
 | Extend a cross-functional flowchart | [Cross-functional flowchart swimlanes](https://firmfooting.github.io/vsdxkit/swimlanes.html) |
+| Build a diagram from data, with no coordinates | [Diagrams from data](https://firmfooting.github.io/vsdxkit/diagrams_as_code.html) |
 | Fill a Visio template with data | [Jinja templates](https://firmfooting.github.io/vsdxkit/templating.html) |
 | Look up a class or an error | [API reference](https://firmfooting.github.io/vsdxkit/api/index.html) |
 | Move code from 0.x to 1.0 | [Migrating to 1.0](https://firmfooting.github.io/vsdxkit/migration-1.0.html) |
