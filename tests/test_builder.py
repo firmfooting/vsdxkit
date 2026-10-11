@@ -174,6 +174,8 @@ def _node(id_: str, kind: str = "process") -> Node:
             "more than one page-link",
         ),
         ([Page("P", [_node("a", "off_page")], [Edge("a", "a", kind="page-link")])], "must join an off_page node"),
+        ([Page("P", [Node("a", "off_page", "a", data={"Linked page": "x"})])], "reserved"),
+        ([Page("P", [Node("a", "off_page", "a", data={"Linked node": "x"})])], "reserved"),
         (
             [Page("P", [_node("a")], [Edge("a", "b", kind="page-link")]), Page("Q", [_node("b", "off_page")])],
             "must join an off_page node",
@@ -416,6 +418,16 @@ def test_an_edge_label_wider_than_the_layout_grows_the_page_and_stays_on_it(tmp_
     assert label.x + label.width / 2 <= document.pages[0].width + 1e-9
     assert label.y - label.height / 2 >= -1e-9
     assert label.y + label.height / 2 <= document.pages[0].height + 1e-9
+
+
+def test_a_multi_line_edge_label_is_sized_by_its_lines_and_stays_on_the_page(tmp_path):
+    page = Page("P", [_node("a"), _node("b")], [Edge("a", "b", "\n".join(["ab"] * 12))])
+    document = Document.open(Diagram("T", [page]).save(tmp_path / "m.vsdx"))
+    label = next(s for s in document.pages[0].shapes if _rows(s).get("Kind") == "edge_label")
+    assert label.height >= 0.25 * 12
+    assert label.width < 2
+    assert label.y - label.height / 2 >= -0.01
+    assert label.y + label.height / 2 <= document.pages[0].height + 0.01
 
 
 def test_a_laned_page_is_measured_after_its_labels_are_placed():
