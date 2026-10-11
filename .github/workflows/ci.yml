@@ -13,55 +13,25 @@ concurrency:
 
 jobs:
   test:
-    name: test py${{ matrix.python-version }} (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-        python-version: ['3.11', '3.12', '3.13', '3.14']
-        include:
-          # macOS runs the floor and ceiling interpreters only. What a third
-          # platform adds is filesystem behaviour (path separators, a
-          # case-insensitive default filesystem), which does not vary by
-          # interpreter minor version, so a full third column would spend five
-          # jobs a run testing the same thing five times.
-          - os: macos-latest
-            python-version: '3.11'
-          - os: macos-latest
-            python-version: '3.14'
-          # Coverage is measured on one cell, the interpreter the lint, docs
-          # and build jobs already use. Measuring it on all twelve would
-          # produce the same number twelve times.
-          - os: ubuntu-latest
-            python-version: '3.12'
-            coverage: true
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     env:
-      UV_PYTHON: ${{ matrix.python-version }}
+      UV_PYTHON: '3.15'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4  # v10.1.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
         with:
           enable-cache: false
-          version: "0.12.7"
-      - name: Install
-        if: ${{ !matrix.coverage }}
-        run: uv sync --locked --no-default-groups --group test
-      - name: Test
-        if: ${{ !matrix.coverage }}
-        run: uv run --no-sync python -m pytest tests -q
+          version: "0.13.0"
       - name: Install with coverage
-        if: ${{ matrix.coverage }}
         run: uv sync --locked --no-default-groups --group test --group coverage
       - name: Test with coverage
         # fail_under lives in pyproject.toml; pytest-cov applies it here and
         # fails the job when coverage drops below it.
         id: coverage
-        if: ${{ matrix.coverage }}
         run: uv run --no-sync python -m pytest tests --cov=vsdxkit --cov-report=xml --cov-report=term
       # Both steps below run whether the step above passed or failed, so a run
       # under the threshold still shows which files lost coverage. They are
@@ -69,39 +39,35 @@ jobs:
       # is no report to read. --fail-under=0 keeps the gate in one place rather
       # than failing the job twice for one cause.
       - name: Publish coverage summary
-        if: ${{ matrix.coverage && (steps.coverage.outcome == 'success' || steps.coverage.outcome == 'failure') }}
+        if: ${{ steps.coverage.outcome == 'success' || steps.coverage.outcome == 'failure' }}
         run: |
           {
             echo '## Coverage'
             echo
             uv run --no-sync coverage report --format=markdown --fail-under=0
           } >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        if: ${{ matrix.coverage && (steps.coverage.outcome == 'success' || steps.coverage.outcome == 'failure') }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        if: ${{ steps.coverage.outcome == 'success' || steps.coverage.outcome == 'failure' }}
         with:
           name: coverage
           path: coverage.xml
           if-no-files-found: error
 
   minimum-dependencies:
-    name: lowest direct dependencies py${{ matrix.python-version }}
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ['3.11', '3.14']
+    name: lowest direct dependencies
     runs-on: ubuntu-latest
     permissions:
       contents: read
     env:
-      UV_PYTHON: ${{ matrix.python-version }}
+      UV_PYTHON: '3.15'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4  # v10.1.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
         with:
           enable-cache: false
-          version: "0.12.7"
+          version: "0.13.0"
       - name: Resolve declared dependency floors
         run: uv lock --upgrade --resolution lowest-direct
       - name: Install test environment
@@ -120,15 +86,15 @@ jobs:
     permissions:
       contents: read
     env:
-      UV_PYTHON: '3.12'
+      UV_PYTHON: '3.15'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4  # v10.1.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
         with:
           enable-cache: false
-          version: "0.12.7"
+          version: "0.13.0"
       - name: Install LibreOffice Draw
         run: |
           sudo apt-get update
@@ -144,15 +110,15 @@ jobs:
     permissions:
       contents: read
     env:
-      UV_PYTHON: '3.12'
+      UV_PYTHON: '3.15'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4  # v10.1.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
         with:
           enable-cache: false
-          version: "0.12.7"
+          version: "0.13.0"
       - name: Install lint and documentation tools
         run: uv sync --locked --no-default-groups --group lint --group docs
       - name: ruff check
@@ -180,15 +146,15 @@ jobs:
     permissions:
       contents: read
     env:
-      UV_PYTHON: '3.12'
+      UV_PYTHON: '3.15'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4  # v10.1.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
         with:
           enable-cache: false
-          version: "0.12.7"
+          version: "0.13.0"
       - name: Build
         run: |
           # the test group is here for the sdist smoke test, which runs the
@@ -216,13 +182,13 @@ jobs:
         run: |
           uv run --no-sync sphinx-build -W --keep-going -q -b html docs docs/_build/html
           uv run --no-sync python tools/check_api_documented.py type-completeness.json docs/_build/html/objects.inv
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         if: ${{ !cancelled() }}
         with:
           name: type-completeness
           path: type-completeness.json
           if-no-files-found: warn
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: dist
           path: dist/

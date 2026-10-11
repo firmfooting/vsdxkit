@@ -56,7 +56,7 @@ def tracked_files() -> list[str] | None:
             text=True,
             timeout=30,
         )
-    except (OSError, subprocess.SubprocessError):
+    except OSError, subprocess.SubprocessError:
         return None  # git is missing or did not finish
     if result.returncode != 0:
         return None  # not a checkout, e.g. running against an unpacked sdist

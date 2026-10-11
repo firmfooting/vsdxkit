@@ -29,7 +29,7 @@ from vsdxkit.document import Document
 from vsdxkit.errors import GraphError, InvalidOperationError
 from vsdxkit.layout import Layout, LayoutNode, LayoutOptions, layered_layout, snap
 from vsdxkit.pages import Page as VisioPage
-from vsdxkit.swimlanes import DIAGRAM_WIDTHS, LABEL_CHARS_PER_INCH, LANE_HEIGHTS, MAX_LANES
+from vsdxkit.swimlanes import DECORATION_ROW, DIAGRAM_WIDTHS, LABEL_CHARS_PER_INCH, LANE_HEIGHTS, MAX_LANES
 
 NodeKind = Literal["start", "end", "process", "decision", "data_store", "external", "document", "subprocess", "off_page"]
 """What a node looks like."""
@@ -405,7 +405,7 @@ def _draw_page(page: Page, target: VisioPage, options: LayoutOptions, links: Map
         replace(
             options,
             parents=tuple(parents),
-            headings=tuple((g.id, *_heading_size(g.label)) for g in _all_groups(page)),
+            headings=tuple((g.id, *_heading_size(g.label)) for g in _all_groups(page) if g.label.strip()),
             edge_labels=tuple(label_size(e.label) if e.label else None for e in page.edges if e.kind != "page-link"),
         ),
     )
@@ -468,7 +468,7 @@ def _draw_layout(
             box = layout.groups[group.id]
             add_data_rows(
                 draw_backdrop(target, box.x, box.y, box.width, box.height, group.label, dashed=True),
-                {"Source": group.id, "Kind": "group"},
+                {"Source": group.id, "Kind": "group", DECORATION_ROW: "1"},
                 clear=True,
             )
     for node in page.nodes:
@@ -487,11 +487,13 @@ def _draw_layout(
         source = f"{edge.source}->{edge.target}"
         add_data_rows(
             draw_path(target, points, arrow=True, dashed=edge.kind in _DASHED_EDGES),
-            {"Source": source, "Kind": edge.kind},
+            {"Source": source, "Kind": edge.kind, DECORATION_ROW: "1"},
             clear=True,
         )
         if edge.label:
             label = layout.labels[(edge.source, edge.target, n)]
             add_data_rows(
-                draw_label(target, label.x, label.y, edge.label), {"Source": source, "Kind": "edge_label"}, clear=True
+                draw_label(target, label.x, label.y, edge.label),
+                {"Source": source, "Kind": "edge_label", DECORATION_ROW: "1"},
+                clear=True,
             )

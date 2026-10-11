@@ -119,11 +119,22 @@ def test_a_definition_without_a_docstring_is_a_gap(tmp_path, source, gap):
         ("#: how many there may be\nLIMIT = 3\n", "constant LIMIT"),
         ('LIMIT = 3\n""""""\n', "constant LIMIT"),
         ("_logger: object = None\n", "constant _logger"),
+        ("type Pair = tuple[int, int]\n", "constant Pair"),
         ('class Colour:\n    """A colour."""\n\n    RED = "red"\n', "attribute Colour.RED"),
         ('class Options:\n    """Options."""\n\n    size: int = 0\n', "attribute Options.size"),
         ('class Seam:\n    """A seam."""\n\n    name: str\n', "attribute Seam.name"),
     ],
-    ids=["bare", "trailing comment", "sphinx comment", "empty string", "private", "enum member", "field", "protocol"],
+    ids=[
+        "bare",
+        "trailing comment",
+        "sphinx comment",
+        "empty string",
+        "private",
+        "type alias",
+        "enum member",
+        "field",
+        "protocol",
+    ],
 )
 def test_an_assignment_without_a_string_after_it_is_a_gap(tmp_path, source, gap):
     assert _gaps(tmp_path, source) == [gap]

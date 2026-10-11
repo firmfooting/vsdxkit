@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
-from typing import Protocol, TypeAlias
+from typing import Protocol
 from xml.etree.ElementTree import Element
 
 from vsdxkit import namespace
@@ -156,9 +156,9 @@ class _ConnectorShape(_EndShape, Protocol):
 
 # One end of a connector as the engine plans it: the shape it glues to and
 # its connection point, `None` for dynamic glue. A floating end is `None`.
-_Glued: TypeAlias = tuple[_EndShape, int | None]
+type _Glued = tuple[_EndShape, int | None]
 """One glued end as the engine plans it: the shape and its connection point, or `None` for dynamic glue."""
-_End: TypeAlias = _Glued | None
+type _End = _Glued | None
 """An end of a connector as the engine plans it: `_Glued`, or `None` for a floating end."""
 
 # a Connect record's ToPart for connection point row n is 100 + n, and its ToCell Connections.X{n + 1}

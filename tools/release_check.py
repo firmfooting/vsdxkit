@@ -29,6 +29,8 @@ DEFAULT_CHANGELOG = REPO_ROOT / "CHANGELOG.md"
 # Any other "## " line matches too, and that is deliberate -- an unrecognised
 # heading still has to delimit the section above it.
 HEADING_RE = re.compile(r"^##\s+\[?(?P<version>[^\]\s]+)\]?\s*(.*)$")
+# Every trailing "(#1)" or "(#1, #2)" group; release-please links each, so the bare text never matches.
+TRAILING_REFS_RE = re.compile(r"(?:\s*\(#\d+(?:,\s*#\d+)*\))+$")
 
 
 def section_for(version: str, changelog: Path | None = None) -> str | None:
@@ -69,7 +71,7 @@ def _conventional_subjects(since_tag: str) -> list[str] | None:
             text=True,
             timeout=30,
         )
-    except (OSError, subprocess.SubprocessError):
+    except OSError, subprocess.SubprocessError:
         return None
     if result.returncode != 0:
         return None
@@ -79,7 +81,7 @@ def _conventional_subjects(since_tag: str) -> list[str] | None:
         type_, separator, rest = line.partition(":")
         if not separator or type_.rstrip("!").split("(")[0] not in wanted:
             continue
-        subjects.append(rest.strip().removesuffix(")").rpartition(" (#")[0] or rest.strip())
+        subjects.append(TRAILING_REFS_RE.sub("", rest.strip()) or rest.strip())
     return subjects
 
 

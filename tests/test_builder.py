@@ -713,3 +713,46 @@ def test_routes_into_a_rectangle_and_a_cylinder_sized_beyond_its_radius_stay_on_
     for kind in ("process", "data_store"):
         box, ends = _drawn_ends(kind, 7, tmp_path)
         assert all(x == pytest.approx(box.x - box.width / 2, abs=1e-6) for x, _y in ends), kind
+
+
+def test_shapes_in_returns_only_the_nodes_not_the_builders_paths_labels_or_backdrops():
+    nodes = [Node("a", "process", "A"), Node("b", "process", "B")]
+    page = Page("Main", nodes, [Edge("a", "b", "go")], [Group("g", "Stage", ["a", "b"])], [Lane("l", "Role", ["a", "b"])])
+    diagram = Diagram("T", [page]).build().pages[0].swimlanes
+    assert diagram is not None
+    members = diagram.shapes_in(diagram.lanes[0])
+    assert sorted(_rows(s)["Source"] for s in members) == ["a", "b"]
+
+
+def test_the_decoration_kinds_are_the_builders_edge_kinds_plus_label_and_group():
+    from typing import get_args
+
+    from vsdxkit.swimlanes import _DECORATION_KINDS
+
+    assert (set(get_args(builder.EdgeKind)) - {"page-link"}) | {"edge_label", "group"} == _DECORATION_KINDS
+
+
+@pytest.mark.parametrize("kind", ["group", "flow"])
+def test_a_user_shape_whose_kind_matches_a_decoration_is_still_a_member(kind):
+    from vsdxkit._drawing import add_data_rows
+    from vsdxkit.shape_kind import ShapeKind
+
+    page = Page("Main", [Node("a", "process", "A")], lanes=[Lane("l", "Role", ["a"])])
+    document = Diagram("T", [page]).build()
+    diagram = document.pages[0].swimlanes
+    assert diagram is not None
+    lane = diagram.lanes[0]
+    mine = document.pages[0].create_shape(ShapeKind.RECTANGLE, x=3, y=lane.y, width=1, height=0.5, text="mine")
+    add_data_rows(mine, {"Source": "mine", "Kind": kind})
+    assert mine in diagram.shapes_in(lane)
+    diagram.move_to_lane(mine, lane)
+
+
+def test_a_group_with_an_empty_label_reserves_no_heading_strip(tmp_path):
+    page = Page("P", [_node("a"), _node("b")], [Edge("a", "b")], groups=[Group("g", "", ["b"])])
+    document = Document.open(
+        Diagram("T", [page]).build(layout=builder.LayoutOptions(direction="top_down")).save(tmp_path / "e.vsdx")
+    )
+    node = _box(_by_source(document)["b"])
+    end = _absolute_points(_kinds(document, "flow")[0])[-1]
+    assert abs(end[1] - (node.y + node.height / 2)) < 1e-6, "the edge enters the top of the node, with no heading to avoid"

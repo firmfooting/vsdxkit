@@ -14,18 +14,11 @@ from __future__ import annotations
 
 import math
 import os
-import sys
 import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from enum import IntEnum
 from pathlib import Path
-from typing import Protocol, overload
-
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
-
+from typing import Protocol, overload, override
 
 from vsdxkit import namespace, r_namespace
 from vsdxkit._connectors import _Connect, _float_ends, _glue_connector, _plan_connector
