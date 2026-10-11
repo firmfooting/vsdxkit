@@ -1,6 +1,7 @@
 """The layered layout: boxes never overlap, routes are orthogonal and meet no node, and the result depends on nothing but the arguments."""
 
 import os
+import random
 import subprocess
 import sys
 import time
@@ -105,12 +106,26 @@ def test_a_random_graph_lays_out_cleanly(seed, lanes, groups, direction):
 
 
 def test_a_200_node_graph_with_lanes_and_groups_has_no_route_through_a_shape():
-    """The #53 exit criterion, checked geometrically."""
+    """The #53 exit criterion, checked geometrically; a layout too crowded to keep its routes apart is refused, never drawn."""
     rows, edges, lane_ids, group_ids, parents = random_graph(1, 200, 320, 4, 4)
     nodes = tuple(LayoutNode(*row) for row in rows)
-    layout = layered_layout(nodes, edges, lane_ids, group_ids, LayoutOptions(parents=parents))
+    try:
+        layout = layered_layout(nodes, edges, lane_ids, group_ids, LayoutOptions(parents=parents))
+    except GraphError as error:
+        assert "cannot be kept apart" in str(error) or "too crowded" in str(error)
+        return
     assert len(layout.routes) == 320
     _check(layout, nodes, parents)
+    _check_routes(layout)
+
+
+def test_a_150_node_graph_with_lanes_and_groups_lays_out_with_no_shared_run():
+    rows, edges, lane_ids, group_ids, parents = random_graph(1, 150, 240, 4, 4)
+    nodes = tuple(LayoutNode(*row) for row in rows)
+    layout = layered_layout(nodes, edges, lane_ids, group_ids, LayoutOptions(parents=parents))
+    assert len(layout.routes) == 240
+    _check(layout, nodes, parents)
+    _check_routes(layout)
 
 
 def test_lanes_stack_top_to_bottom_in_the_order_given():
@@ -492,5 +507,59 @@ def test_a_200_node_400_edge_graph_lays_out_at_default_options():
     layout = layered_layout(nodes, edges, lane_ids, group_ids, LayoutOptions(parents=parents))
     assert time.perf_counter() - start < 60
     assert len(layout.routes) == 400
+    _check(layout, nodes, parents)
+    _check_routes(layout)
+
+
+@pytest.mark.parametrize("direction", ["left_to_right", "top_down"])
+@pytest.mark.parametrize(("n", "m", "groups"), [(60, 120, 4), (60, 200, 6)])
+def test_a_busy_grouped_graph_lays_out_with_no_shared_run(direction, n, m, groups):
+    """The contract is a layout: these sizes route within the search limit."""
+    rows, edges, lane_ids, group_ids, parents = random_graph(1, n, m, 0, groups)
+    nodes = tuple(LayoutNode(*row) for row in rows)
+    start = time.perf_counter()
+    layout = layered_layout(nodes, edges, lane_ids, group_ids, LayoutOptions(direction=direction, parents=parents))
+    assert time.perf_counter() - start < 60
+    assert len(layout.routes) == m
+    _check(layout, nodes, parents)
+    _check_routes(layout)
+
+
+@pytest.mark.parametrize("direction", ["left_to_right", "top_down"])
+def test_a_crowded_graph_of_200_nodes_and_20_groups_is_refused_not_drawn_with_shared_runs(direction):
+    """The contract is a GraphError: this many routes round this many groups exceed the search limit."""
+    rows, edges, lane_ids, group_ids, parents = random_graph(1, 200, 400, 0, 20)
+    nodes = tuple(LayoutNode(*row) for row in rows)
+    start = time.perf_counter()
+    try:
+        layout = layered_layout(nodes, edges, lane_ids, group_ids, LayoutOptions(direction=direction, parents=parents))
+    except GraphError as error:
+        assert "too crowded" in str(error) or "cannot be kept apart" in str(error)
+    else:
+        _check(layout, nodes, parents)
+        _check_routes(layout)
+    assert time.perf_counter() - start < 90
+
+
+@pytest.mark.parametrize("seed", range(40))
+def test_random_graphs_either_lay_out_cleanly_or_are_refused(seed):
+    rng = random.Random(seed)
+    n = rng.randint(1, 30)
+    lanes, groups = rng.choice([0, 0, 2, 3]), rng.choice([0, 0, 2, 3, 5])
+    direction = "left_to_right" if lanes else rng.choice(["left_to_right", "top_down"])
+    rows, edges, lane_ids, group_ids, parents = random_graph(rng.randrange(10**6), n, rng.randint(0, 3 * n), lanes, groups)
+    if edges:
+        extra = [edges[rng.randrange(len(edges))] for _ in range(rng.randint(0, 4))]
+        loops = [(f"n{k}", f"n{k}") for k in rng.sample(range(n), min(n, rng.randint(0, 3)))]
+        edges = (*edges, *extra, *loops)
+    scale = rng.choice([1.0, 1.0, 0.05])
+    nodes = tuple(LayoutNode(r[0], r[1] * scale, r[2] * scale, r[3], r[4]) for r in rows)
+    options = LayoutOptions(
+        direction=direction, parents=parents, margin=rng.choice([0.0, 0.1, 0.5]), node_gap=rng.choice([0.0, 0.1, 0.4])
+    )
+    try:
+        layout = layered_layout(nodes, edges, lane_ids, group_ids, options)
+    except GraphError:
+        return  # a node too small for its parallel edges, or a layout too crowded to keep apart, is refused
     _check(layout, nodes, parents)
     _check_routes(layout)

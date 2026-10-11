@@ -225,6 +225,165 @@ def _order(rows: list[list[_Key]], slots: dict[_Key, _Slot], chains: list[list[_
             sweep(layer, down)
 
 
+def _blocks(a: tuple[float, float], b: tuple[float, float], rect: _Rect) -> bool:
+    """Whether the axis-parallel segment a-b enters `rect` or runs along its border."""
+    if a[0] == b[0]:
+        return rect[0] - _EPS <= a[0] <= rect[1] + _EPS and max(min(a[1], b[1]), rect[2] + _EPS) < min(
+            max(a[1], b[1]), rect[3] - _EPS
+        )
+    return rect[2] - _EPS <= a[1] <= rect[3] + _EPS and max(min(a[0], b[0]), rect[0] + _EPS) < min(
+        max(a[0], b[0]), rect[1] - _EPS
+    )
+
+
+def _simplify(path: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """`path` without repeated points or points in the middle of a straight run."""
+    pts = [path[0]]
+    for p in path[1:]:
+        if p != pts[-1]:
+            pts.append(p)
+    kept = [pts[0]]
+    for a, b, c in zip(pts, pts[1:], pts[2:], strict=False):
+        if not (a[0] == b[0] == c[0] or a[1] == b[1] == c[1]):
+            kept.append(b)
+    kept.append(pts[-1])
+    return kept
+
+
+def _runs(
+    paths: list[list[tuple[float, float]]], skip: int = -1
+) -> dict[tuple[int, float], list[tuple[float, float, int, int]]]:
+    """Every segment of every path but `skip`, by line: (low, high, path, segment) under (axis, coordinate)."""
+    lines: dict[tuple[int, float], list[tuple[float, float, int, int]]] = {}
+    for n, pts in enumerate(paths):
+        if n == skip:
+            continue
+        for i, (a, b) in enumerate(pairwise(pts)):
+            if a[1] == b[1]:
+                lines.setdefault((0, round(a[1], 4)), []).append((min(a[0], b[0]), max(a[0], b[0]), n, i))
+            else:
+                lines.setdefault((1, round(a[0], 4)), []).append((min(a[1], b[1]), max(a[1], b[1]), n, i))
+    return lines
+
+
+def _apart(
+    paths: list[list[tuple[float, float]]],
+    ends: list[set[tuple[float, float]]],
+    fits: Callable[[int, list[tuple[float, float]]], bool],
+    name: Callable[[int], tuple[str, str]],
+    reroute: Callable[[int], list[tuple[float, float]] | None],
+) -> None:
+    """Move segments aside, one grid step at a time, until no two paths run along one line, or raise GraphError.
+
+    Two paths may overlap where they share an end point. A path that is moved is the later one, and only a segment
+    that is neither its first nor its last, so its ends stay on their borders; `fits` says whether a moved path is
+    still legal. A pair that `_SEPARATIONS` steps either way cannot part is refused.
+    """
+    for _round in range(_REROUTES):
+        # every route that runs along another is searched again, now that the routes after it are known
+        for n in range(len(paths)):
+            if name(n)[0] == name(n)[1]:
+                continue
+            rest = _runs(paths, skip=n)
+            now = _clashes(paths[n], n, rest, ends)
+            if now:
+                again = reroute(n)
+                if again is not None and fits(n, again) and _clashes(again, n, rest, ends) < now:
+                    paths[n] = again
+    for _ in range(8 * len(paths) + 8):
+        lines = _runs(paths)
+        clash = None
+        for key in sorted(lines):
+            runs = sorted(lines[key])
+            for x, (_lo, hi, n, i) in enumerate(runs):
+                for lo2, hi2, m, j in runs[x + 1 :]:
+                    if lo2 >= hi - _EPS:
+                        break
+                    if m != n and not ends[n] & ends[m] and min(hi, hi2) - lo2 > _EPS:
+                        clash = (n, i, m, j)
+                        break
+                if clash:
+                    break
+            if clash:
+                break
+        if clash is None:
+            return
+        n, i, m, j = clash
+        for who, seg in sorted(((n, i), (m, j)), reverse=True):
+            pts = paths[who]
+            if name(who)[0] == name(who)[1] or not 1 <= seg <= len(pts) - 3:
+                continue
+            others = _runs(paths, skip=who)
+            before = _clashes(pts, who, others, ends)
+            for step in range(1, _SEPARATIONS + 1):
+                moved = None
+                for sign in (1, -1):
+                    moved = _shifted(pts, seg, sign * step * GRID)
+                    if moved is not None and fits(who, moved) and _clashes(moved, who, others, ends) < before:
+                        break
+                    moved = None
+                if moved is not None:
+                    paths[who] = moved
+                    break
+            else:
+                continue
+            break
+        else:
+            # no segment will move aside, so search for a whole new route for one of the pair
+            for who in (m, n) if m > n else (n, m):
+                if name(who)[0] == name(who)[1]:
+                    continue
+                again = reroute(who)
+                rest = _runs(paths, skip=who)
+                if (
+                    again is not None
+                    and fits(who, again)
+                    and _clashes(again, who, rest, ends) < _clashes(paths[who], who, rest, ends)
+                ):
+                    paths[who] = again
+                    break
+            else:
+                a, b = name(n), name(m)
+                raise GraphError(f"edge {a[0]!r} -> {a[1]!r} and edge {b[0]!r} -> {b[1]!r} cannot be kept apart")
+    raise GraphError("the routes cannot be kept apart")
+
+
+def _shifted(pts: list[tuple[float, float]], seg: int, delta: float) -> list[tuple[float, float]] | None:
+    """`pts` with segment `seg` moved across itself by `delta`, or None if a neighbouring segment would vanish or flip."""
+    a, b = pts[seg], pts[seg + 1]
+    axis = 1 if a[1] == b[1] else 0
+    moved = list(pts)
+    for k in (seg, seg + 1):
+        p = list(pts[k])
+        p[axis] = snap(p[axis] + delta)
+        moved[k] = (p[0], p[1])
+    for k in (seg - 1, seg + 1):
+        before, after = pts[k], pts[k + 1]
+        new_before, new_after = moved[k], moved[k + 1]
+        if (new_after[axis] - new_before[axis]) * (after[axis] - before[axis]) <= 0:
+            return None
+    return moved
+
+
+def _clashes(
+    pts: list[tuple[float, float]],
+    who: int,
+    lines: dict[tuple[int, float], list[tuple[float, float, int, int]]],
+    ends: list[set[tuple[float, float]]],
+) -> int:
+    """How many segments of `pts` run along a segment of another path that does not share an end point."""
+    count = 0
+    for a, b in pairwise(pts):
+        key = (0, round(a[1], 4)) if a[1] == b[1] else (1, round(a[0], 4))
+        low, high = (min(a[0], b[0]), max(a[0], b[0])) if key[0] == 0 else (min(a[1], b[1]), max(a[1], b[1]))
+        count += sum(
+            1
+            for lo, hi, m, _j in lines.get(key, ())
+            if m != who and min(high, hi) - max(low, lo) > _EPS and not (ends[who] & ends[m])
+        )
+    return count
+
+
 def _enters(a: tuple[float, float], b: tuple[float, float], rect: _Rect) -> bool:
     """Whether the axis-parallel segment a-b passes through the open inside of `rect`."""
     left, right, bottom, top = rect[0] + _EPS, rect[1] - _EPS, rect[2] + _EPS, rect[3] - _EPS
@@ -236,7 +395,54 @@ def _enters(a: tuple[float, float], b: tuple[float, float], rect: _Rect) -> bool
 _NUDGES = (0.03, -0.03, 0.07, -0.07, 0.09, -0.09)
 """Inches a dummy's row may move off its centre; none is zero, and the largest stays inside the dummy's 0.2 in slot."""
 
-_CORRIDOR = 0.3
+_CORRIDOR = 0.5
+"""Inches of clear space kept round a group box, so a route has somewhere to go round it."""
+
+_LANE_STEP = 0.02
+"""Inches between the neighbouring lines a detour may use along one gap or corridor, so detours can run side by side."""
+
+_WORK_CAP = 12_000_000
+"""Search steps one layout may spend routing round groups and parting routes, so a very crowded one fails instead of running on."""
+
+_REROUTES = 2
+"""How many times every route that runs along another is searched again, before single segments are moved aside."""
+
+_SEPARATIONS = 12
+"""How many grid steps, either way, a segment may move to part from another route before the layout is refused."""
+
+_NEAR = 2.0
+"""Inches round an edge's end points within which a detour first looks for lines to turn on."""
+
+_HURRY = 2.0
+"""How much the distance still to go outweighs the distance so far; above 1 the search is faster and the path a little longer."""
+
+_EPS = 1e-6
+"""Tolerance, in inches, for a line that lies on a border: it is not inside."""
+
+_SHARING = 1000.0
+"""Extra cost per inch of a detour that runs along another route, so a free line is preferred to a shared one."""
+
+_STEPS = ((1, 0), (-1, 0), (0, 1), (0, -1))
+"""Unit steps along the flow, against it, across it and back, indexed as a heading."""
+
+
+def _heading(a: tuple[float, float], b: tuple[float, float]) -> int:
+    """The index into _STEPS of the direction from a to b."""
+    return 0 if b[0] > a[0] else 1 if b[0] < a[0] else 2 if b[1] > a[1] else 3
+
+
+def _enters(a: tuple[float, float], b: tuple[float, float], rect: _Rect) -> bool:
+    """Whether the axis-parallel segment a-b passes through the open inside of `rect`."""
+    left, right, bottom, top = rect[0] + _EPS, rect[1] - _EPS, rect[2] + _EPS, rect[3] - _EPS
+    if a[0] == b[0]:
+        return left < a[0] < right and max(min(a[1], b[1]), bottom) < min(max(a[1], b[1]), top)
+    return bottom < a[1] < top and max(min(a[0], b[0]), left) < min(max(a[0], b[0]), right)
+
+
+_NUDGES = (0.03, -0.03, 0.07, -0.07, 0.09, -0.09)
+"""Inches a dummy's row may move off its centre; none is zero, and the largest stays inside the dummy's 0.2 in slot."""
+
+_CORRIDOR = 0.5
 """Inches of clear space kept round a group box, so a route has somewhere to go round it."""
 
 _LANE_STEP = 0.02
@@ -254,7 +460,7 @@ _HURRY = 2.0
 _EPS = 1e-6
 """Tolerance, in inches, for a line that lies on a border: it is not inside."""
 
-_SHARING = 100.0
+_SHARING = 1000.0
 """Extra cost per inch of a detour that runs along another route, so a free line is preferred to a shared one."""
 
 _STEPS = ((1, 0), (-1, 0), (0, 1), (0, -1))
@@ -385,6 +591,8 @@ def _detour(
     while heap:
         _f, _c, state = heapq.heappop(heap)
         work[0] += 1
+        if work[0] > _WORK_CAP:
+            raise GraphError("the layout is too crowded to route within its search limit")
         cell, d = divmod(state, 4)
         i, j = divmod(cell, ny)
         if cell == goal_cell and d == last:
@@ -434,7 +642,8 @@ def layered_layout(
     :param groups: every group id; a node names its innermost group
     :raises GraphError: lanes with a top-down direction, an edge naming a missing node, a node in an unknown lane or group
         or without a lane when lanes are declared, a node size that is not finite and positive, a repeated node, lane or
-        group id, an option that is not a finite non-negative number, a layer_gap too small for the edges that cross it,
+        group id, a layout too crowded to give every route its own line (it stops after a fixed number of search steps,
+        and names two edges that could not be parted), an option that is not a finite non-negative number, a layer_gap too small for the edges that cross it,
         a node too small to give each of its parallel edges a grid step of its border, an edge that cannot be routed
         round the groups it does not belong to, a group whose members sit in different lanes, or a parent that is
         undeclared, repeated for one child or nests more than one level
@@ -821,77 +1030,117 @@ def layered_layout(
             elif a[0] == b[0] and a[1] != b[1]:
                 occupied.setdefault((1, round(a[0], 4)), []).append((min(a[1], b[1]), max(a[1], b[1]), n))
 
-    pending = []
-    for n, (bends, source, target, _chain, _parallel) in enumerate(built):
-        foreign = [
+    def lane_span(chain: list[_Key]) -> tuple[float, float]:
+        """The range across the flow that an edge between the ends of `chain` may use."""
+        if not lanes:
+            return -shift_v, v_total - shift_v
+        a, b = slots[chain[0]].lane, slots[chain[-1]].lane
+        return lane_top[min(a, b)], lane_bottom[max(a, b)]
+
+    foreign_of = [
+        [
             (r[0] - GRID, r[1] + GRID, r[2] - GRID, r[3] + GRID)
             for g, r in group_rect.items()
             if g not in groups_of[source] | groups_of[target]
         ]
+        for _bends, source, target, _chain, _parallel in built
+    ]
+    pending = []
+    for n, (bends, source, target, _chain, _parallel) in enumerate(built):
+        foreign = foreign_of[n]
         lines = [(a, b) for a, b in pairwise(bends) if a != b]
         if source != target and any(_enters(a, b, r) for a, b in lines for r in foreign):
             pending.append((n, foreign))
         else:
             occupy(bends, n)
-    spent = [0]  # search steps so far; a crowded detour is searched again only while this is under budget
-    for k, (n, foreign) in enumerate(pending):
-        bends, source, target, chain, _parallel = built[n]
-        # the direct channels cross a group the edge does not belong to, so search for a way round
-        low = lane_top[min(slots[chain[0]].lane, slots[chain[-1]].lane)] if lanes else -shift_v
-        high = lane_bottom[max(slots[chain[0]].lane, slots[chain[-1]].lane)] if lanes else v_total - shift_v
-        path = [bends[0], *(b for a, b in pairwise(bends) if a != b)]
-        # each edge also gets shifted copies of every line, so detours of different edges can run side by side; when a
-        # detour still runs along another route, it tries again with more copies
-        # routes that leave or arrive at the same border point may run along this one, so they do not count
-        mine = {path[0], path[-1]}
-        others = {key: [(lo, hi) for lo, hi, m in runs if not ends_of[m] & mine] for key, runs in occupied.items()}
-        around = None
-        extra_xs: set[float] = set()
-        extra_ys: set[float] = set()
+    # the lines round the whole drawing carry the routes that go the long way round, so they come in many copies
+    outer_xs = {*(f(end_xs) for f in (min, max) if end_xs)}
+    outer_ys = {*(f(end_ys) for f in (min, max) if end_ys)}
+    spent = [0]
+
+    def search(
+        n: int, path: list[tuple[float, float]], others: dict[tuple[int, float], list[tuple[float, float]]], k: int
+    ) -> list[tuple[float, float]] | None:
+        """A way for edge `n` from the first point of `path` to its last that avoids boxes and foreign groups."""
+        low, high = lane_span(built[n][3])
+        # each edge gets its own shifted copy of every line, so detours of different edges tend to run side by side
         shifts = [sign * (k % 12 + 1) * _LANE_STEP for sign in (-1, 1)]
-        # the lines near the edge's own end points are tried first: most detours stay close to where they start and end
         near_u = (min(path[0][0], path[-1][0]) - _NEAR, max(path[0][0], path[-1][0]) + _NEAR)
         near_v = (min(path[0][1], path[-1][1]) - _NEAR, max(path[0][1], path[-1][1]) + _NEAR)
-        wide = False
-        attempt = 0
-        while attempt < 4:
+        around = None
+        for wide in (False, True):  # the lines near the end points first; every line if nothing close by works
             keep_ys = [y for y in flat_ys if wide or near_v[0] <= y <= near_v[1] or y in (min(flat_ys), max(flat_ys))]
             keep_xs = [x for x in base_xs if wide or near_u[0] <= x <= near_u[1] or x in (min(base_xs), max(base_xs))]
             near_end_ys = [y for y in end_ys if wide or near_v[0] <= y <= near_v[1] or y in (min(end_ys), max(end_ys))]
             near_end_xs = [x for x in end_xs if wide or near_u[0] <= x <= near_u[1] or x in (min(end_xs), max(end_xs))]
             ys = {
-                y
-                for y in (*keep_ys, *near_end_ys, *(y + o for y in keep_ys for o in shifts), *extra_ys)
+                snap(y)
+                for y in (
+                    *keep_ys,
+                    *near_end_ys,
+                    *(y + o for y in (*keep_ys, *near_end_ys) for o in shifts),
+                    *(y + m * _LANE_STEP for y in outer_ys for m in range(-20, 21)),
+                )
                 if low <= y <= high and -shift_v <= y <= v_total - shift_v
             }
             xs = {
-                x
-                for x in (*keep_xs, *near_end_xs, *(x + o for x in keep_xs for o in shifts), *extra_xs)
+                snap(x)
+                for x in (
+                    *keep_xs,
+                    *near_end_xs,
+                    *(x + o for x in (*keep_xs, *near_end_xs) for o in shifts),
+                    *(x + m * _LANE_STEP for x in outer_xs for m in range(-20, 21)),
+                )
                 if -shift_u <= x <= u_total - shift_u
             }
-            found = _detour(path, {snap(x) for x in xs}, {snap(y) for y in ys}, [*solids, *foreign], others, spent)
-            if found is None and not wide:
-                wide = True  # nothing close by, so allow every line
-                continue
-            attempt += 1
-            if found is None:
+            around = _detour(path, xs, ys, [*solids, *foreign_of[n]], others, spent)
+            if around is not None:
                 break
-            around = found
-            crowded = _shared(found, others)
-            if not crowded or spent[0] > _RETRY_BUDGET:
-                break
-            # run side by side with the routes already on those lines
-            for axis, coord in crowded:
-                copies = {coord + m * _LANE_STEP for m in range(-6, 7) if m}
-                (extra_ys if axis == 0 else extra_xs).update(copies)
+        return around
+
+    for k, (n, _foreign) in enumerate(pending):
+        bends, source, target, chain, parallel = built[n]
+        path = [bends[0], *(b for a, b in pairwise(bends) if a != b)]
+        # routes that leave or arrive at the same border point may run along this one, so they do not count
+        mine = {path[0], path[-1]}
+        others = {key: [(lo, hi) for lo, hi, m in runs if not ends_of[m] & mine] for key, runs in occupied.items()}
+        around = search(n, path, others, k)
         if around is None:
             raise GraphError(f"edge {source!r} -> {target!r} cannot be routed round the groups it does not belong to")
-        built[n] = (around, source, target, chain, _parallel)
+        built[n] = (around, source, target, chain, parallel)
         occupy(around, n)
 
-    for bends, source, target, _chain, parallel in built:
+    # a route may still run along another one; move a later segment aside a grid step at a time, or refuse
+    paths = [_simplify(b[0]) for b in built]
+    border_ends = [{p[0], p[-1]} for p in paths]
+
+    def fits(n: int, pts: list[tuple[float, float]]) -> bool:
+        """Whether `pts` stays on the page, in the lanes of edge `n`'s ends, off every box and off foreign groups."""
+        low, high = lane_span(built[n][3])
+        if any(
+            not (-shift_u <= u <= u_total - shift_u and max(low, -shift_v) <= v <= min(high, v_total - shift_v))
+            for u, v in pts
+        ):
+            return False
+        return not any(_blocks(a, b, r) for a, b in pairwise(pts) for r in solids) and not any(
+            _enters(a, b, r) for a, b in pairwise(pts) for r in foreign_of[n]
+        )
+
+    def reroute(n: int) -> list[tuple[float, float]] | None:
+        """Edge `n` searched again, knowing every other route as it now stands."""
+        mine = {paths[n][0], paths[n][-1]}
+        others = {
+            key: [(lo, hi) for lo, hi, m, _j in runs if not border_ends[m] & mine]
+            for key, runs in _runs(paths, skip=n).items()
+        }
+        found = search(n, paths[n], others, n)
+        return None if found is None else _simplify(found)
+
+    _apart(paths, border_ends, fits, lambda n: (built[n][1], built[n][2]), reroute)
+
+    for pts, (_bends, source, target, _chain, parallel) in zip(paths, built, strict=True):
         mapped: list[tuple[float, float]] = []
-        for p in (page(u, v) for u, v in bends):
+        for p in (page(u, v) for u, v in pts):
             if not mapped or mapped[-1] != p:
                 mapped.append(p)
         kept = [mapped[0]]
