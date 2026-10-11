@@ -710,3 +710,13 @@ def test_a_user_shape_whose_kind_matches_a_decoration_is_still_a_member(kind):
     add_data_rows(mine, {"Source": "mine", "Kind": kind})
     assert mine in diagram.shapes_in(lane)
     diagram.move_to_lane(mine, lane)
+
+
+def test_a_group_with_an_empty_label_reserves_no_heading_strip(tmp_path):
+    page = Page("P", [_node("a"), _node("b")], [Edge("a", "b")], groups=[Group("g", "", ["b"])])
+    document = Document.open(
+        Diagram("T", [page]).build(layout=builder.LayoutOptions(direction="top_down")).save(tmp_path / "e.vsdx")
+    )
+    node = _box(_by_source(document)["b"])
+    end = _absolute_points(_kinds(document, "flow")[0])[-1]
+    assert abs(end[1] - (node.y + node.height / 2)) < 1e-6, "the edge enters the top of the node, with no heading to avoid"

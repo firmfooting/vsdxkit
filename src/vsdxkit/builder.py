@@ -404,7 +404,7 @@ def _draw_page(page: Page, target: VisioPage, options: LayoutOptions, links: Map
         replace(
             options,
             parents=tuple(parents),
-            headings=tuple((g.id, *_heading_size(g.label)) for g in _all_groups(page)),
+            headings=tuple((g.id, *_heading_size(g.label)) for g in _all_groups(page) if g.label.strip()),
             edge_labels=tuple(label_size(e.label) if e.label else None for e in page.edges if e.kind != "page-link"),
         ),
     )

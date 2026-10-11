@@ -601,6 +601,39 @@ def _check_labels(layout: Layout, edges, labels) -> None:
             assert not _overlap(box, other), f"labels {key} and {other_key} overlap"
 
 
+def _check_labels_keep_out(layout: Layout, nodes, parents, edges, headings) -> None:
+    """A label hides no heading, no lane heading and no group its edge does not touch, and stays inside its edge's lanes."""
+    parent = dict(parents)
+    groups_of = {}
+    for node in nodes:
+        found, g = set(), node.group
+        while g is not None:
+            found.add(g)
+            g = parent.get(g)
+        groups_of[node.id] = found
+    by_id = {node.id: node for node in nodes}
+    seen: dict[tuple[str, str], int] = {}
+    for source, target in edges:
+        key = (source, target, seen.get((source, target), 0))
+        seen[(source, target)] = key[2] + 1
+        label = layout.labels[key]
+        for g, width, height in headings:
+            if g in layout.groups:
+                box = layout.groups[g]
+                band = Box(box.x, box.y + box.height / 2 - height / 2, min(width, box.width), height)
+                assert not _overlap(label, band), f"label {key} covers the heading of group {g}"
+        for g, box in layout.groups.items():
+            if g not in groups_of[source] | groups_of[target]:
+                assert not _overlap(label, box), f"label {key} covers group {g}"
+        ends = [layout.lanes[by_id[i].lane] for i in (source, target) if by_id[i].lane is not None]
+        if ends:
+            low, high = min(b.y - b.height / 2 for b in ends), max(b.y + b.height / 2 for b in ends)
+            assert low - SHRINK <= label.y - label.height / 2 and label.y + label.height / 2 <= high + SHRINK, (
+                f"label {key} leaves its lanes"
+            )
+            assert label.x - label.width / 2 >= 1.1 - SHRINK, f"label {key} covers the lane headings"
+
+
 def _check_heading_bands(layout: Layout, headings) -> None:
     """No route enters the strip at the top of a group box, where its heading is drawn."""
     for g, width, height in headings:
@@ -649,6 +682,7 @@ def test_labels_and_headings_get_room_in_random_graphs(seed, lanes, groups, dire
     _check(layout, nodes, parents)
     _check_routes(layout)
     _check_labels(layout, edges, labels)
+    _check_labels_keep_out(layout, nodes, parents, edges, headings)
     _check_headings(layout, nodes, parents, headings)
     _check_heading_bands(layout, headings)
     assert layout == layered_layout(nodes, edges, lane_ids, group_ids, options)
@@ -691,6 +725,12 @@ def test_a_heading_that_would_cover_a_node_outside_its_group_is_refused():
         LayoutOptions(edge_labels=((0.0, 0.3),)),
         LayoutOptions(headings=(("ghost", 1.0, 1.0),)),
         LayoutOptions(headings=(("g", 1.0, float("nan")),)),
+        LayoutOptions(headings=(("g", 1.0, 1.0), ("g", 2.0, 1.0))),
+        LayoutOptions(headings=(("g", 1.0),)),
+        LayoutOptions(headings=(("g", 1.0, 1.0, 1.0),)),
+        LayoutOptions(headings=(("g", "wide", 1.0),)),
+        LayoutOptions(headings=((),)),
+        LayoutOptions(edge_labels=(("wide", 0.3),)),
     ],
 )
 def test_a_label_or_heading_option_that_is_not_valid_is_refused(options):
@@ -722,3 +762,37 @@ def test_a_one_line_heading_that_fits_the_padding_still_keeps_routes_off_it():
     layout = layered_layout(nodes, (("a", "b"),), (), ("g",), LayoutOptions(direction="top_down", headings=headings))
     _check_routes(layout)
     _check_heading_bands(layout, headings)
+
+
+def test_a_wide_label_entering_a_group_top_down_does_not_cover_its_heading():
+    nodes = (LayoutNode("a", 1.5, 0.8), LayoutNode("b", 1.5, 0.8, group="g"))
+    headings = (("g", 1.0, 0.25),)
+    labels = ((3.0, 0.3),)
+    options = LayoutOptions(direction="top_down", edge_labels=labels, headings=headings)
+    layout = layered_layout(nodes, (("a", "b"),), (), ("g",), options)
+    _check_labels(layout, (("a", "b"),), labels)
+    _check_labels_keep_out(layout, nodes, (), (("a", "b"),), headings)
+
+
+def test_a_lane_gives_room_to_the_labels_that_stay_in_it():
+    nodes = (LayoutNode("a", 1.5, 0.8, "x"), LayoutNode("b", 1.5, 0.8, "x"), LayoutNode("c", 1.5, 0.8, "y"))
+    edges = (("a", "b"),) * 4 + (("b", "c"),)
+    labels = ((0.66, 0.3),) * 5
+    layout = layered_layout(nodes, edges, ("x", "y"), (), LayoutOptions(edge_labels=labels))
+    _check_labels(layout, edges, labels)
+    _check_labels_keep_out(layout, nodes, (), edges, ())
+
+
+def test_25_parallel_labelled_edges_are_all_placed():
+    nodes = (LayoutNode("a", 2.0, 8.0), LayoutNode("b", 2.0, 8.0))
+    edges = (("a", "b"),) * 25
+    labels = ((0.66, 0.3),) * 25
+    layout = layered_layout(nodes, edges, options=LayoutOptions(edge_labels=labels))
+    _check_labels(layout, edges, labels)
+
+
+def test_the_page_ends_a_margin_after_the_last_column_when_labels_widen_the_gaps():
+    nodes = (LayoutNode("a", 1.5, 0.8), LayoutNode("b", 1.5, 0.8))
+    layout = layered_layout(nodes, (("b", "a"),), options=LayoutOptions(edge_labels=((2.0, 0.3),)))
+    right = max(box.x + box.width / 2 for box in layout.nodes.values())
+    assert layout.width == pytest.approx(right + 0.5, abs=0.02)
