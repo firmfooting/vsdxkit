@@ -111,6 +111,17 @@ LINES: tuple[tuple[str, str], ...] = (
     ),
     ("lanes_add", "lanes_add: a created two-lane diagram with a lane added by add_lane; every shape where it was written"),
     ("lanes_wide", "lanes_wide: a diagram 22 inches wide on a page widened to 24; every shape where it was written"),
+    (
+        "lanes_wide_60_3",
+        "lanes_wide_60_3: three lanes, a diagram 60 inches wide on a page widened to 61; every shape where it was written",
+    ),
+    (
+        "lanes_wide_60_5",
+        "lanes_wide_60_5: five lanes, a diagram 60 inches wide on a page widened to 61; every shape where it was written",
+    ),
+    ("every_kind", "every_kind: nine node kinds, six edge kinds, a long edge, a self-loop; every shape where it was written"),
+    ("groups_and_lanes", "groups_and_lanes: three lanes, a group holding a group; every shape where it was written"),
+    ("two_pages", "two_pages: two pages and a page link; every shape on both pages where it was written"),
 )
 """Every case file's name and what Visio must show for it."""
 
