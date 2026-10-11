@@ -539,6 +539,19 @@ def test_a_unique_id_held_on_another_page_is_not_given_again():
     assert wanted not in _unique_ids(first)
 
 
+def test_a_unique_id_a_master_shape_holds_is_not_given_again():
+    document = Document.new()
+    page = _page(document)
+    next_id = max(int(s.ID) for s in page.shapes) + 1 if page.shapes else 1
+    wanted = _derived(page, next_id)
+    shape_element = next(document.master_pages[0].xml.getroot().iter(f"{namespace}Shape"))
+    shape_element.attrib["UniqueID"] = wanted
+    page.create_swimlanes(BANDS, left=0.5, top=7.0, width=10.0)
+    mine = {i.upper() for i in _unique_ids(page)}
+    assert wanted.upper() not in mine
+    assert len(mine) == len(_unique_ids(page))
+
+
 def _derived(page, shape_id) -> str:
     """The UniqueID the code first derives for the shape with this ID on this page."""
     import uuid
