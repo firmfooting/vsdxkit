@@ -25,7 +25,7 @@ from vsdxkit._drawing import (
     label_size,
 )
 from vsdxkit.document import Document
-from vsdxkit.errors import GraphError
+from vsdxkit.errors import GraphError, InvalidOperationError
 from vsdxkit.layout import Layout, LayoutNode, LayoutOptions, layered_layout, snap
 from vsdxkit.pages import Page as VisioPage
 from vsdxkit.swimlanes import DIAGRAM_WIDTHS, LABEL_CHARS_PER_INCH, LANE_HEIGHTS, MAX_LANES
@@ -427,20 +427,27 @@ def _draw_layout(
     if page.lanes:
         boxes = [layout.lanes[lane.id] for lane in page.lanes]
         for lane, box in zip(page.lanes, boxes, strict=True):
-            if not LANE_HEIGHTS[0] <= box.height <= LANE_HEIGHTS[1]:
+            if (
+                isinstance(box.height, bool)
+                or not isinstance(box.height, (int, float))
+                or not LANE_HEIGHTS[0] <= box.height <= LANE_HEIGHTS[1]
+            ):
                 raise GraphError(
-                    f"lane {lane.id!r} is laid out {box.height:g} inches tall; a lane is drawn {LANE_HEIGHTS[0]} to {LANE_HEIGHTS[1]}"
+                    f"lane {lane.id!r} is laid out {box.height!r} inches tall; a lane is drawn {LANE_HEIGHTS[0]} to {LANE_HEIGHTS[1]}"
                 )
             if len(lane.label) > LABEL_CHARS_PER_INCH * box.height:
                 raise GraphError(
                     f"lane {lane.id!r} has a label of {len(lane.label)} characters, more than its {box.height:g} inch height holds"
                 )
-        diagram = target.create_swimlanes(
-            [(lane.label, box.height) for lane, box in zip(page.lanes, boxes, strict=True)],
-            left=_LANE_LEFT,
-            top=boxes[0].y + boxes[0].height / 2,
-            width=layout.width - 2 * _LANE_LEFT,
-        )
+        try:
+            diagram = target.create_swimlanes(
+                [(lane.label, box.height) for lane, box in zip(page.lanes, boxes, strict=True)],
+                left=_LANE_LEFT,
+                top=boxes[0].y + boxes[0].height / 2,
+                width=layout.width - 2 * _LANE_LEFT,
+            )
+        except InvalidOperationError as error:  # a limit the checks above missed must still leave the builder as a GraphError
+            raise GraphError(f"page {page.name!r} cannot draw its lanes: {error}") from error
         add_data_rows(diagram.container, {"Source": page.name, "Kind": "lane_container"})
         for lane, shape in zip(page.lanes, diagram.lanes, strict=True):
             add_data_rows(shape, {"Source": lane.id, "Kind": "lane"})
