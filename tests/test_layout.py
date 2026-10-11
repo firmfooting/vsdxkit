@@ -569,11 +569,14 @@ def test_sweeps_must_not_be_a_bool():
         layered_layout((_n("a"),), (), options=LayoutOptions(sweeps=True))
 
 
-def _label_and_heading_sizes(seed, edges, group_ids):
+def _heading_sizes(seed, group_ids):
     rng = random.Random(seed)
-    labels = tuple((rng.choice([0.3, 0.66, 1.2]), rng.choice([0.3, 0.3, 0.55])) for _ in edges)
-    headings = tuple((g, rng.choice([0.8, 1.5, 3.0]), rng.choice([0.25, 0.5, 0.75])) for g in group_ids)
-    return labels, headings
+    return tuple((g, rng.choice([0.8, 1.5, 3.0]), rng.choice([0.25, 0.5, 0.75])) for g in group_ids)
+
+
+def _label_sizes(seed, edges):
+    rng = random.Random(seed + 1000)
+    return tuple((rng.choice([0.3, 0.66, 1.2]), rng.choice([0.3, 0.3, 0.55])) for _ in edges)
 
 
 def _check_labels(layout: Layout, edges, labels) -> None:
@@ -670,13 +673,32 @@ def _check_headings(layout: Layout, nodes, parents, headings) -> None:
 @pytest.mark.parametrize("seed", range(40))
 @pytest.mark.parametrize(
     ("lanes", "groups", "direction"),
+    [(0, 3, "left_to_right"), (3, 3, "left_to_right"), (0, 3, "top_down"), (0, 1, "top_down")],
+)
+def test_headings_get_room_in_random_graphs(seed, lanes, groups, direction):
+    rows, edges, lane_ids, group_ids, parents = random_graph(seed, 7, 10, lanes, groups)
+    edges = (*edges, edges[0], edges[0], (edges[1][0], edges[1][0]), edges[2][::-1])
+    nodes = tuple(LayoutNode(*row) for row in rows)
+    headings = _heading_sizes(seed, group_ids)
+    options = LayoutOptions(direction=direction, parents=parents, headings=headings)
+    layout = layered_layout(nodes, edges, lane_ids, group_ids, options)
+    _check(layout, nodes, parents)
+    _check_routes(layout)
+    _check_headings(layout, nodes, parents, headings)
+    _check_heading_bands(layout, headings)
+    assert layout == layered_layout(nodes, edges, lane_ids, group_ids, options)
+
+
+@pytest.mark.parametrize("seed", range(40))
+@pytest.mark.parametrize(
+    ("lanes", "groups", "direction"),
     [(0, 0, "left_to_right"), (0, 0, "top_down"), (3, 0, "left_to_right"), (3, 3, "left_to_right"), (0, 3, "top_down")],
 )
 def test_labels_and_headings_get_room_in_random_graphs(seed, lanes, groups, direction):
     rows, edges, lane_ids, group_ids, parents = random_graph(seed, 7, 10, lanes, groups)
     edges = (*edges, edges[0], edges[0], (edges[1][0], edges[1][0]), edges[2][::-1])
     nodes = tuple(LayoutNode(*row) for row in rows)
-    labels, headings = _label_and_heading_sizes(seed, edges, group_ids)
+    labels, headings = _label_sizes(seed, edges), _heading_sizes(seed, group_ids)
     options = LayoutOptions(direction=direction, parents=parents, edge_labels=labels, headings=headings)
     layout = layered_layout(nodes, edges, lane_ids, group_ids, options)
     _check(layout, nodes, parents)

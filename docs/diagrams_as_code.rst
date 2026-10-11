@@ -51,7 +51,9 @@ Node kinds are ``start``, ``end``, ``process``, ``decision``, ``data_store``,
 drawn on an opaque white background. The layout leaves room for each edge label
 and each group heading: a gap widens to hold the labels that cross it, a group
 box widens and grows at the top to hold its heading, and a label or heading that
-cannot be placed clear of the nodes and other labels is refused.
+cannot be placed clear of the nodes, headings, other groups and other labels, or
+a heading that would make its box cover a node or group that is not its own, is
+refused.
 
 :meth:`~vsdxkit.builder.Diagram.validate` refuses a description that cannot be
 drawn, naming the first thing wrong, as :class:`~vsdxkit.errors.GraphError`.

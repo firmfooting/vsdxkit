@@ -34,13 +34,8 @@ is separate work.
 
 from __future__ import annotations
 
-import sys
 import xml.etree.ElementTree as ET
-
-if sys.version_info >= (3, 12):
-    from typing import override
-else:
-    from typing_extensions import override
+from typing import override
 
 
 class VsdxError(Exception):
