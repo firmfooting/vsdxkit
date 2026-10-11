@@ -412,12 +412,51 @@ def test_the_bytes_equal_the_digest_every_platform_is_held_to(tmp_path):
     assert digest == GOLDEN.read_text(encoding="utf-8").strip()
 
 
-def test_no_shape_keeps_a_row_its_donor_was_copied_with(tmp_path):
-    """The bundled donors of some kinds and of connectors hold placeholder Shape Data rows, which must not reach a drawing."""
-    path = _big(10, 12).save(tmp_path / "d.vsdx")
-    for page in Document.open(path).pages:
-        for shape in page.shapes:
-            assert not [name for name in _rows(shape) if name.startswith("my_")], f"shape {shape.ID} kept a donor row"
+def test_an_edge_label_wider_than_the_layout_grows_the_page_and_stays_on_it(tmp_path):
+    page = Page("P", [_node("a"), _node("b")], [Edge("a", "b", "x" * 100)])
+    document = Document.open(Diagram("T", [page]).save(tmp_path / "w.vsdx"))
+    label = next(s for s in document.pages[0].shapes if _rows(s).get("Kind") == "edge_label")
+    assert label.x - label.width / 2 >= -1e-9
+    assert label.x + label.width / 2 <= document.pages[0].width + 1e-9
+    assert label.y - label.height / 2 >= -1e-9
+    assert label.y + label.height / 2 <= document.pages[0].height + 1e-9
+
+
+def test_a_laned_page_is_measured_after_its_labels_are_placed():
+    nodes = [_node("a"), _node("b")]
+    page = Page("P", nodes, [Edge("a", "b", "x" * 600)], lanes=[Lane("l", "L", ["a", "b"])])
+    with pytest.raises(GraphError, match="inches wide"):
+        Diagram("T", [page]).build()
+
+
+def test_a_multi_line_label_makes_a_tall_node_not_a_wide_one():
+    document = Diagram("T", [Page("P", [Node("a", "process", "\n".join(["ab"] * 20))])]).build()
+    shape = _by_source(document)["a"]
+    assert shape.height >= 0.25 * 20
+    assert shape.width < 3
+
+
+@pytest.mark.parametrize(
+    "groups",
+    [
+        [Group("g", "G", [], [Group("h", "H", ["a"]), Group("i", "I", ["a"])])],
+        [Group("g", "G", ["a"], [Group("h", "H", ["a"])])],
+    ],
+    ids=["siblings", "parent and child"],
+)
+def test_a_node_in_two_nested_groups_is_refused(groups):
+    with pytest.raises(GraphError, match="is in groups"):
+        Diagram("T", [Page("P", [_node("a")], groups=groups)]).build()
+
+
+def test_no_donor_shape_data_row_is_left_in_the_saved_file(tmp_path):
+    kinds = ["external", "document", "process", "decision"]
+    nodes = [Node(f"n{i}", kind, kind) for i, kind in enumerate(kinds)]
+    edges = [Edge("n0", "n1", "go"), Edge("n1", "n2")]
+    page = Page("P", nodes, edges, [Group("g", "G", ["n2", "n3"])])
+    document = Document.open(Diagram("T", [page]).save(tmp_path / "d.vsdx"))
+    for shape in document.pages[0].shapes:
+        assert not {"my_property_name", "my_second_property_name"} & set(_rows(shape)), _rows(shape)
 
 
 def _chain(count: int) -> Diagram:
