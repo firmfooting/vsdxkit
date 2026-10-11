@@ -184,7 +184,7 @@ LANE_HEIGHTS = (0.5, 6.0)
 """The least and greatest lane height, in inches, that Visio was checked on."""
 DIAGRAM_WIDTHS = (5.0, 22.0)
 """The least and greatest diagram width, in inches, that Visio was checked on."""
-LABEL_CHARS_PER_INCH = 11.5
+LABEL_CHARS_PER_INCH = 11
 """The most characters of a label for each inch of lane height: a longer label wraps out of the heading, which Visio showed."""
 ID_CEILING = 1000
 """The bundled diagram's shape IDs start here, so a page may hold shapes only below it for a copy's IDs never to equal one of them."""
