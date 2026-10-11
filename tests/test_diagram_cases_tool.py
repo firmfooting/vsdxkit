@@ -33,7 +33,10 @@ def test_every_case_writes_a_file_that_opens_and_is_asked_about_in_full(tmp_path
 def test_a_case_builds_the_same_bytes_every_time(tmp_path):
     tool = _tool()
     first, second = tmp_path / "a", tmp_path / "b"
-    tool.main([str(first)])
-    tool.main([str(second)])
-    for path in sorted(first.glob("*.vsdx")):
+    assert tool.main([str(first)]) == 0
+    assert tool.main([str(second)]) == 0
+    built = sorted(first.glob("*.vsdx"))
+    assert [path.name for path in built] == [path.name for path in sorted(second.glob("*.vsdx"))]
+    assert built
+    for path in built:
         assert path.read_bytes() == (second / path.name).read_bytes()
