@@ -293,7 +293,7 @@ def _axis_of(member: Shape, name: str, depth: int = 0) -> int | None:
     """
     found = set()
     for bang, raw_term in _AXIS_TERM.findall(_formula_of(member, name) or ""):
-        term = raw_term.capitalize()  # the cell names are Width and Height whatever case the formula uses
+        term: str = raw_term.capitalize()  # the cell names are Width and Height whatever case the formula uses
         direct = (
             bang or term == name or depth > 2
         )  # a formula naming its own cell's name, or nested deeply, is taken as written
