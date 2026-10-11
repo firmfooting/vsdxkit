@@ -205,6 +205,8 @@ def test_a_description_that_cannot_be_drawn_is_refused_before_anything_is_built(
         (Diagram("T", [Page("P", [Node("a", "process", "A", data={"N\x00": "b"})])]), "control character"),
         (Diagram(None, [Page("P", [_node("a")])]), "title"),  # type: ignore[arg-type]
         (Diagram("a\x00b", [Page("P", [_node("a")])]), "control character"),
+        (Diagram("a\ufffeb", [Page("P", [_node("a")])]), "cannot carry"),
+        (Diagram("a\ud800b", [Page("P", [_node("a")])]), "cannot carry"),
         (Diagram("T", [Page("P", [Node("a", "process", "a\x01b")])]), "control character"),
         (Diagram("T", [Page("P", [Node("a", "process", "A", sublabel="a\x1fb")])]), "control character"),
         (Diagram("T", [Page("P", [_node("a")], [Edge("a", "a", label="a\x02b")])]), "control character"),

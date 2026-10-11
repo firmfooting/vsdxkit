@@ -159,7 +159,8 @@ class Diagram:
         """Refuse a description that cannot be drawn, naming the first thing wrong; otherwise return the Shape Data rows each ``page-link`` end gets.
 
         :raises GraphError: on a title, page name, id, label, sublabel or Shape Data name or value that is not a string or
-            holds a character XML cannot carry (a control character other than tab and newline), a ``Kind`` entry in a
+            holds a character XML 1.0 cannot carry (a control character other than tab, newline and carriage return, a lone
+            surrogate, U+FFFE or U+FFFF), a ``Kind`` entry in a
             node's ``data``, a repeated or empty id or page name, an edge or member naming a node
             not on its page, a node in two lanes or two groups, a node outside every lane on a page with lanes,
             a group split across lanes or nested two deep, more lanes than a page draws, a blank lane label, an
@@ -215,7 +216,9 @@ def _text(value: object, what: str) -> None:
     if not isinstance(value, str):
         raise GraphError(f"{what} is {value!r}; it must be a string")
     if match := _XML_ILLEGAL.search(value):
-        raise GraphError(f"{what} holds the control character {match.group()!r}, which a Visio file cannot carry")
+        raise GraphError(
+            f"{what} holds {match.group()!r}, a character XML 1.0 cannot carry (a control character other than tab, newline and carriage return, a lone surrogate, U+FFFE or U+FFFF)"
+        )
 
 
 def _check_data(node: Node) -> None:
