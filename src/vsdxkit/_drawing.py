@@ -46,8 +46,10 @@ def _cell(name: str, value: str) -> Element:
     return Element(f"{namespace}Cell", {"N": name, "V": value})
 
 
-def add_data_rows(shape: Shape, rows: Mapping[str, str]) -> None:
+def add_data_rows(shape: Shape, rows: Mapping[str, str], *, clear: bool = False) -> None:
     """Write each entry of `rows` as a string Shape Data row on `shape`, in the order given, replacing a row of the same name.
+
+    With `clear`, the rows the shape already has (the demonstration rows of a bundled donor) are removed first.
 
     The cells follow the order the bundled donors use. Type 0 is a string (Learn: Type Cell, Shape Data Section).
     """
@@ -56,6 +58,9 @@ def add_data_rows(shape: Shape, rows: Mapping[str, str]) -> None:
         section = Element(f"{namespace}Section", {"N": "Property"})
         leading = max((i + 1 for i, child in enumerate(shape.xml) if child.tag == f"{namespace}Cell"), default=0)
         shape.xml.insert(leading, section)
+    if clear:
+        for old in section.findall(f"{namespace}Row"):
+            section.remove(old)
     for name, value in rows.items():
         for old in [r for r in section.findall(f"{namespace}Row") if r.attrib.get("N") == name]:
             section.remove(old)
@@ -155,9 +160,18 @@ def draw_backdrop(page: Page, x: float, y: float, width: float, height: float, t
     return shape
 
 
+LABEL_HEIGHT = 0.3
+"""Height in inches of an edge label's box."""
+
+
+def label_width(text: str) -> float:
+    """Width in inches of an edge label's box."""
+    return snap(0.12 * len(text) + 0.3)
+
+
 def draw_label(page: Page, x: float, y: float, text: str) -> Shape:
     """A borderless, unfilled text box centred on `x`, `y`, for an edge's label."""
-    shape = page.create_shape(ShapeKind.RECTANGLE, x=x, y=y, width=snap(0.12 * len(text) + 0.3), height=0.3, text=text)
+    shape = page.create_shape(ShapeKind.RECTANGLE, x=x, y=y, width=label_width(text), height=LABEL_HEIGHT, text=text)
     shape.set_cell_value("FillPattern", "0")
     shape.set_cell_value("LinePattern", "0")
     shape.set_cell_value("VerticalAlign", "1")
