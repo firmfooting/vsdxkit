@@ -250,14 +250,25 @@ def _simplify(path: list[tuple[float, float]]) -> list[tuple[float, float]]:
     return kept
 
 
+def _spend(work: list[int], amount: int) -> None:
+    """Charge `amount` search steps to `work`, and refuse the layout once it is past `_WORK_CAP`."""
+    work[0] += amount
+    if work[0] > _WORK_CAP:
+        raise GraphError(f"the layout is too crowded to route within its search limit of {_WORK_CAP} steps")
+
+
 def _runs(
-    paths: list[list[tuple[float, float]]], skip: int = -1
+    paths: list[list[tuple[float, float]]], work: list[int], skip: int = -1
 ) -> dict[tuple[int, float], list[tuple[float, float, int, int]]]:
-    """Every segment of every path but `skip`, by line: (low, high, path, segment) under (axis, coordinate)."""
+    """Every segment of every path but `skip`, by line: (low, high, path, segment) under (axis, coordinate).
+
+    Each segment scanned is charged to `work`.
+    """
     lines: dict[tuple[int, float], list[tuple[float, float, int, int]]] = {}
     for n, pts in enumerate(paths):
         if n == skip:
             continue
+        _spend(work, len(pts))
         for i, (a, b) in enumerate(pairwise(pts)):
             if a[1] == b[1]:
                 lines.setdefault((0, round(a[1], 4)), []).append((min(a[0], b[0]), max(a[0], b[0]), n, i))
@@ -267,10 +278,10 @@ def _runs(
 
 
 def _first_clash(
-    paths: list[list[tuple[float, float]]], ends: list[set[tuple[float, float]]]
+    paths: list[list[tuple[float, float]]], ends: list[set[tuple[float, float]]], work: list[int]
 ) -> tuple[int, int, int, int] | None:
     """The first two segments (path, segment, path, segment) of different paths that run along one line, or None."""
-    lines = _runs(paths)
+    lines = _runs(paths, work)
     for key in sorted(lines):
         runs = sorted(lines[key])
         for x, (_lo, hi, n, i) in enumerate(runs):
@@ -288,26 +299,28 @@ def _apart(
     fits: Callable[[int, list[tuple[float, float]]], bool],
     name: Callable[[int], tuple[str, str]],
     reroute: Callable[[int], list[tuple[float, float]] | None],
+    work: list[int],
 ) -> None:
     """Move segments aside, one grid step at a time, until no two paths run along one line, or raise GraphError.
 
     Two paths may overlap where they share an end point. A path that is moved is the later one, and only a segment
     that is neither its first nor its last, so its ends stay on their borders; `fits` says whether a moved path is
-    still legal. A pair that `_SEPARATIONS` steps either way cannot part is refused.
+    still legal. A pair that `_SEPARATIONS` steps either way cannot part is refused, and so is a layout whose
+    scanning, with the route searches, passes `_WORK_CAP` steps in `work`.
     """
     for _round in range(_REROUTES):
         # every route that runs along another is searched again, now that the routes after it are known
         for n in range(len(paths)):
             if name(n)[0] == name(n)[1]:
                 continue
-            rest = _runs(paths, skip=n)
+            rest = _runs(paths, work, skip=n)
             now = _clashes(paths[n], n, rest, ends)
             if now:
                 again = reroute(n)
                 if again is not None and fits(n, again) and _clashes(again, n, rest, ends) < now:
                     paths[n] = again
     for _ in range(8 * len(paths) + 8):
-        clash = _first_clash(paths, ends)
+        clash = _first_clash(paths, ends, work)
         if clash is None:
             return
         n, i, m, j = clash
@@ -315,7 +328,7 @@ def _apart(
             pts = paths[who]
             if name(who)[0] == name(who)[1] or not 1 <= seg <= len(pts) - 3:
                 continue
-            others = _runs(paths, skip=who)
+            others = _runs(paths, work, skip=who)
             before = _clashes(pts, who, others, ends)
             for step in range(1, _SEPARATIONS + 1):
                 moved = None
@@ -336,7 +349,7 @@ def _apart(
                 if name(who)[0] == name(who)[1]:
                     continue
                 again = reroute(who)
-                rest = _runs(paths, skip=who)
+                rest = _runs(paths, work, skip=who)
                 if (
                     again is not None
                     and fits(who, again)
@@ -347,7 +360,7 @@ def _apart(
             else:
                 a, b = name(n), name(m)
                 raise GraphError(f"edge {a[0]!r} -> {a[1]!r} and edge {b[0]!r} -> {b[1]!r} cannot be kept apart")
-    clash = _first_clash(paths, ends)
+    clash = _first_clash(paths, ends, work)
     if clash is not None:
         a, b = name(clash[0]), name(clash[2])
         raise GraphError(f"edge {a[0]!r} -> {a[1]!r} and edge {b[0]!r} -> {b[1]!r} cannot be kept apart")
@@ -536,9 +549,7 @@ def _detour(
     goal_cell = goal[0] * ny + goal[1]
     while heap:
         _f, _c, state = heapq.heappop(heap)
-        work[0] += 1
-        if work[0] > _WORK_CAP:
-            raise GraphError("the layout is too crowded to route within its search limit")
+        _spend(work, 1)
         cell, d = divmod(state, 4)
         i, j = divmod(cell, ny)
         if cell == goal_cell and d == last:
@@ -603,7 +614,7 @@ def layered_layout(
         value = getattr(opts, name)
         if not (isinstance(value, int | float) and math.isfinite(value) and value >= 0):
             raise GraphError(f"option {name} is {value!r}; it must be a finite number of inches, zero or more")
-    if not (isinstance(opts.sweeps, int) and opts.sweeps >= 1):
+    if not (isinstance(opts.sweeps, int) and not isinstance(opts.sweeps, bool) and opts.sweeps >= 1):
         raise GraphError(f"option sweeps is {opts.sweeps!r}; it must be a whole number, one or more")
     if opts.direction not in ("left_to_right", "top_down"):
         raise GraphError(f"option direction is {opts.direction!r}; it must be 'left_to_right' or 'top_down'")
@@ -1080,12 +1091,12 @@ def layered_layout(
         mine = {paths[n][0], paths[n][-1]}
         others = {
             key: [(lo, hi) for lo, hi, m, _j in runs if not border_ends[m] & mine]
-            for key, runs in _runs(paths, skip=n).items()
+            for key, runs in _runs(paths, spent, skip=n).items()
         }
         found = search(n, paths[n], others, n)
         return None if found is None else _simplify(found)
 
-    _apart(paths, border_ends, fits, lambda n: (built[n][1], built[n][2]), reroute)
+    _apart(paths, border_ends, fits, lambda n: (built[n][1], built[n][2]), reroute, spent)
 
     for pts, (_bends, source, target, _chain, parallel) in zip(paths, built, strict=True):
         mapped: list[tuple[float, float]] = []

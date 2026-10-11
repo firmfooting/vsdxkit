@@ -553,3 +553,17 @@ def test_random_graphs_either_lay_out_cleanly_or_are_refused(seed):
         return  # a node too small for its parallel edges, or a layout too crowded to keep apart, is refused
     _check(layout, nodes, parents)
     _check_routes(layout)
+
+
+def test_scanning_for_shared_runs_counts_against_the_search_limit(monkeypatch):
+    rows, edges, lane_ids, group_ids, parents = random_graph(1, 40, 80, 0, 0)
+    nodes = tuple(LayoutNode(*row) for row in rows)
+    layered_layout(nodes, edges, lane_ids, group_ids, LayoutOptions(parents=parents))
+    monkeypatch.setattr(layout_module, "_WORK_CAP", 50)
+    with pytest.raises(GraphError, match="search limit of 50 steps"):
+        layered_layout(nodes, edges, lane_ids, group_ids, LayoutOptions(parents=parents))
+
+
+def test_sweeps_must_not_be_a_bool():
+    with pytest.raises(GraphError, match="sweeps"):
+        layered_layout((_n("a"),), (), options=LayoutOptions(sweeps=True))
