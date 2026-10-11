@@ -377,7 +377,7 @@
   "schema": 2,
   "source": {
     "name": "fixtures/diagrams/copy_style_clash.py",
-    "sha256": "5e889d27dba9d41e8d4d896f76c70d0ddc8138dee838c7f04d3519bcf8a51b52",
+    "sha256": "7a9ea98a330f801a1a68a2bd2314d05262044c78a6fe259c7b5d94556587ee0b",
     "transform": "build"
   },
   "status": "opened",

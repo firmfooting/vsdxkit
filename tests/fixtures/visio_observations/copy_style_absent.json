@@ -377,7 +377,7 @@
   "schema": 2,
   "source": {
     "name": "fixtures/diagrams/copy_style_absent.py",
-    "sha256": "caa37d519ea397ecefd4b42e7c64b020da8cb7fbb87b6279871a705297d6c38f",
+    "sha256": "93bbcdd95386726bc7cdb9deaac4dce5226b232fdb873331a1425442b43a1cc1",
     "transform": "build"
   },
   "status": "opened",

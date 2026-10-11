@@ -7,11 +7,10 @@ Usage:
 
 Each case is one ``.vsdx`` built by a case file under ``tests/fixtures/diagrams``. For every shape on every
 page, ``expected.json`` asks Visio for the placement cells and for the X and Y of each row of the first
-geometry section, and ``writes_land_cases.py check`` reads each twice, on open and after ``Cell.Trigger()``
-recalculates it. A connector Visio rerouted, a node it moved, or an outline it rewrote shows as a number that
-differs from the one written. The run is not done until every check passes (CONTRIBUTING, "When a change
-needs Visio"). ``visio_shots.py`` photographs the same cases so a person can see whether the drawing
-reads correctly, which no number can say.
+geometry section. A case file may also define ``style_checks(document)``, which adds the style-dependent cells
+Visio must show. ``writes_land_cases.py check`` reads each cell twice, on open and after ``Cell.Trigger()``
+recalculates it, and ``visio_shots.py`` photographs the same cases. The run is not done until every check
+passes (CONTRIBUTING, "When a change needs Visio").
 """
 
 from __future__ import annotations

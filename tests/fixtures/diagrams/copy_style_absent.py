@@ -36,8 +36,7 @@ def build() -> Document:
 def style_checks(document: Document) -> tuple[tuple[int, str, float], ...]:
     """The cells Visio must show for the sub-shapes that take style 7.
 
-    The wants are what Visio reported for the same sub-shapes in the source file: no line pattern and 0 margins,
-    where the blank document's "Connector" shows 4 pt margins.
+    The wanted values are 0 for both cells.
     """
     shapes = [
         s for s in next(iter(document.pages[0].shapes)).descendants if s.xml.attrib.get("MasterShape") in SOURCE_SHEET_IDS

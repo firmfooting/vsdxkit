@@ -362,12 +362,13 @@ class Document:
             if style_id in settled and self._get_style_by_id(settled[style_id]) is not None:
                 return settled[style_id]
             theirs = source._get_style_by_id(style_id)
-            if theirs is None:
+            if theirs is None:  # an ID missing from the source's own table is left as it is
                 return style_id
             ours = self._get_style_by_id(style_id)
             if ours is not None and ours.attrib.get("NameU") == theirs.attrib.get("NameU"):
                 settled[style_id] = style_id
                 return style_id
+            # a destination style of the same NameU under another ID is not looked for, so duplicates are possible
             taken = [int(e.attrib["ID"]) for e in self._style_sheets() if e.attrib.get("ID", "").isdigit()]
             new_id = style_id if ours is None else str(max(taken) + 1)
             settled[style_id] = new_id

@@ -107,3 +107,18 @@ def test_a_copied_masters_styles_follow_it_where_the_destination_lacks_the_id():
             sheets.remove(sheet)
     assert _copied_master_styles(destination) == {"Normal", "Default Svg Style"}
     assert _names(destination)["7"] == "Default Svg Style"
+
+
+def test_fill_and_text_style_references_are_settled_as_line_style_ones_are():
+    source, destination = Document.new(), Document.new()
+    _add_style(source, "20", "Filler")
+    _add_style(source, "21", "Texter")
+    _add_style(destination, "20", "Something else")
+    master = destination._masters.pages[0]
+    for shape in master.xml.getroot().iter(f"{namespace}Shape"):
+        shape.attrib["FillStyle"], shape.attrib["TextStyle"] = "20", "21"
+    destination._settle_master_styles(source, master)
+    names = _names(destination)
+    shape = next(master.xml.getroot().iter(f"{namespace}Shape"))
+    assert names[shape.attrib["FillStyle"]] == "Filler" and shape.attrib["FillStyle"] != "20"
+    assert names[shape.attrib["TextStyle"]] == "Texter"
