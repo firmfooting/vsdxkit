@@ -18,7 +18,7 @@ from vsdxkit.shapes import PageView
 
 # what PageView's docstring says it leaves out: the members whose types are
 # declared above `shapes`
-PAGE_ONLY = {"swimlanes", "require_swimlanes", "vis"}
+PAGE_ONLY = {"swimlanes", "require_swimlanes", "create_swimlanes", "vis"}
 
 # what DocumentView's docstring says it lists
 DOCUMENT_VIEW = {"pages", "save", "render"}

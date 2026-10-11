@@ -35,7 +35,7 @@ Where to go next
 * Install, open a document and save it: :doc:`quickstart`.
 * Select, add, copy and delete pages, and find shapes: :doc:`find_shape`.
 * Create, connect, retarget and delete shapes: :doc:`create_connect`.
-* Extend a cross-functional flowchart: :doc:`swimlanes`.
+* Extend or create a cross-functional flowchart: :doc:`swimlanes`.
 * Fill a Visio template with data: :doc:`templating`.
 * Look up a class or an error: the :doc:`API reference <api/index>`.
 * Move code from 0.x to 1.0: :doc:`migration-1.0`.

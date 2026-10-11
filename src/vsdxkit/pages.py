@@ -53,7 +53,7 @@ from vsdxkit.shapes import (
     _wrap_children,
     _wrap_descendants,
 )
-from vsdxkit.swimlanes import SwimlaneDiagram, _diagram_on
+from vsdxkit.swimlanes import SwimlaneDiagram, _create_diagram, _diagram_on, _Donors
 
 # the two places a Connect record names a shape: the connector it leads from,
 # and the shape that connector is glued to
@@ -262,6 +262,10 @@ class _DocumentSeam(DocumentView, Protocol):
 
     def _kind_source(self, kind: ShapeKind) -> Shape:
         """The bundled shape `kind` is copied from, one of the donors `vsdxkit._media` loads."""
+        ...
+
+    def _cff_sources(self) -> _Donors:
+        """The bundled cross-functional flowchart, one of the donors `vsdxkit._media` loads."""
         ...
 
     def _copy_connector(self, page: Page) -> Connector:
@@ -832,6 +836,27 @@ class Page:
         if diagram is None:
             raise NotFoundError(f"page {self.name!r} has no CFF container, so no swimlane diagram")
         return diagram
+
+    def create_swimlanes(
+        self, bands: Sequence[tuple[str, float]], *, left: float, top: float, width: float
+    ) -> SwimlaneDiagram:
+        """Create a cross-functional flowchart on this page: a container, a Swimlane List and one lane for each band.
+
+        The lanes are horizontal and stack downwards from ``top``, in the order given. The diagram is a copy of
+        the one Visio draws for its Cross-Functional Flowchart template, so it keeps Visio's behaviour for lanes.
+
+        :param bands: each lane's label and height in inches, top to bottom
+        :param left: the page x of the diagram's left edge, in inches
+        :param top: the page y of the top edge of the first lane; the container's title bar sits above it
+        :param width: the diagram's width in inches
+        :raises InvalidOperationError: if the page is no longer in its document, already has a diagram, or ``bands`` is empty or has a height that is not positive
+        :returns: the new diagram
+        """
+        if not self._attached():
+            raise InvalidOperationError(f"page {self.name!r} is no longer in its document, so nothing can be created on it")
+        if self.swimlanes is not None:
+            raise InvalidOperationError(f"page {self.name!r} already has a swimlane diagram")
+        return _create_diagram(self, self._document._cff_sources(), bands, left=left, top=top, width=width)
 
     def create_shape(
         self,
