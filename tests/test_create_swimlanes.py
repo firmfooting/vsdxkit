@@ -875,7 +875,7 @@ def test_a_step_on_a_page_with_two_containers_is_refused_without_changing_the_pa
 
 
 def test_a_decoy_swimlane_list_before_the_real_one_is_not_what_a_step_names():
-    document, diagram = _diagram()
+    document, _ = _diagram()
     page = _page(document)
     real = next(s for s in page.children if s.xml.attrib.get("NameU") == "Swimlane List")
     decoy = real.copy(page)
