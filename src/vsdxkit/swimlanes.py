@@ -427,7 +427,8 @@ def _create_diagram(
     id_map = {old: int(new) for old, new in renamed.items() if old is not None and new is not None}
     for copied in (container, swimlane_list, phase_list, separator, *lanes):
         remap_sheet_references(copied.xml, id_map)
-    total = sum(height for _label, height in bands)
+    # fsum, because sum() on floats changed its rounding in 3.12 and the bytes must not depend on the version
+    total = math.fsum(height for _label, height in bands)
     list_box = (left, top - total, left + width, top)
     _fit(swimlane_list, donors.swimlane_list, *list_box)
     for name, shape, donor in (
