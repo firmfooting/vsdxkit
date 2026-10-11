@@ -295,6 +295,10 @@ def test_snap_follows_the_grid(monkeypatch):
     assert snap(1.2346) == 1.235
 
 
+def _inside(p: tuple[float, float], box: Box) -> bool:
+    return abs(p[0] - box.x) <= box.width / 2 + SHRINK and abs(p[1] - box.y) <= box.height / 2 + SHRINK
+
+
 def _on_border(p: tuple[float, float], box: Box) -> bool:
     left, right = box.x - box.width / 2, box.x + box.width / 2
     bottom, top = box.y - box.height / 2, box.y + box.height / 2
@@ -327,13 +331,20 @@ def _check_no_shared_run(layout: Layout) -> None:
                     assert _overlap_length(sa, sb) < SHRINK, f"{key_a} and {key_b} share a run {sa} / {sb}"
 
 
-def _check_routes(layout: Layout) -> None:
-    """Every route stays on the page, starts and ends on its boxes' borders, and differs from every other route."""
+def _check_routes(layout: Layout, *, drawn: bool = False) -> None:
+    """Every route stays on the page, starts and ends on its boxes' borders, and differs from every other route.
+
+    With `drawn`, an end may lie inside its box on the line of its last segment: the builder runs it on to the node's outline.
+    """
     seen: dict[tuple[tuple[float, float], ...], tuple[str, str, int]] = {}
     for key, points in layout.routes.items():
         source, target, _n = key
-        assert _on_border(points[0], layout.nodes[source]), f"{key} starts off {source}'s border"
-        assert _on_border(points[-1], layout.nodes[target]), f"{key} ends off {target}'s border"
+        for end, other, box, word in (
+            (points[0], points[1], layout.nodes[source], "starts"),
+            (points[-1], points[-2], layout.nodes[target], "ends"),
+        ):
+            run_on = drawn and _on_border(end, box) is False and _inside(end, box) and not _inside(other, box)
+            assert _on_border(end, box) or run_on, f"{key} {word} off the border of its box"
         for x, y in points:
             assert -SHRINK <= x <= layout.width + SHRINK and -SHRINK <= y <= layout.height + SHRINK, f"{key} leaves the page"
         assert points not in seen, f"{key} repeats {seen[points]}"

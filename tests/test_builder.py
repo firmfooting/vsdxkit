@@ -3,6 +3,7 @@
 import dataclasses
 import hashlib
 import importlib.util
+import math
 import os
 import random
 import subprocess
@@ -562,7 +563,7 @@ def test_the_routes_written_to_the_file_meet_the_layouts_own_guarantees(stem):
     case = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(case)
     layout = _written_layout(case.build())
-    check_routes(layout)
+    check_routes(layout, drawn=True)
 
     def inside(b: Box, g: Box) -> bool:
         return abs(b.x - g.x) + b.width / 2 <= g.width / 2 + 1e-6 and abs(b.y - g.y) + b.height / 2 <= g.height / 2 + 1e-6
@@ -677,3 +678,38 @@ def test_a_long_label_on_an_empty_child_group_does_not_grow_the_page():
         return Diagram("T", [Page("P", [_node("a")], groups=groups, lanes=[lane])]).build().pages[0].height
 
     assert build("\n".join(["x"] * 30)) == build("c")
+
+
+def _drawn_ends(kind: str, count: int, tmp_path) -> tuple[Box, list[tuple[float, float]]]:
+    """The node of `kind` and the last point of each of `count` parallel edges into it, read back from the saved file."""
+    page = Page("P", [_node("s"), _node("t", kind)], [Edge("s", "t") for _ in range(count)])
+    document = Document.open(Diagram("T", [page]).save(tmp_path / "o.vsdx"))
+    ends = [_absolute_points(s)[-1] for s in _kinds(document, "flow")]
+    return _box(_by_source(document)["t"]), ends
+
+
+def _off_diamond(box: Box, p: tuple[float, float]) -> float:
+    return abs(abs(p[0] - box.x) / (box.width / 2) + abs(p[1] - box.y) / (box.height / 2) - 1) * box.width / 2
+
+
+def test_routes_into_a_decision_end_on_the_diamond_not_on_its_box(tmp_path):
+    box, ends = _drawn_ends("decision", 3, tmp_path)
+    assert len(ends) == 3
+    assert all(_off_diamond(box, p) < 0.01 for p in ends), ends
+    assert len({round(p[0], 2) for p in ends}) > 1  # the outer routes run on past the box's left border
+
+
+def test_a_route_into_a_rounded_corner_ends_on_the_arc_and_one_into_a_flat_side_does_not_move(tmp_path):
+    box, ends = _drawn_ends("end", 7, tmp_path)
+    r, left = 0.25, box.x - box.width / 2
+    for x, y in ends:
+        gap = abs(y - box.y) - (box.height / 2 - r)
+        want = left + (r - math.sqrt(r * r - gap * gap) if gap > 0 else 0.0)
+        assert x == pytest.approx(want, abs=0.01), (x, y)
+    assert any(x > left + 0.01 for x, _y in ends) and any(x == pytest.approx(left, abs=1e-6) for x, _y in ends)
+
+
+def test_routes_into_a_rectangle_and_a_cylinder_sized_beyond_its_radius_stay_on_the_box(tmp_path):
+    for kind in ("process", "data_store"):
+        box, ends = _drawn_ends(kind, 7, tmp_path)
+        assert all(x == pytest.approx(box.x - box.width / 2, abs=1e-6) for x, _y in ends), kind
