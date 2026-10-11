@@ -178,6 +178,8 @@ def _node(id_: str, kind: str = "process") -> Node:
             "more than one page-link",
         ),
         ([Page("P", [_node("a", "off_page")], [Edge("a", "a", kind="page-link")])], "must join an off_page node"),
+        ([Page("P", [Node("a", "off_page", "a", data={"Linked page": "x"})])], "reserved"),
+        ([Page("P", [Node("a", "off_page", "a", data={"Linked node": "x"})])], "reserved"),
         (
             [Page("P", [_node("a")], [Edge("a", "b", kind="page-link")]), Page("Q", [_node("b", "off_page")])],
             "must join an off_page node",
@@ -422,6 +424,16 @@ def test_an_edge_label_wider_than_the_layout_grows_the_page_and_stays_on_it(tmp_
     assert label.y + label.height / 2 <= document.pages[0].height + 1e-9
 
 
+def test_a_multi_line_edge_label_is_sized_by_its_lines_and_stays_on_the_page(tmp_path):
+    page = Page("P", [_node("a"), _node("b")], [Edge("a", "b", "\n".join(["ab"] * 12))])
+    document = Document.open(Diagram("T", [page]).save(tmp_path / "m.vsdx"))
+    label = next(s for s in document.pages[0].shapes if _rows(s).get("Kind") == "edge_label")
+    assert label.height >= 0.25 * 12
+    assert label.width < 2
+    assert label.y - label.height / 2 >= -0.01
+    assert label.y + label.height / 2 <= document.pages[0].height + 0.01
+
+
 def test_a_laned_page_is_measured_after_its_labels_are_placed():
     nodes = [_node("a"), _node("b")]
     page = Page("P", nodes, [Edge("a", "b", "x" * 600)], lanes=[Lane("l", "L", ["a", "b"])])
@@ -528,3 +540,9 @@ def test_the_routes_written_to_the_file_meet_the_layouts_own_guarantees(stem):
             for node_id, box in layout.nodes.items():
                 if node_id not in (source, target):
                     assert not segment_enters(p, q, box), f"{source}->{target} runs through {node_id}"
+
+
+@pytest.mark.parametrize("make", [lambda: Group("g", "G", "abc"), lambda: Lane("l", "L", "abc")], ids=["group", "lane"])
+def test_a_bare_string_as_members_is_refused_not_split_into_characters(make):
+    with pytest.raises(GraphError, match="a string"):
+        make()

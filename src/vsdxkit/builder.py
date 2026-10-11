@@ -16,14 +16,13 @@ from pathlib import Path
 from typing import Literal, get_args
 
 from vsdxkit._drawing import (
-    DEFAULT_SIZE,
-    LABEL_HEIGHT,
+    KINDS,
     add_data_rows,
     draw_backdrop,
     draw_label,
     draw_node,
     draw_path,
-    label_width,
+    label_size,
 )
 from vsdxkit.document import Document
 from vsdxkit.errors import GraphError
@@ -42,6 +41,8 @@ _LANE_LEFT = 0.25
 """Inches between the page's left edge and a lane diagram, which also leaves the same on the right."""
 _LANE_MARGIN = 0.7
 """The least margin on a page with lanes: the diagram's title bar sits above its first lane and must stay on the page."""
+_RESERVED_DATA = ("Linked page", "Linked node")
+"""The Shape Data names a page-link writes on an ``off_page`` node."""
 _CORE_PART = "/docProps/core.xml"
 """The part holding the document's title."""
 _DC_TITLE = "{http://purl.org/dc/elements/1.1/}title"
@@ -61,7 +62,7 @@ class Node:
     sublabel: str | None = None
     """A second line of text, or None."""
     data: Mapping[str, str] = field(default_factory=dict)
-    """Shape Data rows, written after the ``Source`` and ``Kind`` rows, sorted by name. A ``Source`` entry replaces the default, the id."""
+    """Shape Data rows, written after the ``Source`` and ``Kind`` rows, sorted by name. A ``Source`` entry replaces the default, the id. On an ``off_page`` node, ``Linked page`` and ``Linked node`` are reserved for page links and refused."""
 
 
 @dataclass(frozen=True)
@@ -93,6 +94,8 @@ class Group:
 
     def __post_init__(self) -> None:
         """Hold the members as tuples, so a group compares by value."""
+        if isinstance(self.node_ids, str):
+            raise GraphError(f"group {self.id!r} has node_ids {self.node_ids!r}, a string; pass a list of ids")
         object.__setattr__(self, "node_ids", tuple(self.node_ids))
         object.__setattr__(self, "groups", tuple(self.groups))
 
@@ -110,6 +113,8 @@ class Lane:
 
     def __post_init__(self) -> None:
         """Hold the members as a tuple, so a lane compares by value."""
+        if isinstance(self.node_ids, str):
+            raise GraphError(f"lane {self.id!r} has node_ids {self.node_ids!r}, a string; pass a list of ids")
         object.__setattr__(self, "node_ids", tuple(self.node_ids))
 
 
@@ -147,15 +152,15 @@ class Diagram:
         """Hold the pages as a tuple, so a diagram compares by value."""
         object.__setattr__(self, "pages", tuple(self.pages))
 
-    def validate(self) -> None:
-        """Refuse a description that cannot be drawn, naming the first thing wrong.
+    def validate(self) -> dict[str, dict[str, str]]:
+        """Refuse a description that cannot be drawn, naming the first thing wrong; otherwise return the Shape Data rows each ``page-link`` end gets.
 
         :raises GraphError: on a repeated, empty or non-string id or page name, an edge or member naming a node
             not on its page, a node in two lanes or two groups, a node outside every lane on a page with lanes,
             a group split across lanes or nested two deep, more lanes than a page draws, a blank lane label, an
             unknown kind, a label or sublabel that is not a string, an edge end that is not a string, an ``off_page``
             node that ends two ``page-link`` edges, or a ``page-link`` that does not join an ``off_page`` node on its
-            own page to one on another. Whether a laned page fits is known only after layout, so :meth:`build` checks it.
+            own page to one on another, or an ``off_page`` node whose ``data`` uses the reserved ``Linked page`` or ``Linked node``. Whether a laned page fits is known only after layout, so :meth:`build` checks it.
         """
         if not self.pages:
             raise GraphError("a diagram needs at least one page")
@@ -171,7 +176,7 @@ class Diagram:
             _check_lanes(page)
             _check_membership(page, where)
             _check_edges(page, where)
-        _links(self)
+        return _links(self)
 
     def build(self, *, layout: LayoutOptions | None = None) -> Document:
         """Compile to a new document with one page per :class:`Page`, creating shapes in input order.
@@ -181,17 +186,16 @@ class Diagram:
             a lane is more than 6 inches tall, a lane label is longer than 11 characters for each inch of its lane, or
             the layout refuses the graph
         """
-        self.validate()
+        links = self.validate()
         options = layout if layout is not None else LayoutOptions()
         document = Document.new(page_name=self.pages[0].name)
         _set_title(document, self.title)
-        links = _links(self)
         for n, page in enumerate(self.pages):
             _draw_page(page, document.pages[0] if n == 0 else document.pages.create(page.name), options, links)
         return document
 
     def save(self, target: str | os.PathLike[str], *, layout: LayoutOptions | None = None) -> Path:
-        """Build and write the document with a deterministic save: equal diagrams give equal bytes.
+        """Build (see :meth:`build`) and write the document with a deterministic save: equal diagrams give equal bytes.
 
         :raises GraphError: as :meth:`validate`
         """
@@ -208,6 +212,8 @@ def _register(page: Page, where: dict[str, tuple[str, str]]) -> None:
             value = getattr(node, field_name)
             if not isinstance(value, str) and not (field_name == "sublabel" and value is None):
                 raise GraphError(f"node {node.id!r} has a {field_name} that is {value!r}; it must be a string")
+        if node.kind == "off_page" and any(key in node.data for key in _RESERVED_DATA):
+            raise GraphError(f"off_page node {node.id!r} uses {sorted(_RESERVED_DATA)}, which are reserved for page links")
     for lane in page.lanes:
         _claim(where, lane.id, page.name, "lane")
     for group in _all_groups(page):
@@ -334,7 +340,7 @@ def _set_title(document: Document, title: str) -> None:
 
 def _size(node: Node) -> tuple[float, float]:
     """The node's width and height: its kind's, grown for a long label or extra lines."""
-    width, height = DEFAULT_SIZE[node.kind]
+    _shape, width, height = KINDS[node.kind]
     lines = [*node.label.split("\n"), *(node.sublabel.split("\n") if node.sublabel else [])]
     return snap(max(width, 0.09 * max(len(line) for line in lines) + 0.5)), snap(max(height, 0.25 * len(lines) + 0.4))
 
@@ -368,16 +374,17 @@ def _draw_page(page: Page, target: VisioPage, options: LayoutOptions, links: Map
     spots = _label_spots(page, layout)
     layout = replace(
         layout,
-        width=max([layout.width, *(w for _x, _y, w in spots.values())]),
-        height=max(layout.height, LABEL_HEIGHT),
+        width=max([layout.width, *(w for _x, _y, w, _h in spots.values())]),
+        height=max([layout.height, *(h for _x, _y, _w, h in spots.values())]),
     )
     spots = {
         n: (
             snap(min(max(x, w / 2), layout.width - w / 2)),
-            snap(min(max(y, LABEL_HEIGHT / 2), layout.height - LABEL_HEIGHT / 2)),
+            snap(min(max(y, h / 2), layout.height - h / 2)),
             w,
+            h,
         )
-        for n, (x, y, w) in spots.items()
+        for n, (x, y, w, h) in spots.items()
     }
     if page.lanes:
         low, high = DIAGRAM_WIDTHS
@@ -392,9 +399,9 @@ def _draw_page(page: Page, target: VisioPage, options: LayoutOptions, links: Map
     _draw_layout(page, target, layout, sizes, links, spots)
 
 
-def _label_spots(page: Page, layout: Layout) -> dict[int, tuple[float, float, float]]:
-    """By edge number, the centre and width of each edge label, on the middle of its route's longest segment."""
-    spots: dict[int, tuple[float, float, float]] = {}
+def _label_spots(page: Page, layout: Layout) -> dict[int, tuple[float, float, float, float]]:
+    """By edge number, the centre, width and height of each edge label, on the middle of its route's longest segment."""
+    spots: dict[int, tuple[float, float, float, float]] = {}
     parallel: dict[tuple[str, str], int] = {}
     for number, edge in enumerate(page.edges):
         if edge.kind == "page-link":
@@ -404,7 +411,7 @@ def _label_spots(page: Page, layout: Layout) -> dict[int, tuple[float, float, fl
         if edge.label:
             points = layout.routes[(edge.source, edge.target, n)]
             (x1, y1), (x2, y2) = max(pairwise(points), key=lambda s: abs(s[0][0] - s[1][0]) + abs(s[0][1] - s[1][1]))
-            spots[number] = (snap((x1 + x2) / 2), snap((y1 + y2) / 2), label_width(edge.label))
+            spots[number] = (snap((x1 + x2) / 2), snap((y1 + y2) / 2), *label_size(edge.label))
     return spots
 
 
@@ -414,7 +421,7 @@ def _draw_layout(
     layout: Layout,
     sizes: Mapping[str, tuple[float, float]],
     links: Mapping[str, Mapping[str, str]],
-    spots: Mapping[int, tuple[float, float, float]],
+    spots: Mapping[int, tuple[float, float, float, float]],
 ) -> None:
     """Draw lane bands, group boxes, nodes and edges where `layout` put them."""
     if page.lanes:
@@ -467,5 +474,5 @@ def _draw_layout(
             clear=True,
         )
         if edge.label:
-            x, y, _width = spots[number]
+            x, y, _width, _height = spots[number]
             add_data_rows(draw_label(target, x, y, edge.label), {"Source": source, "Kind": "edge_label"}, clear=True)

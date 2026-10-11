@@ -12,31 +12,18 @@ from vsdxkit.pages import Page
 from vsdxkit.shape_kind import ShapeKind
 from vsdxkit.shapes import Shape
 
-KIND_SHAPES: dict[str, ShapeKind] = {
-    "start": ShapeKind.START_END,
-    "end": ShapeKind.START_END,
-    "process": ShapeKind.PROCESS,
-    "decision": ShapeKind.DECISION,
-    "data_store": ShapeKind.DATABASE,
-    "external": ShapeKind.RECTANGLE,
-    "document": ShapeKind.RECTANGLE,
-    "subprocess": ShapeKind.RECTANGLE,
-    "off_page": ShapeKind.RECTANGLE,
+KINDS: dict[str, tuple[ShapeKind, float, float]] = {
+    "start": (ShapeKind.START_END, 2.0, 0.8),
+    "end": (ShapeKind.START_END, 2.0, 0.8),
+    "process": (ShapeKind.PROCESS, 2.2, 0.9),
+    "decision": (ShapeKind.DECISION, 2.6, 1.3),
+    "data_store": (ShapeKind.DATABASE, 2.2, 0.9),
+    "external": (ShapeKind.RECTANGLE, 2.2, 0.9),
+    "document": (ShapeKind.RECTANGLE, 2.2, 1.0),
+    "subprocess": (ShapeKind.RECTANGLE, 2.2, 0.9),
+    "off_page": (ShapeKind.RECTANGLE, 1.6, 1.0),
 }
-"""The bundled shape each node kind starts as. The last four are redrawn or restyled."""
-
-DEFAULT_SIZE: dict[str, tuple[float, float]] = {
-    "start": (2.0, 0.8),
-    "end": (2.0, 0.8),
-    "process": (2.2, 0.9),
-    "decision": (2.6, 1.3),
-    "data_store": (2.2, 0.9),
-    "external": (2.2, 0.9),
-    "document": (2.2, 1.0),
-    "subprocess": (2.2, 0.9),
-    "off_page": (1.6, 1.0),
-}
-"""Width and height in inches of each node kind before a long label widens it."""
+"""Each node kind's bundled shape (the last four are redrawn or restyled) and its width and height in inches before a long label grows it."""
 
 _DASHED = "2"
 """A LinePattern index. Learn gives 0 as none and 1 as solid and calls 2 to 23 assorted, so what 2 draws is for the Visio shots to show."""
@@ -142,7 +129,7 @@ def _outline(kind: str, w: float, h: float) -> list[tuple[list[tuple[float, floa
 
 def draw_node(page: Page, kind: str, x: float, y: float, width: float, height: float, text: str) -> Shape:
     """A node of `kind` centred on `x`, `y` at this size, labelled `text`."""
-    shape = page.create_shape(KIND_SHAPES[kind], x=x, y=y, width=width, height=height, text=text)
+    shape = page.create_shape(KINDS[kind][0], x=x, y=y, width=width, height=height, text=text)
     outline = _outline(kind, width, height)
     if outline is not None:
         set_geometry(shape, outline)
@@ -162,17 +149,19 @@ def draw_backdrop(page: Page, x: float, y: float, width: float, height: float, t
 
 
 LABEL_HEIGHT = 0.3
-"""Height in inches of an edge label's box."""
+"""Height in inches of a one-line edge label's box."""
 
 
-def label_width(text: str) -> float:
-    """Width in inches of an edge label's box."""
-    return snap(0.12 * len(text) + 0.3)
+def label_size(text: str) -> tuple[float, float]:
+    """Width and height in inches of an edge label's box: the width from its longest line, the height from its line count."""
+    lines = text.split("\n")
+    return snap(0.12 * max(len(line) for line in lines) + 0.3), snap(max(LABEL_HEIGHT, 0.25 * len(lines) + 0.05))
 
 
 def draw_label(page: Page, x: float, y: float, text: str) -> Shape:
     """A borderless, unfilled text box centred on `x`, `y`, for an edge's label."""
-    shape = page.create_shape(ShapeKind.RECTANGLE, x=x, y=y, width=label_width(text), height=LABEL_HEIGHT, text=text)
+    width, height = label_size(text)
+    shape = page.create_shape(ShapeKind.RECTANGLE, x=x, y=y, width=width, height=height, text=text)
     shape.set_cell_value("FillPattern", "0")
     shape.set_cell_value("LinePattern", "0")
     shape.set_cell_value("VerticalAlign", "1")
