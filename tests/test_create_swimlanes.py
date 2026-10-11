@@ -637,6 +637,10 @@ def test_a_main_child_grows_with_its_container_when_the_container_is_as_wide_as_
         diagram.add_lane()
         child = next(iter(diagram.container.children))
         assert child.height == pytest.approx(diagram.container.height)
+    for shape in (diagram.container, *diagram.container.descendants):
+        tops = [v for axis, v in _vertices(shape) if axis == "Y"]
+        assert not tops or max(tops) <= shape.height + 1e-6
+    assert max(v for axis, v in _vertices(child) if axis == "Y") == pytest.approx(child.height)
 
 
 def test_add_lane_grows_the_diagrams_own_swimlane_list_not_a_decoy_placed_before_it():

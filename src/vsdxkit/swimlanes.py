@@ -255,6 +255,8 @@ _Size = tuple[float, float]
 """A width and a height in inches."""
 
 
+_VERTEX_SIZE_CELL = {"X": "Width", "Y": "Height"}
+"""A vertex is in the shape's local frame, so its X runs along the shape's Width cell and its Y along its Height cell."""
 _AXIS_TERM = re.compile(r"(!?)\b(Width|Height)\b")
 """A Width or Height in a formula; a leading ``!`` marks another shape's (``Sheet.5!Height``), none marks the shape's own."""
 
@@ -318,7 +320,9 @@ def _renew_inherited_vertices(member: Shape, sizes: Sequence[tuple[_Size, _Size]
             for master_cell in master_row.iterfind(f"{namespace}Cell"):
                 raw = master_cell.attrib.get("V")
                 renewed = (
-                    None if master_cell.attrib.get("N") not in ("X", "Y") or raw in (None, "") else _renew(float(raw), sizes)
+                    None
+                    if master_cell.attrib.get("N") not in ("X", "Y") or raw in (None, "")
+                    else _renew(float(raw), sizes, _axis_of(member, _VERTEX_SIZE_CELL[master_cell.attrib["N"]]))
                 )
                 if renewed is None:
                     continue
@@ -366,7 +370,11 @@ def _resync(shape: Shape, sizes: Sequence[tuple[_Size, _Size]]) -> None:
         for section in member.xml.iterfind(f'{namespace}Section[@N="Geometry"]'):
             for vertex in section.iter(f"{namespace}Cell"):
                 raw = vertex.attrib.get("V")
-                renewed = None if vertex.attrib.get("N") not in ("X", "Y") or raw in (None, "") else _renew(float(raw), sizes)
+                renewed = (
+                    None
+                    if vertex.attrib.get("N") not in ("X", "Y") or raw in (None, "")
+                    else _renew(float(raw), sizes, _axis_of(member, _VERTEX_SIZE_CELL[vertex.attrib["N"]]))
+                )
                 if renewed is not None:
                     vertex.attrib["V"] = xml_value(renewed)
         _renew_inherited_vertices(member, sizes)
