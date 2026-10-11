@@ -93,7 +93,7 @@ class LayoutOptions:
     headings: tuple[tuple[str, float, float], ...] = ()
     """Per group, (group id, width, height) in inches of its heading text. The group's box is widened to the width and grows at the top to clear the height above its members; a box that then covers a node or group that is not its own is refused."""
     edge_labels: tuple[tuple[float, float] | None, ...] = ()
-    """Per edge, in the order of ``edges``, the (width, height) in inches of its label, or None for none; empty means no edge has one. Each label is placed on its route clear of every node and every other label, and the gaps it crosses are widened to hold it."""
+    """Per edge, in the order of ``edges``, the (width, height) in inches of its label, or None for none; empty means no edge has one. Each label is placed at its route, at the nearest spot clear of every node, heading, other group, lane heading and other label, so it may sit beside its route and not on it; the gaps it crosses are widened to hold it."""
 
 
 @dataclass(frozen=True)
@@ -127,7 +127,7 @@ class Layout:
     height: float
     """Page height in inches."""
     labels: dict[tuple[str, str, int], Box] = field(default_factory=dict)
-    """Each labelled edge's label box, by the same key as its route. The page holds them."""
+    """Each labelled edge's label box, by the same key as its route: near the route, clear of nodes, headings and other labels. The page holds them, a margin from its edge."""
 
 
 _Rect = tuple[float, float, float, float]
@@ -605,8 +605,13 @@ def _place_labels(
     foreign: list[list[Box]],
     spans: list[tuple[float, float] | None],
     work: list[int],
+    margin: float,
 ) -> dict[tuple[str, str, int], Box]:
-    """Each labelled edge's label box, on its route and clear of `fixed`, of its own `foreign` boxes and of earlier labels.
+    """Each labelled edge's label box, near its route and clear of `fixed`, of its own `foreign` boxes and of earlier labels.
+
+    The box starts on a segment of the route and moves along it and then sideways until it is clear, so a crowded
+    route can leave its label beside the route and not touching it. `margin` is kept between a label and the page's
+    left and bottom edges.
 
     A label is tried along each segment, longest first and the middle first, in steps of half its length, then moved
     sideways in whole label heights or widths, nearest first, as far as there are labels to make room for. It stays
@@ -637,8 +642,8 @@ def _place_labels(
                 for k in _steps(count + 3):
                     unit = k * ((height if flat else width) + 0.02)
                     # a label that would hang off the page's left or bottom is moved onto it; the page grows the other ways
-                    x = snap(max(x1 + t * (x2 - x1) + (0.0 if flat else unit), width / 2))
-                    y = snap(max(y1 + t * (y2 - y1) + (unit if flat else 0.0), height / 2))
+                    x = snap(max(x1 + t * (x2 - x1) + (0.0 if flat else unit), margin + width / 2))
+                    y = snap(max(y1 + t * (y2 - y1) + (unit if flat else 0.0), margin + height / 2))
                     if span is not None and not (span[0] - _EPS <= y - height / 2 and y + height / 2 <= span[1] + _EPS):
                         continue
                     candidate = Box(x, y, width, height)
@@ -1345,8 +1350,8 @@ def layered_layout(
         ends = [lane_boxes[lane] for i in (source, target) if (lane := by_id[i].lane) is not None]
         spans.append((min(b.y - b.height / 2 for b in ends), max(b.y + b.height / 2 for b in ends)) if ends else None)
     foreign = [[b for g, b in group_boxes.items() if g not in groups_of[s] | groups_of[t]] for s, t in edges]
-    labels = _place_labels(opts.edge_labels, edges, routes, fixed, foreign, spans, spent)
-    page_width = max([width, *(_ceil(b.x + b.width / 2) for b in labels.values())])
-    page_height = max([height, *(_ceil(b.y + b.height / 2) for b in labels.values())])
+    labels = _place_labels(opts.edge_labels, edges, routes, fixed, foreign, spans, spent, opts.margin)
+    page_width = max([width, *(_ceil(b.x + b.width / 2 + opts.margin) for b in labels.values())])
+    page_height = max([height, *(_ceil(b.y + b.height / 2 + opts.margin) for b in labels.values())])
     lane_boxes = {name: replace(b, x=snap(page_width / 2), width=page_width) for name, b in lane_boxes.items()}
     return Layout(boxes, group_boxes, lane_boxes, routes, page_width, page_height, labels)

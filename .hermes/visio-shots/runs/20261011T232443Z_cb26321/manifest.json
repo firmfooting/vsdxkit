@@ -1,0 +1,526 @@
+{
+  "run": "20261011T232443Z_cb26321",
+  "created": "2026-10-11T23:24:43+00:00",
+  "commit": "cb2632199b991eb315384de2c0e539d91302822b",
+  "branch": "fix/label-space-edge-labels",
+  "dirty": false,
+  "builder": {
+    "path": "tools/diagram_cases.py",
+    "sha256": "6726cf6fa950ca8408feb6925cc465af890e9a7c55a6b8b5638b18a0dcea877e"
+  },
+  "against": null,
+  "visio": {
+    "version": "16.0",
+    "build": "20430"
+  },
+  "dpi": 150,
+  "build_errors": {
+    "candidate": {}
+  },
+  "cases": {
+    "copy_style_clash": {
+      "line": "copy_style_clash: a shape copied from a document whose style 7 is another style; its sub-shapes show the source's line pattern and margins",
+      "shots": {
+        "candidate": {
+          "open": {
+            "svg": "cdf9da6499c98d596891f6430e494dbfe3c9a22ebc9ebb77d96d78c4b049821a",
+            "png": "fb824489a121bd7a1308debec317101138cab71506cf3638abf1916e82e265ac"
+          },
+          "recalc": {
+            "svg": "cdf9da6499c98d596891f6430e494dbfe3c9a22ebc9ebb77d96d78c4b049821a",
+            "png": "fb824489a121bd7a1308debec317101138cab71506cf3638abf1916e82e265ac"
+          },
+          "triggered": 34,
+          "asked": 34
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": null,
+        "ref -> candidate, after recalc": null,
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "copy_style_absent": {
+      "line": "copy_style_absent: a shape copied into a document with no style 7; its sub-shapes show the source's line pattern and margins",
+      "shots": {
+        "candidate": {
+          "open": {
+            "svg": "cdf9da6499c98d596891f6430e494dbfe3c9a22ebc9ebb77d96d78c4b049821a",
+            "png": "fb824489a121bd7a1308debec317101138cab71506cf3638abf1916e82e265ac"
+          },
+          "recalc": {
+            "svg": "cdf9da6499c98d596891f6430e494dbfe3c9a22ebc9ebb77d96d78c4b049821a",
+            "png": "fb824489a121bd7a1308debec317101138cab71506cf3638abf1916e82e265ac"
+          },
+          "triggered": 34,
+          "asked": 34
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": null,
+        "ref -> candidate, after recalc": null,
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "swimlanes": {
+      "line": "swimlanes: a three-lane cross-functional flowchart from create_swimlanes, a process in each lane; every shape where it was written",
+      "shots": {
+        "candidate": {
+          "open": {
+            "svg": "7f046f16503d32fc1cba11d81f671c7d7a763612839558bb37b40b22f08d4fad",
+            "png": "28ab881f746be690cf9fbbbfbb17f25baa585449e8c2a3bfc1f9e49cf754fa13"
+          },
+          "recalc": {
+            "svg": "7f046f16503d32fc1cba11d81f671c7d7a763612839558bb37b40b22f08d4fad",
+            "png": "28ab881f746be690cf9fbbbfbb17f25baa585449e8c2a3bfc1f9e49cf754fa13"
+          },
+          "triggered": 152,
+          "asked": 152
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": null,
+        "ref -> candidate, after recalc": null,
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_one": {
+      "line": "lanes_one: a cross-functional flowchart of one lane; every shape where it was written",
+      "shots": {
+        "candidate": {
+          "open": {
+            "svg": "4c17e0dae18a6c2578fc01b4903941fa03099c10f6d7902a5a93308b9741d6c4",
+            "png": "a152c180282c8f488fc4282f491300e1d81d234a983101d28432b05c64baa489"
+          },
+          "recalc": {
+            "svg": "4c17e0dae18a6c2578fc01b4903941fa03099c10f6d7902a5a93308b9741d6c4",
+            "png": "a152c180282c8f488fc4282f491300e1d81d234a983101d28432b05c64baa489"
+          },
+          "triggered": 88,
+          "asked": 88
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": null,
+        "ref -> candidate, after recalc": null,
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_two": {
+      "line": "lanes_two: two lanes, a process in each; every shape where it was written",
+      "shots": {
+        "candidate": {
+          "open": {
+            "svg": "da569a1a9a1e3c28cdaaadaa5a44acf680450b6349ec9d293b64980eb6c79765",
+            "png": "12b598b4c0a18eddec44ac9774f28818cc201663783279c84342df1c75925f52"
+          },
+          "recalc": {
+            "svg": "da569a1a9a1e3c28cdaaadaa5a44acf680450b6349ec9d293b64980eb6c79765",
+            "png": "12b598b4c0a18eddec44ac9774f28818cc201663783279c84342df1c75925f52"
+          },
+          "triggered": 120,
+          "asked": 120
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": null,
+        "ref -> candidate, after recalc": null,
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_four": {
+      "line": "lanes_four: four lanes, one labelled with the widest letters; every shape where it was written",
+      "shots": {
+        "candidate": {
+          "open": {
+            "svg": "57d7c730d667571f49b75f6f12b06e8318a7d0e37e3b514c2ffaf157f5a73527",
+            "png": "88441a9be0f634b7c7bf746b0e634c33c1f44bedbd57ac469bffe090149ded27"
+          },
+          "recalc": {
+            "svg": "57d7c730d667571f49b75f6f12b06e8318a7d0e37e3b514c2ffaf157f5a73527",
+            "png": "88441a9be0f634b7c7bf746b0e634c33c1f44bedbd57ac469bffe090149ded27"
+          },
+          "triggered": 184,
+          "asked": 184
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": null,
+        "ref -> candidate, after recalc": null,
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_extremes": {
+      "line": "lanes_extremes: a 0.5 inch lane, a 6 inch lane and a 5 inch wide diagram; every shape where it was written",
+      "shots": {
+        "candidate": {
+          "open": {
+            "svg": "acf23f13dd6b50a09677f49908a7790783aa0292d3ff2b3f8c95dfffa503cf60",
+            "png": "456237489348d4c4c37715fe83ce4c0409c145a2cae35320d82e30bcb1a92032"
+          },
+          "recalc": {
+            "svg": "acf23f13dd6b50a09677f49908a7790783aa0292d3ff2b3f8c95dfffa503cf60",
+            "png": "456237489348d4c4c37715fe83ce4c0409c145a2cae35320d82e30bcb1a92032"
+          },
+          "triggered": 106,
+          "asked": 106
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": null,
+        "ref -> candidate, after recalc": null,
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_five": {
+      "line": "lanes_five: five lanes, a process in each; every shape where it was written",
+      "shots": {
+        "candidate": {
+          "open": {
+            "svg": "15c8faeed1c124f308ee8376d2832be91d27d7544bf385c85cd201531922c80f",
+            "png": "e1bc0e8fa7f47e515938275022e9f19fe75f9372c2f2fd716227439f18ec6c40"
+          },
+          "recalc": {
+            "svg": "15c8faeed1c124f308ee8376d2832be91d27d7544bf385c85cd201531922c80f",
+            "png": "e1bc0e8fa7f47e515938275022e9f19fe75f9372c2f2fd716227439f18ec6c40"
+          },
+          "triggered": 216,
+          "asked": 216
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": null,
+        "ref -> candidate, after recalc": null,
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_uneven": {
+      "line": "lanes_uneven: lanes of different heights, three processes in one and none in another; every shape where it was written",
+      "shots": {
+        "candidate": {
+          "open": {
+            "svg": "1994b0fb9e9f66c46ed75a224b99b0125386a297dc97e1497d9d3fd9ddfb1f0a",
+            "png": "6f5b2789ad8851e4fe3e186b3cbc884210db052ce02962ec74803036a7af169a"
+          },
+          "recalc": {
+            "svg": "1994b0fb9e9f66c46ed75a224b99b0125386a297dc97e1497d9d3fd9ddfb1f0a",
+            "png": "6f5b2789ad8851e4fe3e186b3cbc884210db052ce02962ec74803036a7af169a"
+          },
+          "triggered": 166,
+          "asked": 166
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": null,
+        "ref -> candidate, after recalc": null,
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_style_clash": {
+      "line": "lanes_style_clash: a diagram in a document whose style 7 is another style; the Separator shows Flow Normal's margins",
+      "shots": {
+        "candidate": {
+          "open": {
+            "svg": "9045856038008dda5602ac6dc634dd48422945e8f37e15cefe1305cae72e0137",
+            "png": "82b72f8c0af3dc3a1a001417a91676e0e65b93db7803ef47401988fe62c424b2"
+          },
+          "recalc": {
+            "svg": "9045856038008dda5602ac6dc634dd48422945e8f37e15cefe1305cae72e0137",
+            "png": "82b72f8c0af3dc3a1a001417a91676e0e65b93db7803ef47401988fe62c424b2"
+          },
+          "triggered": 122,
+          "asked": 122
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": null,
+        "ref -> candidate, after recalc": null,
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_style_absent": {
+      "line": "lanes_style_absent: a diagram in a document with no style 7; the Separator shows Flow Normal's margins",
+      "shots": {
+        "candidate": {
+          "open": {
+            "svg": "9045856038008dda5602ac6dc634dd48422945e8f37e15cefe1305cae72e0137",
+            "png": "82b72f8c0af3dc3a1a001417a91676e0e65b93db7803ef47401988fe62c424b2"
+          },
+          "recalc": {
+            "svg": "9045856038008dda5602ac6dc634dd48422945e8f37e15cefe1305cae72e0137",
+            "png": "82b72f8c0af3dc3a1a001417a91676e0e65b93db7803ef47401988fe62c424b2"
+          },
+          "triggered": 122,
+          "asked": 122
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": null,
+        "ref -> candidate, after recalc": null,
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_add": {
+      "line": "lanes_add: a created two-lane diagram with a lane added by add_lane; every shape where it was written",
+      "shots": {
+        "candidate": {
+          "open": {
+            "svg": "ede106d8baf3c5ca4ce961482af478d4cbaaa4d318878e013dc093d44dbb8784",
+            "png": "f3fc697c5a496fd21a0a1ae0c633dada63ff9ee7b7948ff75358e258ee0302e3"
+          },
+          "recalc": {
+            "svg": "ede106d8baf3c5ca4ce961482af478d4cbaaa4d318878e013dc093d44dbb8784",
+            "png": "f3fc697c5a496fd21a0a1ae0c633dada63ff9ee7b7948ff75358e258ee0302e3"
+          },
+          "triggered": 152,
+          "asked": 152
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": null,
+        "ref -> candidate, after recalc": null,
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_wide": {
+      "line": "lanes_wide: a diagram 22 inches wide on a page widened to 24; every shape where it was written",
+      "shots": {
+        "candidate": {
+          "open": {
+            "svg": "556fd6be8cb3642be182d2c96e4e7f0b452e971ddb62a62e5311b539f5012078",
+            "png": "378e98804ee171c9d0a51b775d7882730cbeca2732ceb883e9018e2f69b04b06"
+          },
+          "recalc": {
+            "svg": "556fd6be8cb3642be182d2c96e4e7f0b452e971ddb62a62e5311b539f5012078",
+            "png": "378e98804ee171c9d0a51b775d7882730cbeca2732ceb883e9018e2f69b04b06"
+          },
+          "triggered": 120,
+          "asked": 120
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": null,
+        "ref -> candidate, after recalc": null,
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_wide_60_3": {
+      "line": "lanes_wide_60_3: three lanes, a diagram 60 inches wide on a page widened to 61; every shape where it was written",
+      "shots": {
+        "candidate": {
+          "open": {
+            "svg": "14d29ed6ee44b593acc8b95abfc5dcbfe672b015f2a9da564b98e99f82eaa2bf",
+            "png": "08b24b860e3e39ae36773f45108c1e8290e6ec851f749a61d2526afdd5330324"
+          },
+          "recalc": {
+            "svg": "14d29ed6ee44b593acc8b95abfc5dcbfe672b015f2a9da564b98e99f82eaa2bf",
+            "png": "08b24b860e3e39ae36773f45108c1e8290e6ec851f749a61d2526afdd5330324"
+          },
+          "triggered": 152,
+          "asked": 152
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": null,
+        "ref -> candidate, after recalc": null,
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_wide_60_5": {
+      "line": "lanes_wide_60_5: five lanes, a diagram 60 inches wide on a page widened to 61; every shape where it was written",
+      "shots": {
+        "candidate": {
+          "open": {
+            "svg": "906ec2af3cf39c1a356baecdbe01b2fd226e142891d8988035b5a2d565b1c1ea",
+            "png": "41460533401a4c79398ad775c17ca56e780aa6826ca26a3815b433b8bde97b91"
+          },
+          "recalc": {
+            "svg": "906ec2af3cf39c1a356baecdbe01b2fd226e142891d8988035b5a2d565b1c1ea",
+            "png": "41460533401a4c79398ad775c17ca56e780aa6826ca26a3815b433b8bde97b91"
+          },
+          "triggered": 216,
+          "asked": 216
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": null,
+        "ref -> candidate, after recalc": null,
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "every_kind": {
+      "line": "every_kind: nine node kinds, six edge kinds, a long edge, a self-loop; every shape where it was written",
+      "shots": {
+        "candidate": {
+          "open": {
+            "svg": "69f9a7bfb51901e21f3582a0422255c6f70a0970d00d8735a82fd9ea50e7c455",
+            "png": "e70a232da4582bd1ffd1514ac8e215311c2f181a766feeb5bcd775e59da6013a"
+          },
+          "recalc": {
+            "svg": "69f9a7bfb51901e21f3582a0422255c6f70a0970d00d8735a82fd9ea50e7c455",
+            "png": "e70a232da4582bd1ffd1514ac8e215311c2f181a766feeb5bcd775e59da6013a"
+          },
+          "triggered": 278,
+          "asked": 278
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": null,
+        "ref -> candidate, after recalc": null,
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "groups_and_lanes": {
+      "line": "groups_and_lanes: three lanes, a group holding a group; every shape where it was written",
+      "shots": {
+        "candidate": {
+          "open": {
+            "svg": "5469531a98f7f794d90239b6989a0b181f0a919207191c0884106f0111a2b28e",
+            "png": "74efacf4d9e3498b91cdf0a8985405b1d881642d8a189de916779ddd782bebc3"
+          },
+          "recalc": {
+            "svg": "5469531a98f7f794d90239b6989a0b181f0a919207191c0884106f0111a2b28e",
+            "png": "74efacf4d9e3498b91cdf0a8985405b1d881642d8a189de916779ddd782bebc3"
+          },
+          "triggered": 308,
+          "asked": 308
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": null,
+        "ref -> candidate, after recalc": null,
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "group_heading_top_down": {
+      "line": "group_heading_top_down: a top-down edge into a grouped node, whose one-line heading must stay clear of the connector; every shape where it was written",
+      "shots": {
+        "candidate": {
+          "open": {
+            "svg": "7c73e4636b2df46c703de1fec8df11ecbff670b746dd392b7393fa1ca1f5ddca",
+            "png": "7d33a53e7c4ae2a344ca1356a278a8572957579acda5549ea6a9c9f63199c8ed"
+          },
+          "recalc": {
+            "svg": "7c73e4636b2df46c703de1fec8df11ecbff670b746dd392b7393fa1ca1f5ddca",
+            "png": "7d33a53e7c4ae2a344ca1356a278a8572957579acda5549ea6a9c9f63199c8ed"
+          },
+          "triggered": 56,
+          "asked": 56
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": null,
+        "ref -> candidate, after recalc": null,
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "labels_groups_lanes": {
+      "line": "labels_groups_lanes: labels inside lanes, parallel labelled edges, a label into a headed group, a label wider than its gap; every shape where it was written",
+      "shots": {
+        "candidate": {
+          "open": {
+            "svg": "dc8d61ff8415a294cba6f717958cbcf75073641f1a79873de4d87f89864bbdf0",
+            "png": "ee65aebc58d48126b49d49bd2bae59a035b6a3c0c4020e55a23755b5b530ecef"
+          },
+          "recalc": {
+            "svg": "dc8d61ff8415a294cba6f717958cbcf75073641f1a79873de4d87f89864bbdf0",
+            "png": "ee65aebc58d48126b49d49bd2bae59a035b6a3c0c4020e55a23755b5b530ecef"
+          },
+          "triggered": 324,
+          "asked": 324
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": null,
+        "ref -> candidate, after recalc": null,
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "two_pages/page 1": {
+      "line": "two_pages: two pages and a page link; every shape on both pages where it was written",
+      "shots": {
+        "candidate": {
+          "open": {
+            "svg": "776cafd152182ebb2cdb94057f15876c24393b549baad4241ce52e0b9d45aa54",
+            "png": "e4e5fb8842cc8c4f4c7b6fc1c1075fdab04405d1b6c0767c55eb7d3610e04452"
+          },
+          "recalc": {
+            "svg": "776cafd152182ebb2cdb94057f15876c24393b549baad4241ce52e0b9d45aa54",
+            "png": "e4e5fb8842cc8c4f4c7b6fc1c1075fdab04405d1b6c0767c55eb7d3610e04452"
+          },
+          "triggered": 120,
+          "asked": 120
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": null,
+        "ref -> candidate, after recalc": null,
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "two_pages/page 2": {
+      "line": "two_pages: two pages and a page link; every shape on both pages where it was written",
+      "shots": {
+        "candidate": {
+          "open": {
+            "svg": "ec349ba74e11681c2c320f971363ba9c4379898284878995e2e032bc41e45f04",
+            "png": "51f1c41aaaf3acb72cf7781f9dcf97dcff7b319e631701b1efd0ee3f862fed83"
+          },
+          "recalc": {
+            "svg": "ec349ba74e11681c2c320f971363ba9c4379898284878995e2e032bc41e45f04",
+            "png": "51f1c41aaaf3acb72cf7781f9dcf97dcff7b319e631701b1efd0ee3f862fed83"
+          },
+          "triggered": 120,
+          "asked": 120
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": null,
+        "ref -> candidate, after recalc": null,
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    }
+  }
+}

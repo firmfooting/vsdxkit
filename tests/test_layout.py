@@ -829,3 +829,16 @@ def test_the_page_ends_a_margin_after_the_last_column_when_labels_widen_the_gaps
     layout = layered_layout(nodes, (("b", "a"),), options=LayoutOptions(edge_labels=((2.0, 0.3),)))
     right = max(box.x + box.width / 2 for box in layout.nodes.values())
     assert layout.width == pytest.approx(right + 0.5, abs=0.02)
+
+
+@pytest.mark.parametrize("count", [4, 5])
+def test_labels_keep_the_margin_from_the_page_edge(count):
+    nodes = (LayoutNode("a", 1.5, 0.8), LayoutNode("b", 1.5, 0.8))
+    edges = (("a", "b"),) * count
+    labels = ((0.66, 0.3),) * count
+    layout = layered_layout(nodes, edges, options=LayoutOptions(edge_labels=labels))
+    for key, box in layout.labels.items():
+        assert box.x - box.width / 2 >= 0.5 - SHRINK, key
+        assert box.y - box.height / 2 >= 0.5 - SHRINK, key
+        assert box.x + box.width / 2 <= layout.width - 0.5 + SHRINK, key
+        assert box.y + box.height / 2 <= layout.height - 0.5 + SHRINK, key
