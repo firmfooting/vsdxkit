@@ -16,3 +16,11 @@ def build() -> Document:
     ]
     edges += [Edge("n0", "n4", "skips three"), Edge("n3", "n3", "again")]
     return Diagram("Every kind", [Page("Kinds", nodes, edges)]).build()
+
+
+def style_checks(document: Document) -> tuple[tuple[int, str, str], ...]:
+    """The text background cells Visio must show for each edge label: white, and not transparent."""
+    labels = [s for s in document.pages[0].shapes if (s.text or "").strip() in ("skips three", "again")]
+    return tuple(
+        (int(s.ID), cell, want) for s in labels for cell, want in (("TextBkgnd", "RGB(255,255,255)"), ("TextBkgndTrans", "0"))
+    )

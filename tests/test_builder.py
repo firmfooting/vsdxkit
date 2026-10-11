@@ -2,6 +2,7 @@
 
 import dataclasses
 import hashlib
+import importlib.util
 import os
 import random
 import subprocess
@@ -13,11 +14,14 @@ from xml.etree.ElementTree import Element
 
 import pytest
 from helpers.graphs import random_graph
+from test_layout import _check_routes as check_routes
+from test_layout import _segment_enters as segment_enters
 
 from vsdxkit import builder, namespace
 from vsdxkit.builder import Diagram, Edge, Group, Lane, Node, Page
 from vsdxkit.document import Document
 from vsdxkit.errors import GraphError
+from vsdxkit.layout import Box, Layout
 from vsdxkit.shapes import Shape
 from vsdxkit.swimlanes import ROW_HEADING_TEXT
 
@@ -434,3 +438,54 @@ def test_a_laned_page_is_drawn_up_to_60_inches_of_diagram_and_refused_beyond(tmp
         count += 1
     width = Document.open(_chain(count).save(tmp_path / "edge.vsdx")).pages[0].width
     assert 60.5 - width < 4.0, "one more layer is what crosses the limit"
+
+
+def test_an_edge_label_has_an_opaque_white_text_background_so_its_line_does_not_strike_it(tmp_path):
+    """TextBkgnd and TextBkgndTrans are the cells Visio writes for a text background (tests/test5_master.vsdx)."""
+    diagram = Diagram("L", [Page("P", [_node("a"), _node("b")], [Edge("a", "b", "yes")])])
+    document = Document.open(diagram.save(tmp_path / "l.vsdx"))
+    label = next(s for s in document.pages[0].shapes if _rows(s).get("Kind") == "edge_label")
+    assert label.cell_value("TextBkgnd") == "#ffffff"
+    assert label.cell_value("TextBkgndTrans") == "0"
+
+
+def _written_layout(document: Document) -> Layout:
+    """The layout a saved page holds, read back from its shapes, in the coordinates the layout uses."""
+    nodes, groups, routes, counts = {}, {}, {}, {}
+    for shape in document.pages[0].shapes:
+        rows = _rows(shape)
+        box = Box(shape.x or 0.0, shape.y or 0.0, shape.width or 0.0, shape.height or 0.0)
+        if rows.get("Kind") in NODE_KINDS:
+            nodes[rows["Source"]] = box
+        elif rows.get("Kind") == "group":
+            groups[rows["Source"]] = box
+        elif "->" in rows.get("Source", "") and rows["Kind"] != "edge_label":
+            source, target = rows["Source"].split("->")
+            n = counts[(source, target)] = counts.get((source, target), -1) + 1
+            routes[(source, target, n)] = tuple((round(x, 6), round(y, 6)) for x, y in _absolute_points(shape))
+    page = document.pages[0]
+    return Layout(nodes, groups, {}, routes, page.width or 0.0, page.height or 0.0)
+
+
+@pytest.mark.parametrize("stem", ["every_kind", "groups_and_lanes"])
+def test_the_routes_written_to_the_file_meet_the_layouts_own_guarantees(stem):
+    """Endpoints on borders, no shared run, and no route through a node or a group that is not its own, as written."""
+    spec = importlib.util.spec_from_file_location(stem, HERE / "fixtures" / "diagrams" / f"{stem}.py")
+    case = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(case)
+    layout = _written_layout(case.build())
+    check_routes(layout)
+
+    def inside(b: Box, g: Box) -> bool:
+        return abs(b.x - g.x) + b.width / 2 <= g.width / 2 + 1e-6 and abs(b.y - g.y) + b.height / 2 <= g.height / 2 + 1e-6
+
+    for (source, target, _n), points in layout.routes.items():
+        for name, group in layout.groups.items():
+            if inside(layout.nodes[source], group) or inside(layout.nodes[target], group):
+                continue
+            for p, q in pairwise(points):
+                assert not segment_enters(p, q, group), f"{source}->{target} runs through group {name}"
+        for p, q in pairwise(points):
+            for node_id, box in layout.nodes.items():
+                if node_id not in (source, target):
+                    assert not segment_enters(p, q, box), f"{source}->{target} runs through {node_id}"
