@@ -53,7 +53,7 @@ class LayoutOptions:
     group_padding: float = 0.25
     """Inches a group's box extends past its members."""
     lane_padding: float = 0.3
-    """Inches above and below the boxes in a lane."""
+    """Inches above and below the boxes in a lane, raised to hold the padding of a group box that reaches the lane's edge."""
     lane_heading: float = 0.6
     """Inches left of the first layer for lane labels, when there are lanes."""
     sweeps: int = 8
@@ -205,7 +205,8 @@ def layered_layout(
     :param edges: pairs of (source id, target id); a repeat is a parallel edge, a pair of one id a self-loop
     :param lanes: lane ids, top to bottom
     :param groups: every group id; a node names its innermost group
-    :raises GraphError: lanes with a top-down direction, an edge naming a missing node, or a node in an unknown lane or group
+    :raises GraphError: lanes with a top-down direction, an edge naming a missing node, a node in an unknown lane or group,
+        a repeated node, lane or group id, or a parent that is undeclared or nests more than one level
     """
     opts = options if options is not None else LayoutOptions()
     top_down = opts.direction == "top_down"
@@ -218,6 +219,18 @@ def layered_layout(
     lane_index = {name: i for i, name in enumerate(lanes)}
     group_index = {name: i + 1 for i, name in enumerate(groups)}
     parent_of = dict(opts.parents)
+    for child, parent in opts.parents:
+        for name in (child, parent):
+            if name not in group_index:
+                raise GraphError(f"group {child!r} has parent {parent!r}, and {name!r} is not a declared group")
+        if parent in parent_of:
+            raise GraphError(
+                f"group {child!r} nests in {parent!r}, which nests in {parent_of[parent]!r}; groups nest one level"
+            )
+    for kind, names in (("node", [n.id for n in nodes]), ("lane", lanes), ("group", groups)):
+        for i, name in enumerate(names):
+            if name in names[:i]:
+                raise GraphError(f"{kind} id {name!r} is repeated")
     for n in nodes:
         if n.lane is not None and n.lane not in lane_index:
             raise GraphError(f"node {n.id!r} is in lane {n.lane!r}, which the page does not declare")
@@ -268,6 +281,8 @@ def layered_layout(
     u_total = cursor - opts.layer_gap + opts.margin if rows else 2 * opts.margin
 
     n_lanes = max(len(lanes), 1)
+    # a lane band must contain the padding of the group boxes that touch its edges
+    lane_pad = max(opts.lane_padding, opts.group_padding * (2 if parent_of else 1)) if lanes else 0.0
     track_keys = sorted({(s.lane, s.track) for s in slots.values()})
     track_height: dict[tuple[int, tuple[int, int]], float] = {}
     for key in track_keys:
@@ -283,7 +298,7 @@ def layered_layout(
     cursor = opts.margin
     for lane in range(n_lanes):
         lane_top.append(cursor)
-        cursor += opts.lane_padding if lanes else 0.0
+        cursor += lane_pad
         first = True
         for key in (k for k in track_keys if k[0] == lane):
             if not first:
@@ -291,7 +306,7 @@ def layered_layout(
             first = False
             track_top[key] = cursor
             cursor += track_height[key]
-        cursor += opts.lane_padding if lanes else 0.0
+        cursor += lane_pad
         lane_bottom.append(cursor)
     v_total = cursor + opts.margin
     for row in rows:
