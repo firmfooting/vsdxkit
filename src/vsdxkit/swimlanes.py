@@ -28,7 +28,7 @@ from collections.abc import Sequence
 from typing import NamedTuple, Protocol
 
 from vsdxkit import namespace
-from vsdxkit._shape_tree import remap_sheet_references
+from vsdxkit._shape_tree import SHEET_REFERENCE, remap_sheet_references
 from vsdxkit._xmlio import xml_value
 from vsdxkit.errors import InvalidOperationError
 from vsdxkit.shapes import PageView, Shape, _is_connector, _is_name_or_copy
@@ -186,7 +186,7 @@ _SETTINGS = "visCFFSettings"
 """The User-section row of a lane that spells the diagram's settings, lane count included, as text."""
 _STG4 = re.compile(r"/stg4=\d+,")
 """The lane-count setting inside a lane's ``visCFFSettings`` text."""
-_LANE_LIST = re.compile(r"DEPENDSON\(2(?:,Sheet\.\d+!SheetRef\(\))*\)")
+_LANE_LIST = re.compile(rf"DEPENDSON\(2(?:,{SHEET_REFERENCE.pattern}SheetRef\(\))*\)")
 """The ``DEPENDSON`` call in the Swimlane List's ``Relationships`` formula that names its lanes."""
 MAX_LANES = 5
 """The most lanes the creation is checked against Visio on; see ``tools/diagram_cases.py``."""
@@ -667,12 +667,36 @@ class SwimlaneDiagram:
         shape._write_cell("PinY", v=str(lane.y or 0.0), keep_formula=True)
 
     def _phase_shapes(self) -> list[Shape]:
-        """The Phase List and its Separator, which span the lanes' height and so grow with them."""
-        return [shape for shape in self._page.children if _named(shape, "Phase List") or _named(shape, "Separator")]
+        """The Phase List and its Separator, which span the lanes' height and so grow with them.
+
+        They are the shapes the diagram's own relationships name (the Swimlane List's ``DEPENDSON(11, ...)`` and
+        the Phase List's ``DEPENDSON(2, ...)``, as in the Visio capture), not any shape that shares their names.
+        """
+        phase_list = self._related(self._swimlane_list(), 11)
+        separators = self._related_all(phase_list, 2)
+        return [*([phase_list] if phase_list is not None else []), *separators]
+
+    def _related(self, shape: Shape | None, kind: int) -> Shape | None:
+        """The top-level shape that `shape`'s ``Relationships`` formula lists first under ``DEPENDSON(kind, ...)``, or None."""
+        return next(iter(self._related_all(shape, kind)), None)
+
+    def _related_all(self, shape: Shape | None, kind: int) -> list[Shape]:
+        """Every top-level shape that `shape`'s ``Relationships`` formula lists under ``DEPENDSON(kind, ...)``, in formula order."""
+        if shape is None:
+            return []
+        found: list[Shape] = []
+        for cell in shape.xml.findall(f'{namespace}Cell[@N="Relationships"]'):
+            for call in re.finditer(
+                rf"DEPENDSON\({kind}((?:,{SHEET_REFERENCE.pattern}SheetRef\(\))*)", cell.attrib.get("F", "")
+            ):
+                for named in SHEET_REFERENCE.finditer(call.group(1)):  # `Sheet.5!` and `Sheet5!` alike
+                    found.extend(c for c in self._page.children if str(c.ID) == named.group(2) and c not in found)
+        return found
 
     def _swimlane_list(self) -> Shape | None:
-        """The page's first top-level Swimlane List shape, which `add_lane` grows, or None for a page without one."""
-        return next((shape for shape in self._page.children if _named(shape, _SWIMLANE_LIST_NAME)), None)
+        """The Swimlane List that owns the diagram's lanes: the one the first lane's ``DEPENDSON(5, ...)`` names, or None."""
+        lanes = self.lanes
+        return self._related(lanes[0], 5) if lanes else None
 
     def _require_lane(self, lane: Shape) -> None:
         """Refuse a `lane` that is not one of `lanes`, with `InvalidOperationError`."""

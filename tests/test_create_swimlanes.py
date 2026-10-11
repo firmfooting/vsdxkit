@@ -607,3 +607,89 @@ def test_add_lane_refuses_a_lane_beyond_the_verified_count_and_leaves_the_page_a
         diagram.add_lane("Extra")
     assert len(page.shapes) == shapes
     assert len(diagram.lanes) == MAX_LANES
+
+
+def test_add_lane_resizes_only_the_diagrams_own_phase_list_and_separator():
+    diagram = _make([("Top", LANE_PITCH_INCHES), ("Next", LANE_PITCH_INCHES)])
+    page = diagram.container.page
+    own = {s.shape_name: s for s in page.children if s.shape_name in ("Phase List", "Separator")}
+    decoys = []
+    for name, shape in own.items():
+        decoy = shape.copy(page)
+        decoy.name = name
+        for cell in decoy.xml.findall(f"{namespace}Cell"):
+            if cell.attrib.get("N") == "Relationships":
+                cell.attrib["F"] = "SUM(DEPENDSON(4))"
+        decoys.append(decoy)
+    before = {s.ID: s.height for s in (*decoys, *own.values())}
+    diagram.add_lane("New")
+    assert {s.ID: s.height for s in decoys} == {s.ID: before[s.ID] for s in decoys}
+    assert all(s.height > before[s.ID] for s in own.values())
+
+
+def test_add_lane_grows_the_diagrams_own_swimlane_list_not_a_decoy_placed_before_it():
+    diagram = _make([("Top", LANE_PITCH_INCHES), ("Next", LANE_PITCH_INCHES)])
+    page = diagram.container.page
+    own = next(s for s in page.children if s.shape_name == "Swimlane List")
+    tracked = [own, *diagram._phase_shapes()]
+    assert len(tracked) == 3
+    decoy = own.copy(page)
+    decoy.name = "Swimlane List"
+    for cell in decoy.xml.findall(f"{namespace}Cell"):
+        if cell.attrib.get("N") == "Relationships":
+            cell.attrib["F"] = "SUM(DEPENDSON(4))"
+    shapes = page.xml.getroot().find(f"{namespace}Shapes")
+    shapes.remove(decoy.xml)
+    shapes.insert(0, decoy.xml)
+    assert next(s for s in page.children if s.shape_name == "Swimlane List") is not own
+    before = {s.ID: s.height for s in (decoy, *tracked)}
+    diagram.add_lane("New")
+    assert decoy.height == before[decoy.ID]
+    assert all(s.height > before[s.ID] for s in tracked)
+
+
+def test_add_lane_follows_relationships_written_without_the_dot_after_sheet():
+    diagram = _make([("Top", LANE_PITCH_INCHES), ("Next", LANE_PITCH_INCHES)])
+    page = diagram.container.page
+    tracked = [next(s for s in page.children if s.shape_name == "Swimlane List"), *diagram._phase_shapes()]
+    assert len(tracked) == 3
+    for shape in (diagram.lanes[0], tracked[0], tracked[1]):
+        for cell in shape.xml.findall(f'{namespace}Cell[@N="Relationships"]'):
+            cell.attrib["F"] = re.sub(r"(DEPENDSON\((?:5|11|2),)Sheet\.", r"\1Sheet", cell.attrib["F"])
+    before = {s.ID: s.height for s in tracked}
+    diagram.add_lane("New")
+    assert all(s.height > before[s.ID] for s in tracked)
+
+
+def _add_separator(diagram, *, dotted):
+    """Copy the Separator and name the copy in the Phase List's DEPENDSON(2, ...); the multi-target shape comes from the formula grammar, since no Visio-drawn fixture has several."""
+    page = diagram.container.page
+    phase_list, separator = diagram._phase_shapes()
+    extra = separator.copy(page)
+    for cell in phase_list.xml.findall(f'{namespace}Cell[@N="Relationships"]'):
+        sep = "Sheet." if dotted else "Sheet"
+        cell.attrib["F"] = cell.attrib["F"].replace(
+            f"DEPENDSON(2,Sheet.{separator.ID}!SheetRef()",
+            f"DEPENDSON(2,Sheet.{separator.ID}!SheetRef(),{sep}{extra.ID}!SheetRef()",
+        )
+    return [phase_list, separator, extra]
+
+
+@pytest.mark.parametrize("dotted", [True, False])
+def test_add_lane_grows_every_separator_the_phase_list_names(dotted):
+    diagram = _make([("Top", LANE_PITCH_INCHES), ("Next", LANE_PITCH_INCHES)])
+    tracked = _add_separator(diagram, dotted=dotted)
+    assert diagram._phase_shapes() == tracked
+    before = {s.ID: s.height for s in tracked}
+    diagram.add_lane("New")
+    assert all(s.height > before[s.ID] for s in tracked)
+
+
+def test_add_lane_updates_a_lane_list_written_without_the_dot_after_sheet():
+    diagram = _make([("Top", LANE_PITCH_INCHES), ("Next", LANE_PITCH_INCHES)])
+    swimlane_list = diagram._swimlane_list()
+    for cell in swimlane_list.xml.findall(f'{namespace}Cell[@N="Relationships"]'):
+        cell.attrib["F"] = re.sub(r"(DEPENDSON\(2,)Sheet\.", r"\1Sheet", cell.attrib["F"])
+    new_lane = diagram.add_lane("New")
+    formula = next(c.attrib["F"] for c in swimlane_list.xml.findall(f'{namespace}Cell[@N="Relationships"]'))
+    assert f"DEPENDSON(2,Sheet.{new_lane.ID}!SheetRef()" in formula
