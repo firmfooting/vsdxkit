@@ -24,6 +24,7 @@ import vsdxkit.package
 from vsdxkit import _media
 from vsdxkit.document import Document
 from vsdxkit.errors import (
+    GraphError,
     InvalidOperationError,
     MalformedPackageError,
     MissingPartError,
@@ -39,6 +40,7 @@ from vsdxkit.package import PackageLimits
 BASEDIR = os.path.dirname(os.path.realpath(__file__))
 
 PUBLIC_ERRORS = (
+    GraphError,
     InvalidOperationError,
     MalformedPackageError,
     MissingPartError,
@@ -124,6 +126,7 @@ def test_every_public_error_is_a_vsdx_error(error_type):
 @pytest.mark.parametrize(
     ("error_type", "builtin_base"),
     [
+        (GraphError, ValueError),
         (InvalidOperationError, ValueError),
         (NotFoundError, ValueError),
         (MissingPartError, ValueError),

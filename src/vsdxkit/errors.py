@@ -15,6 +15,7 @@ or nothing at all. The hierarchy, with each builtin base in brackets::
 
    VsdxError
    +-- InvalidOperationError (ValueError)
+   +-- GraphError (ValueError)
    +-- NotFoundError (ValueError)
    |   +-- MissingPartError
    +-- PackageError
@@ -136,3 +137,7 @@ class PackageLimitError(PackageError, OSError):
         super().__init__(message)
         self.reason: str = reason
         """Which limit was violated, as a stable slug: ``member_size``, ``total_size``, ``member_count``, ``compression_ratio``, ``duplicate_member``, ``member_name`` or ``limits_file``."""
+
+
+class GraphError(VsdxError, ValueError):
+    """A diagram description, or a layout request, that cannot be drawn: a repeated id, a dangling edge, lanes with a top-down flow."""
