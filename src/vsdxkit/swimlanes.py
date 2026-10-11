@@ -28,7 +28,7 @@ from collections.abc import Sequence
 from typing import NamedTuple, Protocol
 
 from vsdxkit import namespace
-from vsdxkit._shape_tree import remap_sheet_references
+from vsdxkit._shape_tree import SHEET_REFERENCE, remap_sheet_references
 from vsdxkit._xmlio import xml_value
 from vsdxkit.errors import InvalidOperationError
 from vsdxkit.shapes import PageView, Shape, _is_connector, _is_name_or_copy
@@ -681,9 +681,11 @@ class SwimlaneDiagram:
         if shape is None:
             return None
         for cell in shape.xml.findall(f'{namespace}Cell[@N="Relationships"]'):
-            call = re.search(rf"DEPENDSON\({kind},Sheet\.(\d+)!SheetRef\(\)", cell.attrib.get("F", ""))
-            if call:
-                return next((child for child in self._page.children if str(child.ID) == call.group(1)), None)
+            formula = cell.attrib.get("F", "")
+            call = re.search(rf"DEPENDSON\({kind},", formula)
+            named = call and SHEET_REFERENCE.match(formula, call.end())  # accepts `Sheet.5!` and `Sheet5!` alike
+            if named:
+                return next((child for child in self._page.children if str(child.ID) == named.group(2)), None)
         return None
 
     def _swimlane_list(self) -> Shape | None:

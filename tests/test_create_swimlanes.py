@@ -646,3 +646,16 @@ def test_add_lane_grows_the_diagrams_own_swimlane_list_not_a_decoy_placed_before
     diagram.add_lane("New")
     assert decoy.height == before[decoy.ID]
     assert all(s.height > before[s.ID] for s in tracked)
+
+
+def test_add_lane_follows_relationships_written_without_the_dot_after_sheet():
+    diagram = _make([("Top", LANE_PITCH_INCHES), ("Next", LANE_PITCH_INCHES)])
+    page = diagram.container.page
+    tracked = [next(s for s in page.children if s.shape_name == "Swimlane List"), *diagram._phase_shapes()]
+    assert len(tracked) == 3
+    for shape in (diagram.lanes[0], tracked[0], tracked[1]):
+        for cell in shape.xml.findall(f'{namespace}Cell[@N="Relationships"]'):
+            cell.attrib["F"] = re.sub(r"(DEPENDSON\((?:5|11|2),)Sheet\.", r"\1Sheet", cell.attrib["F"])
+    before = {s.ID: s.height for s in tracked}
+    diagram.add_lane("New")
+    assert all(s.height > before[s.ID] for s in tracked)
