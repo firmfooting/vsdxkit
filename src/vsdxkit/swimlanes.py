@@ -192,7 +192,7 @@ MAX_LANES = 5
 """The most lanes the creation is checked against Visio on; see ``tools/diagram_cases.py``."""
 LANE_HEIGHTS = (0.5, 6.0)
 """The least and greatest lane height, in inches, that Visio was checked on."""
-DIAGRAM_WIDTHS = (5.0, 22.0)
+DIAGRAM_WIDTHS = (5.0, 60.0)
 """The least and greatest diagram width, in inches, that Visio was checked on."""
 LABEL_CHARS_PER_INCH = 11
 """The most characters of a label for each inch of lane height: a longer label wraps out of the heading, which Visio showed."""

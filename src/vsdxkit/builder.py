@@ -168,7 +168,7 @@ class Diagram:
         """Compile to a new document with one page per :class:`Page`, creating shapes in input order.
 
         :param layout: spacing and flow direction; the defaults flow left to right
-        :raises GraphError: as :meth:`validate`, and when a laid-out page with lanes is wider than 22 inches of diagram,
+        :raises GraphError: as :meth:`validate`, and when a laid-out page with lanes is wider than 60 inches of diagram,
             a lane is more than 6 inches tall, a lane label is longer than 11 characters for each inch of its lane, or
             the layout refuses the graph
         """

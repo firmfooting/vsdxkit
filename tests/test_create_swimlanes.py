@@ -261,7 +261,7 @@ def _make(bands, width=10.0):
     [
         ([(f"L{n}", 1.0) for n in range(5)], 10.0),
         ([("W", 0.5), ("W" * 30, 6.0)], 5.0),
-        ([("A", 1.0)], 22.0),
+        ([("A", 1.0)], 60.0),
         ([("a" * 22, 2.0)], 10.0),
         ([("a" * 11, 1.0)], 10.0),
     ],
@@ -275,7 +275,7 @@ def test_a_diagram_inside_the_sizes_visio_was_checked_on_is_made(bands, width):
     [
         ([(f"L{n}", 1.0) for n in range(6)], 10.0, "more than the 5"),
         ([("A", 1.0)], 4.9, "width of 4.9"),
-        ([("A", 1.0)], 22.1, "width of 22.1"),
+        ([("A", 1.0)], 60.1, "width of 60.1"),
         ([("A", 0.4)], 10.0, "lane height of 0.4"),
         ([("A", 6.1)], 10.0, "lane height of 6.1"),
         ([("a" * 23, 2.0)], 10.0, "23 characters"),

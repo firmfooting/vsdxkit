@@ -47,7 +47,9 @@ def _cell(name: str, value: str) -> Element:
 
 
 def add_data_rows(shape: Shape, rows: Mapping[str, str]) -> None:
-    """Write each entry of `rows` as a string Shape Data row on `shape`, in the order given, replacing a row of the same name.
+    """Write each entry of `rows` as a string Shape Data row on `shape`, in the order given, after dropping any row the shape was copied with.
+
+    The bundled donors of some kinds carry placeholder rows, which would otherwise show in Shape Data beside the caller's.
 
     The cells follow the order the bundled donors use. Type 0 is a string (Learn: Type Cell, Shape Data Section).
     """
@@ -56,9 +58,9 @@ def add_data_rows(shape: Shape, rows: Mapping[str, str]) -> None:
         section = Element(f"{namespace}Section", {"N": "Property"})
         leading = max((i + 1 for i, child in enumerate(shape.xml) if child.tag == f"{namespace}Cell"), default=0)
         shape.xml.insert(leading, section)
+    for old in section.findall(f"{namespace}Row"):
+        section.remove(old)
     for name, value in rows.items():
-        for old in [r for r in section.findall(f"{namespace}Row") if r.attrib.get("N") == name]:
-            section.remove(old)
         row = Element(f"{namespace}Row", {"N": name})
         for cell_name, cell_value in (
             ("Value", value),

@@ -855,7 +855,7 @@ class Page:
         one Visio drew for its Cross-Functional Flowchart template, and each lane is a copy of a lane in that diagram.
 
         The sizes are limited to those Visio was checked on, and anything outside them is refused: one to five
-        lanes, each 0.5 to 6 inches tall, in a diagram 5 to 22 inches wide, a label not empty and at most 11
+        lanes, each 0.5 to 6 inches tall, in a diagram 5 to 60 inches wide, a label not empty and at most 11
         characters for each inch of its lane's height. A label of wide letters can fill the heading in fewer.
         The page is not resized; make it large enough before the call. Phases are not created: the diagram
         has the Phase List Visio draws, as it is.

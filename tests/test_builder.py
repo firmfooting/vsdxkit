@@ -296,7 +296,7 @@ def _big(n: int, m: int, lanes: int = 0) -> Diagram:
 
 
 def _laned() -> Diagram:
-    """A page with lanes small enough to be drawn: a diagram with lanes is at most 22 inches wide."""
+    """A page with lanes small enough to be drawn: a diagram with lanes is at most 60 inches wide."""
     rows, edges, lane_ids, _g, _p = random_graph(5, 8, 10, 3, 0)
     built = [Node(row[0], NODE_KINDS[i % len(NODE_KINDS)], f"Step {i}") for i, row in enumerate(rows)]
     lanes = [Lane(name, name, [row[0] for row in rows if row[3] == name]) for name in lane_ids]
@@ -330,7 +330,7 @@ def test_the_bytes_do_not_depend_on_the_hash_seed(tmp_path):
 
 
 def test_a_50_node_process_builds_in_one_call_with_no_coordinates(tmp_path):
-    """The #52 exit criterion. Lanes are limited to 22 inches wide, so the 50 nodes are drawn without them."""
+    """The #52 exit criterion. Lanes are limited to 60 inches wide, so the 50 nodes are drawn without them."""
     document = Document.open(_big(50, 70).save(tmp_path / "fifty.vsdx"))
     nodes = [s for s in document.pages[0].shapes if _rows(s).get("Kind") in NODE_KINDS]
     assert len(nodes) == 50
@@ -343,7 +343,7 @@ def test_a_laned_page_builds_within_the_swimlane_limits(tmp_path):
 
 def test_a_page_the_swimlane_drawing_cannot_hold_is_refused_before_a_file_exists(tmp_path):
     too_many = Page("P", [_node(f"n{i}") for i in range(6)], lanes=[Lane(f"l{i}", f"L{i}", [f"n{i}"]) for i in range(6)])
-    wide = _big(30, 45, lanes=3)
+    wide = _big(40, 60, lanes=3)
     long_label = Page("P", [_node("a")], lanes=[Lane("l", "x" * 40, ["a"])])
     empty_label = Page("P", [_node("a")], lanes=[Lane("l", " ", ["a"])])
     tall = Page("P", [Node("a", "process", "x", sublabel="\n".join(["line"] * 20))], lanes=[Lane("l", "L", ["a"])])
@@ -406,3 +406,31 @@ def test_the_bytes_equal_the_digest_every_platform_is_held_to(tmp_path):
     """Linux, Windows and macOS each build the same diagram and compare with the one committed digest."""
     digest = hashlib.sha256(_fixed_bytes(tmp_path, "d")).hexdigest()
     assert digest == GOLDEN.read_text(encoding="utf-8").strip()
+
+
+def test_no_shape_keeps_a_row_its_donor_was_copied_with(tmp_path):
+    """The bundled donors of some kinds and of connectors hold placeholder Shape Data rows, which must not reach a drawing."""
+    path = _big(10, 12).save(tmp_path / "d.vsdx")
+    for page in Document.open(path).pages:
+        for shape in page.shapes:
+            assert not [name for name in _rows(shape) if name.startswith("my_")], f"shape {shape.ID} kept a donor row"
+
+
+def _chain(count: int) -> Diagram:
+    """`count` processes in a row in one lane, which lays out one layer wide each."""
+    nodes = [_node(f"n{i}") for i in range(count)]
+    edges = [Edge(f"n{i}", f"n{i + 1}") for i in range(count - 1)]
+    return Diagram("C", [Page("P", nodes, edges, lanes=[Lane("l", "Lane", [n.id for n in nodes])])])
+
+
+def test_a_laned_page_is_drawn_up_to_60_inches_of_diagram_and_refused_beyond(tmp_path):
+    count = 2
+    while True:
+        try:
+            Diagram.build(_chain(count + 1))
+        except GraphError as error:
+            assert "at most 60.5" in str(error)
+            break
+        count += 1
+    width = Document.open(_chain(count).save(tmp_path / "edge.vsdx")).pages[0].width
+    assert 60.5 - width < 4.0, "one more layer is what crosses the limit"
