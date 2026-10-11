@@ -612,3 +612,24 @@ def test_add_lane_resizes_only_the_diagrams_own_phase_list_and_separator():
     diagram.add_lane("New")
     assert {s.ID: s.height for s in decoys} == {s.ID: before[s.ID] for s in decoys}
     assert all(s.height > before[s.ID] for s in own.values())
+
+
+def test_add_lane_grows_the_diagrams_own_swimlane_list_not_a_decoy_placed_before_it():
+    diagram = _make([("Top", LANE_PITCH_INCHES), ("Next", LANE_PITCH_INCHES)])
+    page = diagram.container.page
+    own = next(s for s in page.children if s.shape_name == "Swimlane List")
+    tracked = [own, *diagram._phase_shapes()]
+    assert len(tracked) == 3
+    decoy = own.copy(page)
+    decoy.name = "Swimlane List"
+    for cell in decoy.xml.findall(f"{namespace}Cell"):
+        if cell.attrib.get("N") == "Relationships":
+            cell.attrib["F"] = "SUM(DEPENDSON(4))"
+    shapes = page.xml.getroot().find(f"{namespace}Shapes")
+    shapes.remove(decoy.xml)
+    shapes.insert(0, decoy.xml)
+    assert next(s for s in page.children if s.shape_name == "Swimlane List") is not own
+    before = {s.ID: s.height for s in (decoy, *tracked)}
+    diagram.add_lane("New")
+    assert decoy.height == before[decoy.ID]
+    assert all(s.height > before[s.ID] for s in tracked)
