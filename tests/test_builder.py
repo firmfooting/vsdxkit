@@ -627,3 +627,24 @@ def test_a_group_heading_that_would_cover_a_neighbouring_group_is_refused():
     page = Page("P", [_node("a"), _node("b")], groups=[Group("g", "x" * 80, ["a"]), Group("h", "H", ["b"])])
     with pytest.raises(GraphError, match="heading of group"):
         Diagram("T", [page]).build(layout=builder.LayoutOptions(direction="top_down"))
+
+
+def test_labels_of_parallel_edges_do_not_overlap(tmp_path):
+    edges = [Edge("a", "b", "yes"), Edge("a", "b", "no"), Edge("a", "b", "maybe"), Edge("a", "b", "later")]
+    document = Document.open(Diagram("T", [Page("P", [_node("a"), _node("b")], edges)]).save(tmp_path / "p.vsdx"))
+    labels = [_box(s) for s in _kinds(document, "edge_label")]
+    assert len(labels) == 4
+    for i, a in enumerate(labels):
+        for b in labels[i + 1 :]:
+            assert not _meets(a, b)
+
+
+@pytest.mark.parametrize("direction", ["left_to_right", "top_down"])
+def test_an_edge_label_wider_than_the_gap_does_not_cover_either_end_node(tmp_path, direction):
+    page = Page("P", [_node("a"), _node("b")], [Edge("a", "b", "x" * 20)])
+    diagram = Diagram("T", [page])
+    document = Document.open(diagram.build(layout=builder.LayoutOptions(direction=direction)).save(tmp_path / "w.vsdx"))
+    label = _box(_kinds(document, "edge_label")[0])
+    for node in _by_source(document).values():
+        if _rows(node)["Kind"] in NODE_KINDS:
+            assert not _meets(label, _box(node))
