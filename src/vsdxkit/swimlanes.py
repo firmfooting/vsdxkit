@@ -93,9 +93,22 @@ def _named(shape: Shape, name: str) -> bool:
     return _is_name_or_copy(shape.shape_name, name)
 
 
+_DECORATION_KINDS = frozenset({"flow", "yes-path", "no-path", "data", "call", "edge_label", "group"})
+"""The ``Kind`` Shape Data values the diagram builder gives its edge paths, edge labels and group backdrops, which are not flowchart members."""
+
+
+def _is_decoration(shape: Shape) -> bool:
+    """Whether the shape's ``Kind`` Shape Data row names a builder edge path, edge label or group backdrop."""
+    for section in shape.xml.findall(f'{namespace}Section[@N="Property"]'):
+        for row in section.findall(f'{namespace}Row[@N="Kind"]'):
+            cell = row.find(f'{namespace}Cell[@N="Value"]')
+            return cell is not None and cell.attrib.get("V") in _DECORATION_KINDS
+    return False
+
+
 def _is_member(shape: Shape) -> bool:
-    """Whether the top-level shape is part of the flowchart: not the CFF machinery, a lane or a connector."""
-    return not any(_named(shape, name) for name in _CFF_MACHINERY) and not _is_connector(shape)
+    """Whether the top-level shape is part of the flowchart: not the CFF machinery, a lane, a connector or a builder decoration."""
+    return not any(_named(shape, name) for name in _CFF_MACHINERY) and not _is_connector(shape) and not _is_decoration(shape)
 
 
 def _user_row(shape: Shape, name: str) -> ET.Element | None:
@@ -546,7 +559,7 @@ class SwimlaneDiagram:
     def shapes_in(self, lane: Shape) -> tuple[Shape, ...]:
         """The flowchart shapes whose centre lies in the lane's band.
 
-        The CFF machinery, the lanes themselves and connectors are not members.
+        The CFF machinery, the lanes themselves, connectors and the builder's edge paths, edge labels and group backdrops (by their ``Kind`` Shape Data row) are not members.
 
         :raises InvalidOperationError: ``lane`` is not one of :attr:`lanes`
         """

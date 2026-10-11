@@ -597,3 +597,12 @@ def test_a_lane_height_the_drawing_cannot_take_is_a_graph_error_not_another_type
     page = Page("P", [_node("a")], lanes=[Lane("l", "L", ["a"])])
     with pytest.raises(GraphError, match="lane"):
         Diagram("T", [page]).build()
+
+
+def test_shapes_in_returns_only_the_nodes_not_the_builders_paths_labels_or_backdrops():
+    nodes = [Node("a", "process", "A"), Node("b", "process", "B")]
+    page = Page("Main", nodes, [Edge("a", "b", "go")], [Group("g", "Stage", ["a", "b"])], [Lane("l", "Role", ["a", "b"])])
+    diagram = Diagram("T", [page]).build().pages[0].swimlanes
+    assert diagram is not None
+    members = diagram.shapes_in(diagram.lanes[0])
+    assert sorted(_rows(s)["Source"] for s in members) == ["a", "b"]
