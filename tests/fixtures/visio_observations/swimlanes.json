@@ -904,14 +904,14 @@
               "result": 6.25
             },
             {
-              "formula": "50.8 mm",
+              "formula": "User.DefaultWidth",
               "name": "Width",
-              "result": 2.0
+              "result": 0.984251968503937
             },
             {
-              "formula": "25.4 mm",
+              "formula": "User.ResizeTxtHeight",
               "name": "Height",
-              "result": 1.0
+              "result": 0.5905511811023622
             },
             {
               "formula": "0 deg",
@@ -921,12 +921,12 @@
             {
               "formula": "Width*0.5",
               "name": "LocPinX",
-              "result": 1.0
+              "result": 0.4921259842519685
             },
             {
               "formula": "Height*0.5",
               "name": "LocPinY",
-              "result": 0.5
+              "result": 0.2952755905511811
             },
             {
               "formula": "FALSE",
@@ -956,14 +956,14 @@
               "result": 4.5
             },
             {
-              "formula": "50.8 mm",
+              "formula": "User.DefaultWidth",
               "name": "Width",
-              "result": 2.0
+              "result": 0.984251968503937
             },
             {
-              "formula": "25.4 mm",
+              "formula": "User.ResizeTxtHeight",
               "name": "Height",
-              "result": 1.0
+              "result": 0.5905511811023622
             },
             {
               "formula": "0 deg",
@@ -973,12 +973,12 @@
             {
               "formula": "Width*0.5",
               "name": "LocPinX",
-              "result": 1.0
+              "result": 0.4921259842519685
             },
             {
               "formula": "Height*0.5",
               "name": "LocPinY",
-              "result": 0.5
+              "result": 0.2952755905511811
             },
             {
               "formula": "FALSE",
@@ -1008,14 +1008,14 @@
               "result": 3.0
             },
             {
-              "formula": "50.8 mm",
+              "formula": "User.DefaultWidth",
               "name": "Width",
-              "result": 2.0
+              "result": 0.984251968503937
             },
             {
-              "formula": "25.4 mm",
+              "formula": "User.ResizeTxtHeight",
               "name": "Height",
-              "result": 1.0
+              "result": 0.5905511811023622
             },
             {
               "formula": "0 deg",
@@ -1025,12 +1025,12 @@
             {
               "formula": "Width*0.5",
               "name": "LocPinX",
-              "result": 1.0
+              "result": 0.4921259842519685
             },
             {
               "formula": "Height*0.5",
               "name": "LocPinY",
-              "result": 0.5
+              "result": 0.2952755905511811
             },
             {
               "formula": "FALSE",
@@ -1053,7 +1053,7 @@
   "schema": 2,
   "source": {
     "name": "fixtures/diagrams/swimlanes.py",
-    "sha256": "bc89ad109e79f0d6df59ccb0a4899c0d7216b53923b4ed19e1aed161a6bc3a83",
+    "sha256": "11d48a9d78347a85d06280580eb1a8794ff156b696b31dc6ece2c47daab5b06d",
     "transform": "build"
   },
   "status": "opened",
