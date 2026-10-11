@@ -8,6 +8,7 @@ from itertools import pairwise
 import pytest
 from helpers.graphs import random_graph
 
+from vsdxkit import layout as layout_module
 from vsdxkit.errors import GraphError
 from vsdxkit.layout import Box, Layout, LayoutNode, LayoutOptions, layered_layout, snap
 
@@ -40,6 +41,11 @@ def _check(layout: Layout, nodes: tuple[LayoutNode, ...], parents: tuple[tuple[s
                     assert not _segment_enters(p, q, box), f"{source}->{target} runs through {node_id}"
         for x, y in points:
             assert snap(x) == x and snap(y) == y
+    for what, box in [*boxes.items(), *layout.groups.items()]:
+        assert box.x - box.width / 2 >= -SHRINK and box.x + box.width / 2 <= layout.width + SHRINK, f"{what} leaves the page"
+        assert box.y - box.height / 2 >= -SHRINK and box.y + box.height / 2 <= layout.height + SHRINK, (
+            f"{what} leaves the page"
+        )
     members: dict[str, set[str]] = {}
     parent = dict(parents)
     for node in nodes:
@@ -193,3 +199,65 @@ def test_the_layout_does_not_depend_on_the_hash_seed():
         for seed in ("0", "1", "2", "random")
     }
     assert len(digests) == 1
+
+
+def test_a_group_spanning_two_lanes_is_refused_by_name():
+    nodes = (LayoutNode("a", 1, 1, "x", "g"), LayoutNode("m", 1, 1, "y"), LayoutNode("b", 1, 1, "z", "g"))
+    with pytest.raises(GraphError, match=r"'g'.*'x'.*'z'"):
+        layered_layout(nodes, (), ("x", "y", "z"), ("g",))
+
+
+@pytest.mark.parametrize("direction", ["left_to_right", "top_down"])
+@pytest.mark.parametrize("nested", [False, True])
+def test_group_boxes_stay_on_the_page_when_padding_exceeds_the_margin(direction, nested):
+    nodes = (LayoutNode("a", 1, 1, group="inner"), LayoutNode("b", 1, 1, group="inner"), LayoutNode("c", 1, 1))
+    parents = (("inner", "outer"),) if nested else ()
+    options = LayoutOptions(direction=direction, margin=0.1, group_padding=0.8, parents=parents)
+    layout = layered_layout(nodes, (("a", "b"), ("b", "c")), (), ("outer", "inner") if nested else ("inner",), options)
+    _check(layout, nodes, parents)
+
+
+def test_a_node_without_a_lane_is_refused_when_lanes_are_declared():
+    with pytest.raises(GraphError, match="'loose'"):
+        layered_layout((LayoutNode("loose", 1, 1),), (), ("x",))
+
+
+def test_a_node_id_that_looks_like_an_internal_key_survives():
+    nodes = (LayoutNode("a", 1, 1), LayoutNode("\x002:1", 1, 1), LayoutNode("b", 1, 1), LayoutNode("c", 1, 1))
+    edges = (("a", "b"), ("b", "c"), ("a", "c"))
+    layout = layered_layout(nodes, edges)
+    assert list(layout.nodes) == ["a", "\x002:1", "b", "c"]
+    _check(layout, nodes, ())
+
+
+def test_a_child_listed_twice_in_parents_is_refused_by_name():
+    nodes = (LayoutNode("a", 1, 1, group="kid"),)
+    options = LayoutOptions(parents=(("kid", "p1"), ("kid", "p2")))
+    with pytest.raises(GraphError, match="'kid'"):
+        layered_layout(nodes, (), (), ("kid", "p1", "p2"), options)
+
+
+@pytest.mark.parametrize("size", [0.0, -1.0, float("nan"), float("inf"), -float("inf")])
+@pytest.mark.parametrize("axis", ["width", "height"])
+def test_a_node_size_that_is_not_finite_and_positive_is_refused_by_name(size, axis):
+    node = LayoutNode("odd", size if axis == "width" else 1, size if axis == "height" else 1)
+    with pytest.raises(GraphError, match="'odd'"):
+        layered_layout((node,), ())
+
+
+def test_snapping_does_not_make_neighbours_overlap():
+    nodes = (LayoutNode("a", 1, 0.8), LayoutNode("b", 1, 1.23))
+    layout = layered_layout(nodes, (), options=LayoutOptions(node_gap=0.001))
+    assert not _overlap(layout.nodes["a"], layout.nodes["b"])
+
+
+def test_a_self_loop_does_not_enter_a_neighbour_when_node_gap_is_small():
+    nodes = (LayoutNode("a", 1, 1), LayoutNode("b", 1, 1))
+    layout = layered_layout(nodes, (("b", "b"),), options=LayoutOptions(node_gap=0.1))
+    for p, q in pairwise(layout.routes[("b", "b", 0)]):
+        assert not _segment_enters(p, q, layout.nodes["a"])
+
+
+def test_snap_follows_the_grid(monkeypatch):
+    monkeypatch.setattr(layout_module, "GRID", 0.001)
+    assert snap(1.2346) == 1.235

@@ -7,11 +7,15 @@ and routes on every platform. Ties are broken by the order of the arguments.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from itertools import pairwise
 from typing import Literal
 
 from vsdxkit.errors import GraphError
+
+_Key = str | tuple[int, int]
+"""A slot's key: a node's id, or (edge number, layer) for a dummy, which no string id can equal."""
 
 GRID = 0.01
 """Every coordinate is a multiple of this many inches, so number formatting cannot differ between platforms."""
@@ -19,7 +23,12 @@ GRID = 0.01
 
 def snap(value: float) -> float:
     """Round `value` to the grid, as a float that prints the same everywhere."""
-    return round(round(value / GRID) * GRID, 2)
+    return round(round(value / GRID) * GRID, max(0, -math.floor(math.log10(GRID))))
+
+
+def _ceil(value: float) -> float:
+    """Round `value` up to the grid, so an extent never shrinks when it is snapped."""
+    return snap(math.ceil(value / GRID - 1e-9) * GRID)
 
 
 @dataclass(frozen=True)
@@ -167,17 +176,17 @@ def _layers(ids: list[str], edges: list[tuple[str, str]], flipped: list[bool]) -
     return layer
 
 
-def _order(rows: list[list[str]], slots: dict[str, _Slot], chains: list[list[str]], sweeps: int) -> None:
+def _order(rows: list[list[_Key]], slots: dict[_Key, _Slot], chains: list[list[_Key]], sweeps: int) -> None:
     """Order each layer's keys by barycentre sweeps; lane and track come first, so a stable sort keeps input order on ties."""
-    up: dict[str, list[str]] = {k: [] for k in slots}
-    down: dict[str, list[str]] = {k: [] for k in slots}
+    up: dict[_Key, list[_Key]] = {k: [] for k in slots}
+    down: dict[_Key, list[_Key]] = {k: [] for k in slots}
     for chain in chains:
         for a, b in pairwise(chain):
             down[a].append(b)
             up[b].append(a)
     position = {k: float(i) for row in rows for i, k in enumerate(row)}
 
-    def sweep(layer: int, near: dict[str, list[str]]) -> None:
+    def sweep(layer: int, near: dict[_Key, list[_Key]]) -> None:
         """Re-sort one layer by the mean position of each key's neighbours on the `near` side."""
         row = rows[layer]
         mean = {k: sum(position[p] for p in near[k]) / len(near[k]) for k in row if near[k]}
@@ -205,8 +214,10 @@ def layered_layout(
     :param edges: pairs of (source id, target id); a repeat is a parallel edge, a pair of one id a self-loop
     :param lanes: lane ids, top to bottom
     :param groups: every group id; a node names its innermost group
-    :raises GraphError: lanes with a top-down direction, an edge naming a missing node, a node in an unknown lane or group,
-        a repeated node, lane or group id, or a parent that is undeclared or nests more than one level
+    :raises GraphError: lanes with a top-down direction, an edge naming a missing node, a node in an unknown lane or group
+        or without a lane when lanes are declared, a node size that is not finite and positive, a repeated node, lane or
+        group id, a group whose members sit in different lanes, or a parent that is undeclared, repeated for one child or
+        nests more than one level
     """
     opts = options if options is not None else LayoutOptions()
     top_down = opts.direction == "top_down"
@@ -219,7 +230,9 @@ def layered_layout(
     lane_index = {name: i for i, name in enumerate(lanes)}
     group_index = {name: i + 1 for i, name in enumerate(groups)}
     parent_of = dict(opts.parents)
-    for child, parent in opts.parents:
+    for i, (child, parent) in enumerate(opts.parents):
+        if any(child == earlier for earlier, _ in opts.parents[:i]):
+            raise GraphError(f"group {child!r} is listed as a child of more than one parent")
         for name in (child, parent):
             if name not in group_index:
                 raise GraphError(f"group {child!r} has parent {parent!r}, and {name!r} is not a declared group")
@@ -232,17 +245,37 @@ def layered_layout(
             if name in names[:i]:
                 raise GraphError(f"{kind} id {name!r} is repeated")
     for n in nodes:
+        if not (math.isfinite(n.width) and math.isfinite(n.height) and n.width > 0 and n.height > 0):
+            raise GraphError(f"node {n.id!r} has size {n.width} x {n.height}; both must be finite and positive")
+        if n.lane is None and lanes:
+            raise GraphError(f"node {n.id!r} has no lane, and the page declares lanes")
         if n.lane is not None and n.lane not in lane_index:
             raise GraphError(f"node {n.id!r} is in lane {n.lane!r}, which the page does not declare")
         if n.group is not None and n.group not in group_index:
             raise GraphError(f"node {n.id!r} is in group {n.group!r}, which the page does not declare")
+
+    members_of: dict[str, list[str]] = {g: [] for g in groups}
+    for n in nodes:
+        g = n.group
+        while g is not None:
+            members_of[g].append(n.id)
+            g = parent_of.get(g)
+    for g, member_ids in members_of.items():
+        spanned = sorted({lane for m in member_ids if (lane := by_id[m].lane) is not None}, key=lane_index.__getitem__)
+        if len(spanned) > 1:
+            raise GraphError(f"group {g!r} has members in lanes {spanned}; its box would cover the lanes between them")
+
+    # snapping moves each centre by up to half a grid step, so packed neighbours keep one step more than asked
+    loops = any(source == target for source, target in edges)
+    v_gap = max(opts.node_gap, 0.2 if loops else 0.0) + GRID
+    u_gap = max(opts.layer_gap, 0.3 if loops else 0.0) + GRID
 
     ids = [n.id for n in nodes]
     flipped = _break_cycles(ids, list(edges))
     layer_of = _layers(ids, list(edges), flipped)
     n_layers = max(layer_of.values(), default=-1) + 1
 
-    slots: dict[str, _Slot] = {}
+    slots: dict[_Key, _Slot] = {}
     for n in nodes:
         parent = parent_of.get(n.group) if n.group is not None else None
         track = (
@@ -252,22 +285,22 @@ def layered_layout(
             if parent is None
             else (group_index[parent], group_index[n.group])
         )
-        u, v = (n.height, n.width) if top_down else (n.width, n.height)
+        u, v = (_ceil(n.height), _ceil(n.width)) if top_down else (_ceil(n.width), _ceil(n.height))
         slots[n.id] = _Slot(layer_of[n.id], u, v, lane_index[n.lane] if n.lane is not None else 0, track, True)
 
-    chains: list[list[str]] = []
+    chains: list[list[_Key]] = []
     for n, ((source, target), flip) in enumerate(zip(edges, flipped, strict=True)):
         a, b = (target, source) if flip else (source, target)
-        chain = [a]
+        chain: list[_Key] = [a]
         if a != b:
             for layer in range(layer_of[a] + 1, layer_of[b]):
-                key = f"\0{n}:{layer}"
+                key = (n, layer)
                 slots[key] = _Slot(layer, 0.0, 0.2, slots[a].lane, (0, 0), False)
                 chain.append(key)
         chain.append(b)
         chains.append(chain)
 
-    rows: list[list[str]] = [[] for _ in range(n_layers)]
+    rows: list[list[_Key]] = [[] for _ in range(n_layers)]
     for key, slot in slots.items():
         rows[slot.layer].append(key)
     _order(rows, slots, chains, opts.sweeps)
@@ -277,12 +310,12 @@ def layered_layout(
     cursor = opts.margin + (opts.lane_heading if lanes else 0.0)
     for w in col_width:
         col_left.append(cursor)
-        cursor += w + opts.layer_gap
-    u_total = cursor - opts.layer_gap + opts.margin if rows else 2 * opts.margin
+        cursor += w + u_gap
+    u_total = cursor - u_gap + opts.margin if rows else 2 * opts.margin
 
     n_lanes = max(len(lanes), 1)
-    # a lane band must contain the padding of the group boxes that touch its edges
-    lane_pad = max(opts.lane_padding, opts.group_padding * (2 if parent_of else 1)) if lanes else 0.0
+    # a lane band must contain the padding of the group boxes that touch its edges, and the snapping of their coordinates
+    lane_pad = max(opts.lane_padding, opts.group_padding * (2 if parent_of else 1) + 2 * GRID) if lanes else 0.0
     track_keys = sorted({(s.lane, s.track) for s in slots.values()})
     track_height: dict[tuple[int, tuple[int, int]], float] = {}
     for key in track_keys:
@@ -290,7 +323,7 @@ def layered_layout(
         for row in rows:
             members = [slots[k] for k in row if (slots[k].lane, slots[k].track) == key]
             if members:
-                best = max(best, sum(m.v_extent for m in members) + opts.node_gap * (len(members) - 1))
+                best = max(best, sum(m.v_extent for m in members) + v_gap * (len(members) - 1))
         track_height[key] = best
     track_top: dict[tuple[int, tuple[int, int]], float] = {}
     lane_top: list[float] = []
@@ -302,7 +335,7 @@ def layered_layout(
         first = True
         for key in (k for k in track_keys if k[0] == lane):
             if not first:
-                cursor += opts.node_gap + 4 * opts.group_padding
+                cursor += v_gap + 4 * opts.group_padding
             first = False
             track_top[key] = cursor
             cursor += track_height[key]
@@ -314,14 +347,32 @@ def layered_layout(
         for k in row:
             runs.setdefault((slots[k].lane, slots[k].track), []).append(slots[k])
         for key, members in runs.items():
-            used = sum(m.v_extent for m in members) + opts.node_gap * (len(members) - 1)
+            used = sum(m.v_extent for m in members) + v_gap * (len(members) - 1)
             at = track_top[key] + (track_height[key] - used) / 2
             for m in members:
                 m.v = at + m.v_extent / 2
-                at += m.v_extent + opts.node_gap
+                at += m.v_extent + v_gap
+
+    def pad_of(g: str) -> float:
+        """The padding of a group's box: a parent clears its children's boxes too."""
+        return opts.group_padding * (2 if g in parent_of.values() else 1)
+
+    # a group box can reach past the margin, so the page grows and shifts to hold it, plus a step for snapping
+    lo_u = lo_v = 0.0
+    hi_u, hi_v = u_total, v_total
+    for g, member_ids in members_of.items():
+        for m in member_ids:
+            s = slots[m]
+            c = col_left[s.layer] + col_width[s.layer] / 2
+            reach = pad_of(g) + GRID
+            lo_u, hi_u = min(lo_u, c - s.u_extent / 2 - reach), max(hi_u, c + s.u_extent / 2 + reach)
+            lo_v, hi_v = min(lo_v, s.v - s.v_extent / 2 - reach), max(hi_v, s.v + s.v_extent / 2 + reach)
+    shift_u, shift_v = _ceil(-lo_u), _ceil(-lo_v)
+    u_total, v_total = _ceil(hi_u + shift_u), _ceil(hi_v + shift_v)
 
     def page(u: float, v: float) -> tuple[float, float]:
         """Map a point from (along the flow, across it) to page inches."""
+        u, v = u + shift_u, v + shift_v
         return (snap(v), snap(u_total - u)) if top_down else (snap(u), snap(v_total - v))
 
     def centre_u(slot: _Slot) -> float:
@@ -347,7 +398,7 @@ def layered_layout(
         items.sort()
         left = col_left[layer] + col_width[layer]
         for k, (_low, _high, n, hop) in enumerate(items):
-            channel[(n, hop)] = left + opts.layer_gap * (k + 1) / (len(items) + 1)
+            channel[(n, hop)] = left + u_gap * (k + 1) / (len(items) + 1)
 
     routes: dict[tuple[str, str, int], tuple[tuple[float, float], ...]] = {}
     seen_pairs: dict[tuple[str, str], int] = {}
@@ -390,20 +441,17 @@ def layered_layout(
     height = snap(u_total if top_down else v_total)
     lane_boxes = {
         name: Box(
-            snap(width / 2), snap(height - (lane_top[i] + lane_bottom[i]) / 2), width, snap(lane_bottom[i] - lane_top[i])
+            snap(width / 2),
+            snap(height - (lane_top[i] + lane_bottom[i]) / 2 - shift_v),
+            width,
+            snap(lane_bottom[i] - lane_top[i]),
         )
         for i, name in enumerate(lanes)
     }
-    members_of: dict[str, list[str]] = {g: [] for g in groups}
-    for n in nodes:
-        g = n.group
-        while g is not None:
-            members_of[g].append(n.id)
-            g = parent_of.get(g)
     group_boxes: dict[str, Box] = {}
     for g, member_ids in members_of.items():
         if member_ids:
-            pad = opts.group_padding * (2 if g in parent_of.values() else 1)
+            pad = pad_of(g)
             left = min(boxes[m].x - boxes[m].width / 2 for m in member_ids) - pad
             right = max(boxes[m].x + boxes[m].width / 2 for m in member_ids) + pad
             bottom = min(boxes[m].y - boxes[m].height / 2 for m in member_ids) - pad
