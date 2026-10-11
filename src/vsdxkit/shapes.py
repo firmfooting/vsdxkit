@@ -211,7 +211,7 @@ class _PageSeam(PageView, _ConnectorPage, Protocol):
         ...
 
     def _taken_unique_ids(self) -> set[str]:
-        """Every UniqueID a shape of any page of the document holds."""
+        """Every UniqueID a shape of any page or master of the document holds."""
         ...
 
     @property
