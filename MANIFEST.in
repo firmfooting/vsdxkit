@@ -7,6 +7,9 @@ graft tests
 graft tools
 # tests/test_migration_guide.py holds the guide to tools/api-0.8.0.txt
 include docs/migration-1.0.rst
+# tests/test_diagram_docs.py runs the examples of these two pages
+include docs/diagrams_as_code.rst
+include docs/swimlanes.rst
 
 # CONTRIBUTING carries the commands for running that suite; CHANGELOG is what a
 # packager reads to decide whether to take the version. The other two are the

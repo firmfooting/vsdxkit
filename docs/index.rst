@@ -36,6 +36,7 @@ Where to go next
 * Select, add, copy and delete pages, and find shapes: :doc:`find_shape`.
 * Create, connect, retarget and delete shapes: :doc:`create_connect`.
 * Extend or create a cross-functional flowchart: :doc:`swimlanes`.
+* Build a diagram from data, with no coordinates: :doc:`diagrams_as_code`.
 * Fill a Visio template with data: :doc:`templating`.
 * Look up a class or an error: the :doc:`API reference <api/index>`.
 * Move code from 0.x to 1.0: :doc:`migration-1.0`.
@@ -48,6 +49,7 @@ Where to go next
    quickstart
    create_connect
    swimlanes
+   diagrams_as_code
    templating
    find_shape
    migration-1.0
