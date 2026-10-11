@@ -83,6 +83,15 @@ _SUFFIX_BY_CONTENT_TYPE = {_MACRO_ENABLED_CONTENT_TYPE: ".vsdm", _DRAWING_CONTEN
 """The extension each main-part content type goes with. Only the keys are read: `_main_part_content_type` recognises a main part under an unusual name by them."""
 
 
+def _same_style_name(ours: Element, theirs: Element) -> bool:
+    """Whether two style sheets under one ID are the same style: equal ``NameU``, else equal ``Name``, each only when both are present."""
+    for attribute in ("NameU", "Name"):
+        a, b = ours.attrib.get(attribute), theirs.attrib.get(attribute)
+        if a is not None and b is not None:
+            return a == b
+    return False
+
+
 class Document:
     """A Visio drawing, ``.vsdx`` or ``.vsdm``, read whole into memory.
 
@@ -348,11 +357,12 @@ class Document:
         taken; the style it is based on comes with it, and the master's references follow. What was settled is
         remembered per `source`, so a second master that names the same style reuses it.
 
-        A style of the same ``NameU`` under the same ID is taken to be the same style, whatever its formatting
+        A style under the same ID is taken to be the same style when both have a ``NameU`` and they are equal, or
+        when either lacks one and both have a ``Name`` and they are equal, whatever its formatting
         cells hold: documents made by Visio from one template share their built-in styles by name and ID, and
         comparing the cells would import a copy of "Normal" for every small difference in theme values.
 
-        Only the master's own shapes are remapped. A shape copied across documents onto a page keeps the style
+        Only the master's own shapes and its page sheet are remapped. A shape copied across documents onto a page keeps the style
         IDs it had in `source`; that is not changed here.
         """
         settled = self._style_maps.setdefault(source, {})
@@ -365,7 +375,7 @@ class Document:
             if theirs is None:  # an ID missing from the source's own table is left as it is
                 return style_id
             ours = self._get_style_by_id(style_id)
-            if ours is not None and ours.attrib.get("NameU") == theirs.attrib.get("NameU"):
+            if ours is not None and _same_style_name(ours, theirs):
                 settled[style_id] = style_id
                 return style_id
             # a destination style of the same NameU under another ID is not looked for, so duplicates are possible
@@ -381,10 +391,10 @@ class Document:
             return new_id
 
         root = master.xml.getroot()
-        for shape in root.iter(f"{namespace}Shape"):
+        for element in (*root.iter(f"{namespace}Shape"), master._pagesheet_xml):
             for attribute in _STYLE_ATTRIBUTES:
-                if attribute in shape.attrib:
-                    shape.attrib[attribute] = settle(shape.attrib[attribute])
+                if attribute in element.attrib:
+                    element.attrib[attribute] = settle(element.attrib[attribute])
 
     def _load_pages(self) -> None:
         """Build a `Page` for each entry in pages.xml, in order, over the part its relationship names; the open's first read.

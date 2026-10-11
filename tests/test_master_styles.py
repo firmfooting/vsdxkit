@@ -4,6 +4,7 @@ from pathlib import Path
 
 from vsdxkit import namespace
 from vsdxkit.document import Document
+from vsdxkit.pages import Page as Master
 
 
 def _add_style(document: Document, style_id: str, name: str, based_on: str | None = None) -> None:
@@ -122,3 +123,49 @@ def test_fill_and_text_style_references_are_settled_as_line_style_ones_are():
     shape = next(master.xml.getroot().iter(f"{namespace}Shape"))
     assert names[shape.attrib["FillStyle"]] == "Filler" and shape.attrib["FillStyle"] != "20"
     assert names[shape.attrib["TextStyle"]] == "Texter"
+
+
+def _add_raw_style(document: Document, **attributes: str) -> None:
+    document._style_sheets().append(Document.new()._style_sheets().makeelement(f"{namespace}StyleSheet", attributes))
+
+
+def _settle_one(source_attributes: dict[str, str], destination_attributes: dict[str, str]) -> tuple[Document, Master]:
+    source, destination = Document.new(), Document.new()
+    _add_raw_style(source, ID="30", **source_attributes)
+    _add_raw_style(destination, ID="30", **destination_attributes)
+    master = _master_naming(destination, "30")
+    destination._settle_master_styles(source, master)
+    return destination, master
+
+
+def test_styles_without_a_nameu_and_with_different_names_are_not_taken_to_be_the_same():
+    destination, master = _settle_one({"Name": "Mine"}, {"Name": "Yours"})
+    assert _line_styles(master) != {"30"}
+    assert "Mine" in {s.attrib.get("Name") for s in destination._style_sheets()}
+
+
+def test_styles_without_a_nameu_and_with_the_same_name_are_taken_to_be_the_same():
+    destination, master = _settle_one({"Name": "Same"}, {"Name": "Same"})
+    assert _line_styles(master) == {"30"}
+    assert sum(s.attrib.get("Name") == "Same" for s in destination._style_sheets()) == 1
+
+
+def test_styles_with_the_same_nameu_are_taken_to_be_the_same_whatever_their_names():
+    _, master = _settle_one({"NameU": "Same", "Name": "A"}, {"NameU": "Same", "Name": "B"})
+    assert _line_styles(master) == {"30"}
+
+
+def test_styles_with_different_nameu_are_not_the_same_even_where_the_names_match():
+    _, master = _settle_one({"NameU": "A", "Name": "Same"}, {"NameU": "B", "Name": "Same"})
+    assert _line_styles(master) != {"30"}
+
+
+def test_the_page_sheet_of_an_imported_master_is_settled_too():
+    source, destination = Document.new(), Document.new()
+    _add_style(source, "30", "Mine")
+    _add_style(destination, "30", "Yours")
+    master = destination._masters.pages[0]
+    master._pagesheet_xml.attrib.update(LineStyle="30", FillStyle="30", TextStyle="30")
+    destination._settle_master_styles(source, master)
+    names = _names(destination)
+    assert {names[master._pagesheet_xml.attrib[a]] for a in ("LineStyle", "FillStyle", "TextStyle")} == {"Mine"}
