@@ -606,3 +606,27 @@ def test_shapes_in_returns_only_the_nodes_not_the_builders_paths_labels_or_backd
     assert diagram is not None
     members = diagram.shapes_in(diagram.lanes[0])
     assert sorted(_rows(s)["Source"] for s in members) == ["a", "b"]
+
+
+def test_the_decoration_kinds_are_the_builders_edge_kinds_plus_label_and_group():
+    from typing import get_args
+
+    from vsdxkit.swimlanes import _DECORATION_KINDS
+
+    assert (set(get_args(builder.EdgeKind)) - {"page-link"}) | {"edge_label", "group"} == _DECORATION_KINDS
+
+
+@pytest.mark.parametrize("kind", ["group", "flow"])
+def test_a_user_shape_whose_kind_matches_a_decoration_is_still_a_member(kind):
+    from vsdxkit._drawing import add_data_rows
+    from vsdxkit.shape_kind import ShapeKind
+
+    page = Page("Main", [Node("a", "process", "A")], lanes=[Lane("l", "Role", ["a"])])
+    document = Diagram("T", [page]).build()
+    diagram = document.pages[0].swimlanes
+    assert diagram is not None
+    lane = diagram.lanes[0]
+    mine = document.pages[0].create_shape(ShapeKind.RECTANGLE, x=3, y=lane.y, width=1, height=0.5, text="mine")
+    add_data_rows(mine, {"Source": "mine", "Kind": kind})
+    assert mine in diagram.shapes_in(lane)
+    diagram.move_to_lane(mine, lane)

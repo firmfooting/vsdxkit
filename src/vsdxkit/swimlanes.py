@@ -94,16 +94,23 @@ def _named(shape: Shape, name: str) -> bool:
 
 
 _DECORATION_KINDS = frozenset({"flow", "yes-path", "no-path", "data", "call", "edge_label", "group"})
-"""The ``Kind`` Shape Data values the diagram builder gives its edge paths, edge labels and group backdrops, which are not flowchart members."""
+"""The ``Kind`` values of the builder's edge paths, edge labels and group backdrops."""
+DECORATION_ROW = "Decoration"
+"""The Shape Data row the builder stamps on those shapes, so that a user shape whose ``Kind`` happens to match is still a member."""
+
+
+def _row_value(shape: Shape, name: str) -> str | None:
+    """The value of the shape's Shape Data row `name`, or None."""
+    for section in shape.xml.findall(f'{namespace}Section[@N="Property"]'):
+        for row in section.findall(f'{namespace}Row[@N="{name}"]'):
+            cell = row.find(f'{namespace}Cell[@N="Value"]')
+            return None if cell is None else cell.attrib.get("V")
+    return None
 
 
 def _is_decoration(shape: Shape) -> bool:
-    """Whether the shape's ``Kind`` Shape Data row names a builder edge path, edge label or group backdrop."""
-    for section in shape.xml.findall(f'{namespace}Section[@N="Property"]'):
-        for row in section.findall(f'{namespace}Row[@N="Kind"]'):
-            cell = row.find(f'{namespace}Cell[@N="Value"]')
-            return cell is not None and cell.attrib.get("V") in _DECORATION_KINDS
-    return False
+    """Whether the shape carries the builder's ``Decoration`` row and a decoration ``Kind``."""
+    return _row_value(shape, DECORATION_ROW) == "1" and _row_value(shape, "Kind") in _DECORATION_KINDS
 
 
 def _is_member(shape: Shape) -> bool:
@@ -559,7 +566,7 @@ class SwimlaneDiagram:
     def shapes_in(self, lane: Shape) -> tuple[Shape, ...]:
         """The flowchart shapes whose centre lies in the lane's band.
 
-        The CFF machinery, the lanes themselves, connectors and the builder's edge paths, edge labels and group backdrops (by their ``Kind`` Shape Data row) are not members.
+        The CFF machinery, the lanes themselves, connectors and the builder's edge paths, edge labels and group backdrops (stamped with a ``Decoration`` Shape Data row) are not members.
 
         :raises InvalidOperationError: ``lane`` is not one of :attr:`lanes`
         """
