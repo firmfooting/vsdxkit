@@ -9,7 +9,7 @@ Raises on any of:
 - vsdxkit not importable, or importable only via the checkout (source shadowing)
 - py.typed or the bundled media .vsdx files missing from the installation
 - loading the bundled donors, create_shape(), connector creation, save or reopen failing
-- Document.new() or create_swimlanes() failing to make a document that saves and opens again
+- Document.new(), create_swimlanes() or the builder failing, or the builder's bytes differing between two runs
 - the wheel's top-level modules differing from the checkout's src/vsdxkit/*.py,
   as a wheel built over a stale build/lib does
 """
@@ -173,6 +173,22 @@ def main() -> int:
                 ok("create_swimlanes() works from the installed wheel")
         except Exception as error:  # smoke harness reports every failure mode
             fail(f"create_swimlanes() exercise failed: {error}")
+            return 1
+
+        try:
+            from vsdxkit.builder import Diagram, Edge, Node
+            from vsdxkit.builder import Page as GraphPage
+
+            built = Diagram("smoke", [GraphPage("Flow", [Node("a", "start", "A"), Node("b", "end", "B")], [Edge("a", "b")])])
+            built_path = built.save(os.path.join(workdir, "built.vsdx"))
+            if built_path.read_bytes() != built.save(os.path.join(workdir, "again.vsdx")).read_bytes():
+                fail("building the same diagram twice gave different bytes")
+            elif len(Document.open(built_path).pages[0].shapes) < 3:
+                fail("the built diagram lost its shapes")
+            else:
+                ok("the builder writes a deterministic diagram that opens again")
+        except Exception as error:  # smoke harness reports every failure mode
+            fail(f"builder exercise failed: {error}")
             return 1
 
     if failures:
