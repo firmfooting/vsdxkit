@@ -194,11 +194,6 @@ class DocumentView(Protocol):
         """The document's pages, in order: see :class:`PageCollection`."""
         ...
 
-    @property
-    def master_pages(self) -> list[Page]:
-        """Every master, as a page, in `masters.xml` order."""
-        ...
-
     def save(self, target: str | os.PathLike[str] | None = None, *, deterministic: bool = False) -> Path:
         """Write the document, and return the absolute path it was written to.
 
@@ -222,6 +217,11 @@ class _DocumentSeam(DocumentView, Protocol):
     from, are the document's. `document` imports this module, so the page
     declares what it reads rather than importing `Document`.
     """
+
+    @property
+    def master_pages(self) -> list[Page]:
+        """Every master, as a page, in `masters.xml` order."""
+        ...
 
     @property
     def _pages_xml(self) -> PartTree | None:
