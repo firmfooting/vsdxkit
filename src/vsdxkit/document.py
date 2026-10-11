@@ -127,14 +127,15 @@ class Document:
         return cls(PackageStore.open(filename, limits=limits if limits is not None else PackageLimits()), filename)
 
     @classmethod
-    def new(cls, *, page_name: str = "Page-1") -> Document:
+    def new(cls, *, page_name: str = "Page-1", limits: PackageLimits | None = None) -> Document:
         """A blank drawing of one empty page, made from the template shipped in the package.
 
         The document has no file behind it: :meth:`save` must be given a target.
 
         :param page_name: the page's name
+        :param limits: the package limits the document is held to, as for :meth:`open`
         """
-        document = cls(PackageStore.from_template(Path(media_path(BLANK))), "")
+        document = cls(PackageStore.from_template(Path(media_path(BLANK)), limits=limits), "")
         document.pages[0].name = page_name
         return document
 

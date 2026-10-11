@@ -11,7 +11,8 @@ from helpers.package_validator import validate_package
 
 from vsdxkit import _media
 from vsdxkit.document import Document
-from vsdxkit.errors import InvalidOperationError
+from vsdxkit.errors import InvalidOperationError, PackageLimitError
+from vsdxkit.package import PackageLimits
 from vsdxkit.shape_kind import ShapeKind
 
 
@@ -78,3 +79,18 @@ def test_a_new_document_saved_to_a_new_path_gets_the_mode_the_umask_allows(tmp_p
     finally:
         os.umask(old)
     assert stat.S_IMODE(path.stat().st_mode) == 0o644
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
+def test_saving_a_new_document_never_touches_the_process_umask(tmp_path, monkeypatch):
+    def refuse(_mask):
+        raise AssertionError("os.umask is process-wide state and must not be called")
+
+    monkeypatch.setattr(os, "umask", refuse)
+    path = Document.new().save(tmp_path / "blank.vsdx")
+    assert path.exists()
+
+
+def test_a_new_document_is_held_to_the_limits_it_was_given():
+    with pytest.raises(PackageLimitError):
+        Document.new(limits=PackageLimits(max_member_size=16))
