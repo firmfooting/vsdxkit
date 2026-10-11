@@ -88,7 +88,7 @@ def _assigned_names(node: ast.Assign | ast.AnnAssign) -> list[str]:
     """The plain names an assignment binds; an attribute or subscript target binds none.
 
     A ``type X = ...`` statement needs Python 3.12 and the package supports
-    3.10, so ``src/vsdxkit`` holds none, and this module runs on 3.10 too.
+    3.11, so ``src/vsdxkit`` holds none, and this module runs on 3.11 too.
     """
     if isinstance(node, ast.Assign):
         return [target.id for target in node.targets if isinstance(target, ast.Name)]

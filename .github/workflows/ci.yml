@@ -18,7 +18,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
+        python-version: ['3.11', '3.12', '3.13', '3.14']
         include:
           # macOS runs the floor and ceiling interpreters only. What a third
           # platform adds is filesystem behaviour (path separators, a
@@ -26,7 +26,7 @@ jobs:
           # interpreter minor version, so a full third column would spend five
           # jobs a run testing the same thing five times.
           - os: macos-latest
-            python-version: '3.10'
+            python-version: '3.11'
           - os: macos-latest
             python-version: '3.14'
           # Coverage is measured on one cell, the interpreter the lint, docs
@@ -88,7 +88,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.10', '3.14']
+        python-version: ['3.11', '3.14']
     runs-on: ubuntu-latest
     permissions:
       contents: read
