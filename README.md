@@ -189,8 +189,8 @@ covers connection points and `options`.
 ### Work with swimlanes
 
 Swimlane operations need a page that holds a Visio cross-functional flowchart
-(CFF), one Visio drew or one made with `Page.create_swimlanes()`. `add_lane()` copies the top lane above it and grows the CFF
-container to match.
+(CFF), one Visio drew or one made with `Page.create_swimlanes()`. `add_lane()`
+copies the top lane above it and grows the CFF container to match.
 
 ```python
 document = Document.open("cross-functional-flow.vsdx")
