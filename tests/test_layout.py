@@ -261,3 +261,67 @@ def test_a_self_loop_does_not_enter_a_neighbour_when_node_gap_is_small():
 def test_snap_follows_the_grid(monkeypatch):
     monkeypatch.setattr(layout_module, "GRID", 0.001)
     assert snap(1.2346) == 1.235
+
+
+def _on_border(p: tuple[float, float], box: Box) -> bool:
+    left, right = box.x - box.width / 2, box.x + box.width / 2
+    bottom, top = box.y - box.height / 2, box.y + box.height / 2
+    inside = left - SHRINK <= p[0] <= right + SHRINK and bottom - SHRINK <= p[1] <= top + SHRINK
+    return inside and any(abs(p[0] - e) < SHRINK for e in (left, right)) | any(abs(p[1] - e) < SHRINK for e in (bottom, top))
+
+
+def _check_routes(layout: Layout) -> None:
+    """Every route stays on the page, starts and ends on its boxes' borders, and differs from every other route."""
+    seen: dict[tuple[tuple[float, float], ...], tuple[str, str, int]] = {}
+    for key, points in layout.routes.items():
+        source, target, _n = key
+        assert _on_border(points[0], layout.nodes[source]), f"{key} starts off {source}'s border"
+        assert _on_border(points[-1], layout.nodes[target]), f"{key} ends off {target}'s border"
+        for x, y in points:
+            assert -SHRINK <= x <= layout.width + SHRINK and -SHRINK <= y <= layout.height + SHRINK, f"{key} leaves the page"
+        assert points not in seen, f"{key} repeats {seen[points]}"
+        assert points[::-1] not in seen, f"{key} repeats {seen[points[::-1]]} reversed"
+        seen[points] = key
+
+
+@pytest.mark.parametrize("axis", ["width", "height"])
+@pytest.mark.parametrize("size", [0.001, 1.234])
+def test_a_box_has_the_extent_the_routes_attach_to(axis, size):
+    node = LayoutNode("a", size if axis == "width" else 1, size if axis == "height" else 1)
+    layout = layered_layout((node, LayoutNode("b", 1, 1)), (("a", "b"),))
+    box = layout.nodes["a"]
+    assert getattr(box, axis) >= size
+    _check_routes(layout)
+
+
+@pytest.mark.parametrize("direction", ["left_to_right", "top_down"])
+def test_a_self_loop_stays_on_the_page_when_the_margin_is_small(direction):
+    layout = layered_layout((LayoutNode("a", 1, 1),), (("a", "a"),), options=LayoutOptions(direction=direction, margin=0.1))
+    _check_routes(layout)
+
+
+@pytest.mark.parametrize("direction", ["left_to_right", "top_down"])
+@pytest.mark.parametrize("loops", [False, True])
+def test_parallel_edges_get_distinct_routes(direction, loops):
+    pair = ("a", "a") if loops else ("a", "b")
+    nodes = (LayoutNode("a", 1, 1), LayoutNode("b", 1, 1))
+    options = LayoutOptions(direction=direction)
+    layout = layered_layout(nodes, (pair, pair, pair, ("b", "a")), options=options)
+    assert len(layout.routes) == 4
+    _check_routes(layout)
+    _check(layout, nodes, ())
+
+
+@pytest.mark.parametrize("seed", range(30))
+@pytest.mark.parametrize(
+    ("lanes", "groups", "direction"),
+    [(0, 0, "left_to_right"), (0, 0, "top_down"), (3, 0, "left_to_right"), (3, 3, "left_to_right"), (0, 3, "top_down")],
+)
+def test_random_small_graphs_with_parallel_edges_and_loops_route_cleanly(seed, lanes, groups, direction):
+    rows, edges, lane_ids, group_ids, parents = random_graph(seed, 7, 10, lanes, groups)
+    edges = (*edges, edges[0], edges[0], (edges[1][0], edges[1][0]), (edges[1][0], edges[1][0]), edges[2][::-1])
+    nodes = tuple(LayoutNode(*row) for row in rows)
+    layout = layered_layout(nodes, edges, lane_ids, group_ids, LayoutOptions(direction=direction, parents=parents, margin=0.1))
+    assert len(layout.routes) == len(edges)
+    _check(layout, nodes, parents)
+    _check_routes(layout)

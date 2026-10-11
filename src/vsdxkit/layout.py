@@ -8,6 +8,7 @@ and routes on every platform. Ties are broken by the order of the arguments.
 from __future__ import annotations
 
 import math
+from collections import Counter
 from dataclasses import dataclass
 from itertools import pairwise
 from typing import Literal
@@ -29,6 +30,18 @@ def snap(value: float) -> float:
 def _ceil(value: float) -> float:
     """Round `value` up to the grid, so an extent never shrinks when it is snapped."""
     return snap(math.ceil(value / GRID - 1e-9) * GRID)
+
+
+def _even(value: float) -> float:
+    """Round `value` up to an even number of grid steps, so a snapped centre keeps both borders on the grid."""
+    return snap(math.ceil(value / (2 * GRID) - 1e-9) * 2 * GRID)
+
+
+def _spread(count: int, extent: float) -> list[float]:
+    """Offsets, in inches on the grid and about zero, that keep `count` parallel routes apart inside `extent`."""
+    step = min(10, round(extent / GRID) // count)  # ponytail: an extent under `count` steps puts the routes on one line
+    start = -((count - 1) * step // 2)
+    return [snap((start + i * step) * GRID) for i in range(count)]
 
 
 @dataclass(frozen=True)
@@ -266,9 +279,9 @@ def layered_layout(
             raise GraphError(f"group {g!r} has members in lanes {spanned}; its box would cover the lanes between them")
 
     # snapping moves each centre by up to half a grid step, so packed neighbours keep one step more than asked
-    loops = any(source == target for source, target in edges)
-    v_gap = max(opts.node_gap, 0.2 if loops else 0.0) + GRID
-    u_gap = max(opts.layer_gap, 0.3 if loops else 0.0) + GRID
+    most_loops = max(Counter(source for source, target in edges if source == target).values(), default=0)
+    v_gap = max(opts.node_gap, 0.2 + 0.1 * (most_loops - 1) if most_loops else 0.0) + GRID
+    u_gap = max(opts.layer_gap, 0.3 + 0.1 * (most_loops - 1) if most_loops else 0.0) + GRID
 
     ids = [n.id for n in nodes]
     flipped = _break_cycles(ids, list(edges))
@@ -285,7 +298,7 @@ def layered_layout(
             if parent is None
             else (group_index[parent], group_index[n.group])
         )
-        u, v = (_ceil(n.height), _ceil(n.width)) if top_down else (_ceil(n.width), _ceil(n.height))
+        u, v = (_even(n.height), _even(n.width)) if top_down else (_even(n.width), _even(n.height))
         slots[n.id] = _Slot(layer_of[n.id], u, v, lane_index[n.lane] if n.lane is not None else 0, track, True)
 
     chains: list[list[_Key]] = []
@@ -350,7 +363,7 @@ def layered_layout(
             used = sum(m.v_extent for m in members) + v_gap * (len(members) - 1)
             at = track_top[key] + (track_height[key] - used) / 2
             for m in members:
-                m.v = at + m.v_extent / 2
+                m.v = snap(at + m.v_extent / 2)  # on the grid, so even extents put both borders on it
                 at += m.v_extent + v_gap
 
     def pad_of(g: str) -> float:
@@ -367,6 +380,12 @@ def layered_layout(
             reach = pad_of(g) + GRID
             lo_u, hi_u = min(lo_u, c - s.u_extent / 2 - reach), max(hi_u, c + s.u_extent / 2 + reach)
             lo_v, hi_v = min(lo_v, s.v - s.v_extent / 2 - reach), max(hi_v, s.v + s.v_extent / 2 + reach)
+    loop_count = Counter(source for source, target in edges if source == target)
+    for node_id, count in loop_count.items():
+        s = slots[node_id]
+        right = col_left[s.layer] + col_width[s.layer] / 2 + s.u_extent / 2
+        reach = 0.2 + 0.1 * (count - 1) + GRID
+        lo_v, hi_u = min(lo_v, s.v - s.v_extent / 2 - reach), max(hi_u, right + 0.3 + 0.1 * (count - 1) + GRID)
     shift_u, shift_v = _ceil(-lo_u), _ceil(-lo_v)
     u_total, v_total = _ceil(hi_u + shift_u), _ceil(hi_v + shift_v)
 
@@ -377,7 +396,7 @@ def layered_layout(
 
     def centre_u(slot: _Slot) -> float:
         """The middle of a slot's column, along the flow."""
-        return col_left[slot.layer] + col_width[slot.layer] / 2
+        return snap(col_left[slot.layer] + col_width[slot.layer] / 2)
 
     def right_u(slot: _Slot) -> float:
         """Where an edge leaves a slot: its far border, or the column's for a dummy."""
@@ -387,7 +406,13 @@ def layered_layout(
         """Where an edge arrives at a slot: its near border, or the column's for a dummy."""
         return centre_u(slot) - (slot.u_extent if slot.real else col_width[slot.layer]) / 2
 
-    boxes = {n.id: Box(*page(centre_u(slots[n.id]), slots[n.id].v), snap(n.width), snap(n.height)) for n in nodes}
+    boxes = {
+        n.id: Box(
+            *page(centre_u(slots[n.id]), slots[n.id].v),
+            *((slots[n.id].v_extent, slots[n.id].u_extent) if top_down else (slots[n.id].u_extent, slots[n.id].v_extent)),
+        )
+        for n in nodes
+    }
 
     gap_edges: dict[int, list[tuple[float, float, int, int]]] = {}
     for n, chain in enumerate(chains):
@@ -400,30 +425,41 @@ def layered_layout(
         for k, (_low, _high, n, hop) in enumerate(items):
             channel[(n, hop)] = left + u_gap * (k + 1) / (len(items) + 1)
 
+    twins = Counter((c[0], c[-1]) for c in chains)
+    twin_at: dict[tuple[_Key, _Key], int] = {}
     routes: dict[tuple[str, str, int], tuple[tuple[float, float], ...]] = {}
     seen_pairs: dict[tuple[str, str], int] = {}
     for n, ((source, target), flip, chain) in enumerate(zip(edges, flipped, chains, strict=True)):
         parallel = seen_pairs.get((source, target), 0)
         seen_pairs[(source, target)] = parallel + 1
         first_slot = slots[chain[0]]
+        ends = (chain[0], chain[-1])
+        i = twin_at.get(ends, 0)
+        twin_at[ends] = i + 1
         if source == target:
-            r = first_slot.v_extent / 2 + 0.2
-            c = centre_u(first_slot)
+            r = first_slot.v_extent / 2 + 0.2 + 0.1 * i
+            c = centre_u(first_slot) - _spread(twins[ends], first_slot.u_extent)[i]
+            dv = _spread(twins[ends], first_slot.v_extent)[i]
             bends = [
-                (right_u(first_slot), first_slot.v),
-                (right_u(first_slot) + 0.3, first_slot.v),
-                (right_u(first_slot) + 0.3, first_slot.v - r),
+                (right_u(first_slot), first_slot.v + dv),
+                (right_u(first_slot) + 0.3 + 0.1 * i, first_slot.v + dv),
+                (right_u(first_slot) + 0.3 + 0.1 * i, first_slot.v - r),
                 (c, first_slot.v - r),
                 (c, first_slot.v - first_slot.v_extent / 2),
             ]
         else:
-            bends = [(right_u(first_slot), first_slot.v)]
-            for hop, (a, b) in enumerate(pairwise(chain)):
-                sa, sb = slots[a], slots[b]
+            # parallel edges leave and arrive at different points along the border so they never overlay
+            room = min(first_slot.v_extent, slots[chain[-1]].v_extent)
+            off = _spread(twins[ends], room)[i]
+            vs = [slots[k].v for k in chain]
+            vs[0] += off
+            vs[-1] += off
+            bends = [(right_u(first_slot), vs[0])]
+            for hop, sb in enumerate(slots[k] for k in chain[1:]):
                 cu = channel[(n, hop)]
-                bends += [(cu, sa.v), (cu, sb.v), (left_u(sb), sb.v)]
+                bends += [(cu, vs[hop]), (cu, vs[hop + 1]), (left_u(sb), vs[hop + 1])]
                 if hop + 1 < len(chain) - 1:
-                    bends.append((right_u(sb), sb.v))
+                    bends.append((right_u(sb), vs[hop + 1]))
             if flip:
                 bends.reverse()
         mapped: list[tuple[float, float]] = []
