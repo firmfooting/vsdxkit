@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import math
 import re
+import uuid
 import xml.etree.ElementTree as ET
 from collections.abc import Sequence
 from typing import NamedTuple, Protocol
@@ -186,6 +187,8 @@ DIAGRAM_WIDTHS = (5.0, 22.0)
 """The least and greatest diagram width, in inches, that Visio was checked on."""
 LABEL_CHARS_PER_INCH = 11
 """The most characters of a label for each inch of lane height: a longer label wraps out of the heading, which Visio showed."""
+_UNIQUE_ID_NAMESPACE = uuid.UUID("6f1d3c52-8b0a-5e41-9a37-2c5d7e90b4a1")
+"""The fixed namespace the copies' UniqueIDs are derived in, so the same diagram on the same page always gets the same ones."""
 ID_CEILING = 1000
 """The bundled diagram's shape IDs start here, so a page may hold shapes only below it for a copy's IDs never to equal one of them."""
 
@@ -438,6 +441,8 @@ def _create_diagram(
         sizes = [((old_sizes[old.ID]), (new.width or 0.0, new.height or 0.0))]
         sizes += [(old_sizes[o.ID], (n.width or 0.0, n.height or 0.0)) for o, n in tops if o is not old]
         _resync(new, sizes)
+    for top_level in (container, swimlane_list, phase_list, separator, *lanes):
+        _renew_unique_ids(page.name, top_level)
     _relate(swimlane_list, lanes)
     _user_value(container, _NUM_LANES).attrib["V"] = str(len(bands))
     diagram = SwimlaneDiagram(container)
@@ -449,6 +454,18 @@ def _create_diagram(
         settings = _user_value(lane, _SETTINGS)
         settings.attrib["V"] = _STG4.sub(f"/stg4={len(bands)},", settings.attrib["V"])
     return diagram
+
+
+def _renew_unique_ids(page_name: str, shape: Shape) -> None:
+    """Give `shape` and its sub-shapes UniqueIDs of their own, derived from the page's name and each shape's ID.
+
+    A copy keeps the UniqueID it was copied from, and Visio addresses a shape by it. Deriving it, rather than
+    drawing a random one, keeps a saved document the same every time it is built.
+    """
+    for member in (shape, *shape.descendants):
+        if "UniqueID" in member.xml.attrib:
+            derived = uuid.uuid5(_UNIQUE_ID_NAMESPACE, f"{page_name}/{member.ID}")
+            member.xml.attrib["UniqueID"] = "{" + str(derived).upper() + "}"
 
 
 def _relate(swimlane_list: Shape, lanes: Sequence[Shape]) -> None:
@@ -528,7 +545,10 @@ class SwimlaneDiagram:
         return holding[0] if holding else None
 
     def add_lane(self, label: str | None = None) -> Shape:
-        """Add a lane one pitch above the top lane, a copy of it, and grow the Swimlane List and container to match.
+        """Add a lane one pitch above the top lane, a copy of it, and grow the Swimlane List, container, Phase List and Separator to match.
+
+        The lane count the diagram keeps (the container's ``numLanes``, each lane's ``/stg4`` setting and the
+        Swimlane List's ``Relationships``) is brought up to the new count, and the copy gets a UniqueID of its own.
 
         Whether the new lane can take ``label`` is settled on the lane it is
         copied from before anything is written, so a refused label leaves the
@@ -550,16 +570,43 @@ class SwimlaneDiagram:
         if label is not None:
             self._check_label(top_lane, label, subject=subject)
         new_lane = top_lane.copy(self._page)
+        _renew_unique_ids(self._page.name, new_lane)
         new_lane._write_cell("PinY", v=str((top_lane.y or 0.0) + LANE_PITCH_INCHES), keep_formula=True)
         if label is not None:
             self._write_label(new_lane, label, subject=subject)
         # the list and the container grow upwards so the new lane sits inside them
-        for grown in (self._swimlane_list(), self._container):
-            if grown is None:
-                continue
-            grown._write_cell("PinY", v=str((grown.y or 0.0) + LANE_PITCH_INCHES / 2), keep_formula=True)
-            grown._write_cell("Height", v=str((grown.height or 0) + LANE_PITCH_INCHES), keep_formula=True)
+        grown_shapes = [
+            shape for shape in (self._swimlane_list(), self._container, *self._phase_shapes()) if shape is not None
+        ]
+        before = {shape.ID: (shape.width or 0.0, shape.height or 0.0) for shape in grown_shapes}
+        for grown in grown_shapes:
+            left, bottom, right, top = grown.bounds
+            _fit(grown, grown, left, bottom, right, top + LANE_PITCH_INCHES)  # the pin moves with the edge it is on
+        sizes = {shape.ID: (before[shape.ID], (shape.width or 0.0, shape.height or 0.0)) for shape in grown_shapes}
+        for shape in grown_shapes:  # their sub-shapes cache numbers that follow the size, as after a creation
+            _resync(shape, [sizes[shape.ID], *(v for k, v in sizes.items() if k != shape.ID)])
+        self._count_lanes(new_lane)
         return new_lane
+
+    def _count_lanes(self, new_lane: Shape) -> None:
+        """Bring the lane count the CFF machinery keeps (the container's row, each lane's setting, the list's relations) up to `new_lane`."""
+        count = len(self.lanes)
+        number = None if self._container is None else _user_row(self._container, _NUM_LANES)
+        value = None if number is None else _value_cell(number)
+        if value is not None:
+            value.attrib["V"] = str(count)
+        for lane in self.lanes:
+            setting = _user_row(lane, _SETTINGS)
+            cell = None if setting is None else _value_cell(setting)
+            if cell is not None:
+                cell.attrib["V"] = _STG4.sub(f"/stg4={count},", cell.attrib["V"])
+        swimlane_list = self._swimlane_list()
+        if swimlane_list is not None:
+            for cell in swimlane_list.xml.findall(f'{namespace}Cell[@N="Relationships"]'):
+                # appended, so the lanes keep the order the formula already lists them in
+                cell.attrib["F"] = _LANE_LIST.sub(
+                    lambda m: m.group(0)[:-1] + f",Sheet.{new_lane.ID}!SheetRef())", cell.attrib["F"]
+                )
 
     def set_lane_label(self, lane: Shape, label: str) -> None:
         """Set a lane's label: its ``visHeadingText`` row and its heading's text, both or neither.
@@ -592,6 +639,10 @@ class SwimlaneDiagram:
         if _holds(_bands(self.lanes)[lane], shape):
             return
         shape._write_cell("PinY", v=str(lane.y or 0.0), keep_formula=True)
+
+    def _phase_shapes(self) -> list[Shape]:
+        """The Phase List and its Separator, which span the lanes' height and so grow with them."""
+        return [shape for shape in self._page.children if _named(shape, "Phase List") or _named(shape, "Separator")]
 
     def _swimlane_list(self) -> Shape | None:
         """The page's first top-level Swimlane List shape, which `add_lane` grows, or None for a page without one."""

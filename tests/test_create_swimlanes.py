@@ -376,3 +376,105 @@ def test_a_masters_styles_are_imported_with_it_where_the_destination_lacks_the_i
             sheets.remove(sheet)
     _page(document).create_swimlanes(BANDS, left=0.5, top=7.0, width=10.0)
     assert "Flow Normal" in _separator_style_names(document)
+
+
+def _unique_ids(page) -> list[str]:
+    """The UniqueID of every shape on the page, sub-shapes included."""
+    return [e.attrib["UniqueID"] for e in page.xml.getroot().iter(f"{namespace}Shape") if "UniqueID" in e.attrib]
+
+
+def test_every_shape_of_a_created_diagram_has_a_unique_id_of_its_own():
+    _, diagram = _diagram()
+    ids = _unique_ids(diagram.container.page)
+    assert len(ids) > 3 * len(BANDS) and len(set(ids)) == len(ids)
+    assert all(re.fullmatch(r"\{[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}\}", i) for i in ids)
+
+
+def test_the_shapes_of_a_created_diagram_share_no_unique_id_with_the_donor():
+    document, diagram = _diagram()
+    donor = _unique_ids(document._cff_sources().container.page)
+    assert donor and not set(donor) & set(_unique_ids(diagram.container.page))
+
+
+def test_diagrams_on_two_pages_of_a_document_share_no_unique_id():
+    document = Document.new()
+    first = _page(document)
+    second = document.pages.create("Second")
+    second.width, second.height = 12.0, 8.0
+    first.create_swimlanes(BANDS, left=0.5, top=7.0, width=10.0)
+    second.create_swimlanes(BANDS, left=0.5, top=7.0, width=10.0)
+    ids = _unique_ids(first) + _unique_ids(second)
+    assert len(set(ids)) == len(ids)
+
+
+def test_two_builds_of_a_created_diagram_save_the_same_bytes(tmp_path):
+    first = _diagram()[0].save(tmp_path / "a.vsdx", deterministic=True)
+    second = _diagram()[0].save(tmp_path / "b.vsdx", deterministic=True)
+    assert first.read_bytes() == second.read_bytes()
+
+
+def _relationship_lanes(diagram) -> list[str]:
+    """The IDs the Swimlane List's Relationships formula names as its lanes."""
+    cell = next(c for c in diagram._swimlane_list().xml if c.tag.endswith("}Cell") and c.attrib["N"] == "Relationships")
+    return (
+        re.findall(r"DEPENDSON\(2((?:,Sheet\.\d+!SheetRef\(\))*)\)", cell.attrib["F"])[0]
+        .replace("!SheetRef()", "")
+        .split(",Sheet.")[1:]
+    )
+
+
+def _check_metadata(diagram, count):
+    assert len(diagram.lanes) == count
+    assert _user(diagram.container, "numLanes") == str(count)
+    assert all(f"/stg4={count}," in _user(lane, "visCFFSettings") for lane in diagram.lanes)
+    assert sorted(_relationship_lanes(diagram)) == sorted(lane.ID for lane in diagram.lanes)
+
+
+def test_a_lane_added_to_a_created_diagram_is_counted_in_the_metadata_the_machinery_keeps():
+    diagram = _make([("Top", LANE_PITCH_INCHES), ("Next", LANE_PITCH_INCHES)])
+    diagram.add_lane("New")
+    _check_metadata(diagram, 3)
+    ids = _unique_ids(diagram.container.page)
+    assert len(set(ids)) == len(ids), "the added lane has a UniqueID of its own"
+
+
+def test_a_lane_added_to_a_diagram_visio_drew_is_counted_too():
+    """Before this was written, add_lane left numLanes, /stg4 and Relationships at the three lanes Visio drew."""
+    diagram = Document.open(REFERENCE).pages[0].require_swimlanes()
+    diagram.add_lane("New")
+    assert _user(diagram.container, "numLanes") == "4"
+    assert all("/stg4=4," in _user(lane, "visCFFSettings") for lane in diagram.lanes)
+    assert sorted(_relationship_lanes(diagram)) == sorted(lane.ID for lane in diagram.lanes)
+
+
+def test_the_sub_shapes_of_the_grown_container_and_list_follow_them_after_add_lane():
+    diagram = _make([("Top", LANE_PITCH_INCHES), ("Next", LANE_PITCH_INCHES)])
+    diagram.add_lane("New")
+    for grown in (diagram.container, diagram._swimlane_list()):
+        tops = [v for shape in (grown, *grown.descendants) for axis, v in _vertices(shape) if axis == "Y"]
+        assert max(tops) == pytest.approx(grown.height)
+    assert next(iter(diagram.container.children)).height == pytest.approx(diagram.container.height)
+
+
+@pytest.mark.parametrize("drawn_by_visio", [False, True])
+def test_the_list_and_container_keep_their_bottom_edge_and_gain_one_pitch_at_the_top_after_add_lane(drawn_by_visio):
+    """A list pinned at its top edge and a container pinned at its middle both grow upwards, so the pin moves with the edge."""
+    if drawn_by_visio:
+        diagram = Document.open(REFERENCE).pages[0].require_swimlanes()
+    else:
+        diagram = _make([("Top", LANE_PITCH_INCHES), ("Next", LANE_PITCH_INCHES)])
+    grown = (diagram._swimlane_list(), diagram.container)
+    before = [shape.bounds for shape in grown]
+    diagram.add_lane("New")
+    for shape, (left, bottom, right, top) in zip(grown, before, strict=True):
+        assert shape.bounds == pytest.approx((left, bottom, right, top + LANE_PITCH_INCHES))
+
+
+def test_the_phase_list_and_separator_gain_one_pitch_at_the_top_after_add_lane_as_the_lanes_do():
+    diagram = _make([("Top", LANE_PITCH_INCHES), ("Next", LANE_PITCH_INCHES)])
+    phases = diagram._phase_shapes()
+    assert len(phases) == 2
+    before = [shape.bounds for shape in phases]
+    diagram.add_lane()
+    for shape, (left, bottom, right, top) in zip(phases, before, strict=True):
+        assert shape.bounds == pytest.approx((left, bottom, right, top + LANE_PITCH_INCHES))

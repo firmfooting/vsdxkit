@@ -109,6 +109,7 @@ LINES: tuple[tuple[str, str], ...] = (
         "lanes_style_absent",
         "lanes_style_absent: a diagram in a document with no style 7; the Separator shows Flow Normal's margins",
     ),
+    ("lanes_add", "lanes_add: a created two-lane diagram with a lane added by add_lane; every shape where it was written"),
     ("lanes_wide", "lanes_wide: a diagram 22 inches wide on a page widened to 24; every shape where it was written"),
 )
 """Every case file's name and what Visio must show for it."""
