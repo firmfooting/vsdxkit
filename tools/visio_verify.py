@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -149,13 +151,40 @@ def _staged(paths: list[str]):
 # a frozen package can only yield the observation it yielded at record time - so
 # that kind of recording proves the XML reader still reads the file the same
 # way, and nothing whatever about what the library writes.
-TRANSFORMS = ("roundtrip", "none")
+TRANSFORMS = ("roundtrip", "none", "build")
+
+
+def _file_sha256(path: str) -> str:
+    """The SHA-256 of a file's bytes: what a recording stores to say which input it is about."""
+    with open(path, "rb") as handle:
+        return hashlib.sha256(handle.read()).hexdigest()
+
+
+def _recorded_name(path: str) -> str:
+    """The name a recording gives its input: the path under tests/ with forward slashes, or the bare name outside it."""
+    relative = os.path.relpath(os.path.abspath(path), os.path.join(REPO, "tests"))
+    return os.path.basename(path) if relative.startswith("..") else relative.replace(os.sep, "/")
+
+
+def _build(source: str, destination: str) -> str:
+    """Run a case file's ``build()`` and save the document it returns, deterministically, as the .vsdx Visio is shown."""
+    spec = importlib.util.spec_from_file_location("visio_verify_case", source)
+    if spec is None or spec.loader is None:
+        raise VisioUnavailable(f"cannot load {source} as a case")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    document = module.build()
+    target = os.path.splitext(destination)[0] + ".vsdx"
+    document.save(target, deterministic=True)
+    return target
 
 
 def _apply_transform(transform: str, source: str, destination: str) -> str:
     """Produce the file Visio should look at, and return its path."""
     if transform == "none":
         return source
+    if transform == "build":
+        return _build(source, destination)
     if transform != "roundtrip":
         raise VisioUnavailable(f"unknown transform {transform!r}; expected one of {', '.join(TRANSFORMS)}")
     # imported here, not at module scope: `replay` is the only caller that runs
@@ -440,7 +469,7 @@ def command_record(
         for path in paths:
             name = os.path.basename(path)
             subject = _apply_transform(transform, path, os.path.join(workspace, name))
-            subjects[name] = (path, subject)
+            subjects[os.path.basename(subject)] = (path, subject)
         payload = observe([subject for _, subject in subjects.values()], allow_running=allow_running)
 
         os.makedirs(into, exist_ok=True)
@@ -456,12 +485,12 @@ def command_record(
             # the whole point; the input is what has to stay put for the
             # recording to still be about the same thing.
             record["source"] = {
-                "name": name,
-                "sha256": observation_from_package(origin).source_sha256,
+                "name": _recorded_name(origin),
+                "sha256": _file_sha256(origin),
                 "transform": transform,
             }
             record["viewer"] = payload["viewer"]
-            destination = os.path.join(into, f"{os.path.splitext(name)[0]}.json")
+            destination = os.path.join(into, f"{os.path.splitext(os.path.basename(origin))[0]}.json")
             with open(destination, "w", encoding="utf-8") as handle:
                 json.dump(record, handle, indent=2, sort_keys=True)
                 handle.write("\n")
@@ -482,7 +511,7 @@ def command_replay(recordings: list[str], *, corpus: str) -> int:
             print(f"ORPHAN {name}: recorded, but {package_path} no longer exists")
             failures += 1
             continue
-        if observation_from_package(package_path).source_sha256 != record["source"]["sha256"]:
+        if _file_sha256(package_path) != record["source"]["sha256"]:
             print(
                 f"STALE  {name}: the input has changed since Visio last saw it.\n"
                 f"    Re-record on a Windows machine: python tools/visio_verify.py record {package_path}"
@@ -507,7 +536,7 @@ def command_replay(recordings: list[str], *, corpus: str) -> int:
             # Re-run the writer *now*. This is what makes replay a gate on the
             # library rather than on its own reader: the bytes being described
             # were produced by today's code, not read back out of git.
-            subject = _apply_transform(transform, package_path, os.path.join(workspace, name))
+            subject = _apply_transform(transform, package_path, os.path.join(workspace, os.path.basename(name)))
             agreed, text = _verdict(record, observation_from_package(subject), visio)
         print(text)
         failures += 0 if agreed else 1

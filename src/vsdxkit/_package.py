@@ -43,7 +43,7 @@ import zipfile
 import zlib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import IO, Protocol
 
 from vsdxkit._xmlio import PartTree, parse_part, serialise_part
 from vsdxkit.errors import MalformedPackageError, MissingPartError, PackageLimitError
@@ -463,6 +463,40 @@ def _promoted(name: str, part: BytesPart) -> XmlPart:
 
 
 # --------------------------------------------------------------------------
+# the deterministic writer
+# --------------------------------------------------------------------------
+
+_FIXED_DATE = (1980, 1, 1, 0, 0, 0)
+"""The earliest date a zip entry can hold, which every deterministic member carries."""
+_FIXED_CREATE_SYSTEM = 3
+"""The "created on" system of every deterministic member: 3, Unix, which is what a save on Linux or WSL already writes and Visio has opened."""
+_FIXED_EXTERNAL_ATTR = 0o600 << 16
+"""The attributes of every deterministic member: rw------- as zipfile writes them. ZipFile.open turns a zero here into this value anyway."""
+
+
+def _write_deterministic(handle: IO[bytes], members: list[tuple[str, bytes]]) -> None:
+    """Write `members` as a zip whose bytes depend on their names and contents alone.
+
+    Entries go in part-name order with `[Content_Types].xml` first, each stored uncompressed (deflate output
+    depends on the zlib build) under a ZipInfo with a fixed date, system, attributes and flags and no extra
+    field. `ZipFile.writestr` given a bare name instead stamps the current local time and the host's system.
+    """
+    ordered = sorted(members, key=lambda member: (member[0] != "/[Content_Types].xml", member[0]))
+    with zipfile.ZipFile(handle, "w", compression=zipfile.ZIP_STORED) as archive:
+        for name, data in ordered:
+            info = zipfile.ZipInfo(name[1:], _FIXED_DATE)
+            info.compress_type = zipfile.ZIP_STORED
+            info.create_system = _FIXED_CREATE_SYSTEM
+            info.create_version = 20
+            info.extract_version = 20
+            info.external_attr = _FIXED_EXTERNAL_ATTR
+            info.flag_bits = 0
+            info.extra = b""
+            info.comment = b""
+            archive.writestr(info, data)
+
+
+# --------------------------------------------------------------------------
 # the store
 # --------------------------------------------------------------------------
 
@@ -594,7 +628,7 @@ class PackageStore:
             raise KeyError(name)
         del self._parts[checked]
 
-    def save(self, target: str | os.PathLike[str] | None = None) -> Path:
+    def save(self, target: str | os.PathLike[str] | None = None, *, deterministic: bool = False) -> Path:
         """Write the package to `target`, or back over the source, and say where.
 
         The only archive writer. Every part goes out once, in `names()` order,
@@ -604,6 +638,9 @@ class PackageStore:
         it was; the temporary file takes the target's mode, or the source's
         when the target is new, wherever the platform can set it through the
         open descriptor (see below).
+
+        With `deterministic`, every member is written in one fixed form (see `_write_deterministic`) so that equal parts
+        give equal bytes on every platform and Python version; the compression-ratio rule does not apply to stored members.
 
         Saving elsewhere does not make elsewhere the source. A later `save()`
         with no target still writes where the package was opened from.
@@ -717,18 +754,21 @@ class PackageStore:
                 # a default reader accepts. A size violation cannot be avoided short of
                 # refusing to save, so for those the caller's own raised limits stand.
                 store_above = min(self._limits.max_ratio, PackageLimits().max_ratio)
-                with zipfile.ZipFile(handle, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-                    for name, data in members_bytes:
-                        # Measure deflated size the way zipfile does: zlib with window=-15
-                        # to skip the zlib header/trailer. If the ratio would exceed the
-                        # limit, store the member uncompressed instead.
-                        compressor = zlib.compressobj(zlib.Z_DEFAULT_COMPRESSION, zlib.DEFLATED, -15)
-                        compressed = compressor.compress(data) + compressor.flush()
-                        ratio = len(data) / max(len(compressed), 1)
-                        if ratio > store_above:
-                            archive.writestr(name[1:], data, compress_type=zipfile.ZIP_STORED)
-                        else:
-                            archive.writestr(name[1:], data)
+                if deterministic:
+                    _write_deterministic(handle, members_bytes)
+                else:
+                    with zipfile.ZipFile(handle, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                        for name, data in members_bytes:
+                            # Measure deflated size the way zipfile does: zlib with window=-15
+                            # to skip the zlib header/trailer. If the ratio would exceed the
+                            # limit, store the member uncompressed instead.
+                            compressor = zlib.compressobj(zlib.Z_DEFAULT_COMPRESSION, zlib.DEFLATED, -15)
+                            compressed = compressor.compress(data) + compressor.flush()
+                            ratio = len(data) / max(len(compressed), 1)
+                            if ratio > store_above:
+                                archive.writestr(name[1:], data, compress_type=zipfile.ZIP_STORED)
+                            else:
+                                archive.writestr(name[1:], data)
                 # The identity of the file actually written, taken through the
                 # descriptor so no path lookup can substitute another file.
                 kept = os.fstat(handle.fileno())

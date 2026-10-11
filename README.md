@@ -46,6 +46,7 @@ import Document`; the package root re-exports nothing.
 - Copies shapes and pages while rewriting package-local IDs and importing masters.
 - Renders data into Visio templates with Jinja.
 - Saves to a new file or safely replaces the source file in place.
+- Saves byte-identical files on every platform with `save(deterministic=True)`.
 
 The implementation edits the XML parts inside the Open Packaging Convention
 archive. It does not drive the Visio user interface. Generated files are checked

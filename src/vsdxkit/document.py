@@ -1084,13 +1084,15 @@ class Document:
             return new_filename
         return new_filename + (".vsdm" if self.is_macro_enabled else ".vsdx")
 
-    def save(self, target: str | os.PathLike[str] | None = None) -> Path:
+    def save(self, target: str | os.PathLike[str] | None = None, *, deterministic: bool = False) -> Path:
         """Write the document, and return the absolute path it was written to.
 
         :param target: where to write. A ``.vsdx`` or ``.vsdm`` extension must
             match the package's own kind; any other name gets the matching
             extension appended. Omit it to save over the file the document
             was opened from; that name is checked the same way but never renamed.
+        :param deterministic: write every member stored, in a fixed order, under a fixed date and attributes,
+            so equal documents give equal bytes on every platform. The default writes the usual compressed archive.
         :raises InvalidOperationError: if the extension contradicts the package kind, the package
             holds no parts, or no target is given for a document made by :meth:`new`
         :raises PackageLimitError: if the package has more members, a larger member, or more bytes in
@@ -1116,9 +1118,9 @@ class Document:
             # member. In place, that is over the absolute path the store
             # captured at open: `filename` may be relative, and resolve against
             # another working directory by the time this runs.
-            return self._package.save()
+            return self._package.save(deterministic=deterministic)
         # resolve the destination first, so a refused extension writes nothing
-        return self._package.save(self._destination_filename(os.fspath(target)))
+        return self._package.save(self._destination_filename(os.fspath(target)), deterministic=deterministic)
 
     def render(self, context: Mapping[str, object]) -> None:
         """Render the document as a Jinja template, in place.
