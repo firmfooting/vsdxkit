@@ -715,8 +715,9 @@ class SwimlaneDiagram:
         return None
 
     def _swimlane_list(self) -> Shape | None:
-        """The page's first top-level Swimlane List shape, which `add_lane` grows, or None for a page without one."""
-        return next((shape for shape in self._page.children if _named(shape, _SWIMLANE_LIST_NAME)), None)
+        """The Swimlane List that owns the diagram's lanes: the one the first lane's ``DEPENDSON(5, ...)`` names, or None."""
+        lanes = self.lanes
+        return self._related(lanes[0], 5) if lanes else None
 
     def _require_lane(self, lane: Shape) -> None:
         """Refuse a `lane` that is not one of `lanes`, with `InvalidOperationError`."""
