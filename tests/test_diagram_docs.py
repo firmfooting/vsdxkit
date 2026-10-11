@@ -1,6 +1,7 @@
 """Run the Python examples of docs/diagrams_as_code.rst and docs/swimlanes.rst's creation example, in order, in one namespace."""
 
 import re
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -10,9 +11,7 @@ _BLOCK = re.compile(r"^\.\. code-block:: python\n\n((?:   .*\n|\n)+)", re.MULTIL
 
 
 def _blocks(page: str) -> list[str]:
-    return [
-        re.sub(r"^   ", "", block, flags=re.MULTILINE) for block in _BLOCK.findall((DOCS / page).read_text(encoding="utf-8"))
-    ]
+    return [textwrap.dedent(block) for block in _BLOCK.findall((DOCS / page).read_text(encoding="utf-8"))]
 
 
 @pytest.mark.parametrize(("page", "count"), [("diagrams_as_code.rst", 3), ("swimlanes.rst", 4)])

@@ -18,6 +18,7 @@ file lists agreeing is not the same as the tests passing.
 from __future__ import annotations
 
 import glob
+import re
 import subprocess
 import sys
 import tarfile
@@ -117,6 +118,18 @@ def main() -> int:
         fail(f"{len(missing)} tracked file(s) under {trees} are absent from the sdist: {missing[:10]}")
     else:
         ok(f"every tracked file under {trees} is in the sdist")
+
+    # A test that reads a docs page fails in the unpacked archive when the page is not shipped.
+    read = {
+        f"docs/{name}"
+        for test in (repo_root / "tests").glob("test*.py")
+        for name in re.findall(r"[\"']([\w-]+\.rst)[\"']", test.read_text(encoding="utf-8"))
+    }
+    absent = sorted(page for page in read if (repo_root / page).exists() and page not in shipped)
+    if absent:
+        fail(f"docs page(s) read by tests are absent from the sdist: {absent}")
+    else:
+        ok("every docs page a test reads is in the sdist")
 
     # Named individually rather than left to the parity check above: these are
     # what the 0.7.0 sdist was missing, and naming them makes the report legible
