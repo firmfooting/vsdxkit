@@ -45,6 +45,7 @@ import Document`; the package root re-exports nothing.
 - Creates, reads and extends Visio cross-functional flowchart swimlanes.
 - Copies shapes and pages while rewriting package-local IDs and importing masters.
 - Renders data into Visio templates with Jinja.
+- Builds a diagram from data, with no coordinates, using `vsdxkit.builder`.
 - Saves to a new file or safely replaces the source file in place.
 - Saves byte-identical files on every platform with `save(deterministic=True)`.
 
