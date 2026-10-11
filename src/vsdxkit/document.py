@@ -90,12 +90,25 @@ def _style_holders(document: Document, master: Page) -> list[Element]:
     return [*master.xml.getroot().iter(f"{namespace}Shape"), *([] if page_sheet is None else [page_sheet])]
 
 
-def _remap_styles(elements: list[Element], settled: dict[str, str]) -> None:
-    """Replace each style ID the `elements` name with the one `settled` gives it; an ID it lacks stays."""
+def _remap_styles(elements: list[Element], settled: dict[int, int]) -> None:
+    """Replace each style number the `elements` name with the one `settled` gives it; one it lacks, or that is no number, stays."""
     for element in elements:
         for attribute in _STYLE_ATTRIBUTES:
-            if attribute in element.attrib:
-                element.attrib[attribute] = settled.get(element.attrib[attribute], element.attrib[attribute])
+            key = _style_number(element.attrib.get(attribute, ""))
+            if key is not None and settled.get(key, key) != key:
+                element.attrib[attribute] = str(settled[key])
+
+
+def _style_number(style_id: str) -> int | None:
+    """A style ID or reference as the ``xsd:unsignedInt`` it is, so "07" and "7" are one style; None for anything else."""
+    return int(style_id) if style_id.isascii() and style_id.isdigit() else None
+
+
+def _style_numbered(table: Element | None, key: int) -> Element | None:
+    """The style sheet in `table` whose ID is the number `key`, however it is spelled, or None."""
+    if table is None:
+        return None
+    return next((e for e in table if _style_number(e.attrib.get("ID", "")) == key), None)
 
 
 def _same_style_name(ours: Element, theirs: Element) -> bool:
@@ -126,7 +139,7 @@ class Document:
         self._load_pages()
         self._masters = MasterCatalog(self._package, self._master_page)
         self._masters.load()
-        self._style_maps: weakref.WeakKeyDictionary[Document, dict[str, str]] = weakref.WeakKeyDictionary()
+        self._style_maps: weakref.WeakKeyDictionary[Document, dict[int, int]] = weakref.WeakKeyDictionary()
         if _logger.isEnabledFor(logging.DEBUG):
             for master in self._masters.pages:
                 _logger.debug("Master(%s, id=%s)\n%s", master._filename, master._page_id, pretty_print_element(master.xml))
@@ -388,56 +401,66 @@ class Document:
         self._commit_master_styles(source, plan)
         _remap_styles(_style_holders(self, master), plan[0])
 
-    def _plan_master_styles(self, source: Document, holders: list[list[Element]]) -> tuple[dict[str, str], dict[str, Element]]:
+    def _plan_master_styles(self, source: Document, holders: list[list[Element]]) -> tuple[dict[int, int], dict[str, Element]]:
         """The IDs here for the styles `holders` name in `source`, and the styles to add for them; changes nothing.
 
         Every style reference to settle is read first, so a failure leaves this document as it was.
         """
         settled = dict(self._style_maps.get(source, {}))
-        staged: dict[str, Element] = {}
-        table = self._part_root(self._document_xml, "document.xml").find(f"{namespace}StyleSheets")
+        staged: dict[int, Element] = {}
+        table, theirs_table = self._styles_table(), source._styles_table()
 
-        def ours_by_id(style_id: str) -> Element | None:
-            """This document's style `style_id`, or one staged to join it, or None."""
-            if style_id in staged:
-                return staged[style_id]
-            return None if table is None else table.find(f"{namespace}StyleSheet[@ID = '{style_id}']")
+        def ours_by_key(key: int) -> Element | None:
+            """This document's style numbered `key`, or one staged to join it, or None."""
+            return staged[key] if key in staged else _style_numbered(table, key)
 
-        def settle(style_id: str) -> str:
-            """The ID in this document of the style `source` knows as `style_id`."""
-            if style_id in settled and ours_by_id(settled[style_id]) is not None:
-                return settled[style_id]
-            theirs = source._get_style_by_id(style_id)
-            if theirs is None:  # an ID missing from the source's own table is left as it is
-                return style_id
-            ours = ours_by_id(style_id)
+        def settle(style_id: str) -> int | None:
+            """The number in this document of the style `source` knows as `style_id`; None when it is not a number."""
+            key = _style_number(style_id)
+            if key is None:
+                return None
+            if key in settled and ours_by_key(settled[key]) is not None:
+                return settled[key]
+            theirs = _style_numbered(theirs_table, key)
+            if theirs is None:  # a number missing from the source's own table is left as it is
+                return key
+            ours = ours_by_key(key)
             if ours is not None and _same_style_name(ours, theirs):
-                settled[style_id] = style_id
-                return style_id
+                settled[key] = key
+                return key
             # a destination style of the same NameU under another ID is not looked for, so duplicates are possible
-            ids = [*staged, *(e.attrib.get("ID", "") for e in (table if table is not None else ()))]
-            new_id = style_id if ours is None else str(max((int(i) for i in ids if i.isdigit()), default=0) + 1)
-            settled[style_id] = new_id
+            used = [*staged]
+            for e in table if table is not None else ():
+                if (n := _style_number(e.attrib.get("ID", ""))) is not None:
+                    used.append(n)
+            new_key = key if ours is None else max(used, default=0) + 1
+            settled[key] = new_key
             imported = copy.deepcopy(theirs)
-            imported.attrib["ID"] = new_id
-            staged[new_id] = imported
+            imported.attrib["ID"] = str(new_key)
+            staged[new_key] = imported
             for attribute in _STYLE_ATTRIBUTES:  # the style this one is based on comes with it
                 if attribute in imported.attrib:
-                    imported.attrib[attribute] = settle(imported.attrib[attribute])
-            return new_id
+                    based = settle(imported.attrib[attribute])
+                    if based is not None:
+                        imported.attrib[attribute] = str(based)
+            return new_key
 
         for elements in holders:
             for element in elements:
                 for attribute in _STYLE_ATTRIBUTES:
                     if attribute in element.attrib:
                         settle(element.attrib[attribute])
-        return settled, staged
+        return settled, {str(key): style for key, style in staged.items()}
 
-    def _commit_master_styles(self, source: Document, plan: tuple[dict[str, str], dict[str, Element]]) -> None:
+    def _styles_table(self) -> Element | None:
+        """document.xml's `StyleSheets`, or None for a document without one, which the schema allows."""
+        return self._part_root(self._document_xml, "document.xml").find(f"{namespace}StyleSheets")
+
+    def _commit_master_styles(self, source: Document, plan: tuple[dict[int, int], dict[str, Element]]) -> None:
         """Add the styles `plan` staged to this document, and remember what it settled for `source`."""
         settled, staged = plan
         if staged:
-            table = self._part_root(self._document_xml, "document.xml").find(f"{namespace}StyleSheets")
+            table = self._styles_table()
             (table if table is not None else self._add_style_sheets()).extend(staged.values())
         self._style_maps.setdefault(source, {}).update(settled)
 

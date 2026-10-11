@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from vsdxkit import document as document_module
 from vsdxkit import namespace
 from vsdxkit.document import Document
 from vsdxkit.pages import Page as Master
@@ -207,14 +208,14 @@ def test_a_settle_that_fails_midway_leaves_the_document_and_the_memo_as_they_wer
     _add_style(source, "21", "Inner")
     master = _master_naming(destination, "20")
     before = ET.tostring(destination._part_root(destination._document_xml, "document.xml"))
-    original = source._get_style_by_id
+    original = document_module._style_numbered
 
-    def fail_on_the_second(style_id: str):
-        if style_id == "21":
+    def fail_on_the_second(table, key: int):
+        if key == 21:
             raise RuntimeError("source went away")
-        return original(style_id)
+        return original(table, key)
 
-    monkeypatch.setattr(source, "_get_style_by_id", fail_on_the_second)
+    monkeypatch.setattr(document_module, "_style_numbered", fail_on_the_second)
     with pytest.raises(RuntimeError):
         destination._settle_master_styles(source, master)
     assert ET.tostring(destination._part_root(destination._document_xml, "document.xml")) == before
@@ -226,12 +227,49 @@ def test_a_copy_whose_styles_cannot_be_settled_leaves_every_part_of_the_package_
     before = {name: destination._package.read_bytes(name) for name in destination._package.names()}
     masters = [m._page_id for m in destination._masters.pages]
 
-    def fail(style_id: str):
+    def fail():
         raise RuntimeError("source went away")
 
-    monkeypatch.setattr(source, "_get_style_by_id", fail)
+    monkeypatch.setattr(source, "_styles_table", fail)
     with pytest.raises(RuntimeError):
         next(iter(source.pages[0].shapes)).copy(destination.pages[0])
     assert {name: destination._package.read_bytes(name) for name in destination._package.names()} == before
     assert not destination._style_maps.get(source)
     assert [m._page_id for m in destination._masters.pages] == masters
+
+
+def test_a_source_without_style_sheets_copies_and_its_ids_stay():
+    source, destination = Document.open(SOURCE), Document.new()
+    root = source._part_root(source._document_xml, "document.xml")
+    root.remove(root.find(f"{namespace}StyleSheets"))
+    copy = next(iter(source.pages[0].shapes)).copy(destination.pages[0])
+    master = destination._masters.by_id(copy.xml.attrib["Master"])
+    assert _line_styles(master) == {"3", "7"}
+
+
+def test_a_leading_zero_id_is_the_same_style_as_the_plain_number():
+    source, destination = Document.new(), Document.new()
+    seven = next(e for e in source._style_sheets() if e.attrib["ID"] == "7")
+    seven.attrib.update(ID="07", NameU="Mine", Name="Mine")
+    master = _master_naming(destination, "07")
+    destination._settle_master_styles(source, master)
+    ids = [s.attrib["ID"] for s in destination._style_sheets()]
+    assert len(ids) == len(set(int(i) for i in ids))
+    (new,) = _line_styles(master)
+    assert new != "7" and _names(destination)[new] == "Mine"
+
+
+def test_a_leading_zero_reference_to_a_matching_style_is_not_imported_again():
+    source, destination = Document.new(), Document.new()
+    _add_style(source, "7", "Connector")
+    count = len(destination._style_sheets())
+    destination._settle_master_styles(source, _master_naming(destination, "07"))
+    assert len(destination._style_sheets()) == count
+
+
+def test_a_style_reference_that_is_not_a_number_is_left_alone():
+    source, destination = Document.new(), Document.new()
+    master = _master_naming(destination, "x1")
+    count = len(destination._style_sheets())
+    destination._settle_master_styles(source, master)
+    assert _line_styles(master) == {"x1"} and len(destination._style_sheets()) == count
