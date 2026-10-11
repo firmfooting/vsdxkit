@@ -741,7 +741,7 @@ def layered_layout(
         for row in rows:
             members = [slots[k] for k in row if (slots[k].lane, slots[k].track) == key]
             if members:
-                best = max(best, sum(m.v_extent for m in members) + v_gap * (len(members) - 1))
+                best = max(best, math.fsum(m.v_extent for m in members) + v_gap * (len(members) - 1))
         track_height[key] = best
     track_top: dict[tuple[int, tuple[int, int]], float] = {}
     lane_top: list[float] = []
@@ -765,7 +765,8 @@ def layered_layout(
         for k in row:
             runs.setdefault((slots[k].lane, slots[k].track), []).append(slots[k])
         for key, members in runs.items():
-            used = sum(m.v_extent for m in members) + v_gap * (len(members) - 1)
+            # fsum, because sum() on floats changed its rounding in 3.12 and the bytes must not depend on the version
+            used = math.fsum(m.v_extent for m in members) + v_gap * (len(members) - 1)
             at = track_top[key] + (track_height[key] - used) / 2
             for m in members:
                 m.v = snap(at + m.v_extent / 2)  # on the grid, so even extents put both borders on it
