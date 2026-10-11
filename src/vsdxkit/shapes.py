@@ -210,6 +210,10 @@ class _PageSeam(PageView, _ConnectorPage, Protocol):
         """
         ...
 
+    def _taken_unique_ids(self) -> set[str]:
+        """Every UniqueID a shape of any page of the document holds."""
+        ...
+
     @property
     def _filename(self) -> str:
         """The name of the page's part, which a copy relates its destination page to for each master it uses."""

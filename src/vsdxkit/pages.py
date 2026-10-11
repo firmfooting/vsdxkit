@@ -837,6 +837,15 @@ class Page:
             raise NotFoundError(f"page {self.name!r} has no CFF container, so no swimlane diagram")
         return diagram
 
+    def _taken_unique_ids(self) -> set[str]:
+        """Every UniqueID a shape of any page of this page's document holds, as :func:`vsdxkit.swimlanes._renew_unique_ids` avoids them."""
+        return {
+            element.attrib["UniqueID"]
+            for page in self._document.pages
+            for element in page.xml.getroot().iter(f"{namespace}Shape")
+            if "UniqueID" in element.attrib
+        }
+
     def create_swimlanes(
         self, bands: Sequence[tuple[str, float]], *, left: float, top: float, width: float
     ) -> SwimlaneDiagram:

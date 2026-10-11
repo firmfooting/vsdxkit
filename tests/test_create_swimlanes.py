@@ -504,3 +504,48 @@ def test_a_diagrams_unique_ids_survive_a_save_and_reopen_and_a_later_diagram(tmp
     assert _unique_ids(reopened.pages[0]) == before
     ids = _unique_ids(reopened.pages[0]) + _unique_ids(other)
     assert len(set(ids)) == len(ids)
+
+
+def test_a_unique_id_a_shape_already_holds_is_never_given_again_and_that_shape_keeps_it():
+    """A shape copied from another document keeps its UniqueID, which can equal one derived here for the same page ID."""
+    import uuid
+
+    from vsdxkit.swimlanes import _UNIQUE_ID_NAMESPACE
+
+    document = Document.new()
+    page = _page(document)
+    held = page.create_shape(ShapeKind.PROCESS, x=1.0, y=1.0)
+    wanted = "{" + str(uuid.uuid5(_UNIQUE_ID_NAMESPACE, f"{page._page_id}/{int(held.ID) + 1}")).upper() + "}"
+    held.xml.attrib["UniqueID"] = wanted
+    diagram = page.create_swimlanes(BANDS, left=0.5, top=7.0, width=10.0)
+    ids = _unique_ids(page)
+    assert len(set(ids)) == len(ids)
+    assert held.xml.attrib["UniqueID"] == wanted
+    assert diagram.container.xml.attrib["UniqueID"] != wanted
+
+
+def test_a_unique_id_held_on_another_page_is_not_given_again():
+    document = Document.new()
+    first = _page(document)
+    other = document.pages.create("Other")
+    shape = other.create_shape(ShapeKind.PROCESS, x=1.0, y=1.0)
+    import uuid
+
+    from vsdxkit.swimlanes import _UNIQUE_ID_NAMESPACE
+
+    wanted = "{" + str(uuid.uuid5(_UNIQUE_ID_NAMESPACE, f"{first._page_id}/{1}")).upper() + "}"
+    shape.xml.attrib["UniqueID"] = wanted
+    first.create_swimlanes(BANDS, left=0.5, top=7.0, width=10.0)
+    assert wanted not in _unique_ids(first)
+
+
+def test_two_equivalent_builds_that_avoided_a_held_unique_id_save_the_same_bytes(tmp_path):
+    def build(name):
+        document = Document.new()
+        page = _page(document)
+        held = page.create_shape(ShapeKind.PROCESS, x=1.0, y=1.0)
+        held.xml.attrib["UniqueID"] = "{00000000-0000-0000-0000-000000000001}"
+        page.create_swimlanes([("A", LANE_PITCH_INCHES)], left=0.5, top=7.0, width=10.0).add_lane()
+        return document.save(tmp_path / name, deterministic=True).read_bytes()
+
+    assert build("a.vsdx") == build("b.vsdx")

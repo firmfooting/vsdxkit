@@ -52,6 +52,10 @@ class _DiagramPage(PageView, Protocol):
         """The page's ID in pages.xml, which no other page of the document has."""
         ...
 
+    def _taken_unique_ids(self) -> set[str]:
+        """Every UniqueID a shape of any page of the document holds."""
+        ...
+
 
 # observed lane pitch in the Visio 16 CFF capture (inches)
 LANE_PITCH_INCHES = 1.18110236220472
@@ -407,6 +411,7 @@ def _create_diagram(
         shape.ID: (shape.width or 0.0, shape.height or 0.0)
         for shape in (donors.container, donors.swimlane_list, donors.phase_list, donors.separator, donors.lane)
     }
+    taken = page._taken_unique_ids()
     container = donors.container.copy(page)
     swimlane_list = donors.swimlane_list.copy(page)
     phase_list = donors.phase_list.copy(page)
@@ -447,7 +452,7 @@ def _create_diagram(
         sizes += [(old_sizes[o.ID], (n.width or 0.0, n.height or 0.0)) for o, n in tops if o is not old]
         _resync(new, sizes)
     for top_level in (container, swimlane_list, phase_list, separator, *lanes):
-        _renew_unique_ids(page, top_level)
+        _renew_unique_ids(page, top_level, taken)
     _relate(swimlane_list, lanes)
     _user_value(container, _NUM_LANES).attrib["V"] = str(len(bands))
     diagram = SwimlaneDiagram(container)
@@ -461,16 +466,26 @@ def _create_diagram(
     return diagram
 
 
-def _renew_unique_ids(page: _DiagramPage, shape: Shape) -> None:
+def _renew_unique_ids(page: _DiagramPage, shape: Shape, taken: set[str]) -> None:
     """Give `shape` and its sub-shapes UniqueIDs of their own, derived from the page's ID in pages.xml and each shape's ID.
 
     A copy keeps the UniqueID it was copied from, and Visio addresses a shape by it. Deriving it, rather than
-    drawing a random one, keeps a saved document the same every time it is built.
+    drawing a random one, keeps a saved document the same every time it is built. A derived ID that a shape of
+    the document already holds (one copied in from another document can) is derived again with a salt.
+    `taken` is the set held before the copies were made, and gains each ID given.
     """
     for member in (shape, *shape.descendants):
-        if "UniqueID" in member.xml.attrib:
-            derived = uuid.uuid5(_UNIQUE_ID_NAMESPACE, f"{page._page_id}/{member.ID}")
-            member.xml.attrib["UniqueID"] = "{" + str(derived).upper() + "}"
+        if "UniqueID" not in member.xml.attrib:
+            continue
+        salt = 0
+        while True:
+            seed = f"{page._page_id}/{member.ID}" + (f"/{salt}" if salt else "")
+            candidate = "{" + str(uuid.uuid5(_UNIQUE_ID_NAMESPACE, seed)).upper() + "}"
+            if candidate not in taken:
+                break
+            salt += 1
+        taken.add(candidate)
+        member.xml.attrib["UniqueID"] = candidate
 
 
 def _relate(swimlane_list: Shape, lanes: Sequence[Shape]) -> None:
@@ -574,8 +589,9 @@ class SwimlaneDiagram:
         subject = f"shape {top_lane.ID} (copied to make the new lane)"
         if label is not None:
             self._check_label(top_lane, label, subject=subject)
+        taken = self._page._taken_unique_ids()
         new_lane = top_lane.copy(self._page)
-        _renew_unique_ids(self._page, new_lane)
+        _renew_unique_ids(self._page, new_lane, taken)
         new_lane._write_cell("PinY", v=str((top_lane.y or 0.0) + LANE_PITCH_INCHES), keep_formula=True)
         if label is not None:
             self._write_label(new_lane, label, subject=subject)
