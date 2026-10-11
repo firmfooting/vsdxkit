@@ -938,7 +938,7 @@ def _command_run(builder: Path, against: str | None, store: Path, dpi: int) -> i
     sys.path.insert(0, str(_TOOLS))
     import visio_verify
 
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     source = _source_identity(builder)
     with tempfile.TemporaryDirectory(prefix="visio-shots-") as scratch:
         work = Path(scratch)

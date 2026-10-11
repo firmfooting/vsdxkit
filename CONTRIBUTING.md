@@ -1,7 +1,7 @@
 # Contributions are welcome
 
 This repository is `vsdxkit`. The distribution
-installs as `vsdxkit` and imports as `vsdxkit`. Python 3.10 or later is required.
+installs as `vsdxkit` and imports as `vsdxkit`. Python 3.11 or later is required.
 
 ## Development environment
 
@@ -15,10 +15,10 @@ uv sync --locked                 # the dev group: test, lint, build and coverage
 uv sync --locked --group docs    # the same, plus Sphinx (needs Python 3.12+)
 ```
 
-The library supports Python 3.10–3.14 on Linux, Windows and macOS. Sphinx is
+The library supports Python 3.11–3.14 on Linux, Windows and macOS. Sphinx is
 pinned in the `docs` dependency group, which requires Python 3.12 or later, so
 run the documentation build on a 3.12+ interpreter. Drop `--group docs` from the
-sync to work on the library itself under Python 3.10 or 3.11.
+sync to work on the library itself under Python 3.11.
 
 ## Checks to run before submitting
 
@@ -53,7 +53,7 @@ docs, the package or its dependencies.
 checks what each one promises, and it pins how many examples there are. If you
 add, remove or re-fence a `python` block in the README, update that test too.
 
-CI runs the tests across Python 3.10–3.14 on Linux and Windows, and on 3.10 and
+CI runs the tests across Python 3.11–3.14 on Linux and Windows, and on 3.11 and
 3.14 on macOS. The ruff, pyrefly and Sphinx gates run once, on Linux under
 Python 3.12. There is more besides: a lowest-direct dependency-floor job, a
 distribution build-and-smoke-test, a type-completeness threshold on the built
