@@ -7,6 +7,7 @@ so the mistake is not correctable after the fact.
 
 import importlib.util
 import os
+import subprocess
 
 import pytest
 
@@ -168,3 +169,24 @@ def test_main_reports_the_documented_version(tmp_path, capsys):
 def test_the_projects_own_changelog_has_no_section_for_an_unreleased_version():
     """Guards the guard: the repo changelog must not already claim 99.0.0."""
     assert release_check.section_for("99.0.0") is None
+
+
+def test_a_subject_with_several_trailing_references_matches_its_entry(monkeypatch):
+    # A squash of a PR that already named its issue carries two references; 0.9.0's publish failed on seven of these.
+    log = (
+        "fix(tools): the Visio scripts kill only the Visio they started (#463) (#464)\n"
+        "fix: an unknown input has no value (#28, #29) (#451)\n"
+        "feat: one reference (#500)\n"
+    )
+    monkeypatch.setattr(release_check.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0, log, ""))
+    body = (
+        "* **tools:** the Visio scripts kill only the Visio they started ([#463](u)) ([#464](u))\n"
+        "* an unknown input has no value ([#28](u), [#29](u)) ([#451](u))\n"
+        "* one reference ([#500](u))\n"
+    )
+    assert release_check.missing_from_changelog(body, "v0.8.0") == []
+    assert release_check.missing_from_changelog("", "v0.8.0") == [
+        "the Visio scripts kill only the Visio they started",
+        "an unknown input has no value",
+        "one reference",
+    ]
