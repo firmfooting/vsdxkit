@@ -11,6 +11,7 @@ from __future__ import annotations
 import copy
 import logging
 import os
+import weakref
 import xml.etree.ElementTree as ET
 from collections.abc import Mapping
 from logging import Logger
@@ -55,6 +56,9 @@ from vsdxkit.shape_kind import ShapeKind
 from vsdxkit.shapes import Connector, Shape
 from vsdxkit.templating import render_document
 
+_STYLE_ATTRIBUTES = ("LineStyle", "FillStyle", "TextStyle")
+"""The attributes of a shape or style sheet that name a style by ID."""
+
 _logger: Logger = get_logger(__name__)
 """This module's logger, under the ``vsdxkit`` hierarchy the library never configures a handler for."""
 
@@ -98,6 +102,7 @@ class Document:
         self._load_pages()
         self._masters = MasterCatalog(self._package, self._master_page)
         self._masters.load()
+        self._style_maps: weakref.WeakKeyDictionary[Document, dict[str, str]] = weakref.WeakKeyDictionary()
         if _logger.isEnabledFor(logging.DEBUG):
             for master in self._masters.pages:
                 _logger.debug("Master(%s, id=%s)\n%s", master._filename, master._page_id, pretty_print_element(master.xml))
@@ -326,10 +331,59 @@ class Document:
         known = {page._page_id for page in self._masters.pages}
         masters = self._masters.import_masters(source._masters, master_ids)
         for master in masters.values():
-            if lists_titles and master._page_id not in known:
+            if master._page_id in known:
+                continue
+            if lists_titles:
                 self._titles_of_parts_insert(master.name, self._MASTERS)
-                known.add(master._page_id)
+            self._settle_master_styles(source, master)
+            known.add(master._page_id)
         return masters
+
+    def _settle_master_styles(self, source: Document, master: Page) -> None:
+        """Make the styles a master just imported from `source` name the styles `source` meant by those IDs.
+
+        A style ID is per-document, so an ID `source` uses may be absent here or name another style: the
+        blank template's 7 is "Connector" where another document's 7 may be "Default Svg Style". A style this
+        document lacks is imported, as is one the same ID names differently here, under a new ID when the ID is
+        taken; the style it is based on comes with it, and the master's references follow. What was settled is
+        remembered per `source`, so a second master that names the same style reuses it.
+
+        A style of the same ``NameU`` under the same ID is taken to be the same style, whatever its formatting
+        cells hold: documents made by Visio from one template share their built-in styles by name and ID, and
+        comparing the cells would import a copy of "Normal" for every small difference in theme values.
+
+        Only the master's own shapes are remapped. A shape copied across documents onto a page keeps the style
+        IDs it had in `source`; that is not changed here.
+        """
+        settled = self._style_maps.setdefault(source, {})
+
+        def settle(style_id: str) -> str:
+            """The ID in this document of the style `source` knows as `style_id`."""
+            if style_id in settled and self._get_style_by_id(settled[style_id]) is not None:
+                return settled[style_id]
+            theirs = source._get_style_by_id(style_id)
+            if theirs is None:
+                return style_id
+            ours = self._get_style_by_id(style_id)
+            if ours is not None and ours.attrib.get("NameU") == theirs.attrib.get("NameU"):
+                settled[style_id] = style_id
+                return style_id
+            taken = [int(e.attrib["ID"]) for e in self._style_sheets() if e.attrib.get("ID", "").isdigit()]
+            new_id = style_id if ours is None else str(max(taken) + 1)
+            settled[style_id] = new_id
+            imported = copy.deepcopy(theirs)
+            imported.attrib["ID"] = new_id
+            self._style_sheets().append(imported)
+            for attribute in _STYLE_ATTRIBUTES:  # the style this one is based on comes with it
+                if attribute in imported.attrib:
+                    imported.attrib[attribute] = settle(imported.attrib[attribute])
+            return new_id
+
+        root = master.xml.getroot()
+        for shape in root.iter(f"{namespace}Shape"):
+            for attribute in _STYLE_ATTRIBUTES:
+                if attribute in shape.attrib:
+                    shape.attrib[attribute] = settle(shape.attrib[attribute])
 
     def _load_pages(self) -> None:
         """Build a `Page` for each entry in pages.xml, in order, over the part its relationship names; the open's first read.
