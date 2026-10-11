@@ -9,7 +9,7 @@ readme = "README.md"
 license = "BSD-3-Clause"
 license-files = ["LICENSE"]
 authors = [{ name = "Firm Footing" }]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "Jinja2>=3.1.6",
     "typing-extensions>=4.4.0; python_version < '3.12'",
@@ -21,7 +21,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -69,7 +68,7 @@ dev = [
 
 [tool.uv.dependency-groups]
 # Sphinx drops old interpreters faster than this library does: 9.x requires
-# 3.12 while vsdxkit itself still supports 3.10. Giving the docs group its own
+# 3.12 while vsdxkit itself still supports 3.11. Giving the docs group its own
 # floor keeps the universal resolution satisfiable across the whole
 # requires-python range, instead of dragging the library up to the
 # documentation toolchain's floor. Raise this together with the Python version
@@ -94,7 +93,7 @@ version = { attr = "vsdxkit.__version__" }
 
 [tool.ruff]
 line-length = 127
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = [
@@ -119,7 +118,7 @@ ban-relative-imports = "all"
 "tests/*" = ["SIM117"]
 
 [tool.pyrefly]
-python-version = "3.10"
+python-version = "3.11"
 project-includes = ["src/vsdxkit"]
 # The strict preset, not legacy: legacy types untyped imports as Any.
 preset = "strict"
