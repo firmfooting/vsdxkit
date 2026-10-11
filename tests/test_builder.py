@@ -648,3 +648,32 @@ def test_an_edge_label_wider_than_the_gap_does_not_cover_either_end_node(tmp_pat
     for node in _by_source(document).values():
         if _rows(node)["Kind"] in NODE_KINDS:
             assert not _meets(label, _box(node))
+
+
+@pytest.mark.parametrize("direction", ["left_to_right", "top_down"])
+def test_no_connector_is_drawn_through_a_group_heading(tmp_path, direction):
+    label = "\n".join(["Review"] * 3)
+    page = Page(
+        "P",
+        [_node("a"), _node("b")],
+        [Edge("a", "b"), Edge("b", "b")],
+        groups=[Group("g", label, ["b"])],
+    )
+    document = Document.open(
+        Diagram("T", [page]).build(layout=builder.LayoutOptions(direction=direction)).save(tmp_path / "h.vsdx")
+    )
+    group = _box(_kinds(document, "group")[0])
+    width, height = builder._heading_size(label)
+    band = Box(group.x, group.y + group.height / 2 - height / 2, min(width, group.width), height)
+    for path in _kinds(document, "flow"):
+        for p, q in pairwise(_absolute_points(path)):
+            assert not segment_enters(p, q, band)
+
+
+def test_a_long_label_on_an_empty_child_group_does_not_grow_the_page():
+    def build(label):
+        groups = [Group("p", "P", ["a"], [Group("c", label, [])])]
+        lane = Lane("l", "L", ["a"])
+        return Diagram("T", [Page("P", [_node("a")], groups=groups, lanes=[lane])]).build().pages[0].height
+
+    assert build("\n".join(["x"] * 30)) == build("c")
