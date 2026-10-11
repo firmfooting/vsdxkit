@@ -194,6 +194,11 @@ class DocumentView(Protocol):
         """The document's pages, in order: see :class:`PageCollection`."""
         ...
 
+    @property
+    def master_pages(self) -> list[Page]:
+        """Every master, as a page, in `masters.xml` order."""
+        ...
+
     def save(self, target: str | os.PathLike[str] | None = None, *, deterministic: bool = False) -> Path:
         """Write the document, and return the absolute path it was written to.
 
@@ -838,10 +843,10 @@ class Page:
         return diagram
 
     def _taken_unique_ids(self) -> set[str]:
-        """Every UniqueID a shape of any page of this page's document holds, as :func:`vsdxkit.swimlanes._renew_unique_ids` avoids them."""
+        """Every UniqueID a shape of any page or master of this page's document holds, as :func:`vsdxkit.swimlanes._renew_unique_ids` avoids them."""
         return {
             element.attrib["UniqueID"].upper()
-            for page in self._document.pages
+            for page in (*self._document.pages, *self._document.master_pages)
             for element in page.xml.getroot().iter(f"{namespace}Shape")
             if "UniqueID" in element.attrib
         }
