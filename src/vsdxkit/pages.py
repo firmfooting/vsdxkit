@@ -219,6 +219,11 @@ class _DocumentSeam(DocumentView, Protocol):
     """
 
     @property
+    def master_pages(self) -> list[Page]:
+        """Every master, as a page, in `masters.xml` order."""
+        ...
+
+    @property
     def _pages_xml(self) -> PartTree | None:
         """The `pages.xml` part, the list of the document's pages, read from the store; None where the package has none.
 
@@ -838,10 +843,10 @@ class Page:
         return diagram
 
     def _taken_unique_ids(self) -> set[str]:
-        """Every UniqueID a shape of any page of this page's document holds, as :func:`vsdxkit.swimlanes._renew_unique_ids` avoids them."""
+        """Every UniqueID a shape of any page or master of this page's document holds, as :func:`vsdxkit.swimlanes._renew_unique_ids` avoids them."""
         return {
             element.attrib["UniqueID"].upper()
-            for page in self._document.pages
+            for page in (*self._document.pages, *self._document.master_pages)
             for element in page.xml.getroot().iter(f"{namespace}Shape")
             if "UniqueID" in element.attrib
         }
