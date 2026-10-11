@@ -1,5 +1,8 @@
 """Document.new(): a blank drawing from the template shipped in the package, with nothing of the machine that made the template."""
 
+import os
+import stat
+import sys
 import zipfile
 from pathlib import Path
 
@@ -65,3 +68,13 @@ def test_the_template_carries_nothing_of_the_machine_that_saved_it():
     assert "<dc:creator></dc:creator>" in core
     assert "<cp:lastModifiedBy>" not in core or "<cp:lastModifiedBy></cp:lastModifiedBy>" in core
     assert core.count("2000-01-01T00:00:00Z") == core.count("</dcterms:") + core.count("</cp:lastPrinted>")
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")
+def test_a_new_document_saved_to_a_new_path_gets_the_mode_the_umask_allows(tmp_path):
+    old = os.umask(0o022)
+    try:
+        path = Document.new().save(tmp_path / "blank.vsdx")
+    finally:
+        os.umask(old)
+    assert stat.S_IMODE(path.stat().st_mode) == 0o644
