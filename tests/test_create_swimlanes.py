@@ -709,3 +709,13 @@ def test_add_lane_updates_a_lane_list_written_without_the_dot_after_sheet():
     new_lane = diagram.add_lane("New")
     formula = next(c.attrib["F"] for c in swimlane_list.xml.findall(f'{namespace}Cell[@N="Relationships"]'))
     assert f"DEPENDSON(2,Sheet.{new_lane.ID}!SheetRef()" in formula
+
+
+@pytest.mark.parametrize("formula", ["Sheet.5!height*0.5", "SHEET.5!HEIGHT"])
+def test_a_width_or_height_term_is_read_whatever_its_case(formula):
+    from vsdxkit.swimlanes import _axis_of
+
+    diagram = _make([("A", LANE_PITCH_INCHES), ("B", LANE_PITCH_INCHES)])
+    shape = diagram.container
+    shape.set_cell_formula("Width", formula)
+    assert _axis_of(shape, "Width") == 1

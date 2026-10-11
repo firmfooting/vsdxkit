@@ -257,7 +257,7 @@ _Size = tuple[float, float]
 
 _VERTEX_SIZE_CELL = {"X": "Width", "Y": "Height"}
 """A vertex is in the shape's local frame, so its X runs along the shape's Width cell and its Y along its Height cell."""
-_AXIS_TERM = re.compile(r"(!?)\b(Width|Height)\b")
+_AXIS_TERM = re.compile(r"(!?)\b(Width|Height)\b", re.IGNORECASE)
 """A Width or Height in a formula; a leading ``!`` marks another shape's (``Sheet.5!Height``), none marks the shape's own."""
 
 
@@ -292,7 +292,8 @@ def _axis_of(member: Shape, name: str, depth: int = 0) -> int | None:
     (``Width*0.5``) is the shape's own cell, so it takes that cell's axis: a heading's width is its lane's height.
     """
     found = set()
-    for bang, term in _AXIS_TERM.findall(_formula_of(member, name) or ""):
+    for bang, raw_term in _AXIS_TERM.findall(_formula_of(member, name) or ""):
+        term = raw_term.capitalize()  # the cell names are Width and Height whatever case the formula uses
         direct = (
             bang or term == name or depth > 2
         )  # a formula naming its own cell's name, or nested deeply, is taken as written
