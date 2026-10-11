@@ -101,11 +101,8 @@ DECORATION_ROW = "Decoration"
 
 def _row_value(shape: Shape, name: str) -> str | None:
     """The value of the shape's Shape Data row `name`, or None."""
-    for section in shape.xml.findall(f'{namespace}Section[@N="Property"]'):
-        for row in section.findall(f'{namespace}Row[@N="{name}"]'):
-            cell = row.find(f'{namespace}Cell[@N="Value"]')
-            return None if cell is None else cell.attrib.get("V")
-    return None
+    cell = shape.xml.find(f'{namespace}Section[@N="Property"]/{namespace}Row[@N="{name}"]/{namespace}Cell[@N="Value"]')
+    return None if cell is None else cell.attrib.get("V")
 
 
 def _is_decoration(shape: Shape) -> bool:
