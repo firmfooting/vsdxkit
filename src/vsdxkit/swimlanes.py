@@ -20,10 +20,16 @@ Model (verified against the capture):
 
 from __future__ import annotations
 
+import math
+import re
+import uuid
 import xml.etree.ElementTree as ET
-from typing import Protocol
+from collections.abc import Sequence
+from typing import NamedTuple, Protocol
 
 from vsdxkit import namespace
+from vsdxkit._shape_tree import remap_sheet_references
+from vsdxkit._xmlio import xml_value
 from vsdxkit.errors import InvalidOperationError
 from vsdxkit.shapes import PageView, Shape, _is_connector, _is_name_or_copy
 
@@ -39,6 +45,15 @@ class _DiagramPage(PageView, Protocol):
 
     def _attached(self) -> bool:
         """Whether the page is still in its document: a page that is not has no swimlane diagram to read."""
+        ...
+
+    @property
+    def _page_id(self) -> str:
+        """The page's ID in pages.xml, which no other page of the document has."""
+        ...
+
+    def _taken_unique_ids(self) -> set[str]:
+        """Every UniqueID a shape of any page of the document holds."""
         ...
 
 
@@ -165,6 +180,321 @@ def _diagram_on(page: _DiagramPage) -> SwimlaneDiagram | None:
     return SwimlaneDiagram(containers[0]) if containers else None
 
 
+_NUM_LANES = "numLanes"
+"""The User-section row of the container that counts the lanes, which Visio's own diagram has."""
+_SETTINGS = "visCFFSettings"
+"""The User-section row of a lane that spells the diagram's settings, lane count included, as text."""
+_STG4 = re.compile(r"/stg4=\d+,")
+"""The lane-count setting inside a lane's ``visCFFSettings`` text."""
+_LANE_LIST = re.compile(r"DEPENDSON\(2(?:,Sheet\.\d+!SheetRef\(\))*\)")
+"""The ``DEPENDSON`` call in the Swimlane List's ``Relationships`` formula that names its lanes."""
+MAX_LANES = 5
+"""The most lanes the creation is checked against Visio on; see ``tools/diagram_cases.py``."""
+LANE_HEIGHTS = (0.5, 6.0)
+"""The least and greatest lane height, in inches, that Visio was checked on."""
+DIAGRAM_WIDTHS = (5.0, 22.0)
+"""The least and greatest diagram width, in inches, that Visio was checked on."""
+LABEL_CHARS_PER_INCH = 11
+"""The most characters of a label for each inch of lane height: a longer label wraps out of the heading, which Visio showed."""
+_UNIQUE_ID_NAMESPACE = uuid.UUID("6f1d3c52-8b0a-5e41-9a37-2c5d7e90b4a1")
+"""The fixed namespace the copies' UniqueIDs are derived in, so the same diagram on the same page always gets the same ones."""
+ID_CEILING = 1000
+"""The bundled diagram's shape IDs start here, so a page may hold shapes only below it for a copy's IDs never to equal one of them."""
+
+
+class _Donors(NamedTuple):
+    """The shapes of the bundled cross-functional flowchart that :func:`_create_diagram` copies."""
+
+    container: Shape
+    """The CFF Container."""
+    swimlane_list: Shape
+    """The Swimlane List."""
+    lane: Shape
+    """One lane, copied once for each band."""
+    phase_list: Shape
+    """The Phase List, which Visio's diagram always has."""
+    separator: Shape
+    """The Phase List's Separator."""
+
+
+def _fit(shape: Shape, donor: Shape, left: float, bottom: float, right: float, top: float) -> None:
+    """Size `shape` to these edges and pin it there, keeping the place of its local pin that `donor` has.
+
+    The local pin is written as a value in the same proportion to the new size, because the formula that
+    gives it (``Height*0.5``, for a lane) is the master's and a refresh leaves a cell only inherited alone.
+    """
+    width, height = right - left, top - bottom
+    pin_x, pin_y = (donor.loc_x or 0.0) / (donor.width or 1.0) * width, (donor.loc_y or 0.0) / (donor.height or 1.0) * height
+    for name, value in (("Width", width), ("Height", height), ("LocPinX", pin_x), ("LocPinY", pin_y)):
+        shape._write_cell(name, v=xml_value(value), keep_formula=True)
+    for member in (shape, *shape.descendants):
+        member._refresh_formula_values()
+    shape._write_cell("PinX", v=xml_value(left + pin_x), keep_formula=True)
+    shape._write_cell("PinY", v=xml_value(bottom + pin_y), keep_formula=True)
+
+
+_SIZED_CELLS = (
+    "PinX",
+    "PinY",
+    "Width",
+    "Height",
+    "LocPinX",
+    "LocPinY",
+    "TxtPinX",
+    "TxtPinY",
+    "TxtWidth",
+    "TxtHeight",
+    "TxtLocPinX",
+    "TxtLocPinY",
+)
+"""The cells of a sub-shape, its text block included, that follow its group's size through the master's formulas."""
+_TITLE_REACH = 0.6
+"""How far below its group's top edge a sub-shape's pin can sit and still be taken as anchored to that edge, in inches."""
+
+_Size = tuple[float, float]
+"""A width and a height in inches."""
+
+
+def _renew(value: float, sizes: Sequence[tuple[_Size, _Size]]) -> float | None:
+    """`value` as the resized shapes make it, or None where it is no dimension of theirs.
+
+    `sizes` lists (size before, size after), the shape the value belongs to first. A value equal to a
+    dimension, or half of one, becomes the same dimension afterwards; a value a short way under the top edge
+    of the first shape keeps that distance from the new top edge.
+    """
+    # these matches hold only while the donor's dimensions stay distinct from each other and from their halves
+    for (old_w, old_h), (new_w, new_h) in sizes:
+        for old, new in ((old_w, new_w), (old_h, new_h)):
+            if math.isclose(value, old, abs_tol=1e-6):
+                return new
+            if math.isclose(value, old / 2, abs_tol=1e-6):
+                return new / 2
+    (_old_w, old_h), (_new_w, new_h) = sizes[0]
+    if 0 < old_h - value <= _TITLE_REACH and value > old_h / 2:
+        return new_h - (old_h - value)
+    return None
+
+
+def _renew_inherited_vertices(member: Shape, sizes: Sequence[tuple[_Size, _Size]]) -> None:
+    """Give `member` an ``Inh`` vertex cell, holding the renewed number, for each master vertex it has no cell of its own for.
+
+    A vertex the shape only inherits is drawn from the master's cached number until something recalculates it,
+    and Visio's own file writes such a cell as ``F="Inh"`` beside the value it computed.
+    """
+    master = member.master_shape
+    if master is None:
+        return
+    for master_section in master.xml.iterfind(f'{namespace}Section[@N="Geometry"]'):
+        section = member.xml.find(f'{namespace}Section[@N="Geometry"][@IX="{master_section.attrib.get("IX", "0")}"]')
+        for master_row in master_section.iterfind(f"{namespace}Row"):
+            for master_cell in master_row.iterfind(f"{namespace}Cell"):
+                raw = master_cell.attrib.get("V")
+                renewed = (
+                    None if master_cell.attrib.get("N") not in ("X", "Y") or raw in (None, "") else _renew(float(raw), sizes)
+                )
+                if renewed is None:
+                    continue
+                if section is None:
+                    section = ET.Element(f"{namespace}Section", {"N": "Geometry", "IX": master_section.attrib.get("IX", "0")})
+                    placed = [e for e in member.xml if e.tag in (f"{namespace}Cell", f"{namespace}Section")]
+                    member.xml.insert(
+                        list(member.xml).index(placed[-1]) + 1 if placed else 0, section
+                    )  # schema order: cells, then sections, then text
+                row = next(
+                    (r for r in section.iterfind(f"{namespace}Row") if r.attrib.get("IX") == master_row.attrib.get("IX")), None
+                )
+                if row is None:
+                    row = ET.SubElement(
+                        section, f"{namespace}Row", {k: v for k, v in master_row.attrib.items() if k in ("T", "IX")}
+                    )
+                if row.find(f'{namespace}Cell[@N="{master_cell.attrib["N"]}"]') is None:
+                    ET.SubElement(row, f"{namespace}Cell", {"N": master_cell.attrib["N"], "V": xml_value(renewed), "F": "Inh"})
+        if section is not None:
+            rows = sorted(section.iterfind(f"{namespace}Row"), key=lambda r: int(r.attrib.get("IX", "0")))
+            for r in rows:
+                section.remove(r)
+            section.extend(rows)  # schema order: rows by IX
+
+
+def _resync(shape: Shape, sizes: Sequence[tuple[_Size, _Size]]) -> None:
+    """Bring the cached placement of the sub-shapes of `shape` in step with its new size.
+
+    Sub-shapes state their placement as formulas inherited from the master: the lane band is as wide as its
+    lane and the heading as wide as the lane is tall. A file that arrives with the old numbers is drawn with
+    them until something recalculates the cell, so each cached number that is a dimension of the bundled
+    shapes before they were resized is rewritten to the same dimension after (see `_renew`). The outline vertices
+    of `shape` itself and of its sub-shapes are cached numbers of the same kind.
+    """
+    for member in shape.descendants:
+        for name in _SIZED_CELLS:
+            inherited = member._cell(name) is None
+            raw = member.cell_value(name)
+            renewed = None if raw in (None, "") else _renew(float(raw), sizes)
+            if renewed is not None:
+                cell = member._write_cell(name, v=xml_value(renewed), keep_formula=True)
+                if inherited:
+                    cell.formula = "Inh"  # the master's formula names its own shapes by Sheet.N; with Inh the oracle showed the right numbers
+    for member in (shape, *shape.descendants):
+        for section in member.xml.iterfind(f'{namespace}Section[@N="Geometry"]'):
+            for vertex in section.iter(f"{namespace}Cell"):
+                raw = vertex.attrib.get("V")
+                renewed = None if vertex.attrib.get("N") not in ("X", "Y") or raw in (None, "") else _renew(float(raw), sizes)
+                if renewed is not None:
+                    vertex.attrib["V"] = xml_value(renewed)
+        _renew_inherited_vertices(member, sizes)
+
+
+def _user_value(shape: Shape, row: str) -> ET.Element:
+    """The Value cell of a User-section row the shape has; the copy of Visio's own diagram always has these."""
+    found = _user_row(shape, row)
+    cell = None if found is None else _value_cell(found)
+    if cell is None:
+        raise InvalidOperationError(f"shape {shape.ID} has no {row} row to write; the bundled diagram changed")
+    return cell
+
+
+def _require_checked(bands: Sequence[tuple[str, float]], width: float) -> None:
+    """Refuse a diagram outside the sizes the Visio oracle recalculated, naming the limit it crosses."""
+    if len(bands) > MAX_LANES:
+        raise InvalidOperationError(f"{len(bands)} lanes is more than the {MAX_LANES} that creation is checked on")
+    low, high = DIAGRAM_WIDTHS
+    if not low <= width <= high:
+        raise InvalidOperationError(
+            f"a diagram width of {width} inches is outside the {low} to {high} that creation is checked on"
+        )
+    low, high = LANE_HEIGHTS
+    for label, height in bands:
+        if not low <= height <= high:
+            raise InvalidOperationError(
+                f"a lane height of {height} inches is outside the {low} to {high} that creation is checked on"
+            )
+        if not label:
+            raise InvalidOperationError("a lane label must not be empty")
+        if len(label) > LABEL_CHARS_PER_INCH * height:
+            raise InvalidOperationError(
+                f"the label {label!r} has {len(label)} characters, more than the {LABEL_CHARS_PER_INCH} for each inch "
+                f"of its {height} inch lane that fit in the heading"
+            )
+
+
+def _create_diagram(
+    page: _DiagramPage, donors: _Donors, bands: Sequence[tuple[str, float]], *, left: float, top: float, width: float
+) -> SwimlaneDiagram:
+    """Copy the bundled diagram onto `page` with one lane for each band, sized and labelled; see `Page.create_swimlanes`."""
+    if not bands:
+        raise InvalidOperationError("a swimlane diagram needs at least one lane")
+    if width <= 0 or any(height <= 0 for _label, height in bands):
+        raise InvalidOperationError("the width and every lane height must be positive")
+    if not all(math.isfinite(value) for value in (left, top, width, *(height for _label, height in bands))):
+        raise InvalidOperationError("left, top, width and every lane height must be finite numbers")
+    _require_checked(bands, width)
+    left_over = [str(shape.ID) for shape in page.children if any(_named(shape, name) for name in _CFF_MACHINERY)]
+    if left_over:
+        raise InvalidOperationError(
+            f"page {page.name!r} holds cross-functional flowchart shapes without a container (shapes {', '.join(left_over)}); delete them first"
+        )
+    held = [int(shape.ID) for shape in page.shapes if shape.ID is not None]
+    if max(held, default=0) + 4 + 3 * len(bands) + 3 >= ID_CEILING:
+        raise InvalidOperationError(f"page {page.name!r} holds shapes with IDs too high to make room for a swimlane diagram")
+    # donor margins are read before anything is copied: the container, the phases and the separator keep the
+    # distances from the list's edges that Visio drew them at
+    list_edges = donors.swimlane_list.bounds
+    margins = {
+        name: tuple(a - b for a, b in zip(shape.bounds, list_edges, strict=True))
+        for name, shape in (
+            ("container", donors.container),
+            ("phase_list", donors.phase_list),
+            ("separator", donors.separator),
+        )
+    }
+    old_sizes = {
+        shape.ID: (shape.width or 0.0, shape.height or 0.0)
+        for shape in (donors.container, donors.swimlane_list, donors.phase_list, donors.separator, donors.lane)
+    }
+    taken = page._taken_unique_ids()
+    container = donors.container.copy(page)
+    swimlane_list = donors.swimlane_list.copy(page)
+    phase_list = donors.phase_list.copy(page)
+    separator = donors.separator.copy(page)
+    lanes = [donors.lane.copy(page) for _band in bands]
+    # the copies still name each other by the donor's IDs; the lane's own subtree was renumbered by the copy
+    renamed = {
+        donors.container.ID: container.ID,
+        donors.swimlane_list.ID: swimlane_list.ID,
+        donors.phase_list.ID: phase_list.ID,
+        donors.separator.ID: separator.ID,
+    }
+    id_map = {old: int(new) for old, new in renamed.items() if old is not None and new is not None}
+    for copied in (container, swimlane_list, phase_list, separator, *lanes):
+        remap_sheet_references(copied.xml, id_map)
+    total = sum(height for _label, height in bands)
+    list_box = (left, top - total, left + width, top)
+    _fit(swimlane_list, donors.swimlane_list, *list_box)
+    for name, shape, donor in (
+        ("container", container, donors.container),
+        ("phase_list", phase_list, donors.phase_list),
+        ("separator", separator, donors.separator),
+    ):
+        dl, db, dr, dt = margins[name]
+        _fit(shape, donor, list_box[0] + dl, list_box[1] + db, list_box[2] + dr, list_box[3] + dt)
+    cursor = top
+    for lane, (_label, height) in zip(lanes, bands, strict=True):
+        _fit(lane, donors.lane, left, cursor - height, left + width, cursor)
+        cursor -= height
+    tops = [
+        (donors.container, container),
+        (donors.swimlane_list, swimlane_list),
+        (donors.phase_list, phase_list),
+        (donors.separator, separator),
+    ]
+    for old, new in [*tops, *((donors.lane, lane) for lane in lanes)]:
+        sizes = [((old_sizes[old.ID]), (new.width or 0.0, new.height or 0.0))]
+        sizes += [(old_sizes[o.ID], (n.width or 0.0, n.height or 0.0)) for o, n in tops if o is not old]
+        _resync(new, sizes)
+    for top_level in (container, swimlane_list, phase_list, separator, *lanes):
+        _renew_unique_ids(page, top_level, taken)
+    _relate(swimlane_list, lanes)
+    _user_value(container, _NUM_LANES).attrib["V"] = str(len(bands))
+    diagram = SwimlaneDiagram(container)
+    for lane, (label, _height) in zip(lanes, bands, strict=True):
+        _user_value(lane, ROW_HEADING_TEXT).attrib["V"] = label
+        for part in lane.children:
+            if part.text:
+                part.text = label
+        settings = _user_value(lane, _SETTINGS)
+        settings.attrib["V"] = _STG4.sub(f"/stg4={len(bands)},", settings.attrib["V"])
+    return diagram
+
+
+def _renew_unique_ids(page: _DiagramPage, shape: Shape, taken: set[str]) -> None:
+    """Give `shape` and its sub-shapes UniqueIDs of their own, derived from the page's ID in pages.xml and each shape's ID.
+
+    A copy keeps the UniqueID it was copied from, and Visio addresses a shape by it. Deriving it, rather than
+    drawing a random one, keeps a saved document the same every time it is built. A derived ID that a shape of
+    the document already holds (one copied in from another document can) is derived again with a salt.
+    `taken` is the set held before the copies were made, and gains each ID given.
+    """
+    for member in (shape, *shape.descendants):
+        if "UniqueID" not in member.xml.attrib:
+            continue
+        salt = 0
+        while True:
+            seed = f"{page._page_id}/{member.ID}" + (f"/{salt}" if salt else "")
+            candidate = "{" + str(uuid.uuid5(_UNIQUE_ID_NAMESPACE, seed)).upper() + "}"
+            if candidate not in taken:
+                break
+            salt += 1
+        taken.add(candidate)
+        member.xml.attrib["UniqueID"] = candidate
+
+
+def _relate(swimlane_list: Shape, lanes: Sequence[Shape]) -> None:
+    """Make the Swimlane List's ``Relationships`` formula name these lanes, top to bottom, as Visio's does."""
+    named = "".join(f",Sheet.{lane.ID}!SheetRef()" for lane in lanes)
+    for cell in swimlane_list.xml.findall(f'{namespace}Cell[@N="Relationships"]'):
+        cell.attrib["F"] = _LANE_LIST.sub(f"DEPENDSON(2{named})", cell.attrib["F"])
+
+
 class SwimlaneDiagram:
     """The cross-functional flowchart on a page: its lanes, and which shapes sit in each.
 
@@ -235,33 +565,69 @@ class SwimlaneDiagram:
         return holding[0] if holding else None
 
     def add_lane(self, label: str | None = None) -> Shape:
-        """Add a lane one pitch above the top lane, a copy of it, and grow the Swimlane List and container to match.
+        """Add a lane one pitch above the top lane, a copy of it, and grow the Swimlane List, container, Phase List and Separator to match.
+
+        The lane count the diagram keeps (the container's ``numLanes``, each lane's ``/stg4`` setting and the
+        Swimlane List's ``Relationships``) is brought up to the new count, and the copy gets a UniqueID of its own.
 
         Whether the new lane can take ``label`` is settled on the lane it is
         copied from before anything is written, so a refused label leaves the
         page as it was (#330).
 
-        :raises InvalidOperationError: the diagram has no lanes, or the top lane cannot take a label
+        :raises InvalidOperationError: the diagram has no lanes, a lane is not one pitch (1.181 inches) tall, or the top lane cannot take a label
         :returns: the new lane
         """
         lanes = self.lanes
         if not lanes:
             raise InvalidOperationError(f"the swimlane diagram on page {self._page.name!r} has no lanes to copy")
+        if any(not math.isclose(lane.height or 0.0, LANE_PITCH_INCHES, abs_tol=1e-6) for lane in lanes):
+            raise InvalidOperationError(
+                f"add_lane places a lane {LANE_PITCH_INCHES:.3f} inches above the top lane, so it needs every lane to be that "
+                f"tall; the lanes of the swimlane diagram on page {self._page.name!r} are not"
+            )
         top_lane = lanes[0]
         subject = f"shape {top_lane.ID} (copied to make the new lane)"
         if label is not None:
             self._check_label(top_lane, label, subject=subject)
+        taken = self._page._taken_unique_ids()
         new_lane = top_lane.copy(self._page)
+        _renew_unique_ids(self._page, new_lane, taken)
         new_lane._write_cell("PinY", v=str((top_lane.y or 0.0) + LANE_PITCH_INCHES), keep_formula=True)
         if label is not None:
             self._write_label(new_lane, label, subject=subject)
         # the list and the container grow upwards so the new lane sits inside them
-        for grown in (self._swimlane_list(), self._container):
-            if grown is None:
-                continue
-            grown._write_cell("PinY", v=str((grown.y or 0.0) + LANE_PITCH_INCHES / 2), keep_formula=True)
-            grown._write_cell("Height", v=str((grown.height or 0) + LANE_PITCH_INCHES), keep_formula=True)
+        grown_shapes = [
+            shape for shape in (self._swimlane_list(), self._container, *self._phase_shapes()) if shape is not None
+        ]
+        before = {shape.ID: (shape.width or 0.0, shape.height or 0.0) for shape in grown_shapes}
+        for grown in grown_shapes:
+            left, bottom, right, top = grown.bounds
+            _fit(grown, grown, left, bottom, right, top + LANE_PITCH_INCHES)  # the pin moves with the edge it is on
+        sizes = {shape.ID: (before[shape.ID], (shape.width or 0.0, shape.height or 0.0)) for shape in grown_shapes}
+        for shape in grown_shapes:  # their sub-shapes cache numbers that follow the size, as after a creation
+            _resync(shape, [sizes[shape.ID], *(v for k, v in sizes.items() if k != shape.ID)])
+        self._count_lanes(new_lane)
         return new_lane
+
+    def _count_lanes(self, new_lane: Shape) -> None:
+        """Bring the lane count the CFF machinery keeps (the container's row, each lane's setting, the list's relations) up to `new_lane`."""
+        count = len(self.lanes)
+        number = None if self._container is None else _user_row(self._container, _NUM_LANES)
+        value = None if number is None else _value_cell(number)
+        if value is not None:
+            value.attrib["V"] = str(count)
+        for lane in self.lanes:
+            setting = _user_row(lane, _SETTINGS)
+            cell = None if setting is None else _value_cell(setting)
+            if cell is not None:
+                cell.attrib["V"] = _STG4.sub(f"/stg4={count},", cell.attrib["V"])
+        swimlane_list = self._swimlane_list()
+        if swimlane_list is not None:
+            for cell in swimlane_list.xml.findall(f'{namespace}Cell[@N="Relationships"]'):
+                # first, because the new lane sits above the top one and the formula lists the lanes top to bottom
+                cell.attrib["F"] = _LANE_LIST.sub(
+                    lambda m: m.group(0).replace("(2", f"(2,Sheet.{new_lane.ID}!SheetRef()", 1), cell.attrib["F"]
+                )
 
     def set_lane_label(self, lane: Shape, label: str) -> None:
         """Set a lane's label: its ``visHeadingText`` row and its heading's text, both or neither.
@@ -294,6 +660,10 @@ class SwimlaneDiagram:
         if _holds(_bands(self.lanes)[lane], shape):
             return
         shape._write_cell("PinY", v=str(lane.y or 0.0), keep_formula=True)
+
+    def _phase_shapes(self) -> list[Shape]:
+        """The Phase List and its Separator, which span the lanes' height and so grow with them."""
+        return [shape for shape in self._page.children if _named(shape, "Phase List") or _named(shape, "Separator")]
 
     def _swimlane_list(self) -> Shape | None:
         """The page's first top-level Swimlane List shape, which `add_lane` grows, or None for a page without one."""

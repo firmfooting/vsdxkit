@@ -42,7 +42,7 @@ import Document`; the package root re-exports nothing.
 - Creates dynamic or connection-point glue with straight, right-angle or curved
   routing.
 - Retargets either end of an existing connector.
-- Reads and extends Visio cross-functional flowchart swimlanes.
+- Creates, reads and extends Visio cross-functional flowchart swimlanes.
 - Copies shapes and pages while rewriting package-local IDs and importing masters.
 - Renders data into Visio templates with Jinja.
 - Saves to a new file or safely replaces the source file in place.
@@ -252,8 +252,8 @@ The full documentation is at <https://firmfooting.github.io/vsdxkit/>.
   as corrupt. Stripping macros to convert a `.vsdm` into a `.vsdx` is not
   supported. A destination with no extension, or with an unrelated one, gets the
   matching Visio extension appended.
-- Swimlane creation works on existing Visio CFF diagrams. It does not convert an
-  ordinary page into a CFF diagram.
+- Swimlane creation copies Visio's own cross-functional flowchart onto a page.
+  It does not convert an ordinary page that has shapes on it into one.
 - Visio may recalculate layout when a generated file opens. The library writes
   the glue and route cells but does not reproduce Visio's entire layout engine.
 - Loading enforces package expansion limits before any archive member is read:

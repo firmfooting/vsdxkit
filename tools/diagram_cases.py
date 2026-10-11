@@ -1,4 +1,4 @@
-"""Write the diagrams the Visio harness checks copied masters against (#40).
+"""Write the diagrams the Visio harness checks copied masters and created swimlanes against (#40).
 
 Usage:
     python tools/diagram_cases.py <out-dir>
@@ -85,6 +85,32 @@ LINES: tuple[tuple[str, str], ...] = (
         "copy_style_absent",
         "copy_style_absent: a shape copied into a document with no style 7; its sub-shapes show the source's line pattern and margins",
     ),
+    (
+        "swimlanes",
+        "swimlanes: a three-lane cross-functional flowchart from create_swimlanes, a process in each lane; every shape where it was written",
+    ),
+    ("lanes_one", "lanes_one: a cross-functional flowchart of one lane; every shape where it was written"),
+    ("lanes_two", "lanes_two: two lanes, a process in each; every shape where it was written"),
+    ("lanes_four", "lanes_four: four lanes, one labelled with the widest letters; every shape where it was written"),
+    (
+        "lanes_extremes",
+        "lanes_extremes: a 0.5 inch lane, a 6 inch lane and a 5 inch wide diagram; every shape where it was written",
+    ),
+    ("lanes_five", "lanes_five: five lanes, a process in each; every shape where it was written"),
+    (
+        "lanes_uneven",
+        "lanes_uneven: lanes of different heights, three processes in one and none in another; every shape where it was written",
+    ),
+    (
+        "lanes_style_clash",
+        "lanes_style_clash: a diagram in a document whose style 7 is another style; the Separator shows Flow Normal's margins",
+    ),
+    (
+        "lanes_style_absent",
+        "lanes_style_absent: a diagram in a document with no style 7; the Separator shows Flow Normal's margins",
+    ),
+    ("lanes_add", "lanes_add: a created two-lane diagram with a lane added by add_lane; every shape where it was written"),
+    ("lanes_wide", "lanes_wide: a diagram 22 inches wide on a page widened to 24; every shape where it was written"),
 )
 """Every case file's name and what Visio must show for it."""
 

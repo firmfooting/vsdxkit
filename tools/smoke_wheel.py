@@ -9,7 +9,7 @@ Raises on any of:
 - vsdxkit not importable, or importable only via the checkout (source shadowing)
 - py.typed or the bundled media .vsdx files missing from the installation
 - loading the bundled donors, create_shape(), connector creation, save or reopen failing
-- Document.new() failing to make a document that saves and opens again
+- Document.new() or create_swimlanes() failing to make a document that saves and opens again
 - the wheel's top-level modules differing from the checkout's src/vsdxkit/*.py,
   as a wheel built over a stale build/lib does
 """
@@ -68,8 +68,8 @@ def main() -> int:
     with zipfile.ZipFile(wheel_path) as wheel:
         names = wheel.namelist()
     media_members = sorted(name for name in names if name.startswith("vsdxkit/_bundled/") and name.endswith(".vsdx"))
-    if len(media_members) < 3:
-        fail(f"wheel carries {len(media_members)} bundled .vsdx members, expected at least 3: {media_members}")
+    if len(media_members) < 4:
+        fail(f"wheel carries {len(media_members)} bundled .vsdx members, expected at least 4: {media_members}")
     else:
         ok(f"wheel bundled .vsdx members: {', '.join(media_members)}")
     if "vsdxkit/py.typed" not in names:
@@ -96,7 +96,7 @@ def main() -> int:
     ok(f"vsdxkit installed at {package_dir}")
 
     # 3. every bundled media file exists in the installed distribution
-    for member_name in ("media.vsdx", "palette_extended.vsdx", "blank.vsdx"):
+    for member_name in ("media.vsdx", "palette_extended.vsdx", "blank.vsdx", "cff.vsdx"):
         installed = os.path.join(package_dir, "_bundled", member_name)
         if not os.path.exists(installed):
             fail(f"installed distribution is missing _bundled/{member_name}")
@@ -163,6 +163,16 @@ def main() -> int:
                 ok("Document.new() works from the installed wheel")
         except Exception as error:  # smoke harness reports every failure mode
             fail(f"Document.new() exercise failed: {error}")
+            return 1
+
+        try:
+            lanes = Document.new().pages[0].create_swimlanes([("One", 1.5), ("Two", 1.5)], left=0.5, top=5.0, width=6.0)
+            if len(lanes.lanes) != 2:
+                fail("a created swimlane diagram lost its lanes")
+            else:
+                ok("create_swimlanes() works from the installed wheel")
+        except Exception as error:  # smoke harness reports every failure mode
+            fail(f"create_swimlanes() exercise failed: {error}")
             return 1
 
     if failures:

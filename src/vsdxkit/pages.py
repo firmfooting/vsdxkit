@@ -53,7 +53,7 @@ from vsdxkit.shapes import (
     _wrap_children,
     _wrap_descendants,
 )
-from vsdxkit.swimlanes import SwimlaneDiagram, _diagram_on
+from vsdxkit.swimlanes import SwimlaneDiagram, _create_diagram, _diagram_on, _Donors
 
 # the two places a Connect record names a shape: the connector it leads from,
 # and the shape that connector is glued to
@@ -262,6 +262,10 @@ class _DocumentSeam(DocumentView, Protocol):
 
     def _kind_source(self, kind: ShapeKind) -> Shape:
         """The bundled shape `kind` is copied from, one of the donors `vsdxkit._media` loads."""
+        ...
+
+    def _cff_sources(self) -> _Donors:
+        """The bundled cross-functional flowchart, one of the donors `vsdxkit._media` loads."""
         ...
 
     def _copy_connector(self, page: Page) -> Connector:
@@ -832,6 +836,42 @@ class Page:
         if diagram is None:
             raise NotFoundError(f"page {self.name!r} has no CFF container, so no swimlane diagram")
         return diagram
+
+    def _taken_unique_ids(self) -> set[str]:
+        """Every UniqueID a shape of any page of this page's document holds, as :func:`vsdxkit.swimlanes._renew_unique_ids` avoids them."""
+        return {
+            element.attrib["UniqueID"].upper()
+            for page in self._document.pages
+            for element in page.xml.getroot().iter(f"{namespace}Shape")
+            if "UniqueID" in element.attrib
+        }
+
+    def create_swimlanes(
+        self, bands: Sequence[tuple[str, float]], *, left: float, top: float, width: float
+    ) -> SwimlaneDiagram:
+        """Create a cross-functional flowchart on this page: a container, a Swimlane List and one lane for each band.
+
+        The lanes are horizontal and stack downwards from ``top``, in the order given. The diagram is a copy of
+        one Visio drew for its Cross-Functional Flowchart template, and each lane is a copy of a lane in that diagram.
+
+        The sizes are limited to those Visio was checked on, and anything outside them is refused: one to five
+        lanes, each 0.5 to 6 inches tall, in a diagram 5 to 22 inches wide, a label not empty and at most 11
+        characters for each inch of its lane's height. A label of wide letters can fill the heading in fewer.
+        The page is not resized; make it large enough before the call. Phases are not created: the diagram
+        has the Phase List Visio draws, as it is.
+
+        :param bands: each lane's label and height in inches, top to bottom
+        :param left: the page x of the diagram's left edge, in inches
+        :param top: the page y of the top edge of the first lane; the container's title bar sits above it
+        :param width: the diagram's width in inches
+        :raises InvalidOperationError: if the page is no longer in its document, already has a diagram, ``bands`` is empty, a lane height or ``width`` is not positive, the sizes are outside the limits above, a number is not finite, or the page holds the flowchart shapes of a diagram whose container was deleted
+        :returns: the new diagram
+        """
+        if not self._attached():
+            raise InvalidOperationError(f"page {self.name!r} is no longer in its document, so nothing can be created on it")
+        if self.swimlanes is not None:
+            raise InvalidOperationError(f"page {self.name!r} already has a swimlane diagram")
+        return _create_diagram(self, self._document._cff_sources(), bands, left=left, top=top, width=width)
 
     def create_shape(
         self,

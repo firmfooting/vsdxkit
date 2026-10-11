@@ -29,11 +29,14 @@ from vsdxkit.errors import NotFoundError
 from vsdxkit.pages import PageCollection
 from vsdxkit.shape_kind import ShapeKind
 from vsdxkit.shapes import Shape
+from vsdxkit.swimlanes import _Donors
 
 MEDIA = "media.vsdx"
 """The bundled document holding the basic shapes and the two connectors."""
 BLANK = "blank.vsdx"
 """The bundled document :meth:`vsdxkit.document.Document.new` starts from: one empty page and no shapes."""
+CFF = "cff.vsdx"
+"""The bundled document holding one cross-functional flowchart: its container, its Swimlane List and three lanes."""
 PALETTE = "palette_extended.vsdx"
 """The bundled document holding the flowchart palette's shapes."""
 
@@ -125,3 +128,16 @@ def _style_copy(style_id: str, open_document: Callable[[str], _Donor]) -> Elemen
     """A copy of the media document's StyleSheet with this ID, or None."""
     style = _donor(MEDIA, open_document)._get_style_by_id(style_id)
     return None if style is None else copy.deepcopy(style)
+
+
+def _cff_shapes(open_document: Callable[[str], _Donor]) -> _Donors:
+    """The bundled CFF's shapes, found by the names Visio gave them. Not for handing out: see the module docstring."""
+    found = {shape.xml.attrib.get("NameU"): shape for shape in _donor(CFF, open_document).pages[0].children}
+    try:
+        return _Donors(
+            found["CFF Container"], found["Swimlane List"], found["Swimlane"], found["Phase List"], found["Separator"]
+        )
+    except KeyError as missing:
+        raise NotFoundError(
+            f"{CFF} has no top-level shape named {missing}; it has {sorted(str(n) for n in found)}"
+        ) from missing

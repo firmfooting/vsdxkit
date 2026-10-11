@@ -28,7 +28,7 @@ from vsdxkit import (
 )
 from vsdxkit._logging_support import get_logger
 from vsdxkit._masters import MasterCatalog
-from vsdxkit._media import BLANK, MEDIA, _connector_shape, _kind_shape, _style_copy, media_path
+from vsdxkit._media import BLANK, MEDIA, _cff_shapes, _connector_shape, _kind_shape, _style_copy, media_path
 from vsdxkit._package import PackageStore, XmlPart, check_relationship_target
 from vsdxkit._partnames import (
     APP_PART,
@@ -54,6 +54,7 @@ from vsdxkit.package import PackageLimits
 from vsdxkit.pages import Page, PageCollection, _DocumentSeam, _PagePosition
 from vsdxkit.shape_kind import ShapeKind
 from vsdxkit.shapes import Connector, Shape
+from vsdxkit.swimlanes import _Donors
 from vsdxkit.templating import render_document
 
 _STYLE_ATTRIBUTES = ("LineStyle", "FillStyle", "TextStyle")
@@ -649,6 +650,10 @@ class Document:
     def _kind_source(self, kind: ShapeKind) -> Shape:
         """The bundled shape `kind` is copied from, one of the donors `vsdxkit._media` loads."""
         return _kind_shape(kind, Document.open)
+
+    def _cff_sources(self) -> _Donors:
+        """The bundled cross-functional flowchart that :meth:`vsdxkit.pages.Page.create_swimlanes` copies."""
+        return _cff_shapes(Document.open)
 
     def _copy_connector(self, page: Page) -> Connector:
         """A copy of the bundled dynamic connector on `page`, one of this document's pages.

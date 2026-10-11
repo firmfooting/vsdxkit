@@ -53,8 +53,8 @@ class PageView(Protocol):
     """A page, as :attr:`Shape.page` gives it.
 
     The type of a shape's back-reference to its page. It lists the page's
-    public API apart from ``swimlanes``, ``require_swimlanes`` and ``vis``,
-    whose types are declared above this module, and it can be written as the
+    public API apart from ``swimlanes``, ``require_swimlanes``, ``create_swimlanes``
+    and ``vis``, whose types are declared above this module, and it can be written as the
     page can: ``shape.page.name = "Summary"`` renames the page. At runtime
     the object is that :class:`vsdxkit.pages.Page` itself.
 
@@ -208,6 +208,10 @@ class _PageSeam(PageView, _ConnectorPage, Protocol):
 
         A copied shape is pointed at the master it instances by this ID.
         """
+        ...
+
+    def _taken_unique_ids(self) -> set[str]:
+        """Every UniqueID a shape of any page of the document holds."""
         ...
 
     @property
