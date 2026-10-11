@@ -3,6 +3,7 @@
 import os
 import subprocess
 import sys
+import time
 from itertools import pairwise
 
 import pytest
@@ -289,6 +290,31 @@ def _on_border(p: tuple[float, float], box: Box) -> bool:
     return inside and any(abs(p[0] - e) < SHRINK for e in (left, right)) | any(abs(p[1] - e) < SHRINK for e in (bottom, top))
 
 
+def _overlap_length(
+    a: tuple[tuple[float, float], tuple[float, float]], b: tuple[tuple[float, float], tuple[float, float]]
+) -> float:
+    """The length two axis-parallel segments share along one line, or 0.0."""
+    for axis in (0, 1):
+        other = 1 - axis
+        if a[0][other] == a[1][other] == b[0][other] == b[1][other]:
+            low = max(min(a[0][axis], a[1][axis]), min(b[0][axis], b[1][axis]))
+            high = min(max(a[0][axis], a[1][axis]), max(b[0][axis], b[1][axis]))
+            return max(0.0, high - low)
+    return 0.0
+
+
+def _check_no_shared_run(layout: Layout) -> None:
+    """No two routes run along the same line for a positive length, unless they share an end point on a border."""
+    items = list(layout.routes.items())
+    for i, (key_a, pa) in enumerate(items):
+        for key_b, pb in items[i + 1 :]:
+            if {pa[0], pa[-1]} & {pb[0], pb[-1]}:
+                continue
+            for sa in pairwise(pa):
+                for sb in pairwise(pb):
+                    assert _overlap_length(sa, sb) < SHRINK, f"{key_a} and {key_b} share a run {sa} / {sb}"
+
+
 def _check_routes(layout: Layout) -> None:
     """Every route stays on the page, starts and ends on its boxes' borders, and differs from every other route."""
     seen: dict[tuple[tuple[float, float], ...], tuple[str, str, int]] = {}
@@ -301,6 +327,7 @@ def _check_routes(layout: Layout) -> None:
         assert points not in seen, f"{key} repeats {seen[points]}"
         assert points[::-1] not in seen, f"{key} repeats {seen[points[::-1]]} reversed"
         seen[points] = key
+    _check_no_shared_run(layout)
 
 
 @pytest.mark.parametrize("axis", ["width", "height"])
@@ -434,13 +461,36 @@ def test_a_layer_gap_too_small_for_its_channels_is_refused_by_name():
     ("lanes", "groups", "direction"),
     [(0, 3, "left_to_right"), (0, 3, "top_down"), (2, 3, "left_to_right"), (3, 3, "left_to_right"), (1, 2, "left_to_right")],
 )
-@pytest.mark.parametrize("gaps", ["default", "minimum"])
+@pytest.mark.parametrize("gaps", ["default", "tight"])
 def test_random_grouped_graphs_with_loops_avoid_foreign_groups_and_stay_in_lanes(seed, lanes, groups, direction, gaps):
     rows, edges, lane_ids, group_ids, parents = random_graph(seed, 9, 14, lanes, groups)
-    edges = (*edges, ("n0", "n0"), ("n0", "n0"), ("n1", "n1"), ("n3", "n3"), ("n2", "n4"), ("n2", "n4"))
+    # three parallel edges that may have to go round a group, and in the default case loops as well
+    edges = (*edges, ("n2", "n4"), ("n2", "n4"), ("n2", "n4"), ("n1", "n3"), ("n1", "n3"))
+    if gaps == "default":
+        edges = (*edges, ("n0", "n0"), ("n0", "n0"), ("n1", "n1"), ("n3", "n3"))
     nodes = tuple(LayoutNode(*row) for row in rows)
-    small = {"node_gap": 0.0, "layer_gap": 0.0, "margin": 0.0, "group_padding": 0.05} if gaps == "minimum" else {}
+    small = {"node_gap": 0.0, "layer_gap": 0.2, "margin": 0.0, "group_padding": 0.05} if gaps == "tight" else {}
     options = LayoutOptions(direction=direction, parents=parents, **small)
     layout = layered_layout(nodes, edges, lane_ids, group_ids, options)
+    _check(layout, nodes, parents)
+    _check_routes(layout)
+
+
+def test_parallel_edges_that_go_round_a_group_run_side_by_side():
+    nodes = (_n("p"), _n("g1", group="G"), _n("m"), _n("g3", group="G"), _n("q", group="H"))
+    edges = (("g1", "m"), ("m", "g3"), ("p", "q"), ("p", "q"), ("p", "q"))
+    layout = layered_layout(nodes, edges, groups=("G", "H"))
+    assert len(layout.routes) == 5
+    _check(layout, nodes, ())
+    _check_routes(layout)
+
+
+def test_a_200_node_400_edge_graph_lays_out_at_default_options():
+    rows, edges, lane_ids, group_ids, parents = random_graph(2, 200, 400, 0, 0)
+    nodes = tuple(LayoutNode(*row) for row in rows)
+    start = time.perf_counter()
+    layout = layered_layout(nodes, edges, lane_ids, group_ids, LayoutOptions(parents=parents))
+    assert time.perf_counter() - start < 60
+    assert len(layout.routes) == 400
     _check(layout, nodes, parents)
     _check_routes(layout)

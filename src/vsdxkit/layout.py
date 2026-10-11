@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import heapq
 import math
+from bisect import bisect_left, bisect_right
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
 from itertools import pairwise
 from typing import Literal
@@ -73,7 +75,7 @@ class LayoutOptions:
     direction: Literal["left_to_right", "top_down"] = "left_to_right"
     """The way the flow runs. Lanes need ``left_to_right``."""
     layer_gap: float = 1.0
-    """Inches between one layer's column and the next, where edges run."""
+    """Inches between one layer's column and the next, where edges run. The default widens for a gap crossed by many edges; a smaller value of your own that cannot hold them is refused."""
     node_gap: float = 0.4
     """Inches between boxes in the same layer."""
     margin: float = 0.5
@@ -225,10 +227,35 @@ def _order(rows: list[list[_Key]], slots: dict[_Key, _Slot], chains: list[list[_
 
 def _enters(a: tuple[float, float], b: tuple[float, float], rect: _Rect) -> bool:
     """Whether the axis-parallel segment a-b passes through the open inside of `rect`."""
+    left, right, bottom, top = rect[0] + _EPS, rect[1] - _EPS, rect[2] + _EPS, rect[3] - _EPS
     if a[0] == b[0]:
-        return rect[0] < a[0] < rect[1] and max(min(a[1], b[1]), rect[2]) < min(max(a[1], b[1]), rect[3])
-    return rect[2] < a[1] < rect[3] and max(min(a[0], b[0]), rect[0]) < min(max(a[0], b[0]), rect[1])
+        return left < a[0] < right and max(min(a[1], b[1]), bottom) < min(max(a[1], b[1]), top)
+    return bottom < a[1] < top and max(min(a[0], b[0]), left) < min(max(a[0], b[0]), right)
 
+
+_NUDGES = (0.03, -0.03, 0.07, -0.07, 0.09, -0.09)
+"""Inches a dummy's row may move off its centre; none is zero, and the largest stays inside the dummy's 0.2 in slot."""
+
+_CORRIDOR = 0.3
+"""Inches of clear space kept round a group box, so a route has somewhere to go round it."""
+
+_LANE_STEP = 0.02
+"""Inches between the neighbouring lines a detour may use along one gap or corridor, so detours can run side by side."""
+
+_RETRY_BUDGET = 1_000_000
+"""Search steps after which a layout stops looking for a quieter line for a detour that runs along another route."""
+
+_NEAR = 2.0
+"""Inches round an edge's end points within which a detour first looks for lines to turn on."""
+
+_HURRY = 2.0
+"""How much the distance still to go outweighs the distance so far; above 1 the search is faster and the path a little longer."""
+
+_EPS = 1e-6
+"""Tolerance, in inches, for a line that lies on a border: it is not inside."""
+
+_SHARING = 100.0
+"""Extra cost per inch of a detour that runs along another route, so a free line is preferred to a shared one."""
 
 _STEPS = ((1, 0), (-1, 0), (0, 1), (0, -1))
 """Unit steps along the flow, against it, across it and back, indexed as a heading."""
@@ -239,8 +266,31 @@ def _heading(a: tuple[float, float], b: tuple[float, float]) -> int:
     return 0 if b[0] > a[0] else 1 if b[0] < a[0] else 2 if b[1] > a[1] else 3
 
 
+def _shared(
+    path: list[tuple[float, float]], occupied: dict[tuple[int, float], list[tuple[float, float]]]
+) -> set[tuple[int, float]]:
+    """The lines (axis, coordinate) along which `path` runs over other routes, not counting its first and last segments."""
+    pts = [path[0]]
+    for a, b in pairwise(path):
+        if a != b:
+            pts.append(b)
+    lines = set()
+    for a, b in list(pairwise(pts))[1:-1]:
+        horizontal = a[1] == b[1]
+        low, high = (min(a[0], b[0]), max(a[0], b[0])) if horizontal else (min(a[1], b[1]), max(a[1], b[1]))
+        key = (0, round(a[1], 4)) if horizontal else (1, round(a[0], 4))
+        if any(min(high, h) > max(low, lo) for lo, h in occupied.get(key, ())):
+            lines.add(key)
+    return lines
+
+
 def _detour(
-    path: list[tuple[float, float]], xs: set[float], ys: set[float], solid: list[_Rect]
+    path: list[tuple[float, float]],
+    xs: set[float],
+    ys: set[float],
+    solid: list[_Rect],
+    occupied: dict[tuple[int, float], list[tuple[float, float]]],
+    work: list[int],
 ) -> list[tuple[float, float]] | None:
     """The shortest few-bend orthogonal path from `path`'s first point to its last that avoids `solid`, or None.
 
@@ -249,9 +299,31 @@ def _detour(
     """
     start, end = path[0], path[-1]
     first, last = _heading(path[0], path[1]), _heading(path[-2], path[-1])
+    # lines just off both ends, so a detour can turn before it meets a route that leaves or arrives close by
+    for k in range(1, 5):
+        for point, heading, sign in ((start, first, 1), (end, last, -1)):
+            dx, dy = _STEPS[heading]
+            if dx:
+                xs = xs | {point[0] + sign * dx * k * _LANE_STEP}
+            else:
+                ys = ys | {point[1] + sign * dy * k * _LANE_STEP}
     gx, gy = sorted(xs | {start[0], end[0]}), sorted(ys | {start[1], end[1]})
-    rows = [[(r[0], r[1]) for r in solid if r[2] < y < r[3]] for y in gy]
-    cols = [[(r[2], r[3]) for r in solid if r[0] < x < r[1]] for x in gx]
+    # a line on a box's border is blocked too, so no route runs along the edge of a box
+    rows = [[(r[0] + _EPS, r[1] - _EPS) for r in solid if r[2] - _EPS <= y <= r[3] + _EPS] for y in gy]
+    cols = [[(r[2] + _EPS, r[3] - _EPS) for r in solid if r[0] - _EPS <= x <= r[1] + _EPS] for x in gx]
+
+    def spans(lines: list[float], blocking: list[list[tuple[float, float]]]) -> list[bytearray]:
+        """Per line, a flag for each gap between neighbouring lines saying whether a box blocks it."""
+        flags = []
+        for intervals in blocking:
+            row = bytearray(len(lines) - 1)
+            for a, b in intervals:
+                for k in range(max(bisect_right(lines, a) - 1, 0), min(bisect_left(lines, b), len(row))):
+                    row[k] = 1
+            flags.append(row)
+        return flags
+
+    blocked_h, blocked_v = spans(gx, rows), spans(gy, cols)
 
     def free(i: int, j: int, d: int) -> tuple[int, int] | None:
         """The next grid point from (i, j) heading d, or None when off the grid or blocked."""
@@ -259,12 +331,8 @@ def _detour(
         if not (0 <= ni < len(gx) and 0 <= nj < len(gy)):
             return None
         if d < 2:
-            low, high = sorted((gx[i], gx[ni]))
-            blocked = any(a < high and low < b for a, b in rows[j])
-        else:
-            low, high = sorted((gy[j], gy[nj]))
-            blocked = any(a < high and low < b for a, b in cols[i])
-        return None if blocked else (ni, nj)
+            return None if blocked_h[j][min(i, ni)] else (ni, nj)
+        return None if blocked_v[i][min(j, nj)] else (ni, nj)
 
     i0, j0 = gx.index(start[0]), gy.index(start[1])
     goal = (gx.index(end[0]), gy.index(end[1]))
@@ -272,45 +340,81 @@ def _detour(
     if hop is None:
         return None
 
+    def covered(axis: int, coord: float) -> Callable[[float], float]:
+        """A function giving how much of one line, up to a position, earlier routes cover."""
+        joined: list[tuple[float, float]] = []
+        for lo, hi in sorted(occupied.get((axis, round(coord, 4)), ())):
+            if joined and lo <= joined[-1][1]:
+                joined[-1] = (joined[-1][0], max(joined[-1][1], hi))
+            else:
+                joined.append((lo, hi))
+        starts = [lo for lo, _hi in joined]
+        before = [0.0]
+        for lo, hi in joined:
+            before.append(before[-1] + hi - lo)
+
+        def up_to(x: float) -> float:
+            """The length of the line below `x` that is covered."""
+            i = bisect_right(starts, x)
+            return 0.0 if i == 0 else before[i - 1] + min(x, joined[i - 1][1]) - joined[i - 1][0]
+
+        return up_to
+
+    along_x = [covered(0, y) for y in gy]
+    along_y = [covered(1, x) for x in gx]
+
     def cost(i: int, j: int, ni: int, nj: int) -> float:
-        """The length of the step from (i, j) to (ni, nj)."""
-        return abs(gx[ni] - gx[i]) + abs(gy[nj] - gy[j])
+        """The length of the step from (i, j) to (ni, nj), dearer where an earlier route already runs."""
+        low, high = (gx[i], gx[ni]) if i != ni else (gy[j], gy[nj])
+        low, high = min(low, high), max(low, high)
+        up_to = along_x[j] if i != ni else along_y[i]
+        return high - low + _SHARING * (up_to(high) - up_to(low))
 
-    def estimate(i: int, j: int) -> float:
-        """A lower bound on the distance left from (i, j) to the goal."""
-        return abs(gx[goal[0]] - gx[i]) + abs(gy[goal[1]] - gy[j])
-
+    to_go_x = [abs(x - gx[goal[0]]) for x in gx]
+    to_go_y = [abs(y - gy[goal[1]]) for y in gy]
+    ny = len(gy)
     bend = 0.5
-    best = {(hop[0], hop[1], first): cost(i0, j0, *hop)}
-    came: dict[tuple[int, int, int], tuple[int, int, int] | None] = {(hop[0], hop[1], first): None}
-    heap = [(best[(hop[0], hop[1], first)] + estimate(*hop), 0, hop[0], hop[1], first)]
+    # a state is a grid point and the heading it was reached with, packed into one integer
+    first_state = (hop[0] * ny + hop[1]) * 4 + first
+    best = {first_state: cost(i0, j0, *hop)}
+    came: dict[int, int | None] = {first_state: None}
+    heap = [(best[first_state] + _HURRY * (to_go_x[hop[0]] + to_go_y[hop[1]]), 0, first_state)]
     count = 0
+    steps: dict[int, tuple[float, int, int] | None] = {}
+    goal_cell = goal[0] * ny + goal[1]
     while heap:
-        _f, _c, i, j, d = heapq.heappop(heap)
-        if (i, j) == goal and d == last:
+        _f, _c, state = heapq.heappop(heap)
+        work[0] += 1
+        cell, d = divmod(state, 4)
+        i, j = divmod(cell, ny)
+        if cell == goal_cell and d == last:
             points = [(gx[i], gy[j])]
-            at: tuple[int, int, int] | None = (i, j, d)
+            at: int | None = state
             while at is not None:
-                points.append((gx[at[0]], gy[at[1]]))
+                c, _d = divmod(at, 4)
+                points.append((gx[c // ny], gy[c % ny]))
                 at = came[at]
             points.append(start)
             return points[::-1]
-        if _f - estimate(i, j) > best[(i, j, d)] + 1e-9:
+        g0 = best[state]
+        if _f - _HURRY * (to_go_x[i] + to_go_y[j]) > g0 + 1e-9:
             continue
-        moves = [(d, 0.0)]
-        if (i, j) != goal:
-            moves += [(nd, bend) for nd in (0, 1, 2, 3) if (nd < 2) != (d < 2)]
-        for nd, extra in moves:
-            nxt = free(i, j, nd)
-            if nxt is None:
+        for nd in (d, *((2, 3) if d < 2 else (0, 1))) if cell != goal_cell else (d,):
+            key = cell * 4 + nd
+            if key in steps:
+                hopped = steps[key]
+            else:
+                nxt = free(i, j, nd)
+                hopped = steps[key] = None if nxt is None else (cost(i, j, *nxt), nxt[0], nxt[1])
+            if hopped is None:
                 continue
-            g = best[(i, j, d)] + extra + cost(i, j, *nxt)
-            key = (nxt[0], nxt[1], nd)
-            if g < best.get(key, math.inf) - 1e-9:
-                best[key] = g
-                came[key] = (i, j, d)
+            g = g0 + (0.0 if nd == d else bend) + hopped[0]
+            new_state = (hopped[1] * ny + hopped[2]) * 4 + nd
+            if g < best.get(new_state, math.inf) - 1e-9:
+                best[new_state] = g
+                came[new_state] = state
                 count += 1
-                heapq.heappush(heap, (g + estimate(*nxt), count, nxt[0], nxt[1], nd))
+                heapq.heappush(heap, (g + _HURRY * (to_go_x[hopped[1]] + to_go_y[hopped[2]]), count, new_state))
     return None
 
 
@@ -429,6 +533,26 @@ def layered_layout(
         rows[slot.layer].append(key)
     _order(rows, slots, chains, opts.sweeps)
 
+    # every edge crossing a gap needs its own channel, a grid step apart; the default gap widens to hold them
+    busiest = max(
+        Counter(slots[a].layer for chain in chains if chain[0] != chain[-1] for a, _b in pairwise(chain)).values(), default=0
+    )
+    if u_gap < (busiest + 1) * GRID:
+        if opts.layer_gap != LayoutOptions.layer_gap:
+            raise GraphError(
+                f"option layer_gap is {opts.layer_gap}; {busiest} edges cross one gap and need at least "
+                f"{busiest * GRID:g} inches to keep their channels apart"
+            )
+        u_gap = (busiest + 1) * GRID
+    # channels start beyond the loops on the column, so no loop shares a line with a channel
+    loop_count = Counter(source for source, target in edges if source == target)
+    loop_zone: dict[int, float] = {}
+    for node_id, count in loop_count.items():
+        layer = slots[node_id].layer
+        loop_zone[layer] = max(loop_zone.get(layer, 0.0), 0.3 + 0.1 * (count - 1) + GRID)
+    crossing = Counter(slots[a].layer for chain in chains if chain[0] != chain[-1] for a, _b in pairwise(chain))
+    u_gap = max([u_gap, *(loop_zone.get(layer, 0.0) + (crossing[layer] + 1) * GRID for layer in {*crossing, *loop_zone})])
+
     col_width = [max((slots[k].u_extent for k in row), default=0.0) for row in rows]
     col_left: list[float] = []
     cursor = opts.margin + (opts.lane_heading if lanes else 0.0)
@@ -490,8 +614,6 @@ def layered_layout(
         """Where an edge arrives at a slot: its near border, or the column's for a dummy."""
         return centre_u(slot) - (slot.u_extent if slot.real else col_width[slot.layer]) / 2
 
-    loop_count = Counter(source for source, target in edges if source == target)
-
     def rect_of(node_id: str) -> _Rect:
         """A node's rectangle as (u low, u high, v low, v high)."""
         s = slots[node_id]
@@ -523,9 +645,10 @@ def layered_layout(
     # a group box can reach past the margin, so the page grows and shifts to hold it, plus a step for snapping
     lo_u = lo_v = 0.0
     hi_u, hi_v = u_total, v_total
+    room = max(opts.margin, _CORRIDOR) + GRID  # clear space round a group, where a route can pass it
     for r in group_rect.values():
-        lo_u, hi_u = min(lo_u, r[0] - GRID), max(hi_u, r[1] + GRID)
-        lo_v, hi_v = min(lo_v, r[2] - GRID), max(hi_v, r[3] + GRID)
+        lo_u, hi_u = min(lo_u, r[0] - room), max(hi_u, r[1] + room)
+        lo_v, hi_v = min(lo_v, r[2] - room), max(hi_v, r[3] + room)
     for node_id, count in loop_count.items():
         lo_a, hi_a, lo_b, _hi_b = rect_of(node_id)
         extra = 0.1 * (count - 1)
@@ -546,28 +669,94 @@ def layered_layout(
         for n in nodes
     }
 
+    twins = Counter((c[0], c[-1]) for c in chains)
+    twin_seen: Counter[tuple[_Key, _Key]] = Counter()
+    twin_rank: list[int] = []
+    rows_of: list[list[float]] = []
+    for chain, (source, target) in zip(chains, edges, strict=True):
+        ends = (chain[0], chain[-1])
+        twin_rank.append(twin_seen[ends])
+        twin_seen[ends] += 1
+        # a pass-through row is nudged within its dummy slot, so it rarely lies on the row of a box another edge uses
+        nudge = _NUDGES[len(rows_of) % len(_NUDGES)]
+        vs = [slots[k].v if slots[k].real else slots[k].v + nudge for k in chain]
+        if source != target:
+            # parallel edges leave and arrive at different points along the border so they never overlay
+            narrow = min((source, target), key=lambda k: slots[k].v_extent)
+            off = _spread(twins[ends], slots[narrow].v_extent, narrow)[twin_rank[-1]]
+            vs[0] += off
+            vs[-1] += off
+        rows_of.append(vs)
+
     gap_edges: dict[int, list[tuple[float, float, int, int]]] = {}
     for n, chain in enumerate(chains):
+        if chain[0] == chain[-1]:
+            continue  # a loop has no channel
         for hop, (a, b) in enumerate(pairwise(chain)):
             gap_edges.setdefault(slots[a].layer, []).append((min(slots[a].v, slots[b].v), max(slots[a].v, slots[b].v), n, hop))
     channel: dict[tuple[int, int], float] = {}
-    for layer, items in gap_edges.items():
-        items.sort()
-        left = col_left[layer] + col_width[layer]
-        if u_gap < (len(items) + 1) * GRID:
-            raise GraphError(
-                f"option layer_gap is {opts.layer_gap}; {len(items)} edges cross that gap and need at least "
-                f"{(len(items) + 1) * GRID - GRID:g} inches to keep their channels apart"
-            )
-        for k, (_low, _high, n, hop) in enumerate(items):
-            channel[(n, hop)] = left + u_gap * (k + 1) / (len(items) + 1)
+
+    def room_for(n: int, i: int, new: float) -> bool:
+        """Whether row `i` of edge `n` can move to `new` and still sit on its box or inside its dummy."""
+        slot = slots[chains[n][i]]
+        return abs(new - slot.v) <= slot.v_extent / 2 - GRID
+
+    for _round in range(6):
+        stuck: list[tuple[int, int, int, int]] = []
+        channel.clear()
+        for layer, items in gap_edges.items():
+            items.sort()
+            # an edge that arrives on the row another leaves on must have its channel right of that edge's, or their runs overlap
+            starts: dict[float, list[int]] = {}
+            for idx, (_lo, _hi, n, hop) in enumerate(items):
+                starts.setdefault(round(rows_of[n][hop], 6), []).append(idx)
+            need = [
+                [f for f in starts.get(round(rows_of[n][hop + 1], 6), []) if f != idx]
+                for idx, (_lo, _hi, n, hop) in enumerate(items)
+            ]
+            before = [list(preds) for preds in need]
+            after: list[list[int]] = [[] for _ in items]
+            for idx, preds in enumerate(before):
+                for f in preds:
+                    after[f].append(idx)
+            ready = [idx for idx, preds in enumerate(before) if not preds]
+            heapq.heapify(ready)
+            order: list[int] = []
+            left_over = set(range(len(items)))
+            while left_over:
+                idx = heapq.heappop(ready) if ready else min(left_over)
+                if idx not in left_over:
+                    continue
+                left_over.discard(idx)
+                order.append(idx)
+                for nxt in after[idx]:
+                    before[nxt] = [f for f in before[nxt] if f != idx]
+                    if not before[nxt] and nxt in left_over:
+                        heapq.heappush(ready, nxt)
+            position = {idx: k for k, idx in enumerate(order)}
+            for idx, preds in enumerate(need):
+                for f in preds:
+                    if position[f] > position[idx]:
+                        stuck.append((items[idx][2], items[idx][3], items[f][2], items[f][3]))
+            zone = loop_zone.get(layer, 0.0)
+            left = col_left[layer] + col_width[layer] + zone
+            for k, idx in enumerate(order):
+                channel[(items[idx][2], items[idx][3])] = left + (u_gap - zone) * (k + 1) / (len(items) + 1)
+        if not stuck:
+            break
+        # two edges swapping rows cannot both be satisfied, so one of the two rows moves a little
+        for en, eh, fn, fh in stuck:
+            for n, i in ((en, eh + 1), (fn, fh)):
+                moved = next((d for d in (0.03, -0.03, 0.07, -0.07) if room_for(n, i, rows_of[n][i] + d)), None)
+                if moved is not None:
+                    rows_of[n][i] += moved
+                    break
 
     # lines a detour may turn on: the middle of each gap between columns, round each group, and between the tracks
     base_xs = {-shift_u, u_total - shift_u} if not lanes else {u_total - shift_u}
     for layer in range(n_layers - 1):
         base_xs.add(col_left[layer] + col_width[layer] + u_gap / 2)
-    for ulo, uhi, _vlo, _vhi in group_rect.values():
-        base_xs |= {ulo - 2 * GRID, uhi + 2 * GRID}
+    end_xs = {x for ulo, uhi, _vlo, _vhi in group_rect.values() for x in (ulo - 2 * GRID, uhi + 2 * GRID)}
     flat_ys = (
         {y for lane in range(n_lanes) for y in (lane_top[lane] + GRID, lane_bottom[lane] - GRID)}
         if lanes
@@ -576,24 +765,26 @@ def layered_layout(
     for a, b in pairwise(track_keys):
         if a[0] == b[0]:
             flat_ys.add((track_top[a] + track_height[a] + track_top[b]) / 2)
-    for _ulo, _uhi, vlo, vhi in group_rect.values():
-        flat_ys |= {vlo - 2 * GRID, vhi + 2 * GRID}
-    base_xs = {x for x in base_xs if -shift_u <= x <= u_total - shift_u}
-    flat_ys = {y for y in flat_ys if -shift_v <= y <= v_total - shift_v}
+    end_ys = {y for _ulo, _uhi, vlo, vhi in group_rect.values() for y in (vlo - 2 * GRID, vhi + 2 * GRID)}
+    base_xs = {x for x in base_xs | end_xs if -shift_u <= x <= u_total - shift_u} - end_xs
+    flat_ys = {y for y in flat_ys | end_ys if -shift_v <= y <= v_total - shift_v} - end_ys
+    end_xs = {x for x in end_xs if -shift_u <= x <= u_total - shift_u}
+    end_ys = {y for y in end_ys if -shift_v <= y <= v_total - shift_v}
+    # the outermost group lines are the free corridors round the drawing, so they get side-by-side copies too
+    base_xs |= {*(f(end_xs) for f in (min, max) if end_xs)}
+    flat_ys |= {*(f(end_ys) for f in (min, max) if end_ys)}
     solids = [rect_of(n.id) for n in nodes]
     groups_of = {n.id: {g for g, ms in members_of.items() if n.id in ms} for n in nodes}
 
-    twins = Counter((c[0], c[-1]) for c in chains)
-    twin_at: dict[tuple[_Key, _Key], int] = {}
     routes: dict[tuple[str, str, int], tuple[tuple[float, float], ...]] = {}
     seen_pairs: dict[tuple[str, str], int] = {}
+    built: list[tuple[list[tuple[float, float]], str, str, list[_Key], int]] = []
     for n, ((source, target), flip, chain) in enumerate(zip(edges, flipped, chains, strict=True)):
         parallel = seen_pairs.get((source, target), 0)
         seen_pairs[(source, target)] = parallel + 1
         first_slot = slots[chain[0]]
         ends = (chain[0], chain[-1])
-        i = twin_at.get(ends, 0)
-        twin_at[ends] = i + 1
+        i = twin_rank[n]
         if source == target:
             r = first_slot.v_extent / 2 + 0.2 + 0.1 * i
             c = centre_u(first_slot) - _spread(twins[ends], first_slot.u_extent, source)[i]
@@ -606,12 +797,7 @@ def layered_layout(
                 (c, first_slot.v - first_slot.v_extent / 2),
             ]
         else:
-            # parallel edges leave and arrive at different points along the border so they never overlay
-            narrow = min((source, target), key=lambda k: slots[k].v_extent)
-            off = _spread(twins[ends], slots[narrow].v_extent, narrow)[i]
-            vs = [slots[k].v for k in chain]
-            vs[0] += off
-            vs[-1] += off
+            vs = rows_of[n]
             bends = [(right_u(first_slot), vs[0])]
             for hop, sb in enumerate(slots[k] for k in chain[1:]):
                 cu = channel[(n, hop)]
@@ -620,6 +806,23 @@ def layered_layout(
                     bends.append((right_u(sb), vs[hop + 1]))
             if flip:
                 bends.reverse()
+        # on the grid before any comparison, so two lines that print the same are the same line
+        built.append(([(snap(u), snap(v)) for u, v in bends], source, target, chain, parallel))
+
+    occupied: dict[tuple[int, float], list[tuple[float, float, int]]] = {}
+    ends_of: dict[int, set[tuple[float, float]]] = {}
+
+    def occupy(path: list[tuple[float, float]], n: int) -> None:
+        """Record the segments of edge `n`'s `path`, so a later detour can keep off them."""
+        ends_of[n] = {path[0], path[-1]}
+        for a, b in pairwise(path):
+            if a[1] == b[1] and a[0] != b[0]:
+                occupied.setdefault((0, round(a[1], 4)), []).append((min(a[0], b[0]), max(a[0], b[0]), n))
+            elif a[0] == b[0] and a[1] != b[1]:
+                occupied.setdefault((1, round(a[0], 4)), []).append((min(a[1], b[1]), max(a[1], b[1]), n))
+
+    pending = []
+    for n, (bends, source, target, _chain, _parallel) in enumerate(built):
         foreign = [
             (r[0] - GRID, r[1] + GRID, r[2] - GRID, r[3] + GRID)
             for g, r in group_rect.items()
@@ -627,15 +830,66 @@ def layered_layout(
         ]
         lines = [(a, b) for a, b in pairwise(bends) if a != b]
         if source != target and any(_enters(a, b, r) for a, b in lines for r in foreign):
-            # the direct channels cross a group the edge does not belong to, so search for a way round
-            low = lane_top[min(slots[chain[0]].lane, slots[chain[-1]].lane)] if lanes else -shift_v
-            high = lane_bottom[max(slots[chain[0]].lane, slots[chain[-1]].lane)] if lanes else v_total - shift_v
-            ys = {y for y in flat_ys if low <= y <= high}
-            path = [bends[0], *(b for a, b in pairwise(bends) if a != b)]
-            around = _detour(path, base_xs, ys, [*solids, *foreign])
-            if around is None:
-                raise GraphError(f"edge {source!r} -> {target!r} cannot be routed round the groups it does not belong to")
-            bends = around
+            pending.append((n, foreign))
+        else:
+            occupy(bends, n)
+    spent = [0]  # search steps so far; a crowded detour is searched again only while this is under budget
+    for k, (n, foreign) in enumerate(pending):
+        bends, source, target, chain, _parallel = built[n]
+        # the direct channels cross a group the edge does not belong to, so search for a way round
+        low = lane_top[min(slots[chain[0]].lane, slots[chain[-1]].lane)] if lanes else -shift_v
+        high = lane_bottom[max(slots[chain[0]].lane, slots[chain[-1]].lane)] if lanes else v_total - shift_v
+        path = [bends[0], *(b for a, b in pairwise(bends) if a != b)]
+        # each edge also gets shifted copies of every line, so detours of different edges can run side by side; when a
+        # detour still runs along another route, it tries again with more copies
+        # routes that leave or arrive at the same border point may run along this one, so they do not count
+        mine = {path[0], path[-1]}
+        others = {key: [(lo, hi) for lo, hi, m in runs if not ends_of[m] & mine] for key, runs in occupied.items()}
+        around = None
+        extra_xs: set[float] = set()
+        extra_ys: set[float] = set()
+        shifts = [sign * (k % 12 + 1) * _LANE_STEP for sign in (-1, 1)]
+        # the lines near the edge's own end points are tried first: most detours stay close to where they start and end
+        near_u = (min(path[0][0], path[-1][0]) - _NEAR, max(path[0][0], path[-1][0]) + _NEAR)
+        near_v = (min(path[0][1], path[-1][1]) - _NEAR, max(path[0][1], path[-1][1]) + _NEAR)
+        wide = False
+        attempt = 0
+        while attempt < 4:
+            keep_ys = [y for y in flat_ys if wide or near_v[0] <= y <= near_v[1] or y in (min(flat_ys), max(flat_ys))]
+            keep_xs = [x for x in base_xs if wide or near_u[0] <= x <= near_u[1] or x in (min(base_xs), max(base_xs))]
+            near_end_ys = [y for y in end_ys if wide or near_v[0] <= y <= near_v[1] or y in (min(end_ys), max(end_ys))]
+            near_end_xs = [x for x in end_xs if wide or near_u[0] <= x <= near_u[1] or x in (min(end_xs), max(end_xs))]
+            ys = {
+                y
+                for y in (*keep_ys, *near_end_ys, *(y + o for y in keep_ys for o in shifts), *extra_ys)
+                if low <= y <= high and -shift_v <= y <= v_total - shift_v
+            }
+            xs = {
+                x
+                for x in (*keep_xs, *near_end_xs, *(x + o for x in keep_xs for o in shifts), *extra_xs)
+                if -shift_u <= x <= u_total - shift_u
+            }
+            found = _detour(path, {snap(x) for x in xs}, {snap(y) for y in ys}, [*solids, *foreign], others, spent)
+            if found is None and not wide:
+                wide = True  # nothing close by, so allow every line
+                continue
+            attempt += 1
+            if found is None:
+                break
+            around = found
+            crowded = _shared(found, others)
+            if not crowded or spent[0] > _RETRY_BUDGET:
+                break
+            # run side by side with the routes already on those lines
+            for axis, coord in crowded:
+                copies = {coord + m * _LANE_STEP for m in range(-6, 7) if m}
+                (extra_ys if axis == 0 else extra_xs).update(copies)
+        if around is None:
+            raise GraphError(f"edge {source!r} -> {target!r} cannot be routed round the groups it does not belong to")
+        built[n] = (around, source, target, chain, _parallel)
+        occupy(around, n)
+
+    for bends, source, target, _chain, parallel in built:
         mapped: list[tuple[float, float]] = []
         for p in (page(u, v) for u, v in bends):
             if not mapped or mapped[-1] != p:
