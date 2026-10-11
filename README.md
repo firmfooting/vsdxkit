@@ -58,7 +58,7 @@ it without Visio. The COM check itself is manual; no workflow runs Visio. See
 
 ## Install
 
-Python 3.15 or later is supported.
+Python 3.15 or later is required. The tests run on Linux.
 
 **The 1.0 API is on `main`.** It is not on PyPI yet. Install it from GitHub:
 

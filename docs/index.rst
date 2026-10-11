@@ -57,7 +57,7 @@ Where to go next
 Format support
 --------------
 
-* Python 3.15 or later
+* Python 3.15 or later (tested on Linux)
 * read, edit and save ``.vsdx``
 * read, edit and save ``.vsdm``, which must stay ``.vsdm``
 * no Microsoft Visio dependency at runtime
