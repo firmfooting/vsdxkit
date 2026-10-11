@@ -143,9 +143,10 @@ class Diagram:
 
         :raises GraphError: on a repeated, empty or non-string id or page name, an edge or member naming a node
             not on its page, a node in two lanes or two groups, a node outside every lane on a page with lanes,
-            a group split across lanes or nested two deep, more lanes than a page draws, a lane heading too long for
-            its lane, a laned page wider than a diagram is drawn, an unknown kind, or a ``page-link`` that does not join
-            an ``off_page`` node on its own page to one on another
+            a group split across lanes or nested two deep, more lanes than a page draws, a blank lane label, an
+            unknown kind, a label or sublabel that is not a string, an edge end that is not a string, an ``off_page``
+            node that ends two ``page-link`` edges, or a ``page-link`` that does not join an ``off_page`` node on its
+            own page to one on another. Whether a laned page fits is known only after layout, so :meth:`build` checks it.
         """
         if not self.pages:
             raise GraphError("a diagram needs at least one page")
@@ -161,12 +162,15 @@ class Diagram:
             _check_lanes(page)
             _check_membership(page, where)
             _check_edges(page, where)
+        _links(self)
 
     def build(self, *, layout: LayoutOptions | None = None) -> Document:
         """Compile to a new document with one page per :class:`Page`, creating shapes in input order.
 
         :param layout: spacing and flow direction; the defaults flow left to right
-        :raises GraphError: as :meth:`validate`
+        :raises GraphError: as :meth:`validate`, and when a laid-out page with lanes is wider than 22 inches of diagram,
+            a lane is not 0.5 to 6 inches tall, a lane label is longer than 11 characters for each inch of its lane, or
+            the layout refuses the graph
         """
         self.validate()
         options = layout if layout is not None else LayoutOptions()
@@ -191,6 +195,10 @@ def _register(page: Page, where: dict[str, tuple[str, str]]) -> None:
         if node.kind not in get_args(NodeKind):
             raise GraphError(f"node {node.id!r} has kind {node.kind!r}; the kinds are {sorted(get_args(NodeKind))}")
         _claim(where, node.id, page.name, node.kind)
+        for field_name in ("label", "sublabel"):
+            value = getattr(node, field_name)
+            if not isinstance(value, str) and not (field_name == "sublabel" and value is None):
+                raise GraphError(f"node {node.id!r} has a {field_name} that is {value!r}; it must be a string")
     for lane in page.lanes:
         _claim(where, lane.id, page.name, "lane")
     for group in _all_groups(page):
@@ -247,6 +255,8 @@ def _check_lanes(page: Page) -> None:
 
 def _on_page(page: Page, node_id: str, where: Mapping[str, tuple[str, str]], what: str) -> None:
     """Refuse `node_id` unless it is a node on `page`."""
+    if not isinstance(node_id, str):
+        raise GraphError(f"{what} lists {node_id!r}; ids are strings")
     if where.get(node_id, ("", ""))[0] != page.name or where[node_id][1] in ("lane", "group"):
         raise GraphError(f"{what} lists {node_id!r}, which is not a node on page {page.name!r}")
 
@@ -257,6 +267,13 @@ def _check_edges(page: Page, where: Mapping[str, tuple[str, str]]) -> None:
         if edge.kind not in get_args(EdgeKind):
             raise GraphError(
                 f"edge {edge.source!r} -> {edge.target!r} has kind {edge.kind!r}; the kinds are {sorted(get_args(EdgeKind))}"
+            )
+        for end in (edge.source, edge.target):
+            if not isinstance(end, str):
+                raise GraphError(f"an edge on page {page.name!r} has an end {end!r}; ids are strings")
+        if edge.label is not None and not isinstance(edge.label, str):
+            raise GraphError(
+                f"edge {edge.source!r} -> {edge.target!r} has a label that is {edge.label!r}; it must be a string"
             )
         source, target = where.get(edge.source), where.get(edge.target)
         if edge.kind == "page-link":
@@ -285,17 +302,21 @@ def _links(diagram: Diagram) -> dict[str, dict[str, str]]:
     for page in diagram.pages:
         for edge in page.edges:
             if edge.kind == "page-link":
+                for end in (edge.source, edge.target):
+                    if end in rows:
+                        raise GraphError(f"off_page node {end!r} ends more than one page-link")
                 rows[edge.source] = {"Linked page": pages[edge.target], "Linked node": edge.target}
                 rows[edge.target] = {"Linked page": page.name, "Linked node": edge.source}
     return rows
 
 
 def _set_title(document: Document, title: str) -> None:
-    """Write the title into the core properties, where the package has them."""
+    """Write the title into the core properties; Document.new always has them, so a missing one is refused."""
     tree = document._package.read_xml(_CORE_PART)
     element = None if tree is None else tree.getroot().find(_DC_TITLE)
-    if element is not None:
-        element.text = title
+    if element is None:
+        raise GraphError("the new document has no title property to write")
+    element.text = title
 
 
 def _size(node: Node) -> tuple[float, float]:

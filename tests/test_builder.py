@@ -19,6 +19,7 @@ from vsdxkit.builder import Diagram, Edge, Group, Lane, Node, Page
 from vsdxkit.document import Document
 from vsdxkit.errors import GraphError
 from vsdxkit.shapes import Shape
+from vsdxkit.swimlanes import ROW_HEADING_TEXT
 
 HERE = Path(__file__).resolve().parent
 NODE_KINDS = ["start", "end", "process", "decision", "data_store", "external", "document", "subprocess", "off_page"]
@@ -160,6 +161,18 @@ def _node(id_: str, kind: str = "process") -> Node:
             [Page("P", [_node("a")], groups=[Group("g", "G", ["lane"])], lanes=[Lane("lane", "L", ["a"])])],
             "not a node on page",
         ),
+        ([Page("P", [Node("a", "process", 5)])], "must be a string"),  # type: ignore[arg-type]
+        ([Page("P", [Node("a", "process", "x", sublabel=5)])], "must be a string"),  # type: ignore[arg-type]
+        ([Page("P", [_node("a")], [Edge("a", ["a"])])], "ids are strings"),  # type: ignore[arg-type]
+        ([Page("P", [_node("a")], [Edge("a", "a", label=3)])], "must be a string"),  # type: ignore[arg-type]
+        ([Page("P", [_node("a")], lanes=[Lane("l", "L", [["a"]])])], "ids are strings"),  # type: ignore[list-item]
+        (
+            [
+                Page("P", [_node("o", "off_page")], [Edge("o", "x", kind="page-link"), Edge("o", "y", kind="page-link")]),
+                Page("Q", [_node("x", "off_page"), _node("y", "off_page")]),
+            ],
+            "more than one page-link",
+        ),
         ([Page("P", [_node("a", "off_page")], [Edge("a", "a", kind="page-link")])], "must join an off_page node"),
         (
             [Page("P", [_node("a")], [Edge("a", "b", kind="page-link")]), Page("Q", [_node("b", "off_page")])],
@@ -188,6 +201,38 @@ def test_awkward_label_text_is_written_escaped_and_reads_back_unchanged(text, tm
     shape = _by_source(Document.open(path))["a"]
     assert shape.text.rstrip("\n") == text
     assert _rows(shape)["Note"] == text
+
+
+@pytest.mark.parametrize("text", AWKWARD_TEXT[:4])
+def test_awkward_text_in_every_other_place_reads_back_unchanged(text, tmp_path):
+    """A sublabel, an edge label, a group label, a lane label and a page name take the same text."""
+    nodes = [Node("a", "process", "A", sublabel=text), Node("b", "process", "B")]
+    page = Page("P" + text, nodes, [Edge("a", "b", text)], [Group("g", text, ["a"])], [Lane("l", text, ["a", "b"])])
+    document = Document.open(Diagram(text, [page]).save(tmp_path / "t.vsdx"))
+    assert document.pages[0].name == "P" + text
+    shapes = list(document.pages[0].shapes)
+    assert _by_source(document)["a"].text.rstrip("\n") == f"A\n{text}"
+    assert next(s for s in shapes if _rows(s).get("Kind") == "edge_label").text.rstrip("\n") == text
+    assert next(s for s in shapes if _rows(s).get("Kind") == "group").text.rstrip("\n") == text
+    lane = document.pages[0].require_swimlanes().lanes[0]
+    row = next(r for r in lane.xml.iter(f"{namespace}Row") if r.attrib.get("N") == ROW_HEADING_TEXT)
+    assert next(c.attrib["V"] for c in row if c.attrib.get("N") == "Value") == text
+
+
+@pytest.mark.parametrize(
+    "edges",
+    [
+        [Edge("a", "a")],
+        [Edge("a", "b"), Edge("b", "c"), Edge("c", "a")],
+        [Edge("a", "b"), Edge("a", "b", "again"), Edge("a", "b", kind="data")],
+    ],
+    ids=["self-loop", "cycle", "parallel"],
+)
+def test_loops_cycles_and_parallel_edges_build_save_and_reopen(edges, tmp_path):
+    nodes = [_node("a"), _node("b"), _node("c")]
+    document = Document.open(Diagram("T", [Page("P", nodes, edges)]).save(tmp_path / "c.vsdx"))
+    paths = [s for s in document.pages[0].shapes if _rows(s).get("Source", "").count("->")]
+    assert len([s for s in paths if _rows(s)["Kind"] != "edge_label"]) == len(edges)
 
 
 def test_a_page_with_no_nodes_a_lane_with_no_nodes_and_a_group_with_no_nodes_all_build(tmp_path):
@@ -271,7 +316,7 @@ def test_the_bytes_do_not_depend_on_the_hash_seed(tmp_path):
     assert len(digests) == 1
 
 
-def test_a_50_node_process_with_lanes_builds_in_one_call_with_no_coordinates(tmp_path):
+def test_a_50_node_process_builds_in_one_call_with_no_coordinates(tmp_path):
     """The #52 exit criterion. Lanes are limited to 22 inches wide, so the 50 nodes are drawn without them."""
     document = Document.open(_big(50, 70).save(tmp_path / "fifty.vsdx"))
     nodes = [s for s in document.pages[0].shapes if _rows(s).get("Kind") in NODE_KINDS]
