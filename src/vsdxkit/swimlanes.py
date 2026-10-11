@@ -178,6 +178,14 @@ _STG4 = re.compile(r"/stg4=\d+,")
 """The lane-count setting inside a lane's ``visCFFSettings`` text."""
 _LANE_LIST = re.compile(r"DEPENDSON\(2(?:,Sheet\.\d+!SheetRef\(\))*\)")
 """The ``DEPENDSON`` call in the Swimlane List's ``Relationships`` formula that names its lanes."""
+MAX_LANES = 5
+"""The most lanes the creation is checked against Visio on; see ``tools/diagram_cases.py``."""
+LANE_HEIGHTS = (0.5, 6.0)
+"""The least and greatest lane height, in inches, that Visio was checked on."""
+DIAGRAM_WIDTHS = (5.0, 22.0)
+"""The least and greatest diagram width, in inches, that Visio was checked on."""
+LABEL_CHARS_PER_INCH = 11.5
+"""The most characters of a label for each inch of lane height: a longer label wraps out of the heading, which Visio showed."""
 ID_CEILING = 1000
 """The bundled diagram's shape IDs start here, so a page may hold shapes only below it for a copy's IDs never to equal one of them."""
 
@@ -333,6 +341,30 @@ def _user_value(shape: Shape, row: str) -> ET.Element:
     return cell
 
 
+def _require_checked(bands: Sequence[tuple[str, float]], width: float) -> None:
+    """Refuse a diagram outside the sizes the Visio oracle recalculated, naming the limit it crosses."""
+    if len(bands) > MAX_LANES:
+        raise InvalidOperationError(f"{len(bands)} lanes is more than the {MAX_LANES} that creation is checked on")
+    low, high = DIAGRAM_WIDTHS
+    if not low <= width <= high:
+        raise InvalidOperationError(
+            f"a diagram width of {width} inches is outside the {low} to {high} that creation is checked on"
+        )
+    low, high = LANE_HEIGHTS
+    for label, height in bands:
+        if not low <= height <= high:
+            raise InvalidOperationError(
+                f"a lane height of {height} inches is outside the {low} to {high} that creation is checked on"
+            )
+        if not label:
+            raise InvalidOperationError("a lane label must not be empty")
+        if len(label) > LABEL_CHARS_PER_INCH * height:
+            raise InvalidOperationError(
+                f"the label {label!r} has {len(label)} characters, more than the {LABEL_CHARS_PER_INCH} for each inch "
+                f"of its {height} inch lane that fit in the heading"
+            )
+
+
 def _create_diagram(
     page: _DiagramPage, donors: _Donors, bands: Sequence[tuple[str, float]], *, left: float, top: float, width: float
 ) -> SwimlaneDiagram:
@@ -341,6 +373,7 @@ def _create_diagram(
         raise InvalidOperationError("a swimlane diagram needs at least one lane")
     if width <= 0 or any(height <= 0 for _label, height in bands):
         raise InvalidOperationError("the width and every lane height must be positive")
+    _require_checked(bands, width)
     held = [int(shape.ID) for shape in page.shapes if shape.ID is not None]
     if max(held, default=0) + 4 + 3 * len(bands) + 3 >= ID_CEILING:
         raise InvalidOperationError(f"page {page.name!r} holds shapes with IDs too high to make room for a swimlane diagram")

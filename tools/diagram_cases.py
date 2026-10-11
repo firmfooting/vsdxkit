@@ -77,6 +77,19 @@ LINES: tuple[tuple[str, str], ...] = (
         "swimlanes",
         "swimlanes: a three-lane cross-functional flowchart from create_swimlanes, a process in each lane; every shape where it was written",
     ),
+    ("lanes_one", "lanes_one: a cross-functional flowchart of one lane; every shape where it was written"),
+    ("lanes_two", "lanes_two: two lanes, a process in each; every shape where it was written"),
+    ("lanes_four", "lanes_four: four lanes, one labelled with the widest letters; every shape where it was written"),
+    (
+        "lanes_extremes",
+        "lanes_extremes: a 0.5 inch lane, a 6 inch lane and a 5 inch wide diagram; every shape where it was written",
+    ),
+    ("lanes_five", "lanes_five: five lanes, a process in each; every shape where it was written"),
+    (
+        "lanes_uneven",
+        "lanes_uneven: lanes of different heights, three processes in one and none in another; every shape where it was written",
+    ),
+    ("lanes_wide", "lanes_wide: a diagram 22 inches wide on a page widened to 24; every shape where it was written"),
 )
 """Every case file's name and what Visio must show for it."""
 

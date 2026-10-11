@@ -845,11 +845,17 @@ class Page:
         The lanes are horizontal and stack downwards from ``top``, in the order given. The diagram is a copy of
         one Visio drew for its Cross-Functional Flowchart template, and each lane is a copy of a lane in that diagram.
 
+        The sizes are limited to those Visio was checked on, and anything outside them is refused: one to five
+        lanes, each 0.5 to 6 inches tall, in a diagram 5 to 22 inches wide, a label not empty and at most 11.5
+        characters for each inch of its lane's height. A label of wide letters can fill the heading in fewer.
+        The page is not resized; make it large enough before the call. Phases are not created: the diagram
+        has the Phase List Visio draws, as it is.
+
         :param bands: each lane's label and height in inches, top to bottom
         :param left: the page x of the diagram's left edge, in inches
         :param top: the page y of the top edge of the first lane; the container's title bar sits above it
         :param width: the diagram's width in inches
-        :raises InvalidOperationError: if the page is no longer in its document, already has a diagram, ``bands`` is empty, or a lane height or ``width`` is not positive
+        :raises InvalidOperationError: if the page is no longer in its document, already has a diagram, ``bands`` is empty, a lane height or ``width`` is not positive, or the sizes are outside the limits above
         :returns: the new diagram
         """
         if not self._attached():

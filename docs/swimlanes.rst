@@ -25,6 +25,12 @@ leave no room for it is refused.
    diagram = page.create_swimlanes([("Requester", 1.5), ("Reviewer", 2.0)], left=0.5, top=7.0, width=10.0)
    document.save("lanes.vsdx")
 
+Creation is limited to sizes Visio was checked on: one to five lanes, each 0.5 to
+6 inches tall, in a diagram 5 to 22 inches wide, with a label that is not empty
+and has at most 11.5 characters for each inch of its lane's height. Anything
+outside raises :class:`~vsdxkit.errors.InvalidOperationError`. The diagram has
+the Phase List Visio draws; phases cannot be set.
+
 The diagram's container stands a title bar, 15 mm high, above the first lane,
 so ``top`` is the top of the first lane and not of the container.
 

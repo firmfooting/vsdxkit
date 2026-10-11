@@ -22,7 +22,16 @@ def test_every_case_writes_a_file_that_opens_and_is_asked_about_in_full(tmp_path
     assert _tool().main([str(tmp_path)]) == 0
 
     expected = json.loads((tmp_path / "expected.json").read_text(encoding="utf-8"))
-    assert sorted(expected) == ["swimlanes"]
+    assert sorted(expected) == [
+        "lanes_extremes",
+        "lanes_five",
+        "lanes_four",
+        "lanes_one",
+        "lanes_two",
+        "lanes_uneven",
+        "lanes_wide",
+        "swimlanes",
+    ]
     for stem, data in expected.items():
         document = Document.open(tmp_path / f"{stem}.vsdx")
         shapes = sum(len(page.shapes) for page in document.pages)

@@ -248,3 +248,38 @@ def test_the_title_bars_pins_are_the_numbers_visio_computed_for_the_case():
     }
     for shape_id in (1, 3, 6, 8):
         assert page.shapes.by_id(str(shape_id)).y == pytest.approx(recorded[shape_id]["PinY"]), shape_id
+
+
+def _make(bands, width=10.0):
+    return _page(Document.new()).create_swimlanes(bands, left=0.5, top=7.0, width=width)
+
+
+@pytest.mark.parametrize(
+    "bands, width",
+    [
+        ([(f"L{n}", 1.0) for n in range(5)], 10.0),
+        ([("W", 0.5), ("W" * 30, 6.0)], 5.0),
+        ([("A", 1.0)], 22.0),
+        ([("a" * 23, 2.0)], 10.0),
+    ],
+)
+def test_a_diagram_inside_the_sizes_visio_was_checked_on_is_made(bands, width):
+    assert len(_make(bands, width).lanes) == len(bands)
+
+
+@pytest.mark.parametrize(
+    "bands, width, message",
+    [
+        ([(f"L{n}", 1.0) for n in range(6)], 10.0, "more than the 5"),
+        ([("A", 1.0)], 4.9, "width of 4.9"),
+        ([("A", 1.0)], 22.1, "width of 22.1"),
+        ([("A", 0.4)], 10.0, "lane height of 0.4"),
+        ([("A", 6.1)], 10.0, "lane height of 6.1"),
+        ([("a" * 24, 2.0)], 10.0, "24 characters"),
+        ([("a" * 12, 1.0)], 10.0, "12 characters"),
+        ([("", 1.0)], 10.0, "must not be empty"),
+    ],
+)
+def test_a_diagram_just_outside_those_sizes_is_refused_naming_the_limit(bands, width, message):
+    with pytest.raises(InvalidOperationError, match=message):
+        _make(bands, width)
