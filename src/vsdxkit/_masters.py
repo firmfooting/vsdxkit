@@ -186,6 +186,17 @@ class MasterCatalog:
                 return master
         return None
 
+    def lacking(self, source: MasterCatalog, master_ids: Iterable[str]) -> list[str]:
+        """The IDs among `master_ids` that :meth:`import_masters` would add a master for, not counting masters it would treat as one."""
+        found: list[str] = []
+        for master_id in dict.fromkeys(master_ids):
+            element = source.element_by_id(master_id)
+            if element is None or source.by_id(master_id) is None:
+                continue
+            if self._imported_from(source, master_id) is None and self.matching(element) is None:
+                found.append(master_id)
+        return found
+
     def load(self) -> None:
         """Read every master from the package. Idempotent: it rebuilds rather than appends."""
         rels_tree = self._store.read_xml(relationships_part_name(MASTERS_PART))

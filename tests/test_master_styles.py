@@ -219,3 +219,19 @@ def test_a_settle_that_fails_midway_leaves_the_document_and_the_memo_as_they_wer
         destination._settle_master_styles(source, master)
     assert ET.tostring(destination._part_root(destination._document_xml, "document.xml")) == before
     assert not destination._style_maps.get(source)
+
+
+def test_a_copy_whose_styles_cannot_be_settled_leaves_every_part_of_the_package_as_it_was(monkeypatch):
+    source, destination = Document.open(SOURCE), Document.new()
+    before = {name: destination._package.read_bytes(name) for name in destination._package.names()}
+    masters = [m._page_id for m in destination._masters.pages]
+
+    def fail(style_id: str):
+        raise RuntimeError("source went away")
+
+    monkeypatch.setattr(source, "_get_style_by_id", fail)
+    with pytest.raises(RuntimeError):
+        next(iter(source.pages[0].shapes)).copy(destination.pages[0])
+    assert {name: destination._package.read_bytes(name) for name in destination._package.names()} == before
+    assert not destination._style_maps.get(source)
+    assert [m._page_id for m in destination._masters.pages] == masters

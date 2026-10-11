@@ -83,6 +83,21 @@ _SUFFIX_BY_CONTENT_TYPE = {_MACRO_ENABLED_CONTENT_TYPE: ".vsdm", _DRAWING_CONTEN
 """The extension each main-part content type goes with. Only the keys are read: `_main_part_content_type` recognises a main part under an unusual name by them."""
 
 
+def _style_holders(document: Document, master: Page) -> list[Element]:
+    """The elements of `master` that name styles: its shapes and its own ``PageSheet`` under ``<Master>`` in masters.xml."""
+    element = document._masters.element_by_id(master._page_id)
+    page_sheet = None if element is None else element.find(f"{namespace}PageSheet")
+    return [*master.xml.getroot().iter(f"{namespace}Shape"), *([] if page_sheet is None else [page_sheet])]
+
+
+def _remap_styles(elements: list[Element], settled: dict[str, str]) -> None:
+    """Replace each style ID the `elements` name with the one `settled` gives it; an ID it lacks stays."""
+    for element in elements:
+        for attribute in _STYLE_ATTRIBUTES:
+            if attribute in element.attrib:
+                element.attrib[attribute] = settled.get(element.attrib[attribute], element.attrib[attribute])
+
+
 def _same_style_name(ours: Element, theirs: Element) -> bool:
     """Whether two style sheets under one ID are the same style: equal ``NameU``, else equal ``Name``, each only when both are present."""
     for attribute in ("NameU", "Name"):
@@ -337,14 +352,18 @@ class Document:
         lists_titles = self._lists_titles()
         if lists_titles:
             self._titles_of_parts_section(self._MASTERS, self._page_titles())
+        # settled before the import so that a failure here leaves the package as it was
+        incoming = [source._masters.by_id(i) for i in self._masters.lacking(source._masters, master_ids)]
+        plan = self._plan_master_styles(source, [_style_holders(source, m) for m in incoming if m is not None])
         known = {page._page_id for page in self._masters.pages}
         masters = self._masters.import_masters(source._masters, master_ids)
+        self._commit_master_styles(source, plan)
         for master in masters.values():
             if master._page_id in known:
                 continue
             if lists_titles:
                 self._titles_of_parts_insert(master.name, self._MASTERS)
-            self._settle_master_styles(source, master)
+            _remap_styles(_style_holders(self, master), plan[0])
             known.add(master._page_id)
         return masters
 
@@ -365,9 +384,17 @@ class Document:
         Only the master's own shapes and its page sheet are remapped. A shape copied across documents onto a page keeps the style
         IDs it had in `source`; that is not changed here.
         """
-        remembered = self._style_maps.setdefault(source, {})
-        settled = dict(remembered)
-        staged: dict[str, Element] = {}  # appended to this document only once every reference has been settled
+        plan = self._plan_master_styles(source, [_style_holders(self, master)])
+        self._commit_master_styles(source, plan)
+        _remap_styles(_style_holders(self, master), plan[0])
+
+    def _plan_master_styles(self, source: Document, holders: list[list[Element]]) -> tuple[dict[str, str], dict[str, Element]]:
+        """The IDs here for the styles `holders` name in `source`, and the styles to add for them; changes nothing.
+
+        Every style reference to settle is read first, so a failure leaves this document as it was.
+        """
+        settled = dict(self._style_maps.get(source, {}))
+        staged: dict[str, Element] = {}
         table = self._part_root(self._document_xml, "document.xml").find(f"{namespace}StyleSheets")
 
         def ours_by_id(style_id: str) -> Element | None:
@@ -399,17 +426,20 @@ class Document:
                     imported.attrib[attribute] = settle(imported.attrib[attribute])
             return new_id
 
-        master_element = self._masters.element_by_id(master._page_id)
-        page_sheet = None if master_element is None else master_element.find(f"{namespace}PageSheet")
-        for element in (*master.xml.getroot().iter(f"{namespace}Shape"), *([] if page_sheet is None else [page_sheet])):
-            for attribute in _STYLE_ATTRIBUTES:
-                if attribute in element.attrib:
-                    element.attrib[attribute] = settle(element.attrib[attribute])
+        for elements in holders:
+            for element in elements:
+                for attribute in _STYLE_ATTRIBUTES:
+                    if attribute in element.attrib:
+                        settle(element.attrib[attribute])
+        return settled, staged
+
+    def _commit_master_styles(self, source: Document, plan: tuple[dict[str, str], dict[str, Element]]) -> None:
+        """Add the styles `plan` staged to this document, and remember what it settled for `source`."""
+        settled, staged = plan
         if staged:
-            if table is None:
-                table = self._add_style_sheets()
-            table.extend(staged.values())
-        remembered.update(settled)
+            table = self._part_root(self._document_xml, "document.xml").find(f"{namespace}StyleSheets")
+            (table if table is not None else self._add_style_sheets()).extend(staged.values())
+        self._style_maps.setdefault(source, {}).update(settled)
 
     def _add_style_sheets(self) -> Element:
         """Create document.xml's `StyleSheets`, after the elements Visio's own files put before it (`DocumentSettings`, `Colors`, `FaceNames`)."""
