@@ -14,7 +14,7 @@ from xml.etree.ElementTree import Element
 import pytest
 from helpers.graphs import random_graph
 
-from vsdxkit import namespace
+from vsdxkit import builder, namespace
 from vsdxkit.builder import Diagram, Edge, Group, Lane, Node, Page
 from vsdxkit.document import Document
 from vsdxkit.errors import GraphError
@@ -161,10 +161,10 @@ def _node(id_: str, kind: str = "process") -> Node:
             [Page("P", [_node("a")], groups=[Group("g", "G", ["lane"])], lanes=[Lane("lane", "L", ["a"])])],
             "not a node on page",
         ),
-        ([Page("P", [Node("a", "process", 5)])], "must be a string"),  # type: ignore[arg-type]
-        ([Page("P", [Node("a", "process", "x", sublabel=5)])], "must be a string"),  # type: ignore[arg-type]
+        ([Page("P", [Node("a", "process", 5)])], "has a label that is 5; it must be a string"),  # type: ignore[arg-type]
+        ([Page("P", [Node("a", "process", "x", sublabel=5)])], "has a sublabel that is 5; it must be a string"),  # type: ignore[arg-type]
         ([Page("P", [_node("a")], [Edge("a", ["a"])])], "ids are strings"),  # type: ignore[arg-type]
-        ([Page("P", [_node("a")], [Edge("a", "a", label=3)])], "must be a string"),  # type: ignore[arg-type]
+        ([Page("P", [_node("a")], [Edge("a", "a", label=3)])], "has a label that is 3; it must be a string"),  # type: ignore[arg-type]
         ([Page("P", [_node("a")], lanes=[Lane("l", "L", [["a"]])])], "ids are strings"),  # type: ignore[list-item]
         (
             [
@@ -180,9 +180,17 @@ def _node(id_: str, kind: str = "process") -> Node:
         ),
     ],
 )
-def test_a_description_that_cannot_be_drawn_is_refused_before_anything_is_built(pages, message):
+def test_a_description_that_cannot_be_drawn_is_refused_before_anything_is_built(pages, message, tmp_path):
+    target = tmp_path / "never.vsdx"
     with pytest.raises(GraphError, match=message):
-        Diagram("T", pages).build()
+        Diagram("T", pages).save(target)
+    assert not target.exists()
+
+
+def test_a_document_without_a_title_property_is_refused(monkeypatch):
+    monkeypatch.setattr(builder, "_DC_TITLE", "{http://purl.org/dc/elements/1.1/}absent")
+    with pytest.raises(GraphError, match="no title property"):
+        Diagram("T", [Page("P", [_node("a")])]).build()
 
 
 AWKWARD_TEXT = [
@@ -203,17 +211,22 @@ def test_awkward_label_text_is_written_escaped_and_reads_back_unchanged(text, tm
     assert _rows(shape)["Note"] == text
 
 
-@pytest.mark.parametrize("text", AWKWARD_TEXT[:4])
+@pytest.mark.parametrize("text", AWKWARD_TEXT)
 def test_awkward_text_in_every_other_place_reads_back_unchanged(text, tmp_path):
     """A sublabel, an edge label, a group label, a lane label and a page name take the same text."""
+    laned = len(text) <= 40  # a 400-character sublabel makes a node too wide for the swimlane limit
     nodes = [Node("a", "process", "A", sublabel=text), Node("b", "process", "B")]
-    page = Page("P" + text, nodes, [Edge("a", "b", text)], [Group("g", text, ["a"])], [Lane("l", text, ["a", "b"])])
+    page = Page(
+        "P" + text, nodes, [Edge("a", "b", text)], [Group("g", text, ["a"])], [Lane("l", text, ["a", "b"])] if laned else []
+    )
     document = Document.open(Diagram(text, [page]).save(tmp_path / "t.vsdx"))
     assert document.pages[0].name == "P" + text
     shapes = list(document.pages[0].shapes)
     assert _by_source(document)["a"].text.rstrip("\n") == f"A\n{text}"
     assert next(s for s in shapes if _rows(s).get("Kind") == "edge_label").text.rstrip("\n") == text
     assert next(s for s in shapes if _rows(s).get("Kind") == "group").text.rstrip("\n") == text
+    if not laned:
+        return
     lane = document.pages[0].require_swimlanes().lanes[0]
     row = next(r for r in lane.xml.iter(f"{namespace}Row") if r.attrib.get("N") == ROW_HEADING_TEXT)
     assert next(c.attrib["V"] for c in row if c.attrib.get("N") == "Value") == text
@@ -333,11 +346,13 @@ def test_a_page_the_swimlane_drawing_cannot_hold_is_refused_before_a_file_exists
     wide = _big(30, 45, lanes=3)
     long_label = Page("P", [_node("a")], lanes=[Lane("l", "x" * 40, ["a"])])
     empty_label = Page("P", [_node("a")], lanes=[Lane("l", " ", ["a"])])
+    tall = Page("P", [Node("a", "process", "x", sublabel="\n".join(["line"] * 20))], lanes=[Lane("l", "L", ["a"])])
     for page, message in (
         (too_many, "at most 5"),
         (wide.pages[0], "inches wide"),
         (long_label, "label"),
         (empty_label, "label"),
+        (tall, "inches tall"),
     ):
         target = tmp_path / "never.vsdx"
         with pytest.raises(GraphError, match=message):

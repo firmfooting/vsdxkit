@@ -169,7 +169,7 @@ class Diagram:
 
         :param layout: spacing and flow direction; the defaults flow left to right
         :raises GraphError: as :meth:`validate`, and when a laid-out page with lanes is wider than 22 inches of diagram,
-            a lane is not 0.5 to 6 inches tall, a lane label is longer than 11 characters for each inch of its lane, or
+            a lane is more than 6 inches tall, a lane label is longer than 11 characters for each inch of its lane, or
             the layout refuses the graph
         """
         self.validate()
