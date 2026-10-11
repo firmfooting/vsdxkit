@@ -659,3 +659,37 @@ def test_add_lane_follows_relationships_written_without_the_dot_after_sheet():
     before = {s.ID: s.height for s in tracked}
     diagram.add_lane("New")
     assert all(s.height > before[s.ID] for s in tracked)
+
+
+def _add_separator(diagram, *, dotted):
+    """Copy the Separator and name the copy in the Phase List's DEPENDSON(2, ...); the multi-target shape comes from the formula grammar, since no Visio-drawn fixture has several."""
+    page = diagram.container.page
+    phase_list, separator = diagram._phase_shapes()
+    extra = separator.copy(page)
+    for cell in phase_list.xml.findall(f'{namespace}Cell[@N="Relationships"]'):
+        sep = "Sheet." if dotted else "Sheet"
+        cell.attrib["F"] = cell.attrib["F"].replace(
+            f"DEPENDSON(2,Sheet.{separator.ID}!SheetRef()",
+            f"DEPENDSON(2,Sheet.{separator.ID}!SheetRef(),{sep}{extra.ID}!SheetRef()",
+        )
+    return [phase_list, separator, extra]
+
+
+@pytest.mark.parametrize("dotted", [True, False])
+def test_add_lane_grows_every_separator_the_phase_list_names(dotted):
+    diagram = _make([("Top", LANE_PITCH_INCHES), ("Next", LANE_PITCH_INCHES)])
+    tracked = _add_separator(diagram, dotted=dotted)
+    assert diagram._phase_shapes() == tracked
+    before = {s.ID: s.height for s in tracked}
+    diagram.add_lane("New")
+    assert all(s.height > before[s.ID] for s in tracked)
+
+
+def test_add_lane_updates_a_lane_list_written_without_the_dot_after_sheet():
+    diagram = _make([("Top", LANE_PITCH_INCHES), ("Next", LANE_PITCH_INCHES)])
+    swimlane_list = diagram._swimlane_list()
+    for cell in swimlane_list.xml.findall(f'{namespace}Cell[@N="Relationships"]'):
+        cell.attrib["F"] = re.sub(r"(DEPENDSON\(2,)Sheet\.", r"\1Sheet", cell.attrib["F"])
+    new_lane = diagram.add_lane("New")
+    formula = next(c.attrib["F"] for c in swimlane_list.xml.findall(f'{namespace}Cell[@N="Relationships"]'))
+    assert f"DEPENDSON(2,Sheet.{new_lane.ID}!SheetRef()" in formula

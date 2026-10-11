@@ -186,7 +186,7 @@ _SETTINGS = "visCFFSettings"
 """The User-section row of a lane that spells the diagram's settings, lane count included, as text."""
 _STG4 = re.compile(r"/stg4=\d+,")
 """The lane-count setting inside a lane's ``visCFFSettings`` text."""
-_LANE_LIST = re.compile(r"DEPENDSON\(2(?:,Sheet\.\d+!SheetRef\(\))*\)")
+_LANE_LIST = re.compile(rf"DEPENDSON\(2(?:,{SHEET_REFERENCE.pattern}SheetRef\(\))*\)")
 """The ``DEPENDSON`` call in the Swimlane List's ``Relationships`` formula that names its lanes."""
 MAX_LANES = 5
 """The most lanes the creation is checked against Visio on; see ``tools/diagram_cases.py``."""
@@ -673,20 +673,25 @@ class SwimlaneDiagram:
         the Phase List's ``DEPENDSON(2, ...)``, as in the Visio capture), not any shape that shares their names.
         """
         phase_list = self._related(self._swimlane_list(), 11)
-        separator = self._related(phase_list, 2)
-        return [shape for shape in (phase_list, separator) if shape is not None]
+        separators = self._related_all(phase_list, 2)
+        return [*([phase_list] if phase_list is not None else []), *separators]
 
     def _related(self, shape: Shape | None, kind: int) -> Shape | None:
         """The top-level shape that `shape`'s ``Relationships`` formula lists first under ``DEPENDSON(kind, ...)``, or None."""
+        return next(iter(self._related_all(shape, kind)), None)
+
+    def _related_all(self, shape: Shape | None, kind: int) -> list[Shape]:
+        """Every top-level shape that `shape`'s ``Relationships`` formula lists under ``DEPENDSON(kind, ...)``, in formula order."""
         if shape is None:
-            return None
+            return []
+        found: list[Shape] = []
         for cell in shape.xml.findall(f'{namespace}Cell[@N="Relationships"]'):
-            formula = cell.attrib.get("F", "")
-            call = re.search(rf"DEPENDSON\({kind},", formula)
-            named = call and SHEET_REFERENCE.match(formula, call.end())  # accepts `Sheet.5!` and `Sheet5!` alike
-            if named:
-                return next((child for child in self._page.children if str(child.ID) == named.group(2)), None)
-        return None
+            for call in re.finditer(
+                rf"DEPENDSON\({kind}((?:,{SHEET_REFERENCE.pattern}SheetRef\(\))*)", cell.attrib.get("F", "")
+            ):
+                for named in SHEET_REFERENCE.finditer(call.group(1)):  # `Sheet.5!` and `Sheet5!` alike
+                    found.extend(c for c in self._page.children if str(c.ID) == named.group(2) and c not in found)
+        return found
 
     def _swimlane_list(self) -> Shape | None:
         """The Swimlane List that owns the diagram's lanes: the one the first lane's ``DEPENDSON(5, ...)`` names, or None."""
