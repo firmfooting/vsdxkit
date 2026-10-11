@@ -192,7 +192,7 @@ MAX_LANES = 5
 """The most lanes the creation is checked against Visio on; see ``tools/diagram_cases.py``."""
 LANE_HEIGHTS = (0.5, 6.0)
 """The least and greatest lane height, in inches, that Visio was checked on."""
-DIAGRAM_WIDTHS = (5.0, 22.0)
+DIAGRAM_WIDTHS = (5.0, 60.0)
 """The least and greatest diagram width, in inches, that Visio was checked on."""
 LABEL_CHARS_PER_INCH = 11
 """The most characters of a label for each inch of lane height: a longer label wraps out of the heading, which Visio showed."""
@@ -427,7 +427,8 @@ def _create_diagram(
     id_map = {old: int(new) for old, new in renamed.items() if old is not None and new is not None}
     for copied in (container, swimlane_list, phase_list, separator, *lanes):
         remap_sheet_references(copied.xml, id_map)
-    total = sum(height for _label, height in bands)
+    # fsum, because sum() on floats changed its rounding in 3.12 and the bytes must not depend on the version
+    total = math.fsum(height for _label, height in bands)
     list_box = (left, top - total, left + width, top)
     _fit(swimlane_list, donors.swimlane_list, *list_box)
     for name, shape, donor in (

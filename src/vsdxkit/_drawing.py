@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from xml.etree.ElementTree import Element
 
 from vsdxkit import namespace
-from vsdxkit.layout import snap
+from vsdxkit.layout import GRID, snap
 from vsdxkit.pages import Page
 from vsdxkit.shape_kind import ShapeKind
 from vsdxkit.shapes import Shape
@@ -164,22 +165,26 @@ def draw_label(page: Page, x: float, y: float, text: str) -> Shape:
     shape.set_cell_value("FillPattern", "0")
     shape.set_cell_value("LinePattern", "0")
     shape.set_cell_value("VerticalAlign", "1")
+    shape.set_cell_value("TextBkgnd", "#ffffff")  # the value Visio writes for an opaque white text background
+    shape.set_cell_value("TextBkgndTrans", "0")
     return shape
+
+
+def _even_steps(extent: float) -> float:
+    """`extent` rounded up to an even number of grid steps, and at least two."""
+    steps = max(math.ceil(round(extent / GRID, 6)), 2)
+    return snap((steps + steps % 2) * GRID)
 
 
 def draw_path(page: Page, points: Sequence[tuple[float, float]], *, arrow: bool, dashed: bool) -> Shape:
     """An open polyline through `points`, a 2-D shape with no fill, and an arrowhead at the last point when `arrow`."""
-    left = min(p[0] for p in points)
-    bottom = min(p[1] for p in points)
-    width = max(max(p[0] for p in points) - left, 0.01)
-    height = max(max(p[1] for p in points) - bottom, 0.01)
+    left = snap(min(p[0] for p in points))
+    bottom = snap(min(p[1] for p in points))
+    # an even number of grid steps puts the centre on the grid, so the snapped pin and size leave the corner at left, bottom
+    width = _even_steps(max(p[0] for p in points) - left)
+    height = _even_steps(max(p[1] for p in points) - bottom)
     shape = page.create_shape(
-        ShapeKind.RECTANGLE,
-        x=snap(left + width / 2),
-        y=snap(bottom + height / 2),
-        width=snap(width),
-        height=snap(height),
-        text="",
+        ShapeKind.RECTANGLE, x=snap(left + width / 2), y=snap(bottom + height / 2), width=width, height=height, text=""
     )
     set_geometry(shape, [([(px - left, py - bottom) for px, py in points], False)], no_fill=True)
     if arrow:

@@ -22,7 +22,7 @@ def test_every_case_writes_a_file_that_opens_and_is_asked_about_in_full(tmp_path
     assert _tool().main([str(tmp_path)]) == 0
 
     expected = json.loads((tmp_path / "expected.json").read_text(encoding="utf-8"))
-    assert {"copy_style_absent", "copy_style_clash"} <= set(expected)
+    assert {"copy_style_absent", "copy_style_clash", "every_kind", "groups_and_lanes", "two_pages"} <= set(expected)
     for stem, data in expected.items():
         document = Document.open(tmp_path / f"{stem}.vsdx")
         shapes = sum(len(page.shapes) for page in document.pages)
