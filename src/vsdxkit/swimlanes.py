@@ -261,20 +261,38 @@ _AXIS_TERM = re.compile(r"(!?)\b(Width|Height)\b")
 """A Width or Height in a formula; a leading ``!`` marks another shape's (``Sheet.5!Height``), none marks the shape's own."""
 
 
-def _axis_of(member: Shape, name: str, depth: int = 0) -> int | None:
-    """0 for width and 1 for height when the formula behind cell `name` of `member` names exactly one of them, else None.
-
-    The formula is the shape's own, or the master's where the shape only inherits (``Inh``). A bare term
-    (``Width*0.5``) is the shape's own cell, so it takes that cell's axis: a heading's width is its lane's height.
-    """
+def _formula_of(member: Shape, name: str) -> str | None:
+    """The formula behind cell `name` of `member`: its own, or the master's where the shape only inherits (``Inh``)."""
     cell = member._cell(name)
     formula = None if cell is None else cell.formula
     if formula in (None, "Inh"):
         master = member.master_shape
         master_cell = None if master is None else master._cell(name)
         formula = None if master_cell is None else master_cell.formula
+    return formula
+
+
+def _vertex_axis(member: Shape, letter: str) -> int | None:
+    """0 for an X vertex and 1 for a Y one, unless the shape's Width or Height formula says the cell takes the other dimension.
+
+    A vertex is in the shape's local frame, so X runs along Width. A heading's Width is its lane's height, so
+    there the formula's axis wins. A cell with no Width or Height in its formula (a constant) keeps the vertex's
+    own axis; a formula naming both (a conditional) is left to the number, as for the sized cells.
+    """
+    cell = _VERTEX_SIZE_CELL[letter]
+    if not _AXIS_TERM.search(_formula_of(member, cell) or ""):
+        return 0 if letter == "X" else 1
+    return _axis_of(member, cell)
+
+
+def _axis_of(member: Shape, name: str, depth: int = 0) -> int | None:
+    """0 for width and 1 for height when the formula behind cell `name` of `member` names exactly one of them, else None.
+
+    The formula is the shape's own, or the master's where the shape only inherits (``Inh``). A bare term
+    (``Width*0.5``) is the shape's own cell, so it takes that cell's axis: a heading's width is its lane's height.
+    """
     found = set()
-    for bang, term in _AXIS_TERM.findall(formula or ""):
+    for bang, term in _AXIS_TERM.findall(_formula_of(member, name) or ""):
         direct = (
             bang or term == name or depth > 2
         )  # a formula naming its own cell's name, or nested deeply, is taken as written
@@ -322,7 +340,7 @@ def _renew_inherited_vertices(member: Shape, sizes: Sequence[tuple[_Size, _Size]
                 renewed = (
                     None
                     if master_cell.attrib.get("N") not in ("X", "Y") or raw in (None, "")
-                    else _renew(float(raw), sizes, _axis_of(member, _VERTEX_SIZE_CELL[master_cell.attrib["N"]]))
+                    else _renew(float(raw), sizes, _vertex_axis(member, master_cell.attrib["N"]))
                 )
                 if renewed is None:
                     continue
@@ -373,7 +391,7 @@ def _resync(shape: Shape, sizes: Sequence[tuple[_Size, _Size]]) -> None:
                 renewed = (
                     None
                     if vertex.attrib.get("N") not in ("X", "Y") or raw in (None, "")
-                    else _renew(float(raw), sizes, _axis_of(member, _VERTEX_SIZE_CELL[vertex.attrib["N"]]))
+                    else _renew(float(raw), sizes, _vertex_axis(member, vertex.attrib["N"]))
                 )
                 if renewed is not None:
                     vertex.attrib["V"] = xml_value(renewed)

@@ -633,14 +633,14 @@ def test_a_main_child_grows_with_its_container_when_the_container_is_as_wide_as_
     diagram = page.create_swimlanes(
         [("A", LANE_PITCH_INCHES), ("B", LANE_PITCH_INCHES)], left=0.5, top=7.0, width=5.314960629921242
     )
-    for _ in range(3):
+    for _ in range(3):  # two lanes plus three is MAX_LANES
         diagram.add_lane()
         child = next(iter(diagram.container.children))
         assert child.height == pytest.approx(diagram.container.height)
-    for shape in (diagram.container, *diagram.container.descendants):
-        tops = [v for axis, v in _vertices(shape) if axis == "Y"]
-        assert not tops or max(tops) <= shape.height + 1e-6
-    assert max(v for axis, v in _vertices(child) if axis == "Y") == pytest.approx(child.height)
+        grown = (diagram.container, diagram._swimlane_list(), *diagram._phase_shapes())
+        for shape in (member for top in grown for member in (top, *top.descendants)):
+            tops = [v for axis, v in _vertices(shape) if axis == "Y"]
+            assert not tops or max(tops) == pytest.approx(shape.height), f"shape {shape.ID}"
 
 
 def test_add_lane_grows_the_diagrams_own_swimlane_list_not_a_decoy_placed_before_it():
