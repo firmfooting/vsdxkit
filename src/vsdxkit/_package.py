@@ -703,6 +703,11 @@ class PackageStore:
             mode_source = destination if destination.exists() else self.source
             if mode_source.is_file():
                 mode = stat.S_IMODE(os.stat(mode_source).st_mode)
+            else:
+                # mkstemp makes 0600, so a new file would be private unlike one a plain open() creates.
+                umask = os.umask(0)
+                os.umask(umask)
+                mode = 0o666 & ~umask
 
         destination.parent.mkdir(parents=True, exist_ok=True)
         fd, temporary = tempfile.mkstemp(prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent)
