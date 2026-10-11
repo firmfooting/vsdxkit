@@ -1,0 +1,128 @@
+{
+  "error": null,
+  "pages": [
+    {
+      "background": false,
+      "connects": [],
+      "index": 1,
+      "name": "Blank",
+      "shapes": [
+        {
+          "cells": [
+            {
+              "formula": "50.8 mm",
+              "name": "PinX",
+              "result": 2.0
+            },
+            {
+              "formula": "50.8 mm",
+              "name": "PinY",
+              "result": 2.0
+            },
+            {
+              "formula": "50.8 mm",
+              "name": "Width",
+              "result": 2.0
+            },
+            {
+              "formula": "25.4 mm",
+              "name": "Height",
+              "result": 1.0
+            },
+            {
+              "formula": "0 deg",
+              "name": "Angle",
+              "result": 0.0
+            },
+            {
+              "formula": "Width*0.5",
+              "name": "LocPinX",
+              "result": 1.0
+            },
+            {
+              "formula": "Height*0.5",
+              "name": "LocPinY",
+              "result": 0.5
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipX",
+              "result": 0.0
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipY",
+              "result": 0.0
+            }
+          ],
+          "id": 1,
+          "name": "Sheet.1",
+          "parent_id": null
+        },
+        {
+          "cells": [
+            {
+              "formula": "127 mm",
+              "name": "PinX",
+              "result": 5.0
+            },
+            {
+              "formula": "50.8 mm",
+              "name": "PinY",
+              "result": 2.0
+            },
+            {
+              "formula": "76.2 mm",
+              "name": "Width",
+              "result": 3.0
+            },
+            {
+              "formula": "50.8 mm",
+              "name": "Height",
+              "result": 2.0
+            },
+            {
+              "formula": "0 deg",
+              "name": "Angle",
+              "result": 0.0
+            },
+            {
+              "formula": "Width*0.5",
+              "name": "LocPinX",
+              "result": 1.5
+            },
+            {
+              "formula": "Height*0.5",
+              "name": "LocPinY",
+              "result": 1.0
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipX",
+              "result": 0.0
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipY",
+              "result": 0.0
+            }
+          ],
+          "id": 2,
+          "name": "Sheet.2",
+          "parent_id": null
+        }
+      ]
+    }
+  ],
+  "schema": 2,
+  "source": {
+    "name": "fixtures/diagrams/new_blank.py",
+    "sha256": "f51ecf432e3344c3dd5134744307879b9a5a2b43972d9a4aa5072c30d113bb08",
+    "transform": "build"
+  },
+  "status": "opened",
+  "viewer": {
+    "product": "Visio",
+    "version": "16.0"
+  }
+}

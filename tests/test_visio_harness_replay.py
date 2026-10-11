@@ -281,3 +281,49 @@ def test_the_observer_and_the_reader_stamp_the_same_schema_version():
     assert stamped, "no $SchemaVersion found; has the observer been renamed?"
 
     assert int(stamped.group(1)) == SCHEMA_VERSION
+
+
+def _build_recording(verify, basedir: str, tmp_path, case: str = "new_blank") -> str:
+    """A recording of the current schema for a build case, agreeing with what the case builds today."""
+    path = os.path.join(basedir, "fixtures", "diagrams", f"{case}.py")
+    built = verify._build(path, str(tmp_path / f"{case}.py"))
+    recording = _agreeing_recording(built)
+    recording["source"] = {"name": f"fixtures/diagrams/{case}.py", "sha256": verify._file_sha256(path), "transform": "build"}
+    recorded = tmp_path / f"{case}.json"
+    recorded.write_text(json.dumps(recording), encoding="utf-8")
+    return str(recorded)
+
+
+def test_a_build_recording_replays_by_running_the_case_again(verify, basedir, tmp_path, capsys):
+    """A case file is the input of a build recording, and replay builds it with today's library."""
+    recorded = _build_recording(verify, basedir, tmp_path)
+
+    exit_code = verify.command_replay([recorded], corpus=basedir)
+
+    assert exit_code == 0, capsys.readouterr().out
+
+
+def test_a_build_recording_whose_case_file_changed_is_refused_as_stale(verify, basedir, tmp_path, capsys):
+    recorded = _build_recording(verify, basedir, tmp_path)
+    corpus = tmp_path / "corpus" / "fixtures" / "diagrams"
+    corpus.mkdir(parents=True)
+    source = pathlib.Path(basedir, "fixtures", "diagrams", "new_blank.py").read_text(encoding="utf-8")
+    (corpus / "new_blank.py").write_text(source + "# edited\n", encoding="utf-8")
+
+    exit_code = verify.command_replay([recorded], corpus=str(tmp_path / "corpus"))
+
+    assert exit_code == 1
+    assert "STALE" in capsys.readouterr().out
+
+
+def test_a_build_recording_fails_when_the_case_builds_something_else(verify, basedir, tmp_path, capsys):
+    """The gate itself: Visio's recorded view names a shape the case no longer builds."""
+    recorded = pathlib.Path(_build_recording(verify, basedir, tmp_path))
+    recording = json.loads(recorded.read_text(encoding="utf-8"))
+    recording["pages"][0]["shapes"].append({**recording["pages"][0]["shapes"][0], "id": 99})
+    recorded.write_text(json.dumps(recording), encoding="utf-8")
+
+    exit_code = verify.command_replay([str(recorded)], corpus=basedir)
+
+    assert exit_code == 1
+    assert "shape 99" in capsys.readouterr().out

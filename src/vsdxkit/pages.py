@@ -194,10 +194,10 @@ class DocumentView(Protocol):
         """The document's pages, in order: see :class:`PageCollection`."""
         ...
 
-    def save(self, target: str | os.PathLike[str] | None = None) -> Path:
+    def save(self, target: str | os.PathLike[str] | None = None, *, deterministic: bool = False) -> Path:
         """Write the document, and return the absolute path it was written to.
 
-        See :meth:`vsdxkit.document.Document.save` for ``target`` and what it raises.
+        See :meth:`vsdxkit.document.Document.save` for ``target``, ``deterministic`` and what it raises.
         """
         ...
 
