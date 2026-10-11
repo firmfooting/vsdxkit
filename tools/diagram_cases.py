@@ -125,6 +125,10 @@ LINES: tuple[tuple[str, str], ...] = (
         "group_heading_top_down",
         "group_heading_top_down: a top-down edge into a grouped node, whose one-line heading must stay clear of the connector; every shape where it was written",
     ),
+    (
+        "labels_groups_lanes",
+        "labels_groups_lanes: labels inside lanes, parallel labelled edges, a label into a headed group, a label wider than its gap; every shape where it was written",
+    ),
     ("two_pages", "two_pages: two pages and a page link; every shape on both pages where it was written"),
 )
 """Every case file's name and what Visio must show for it."""

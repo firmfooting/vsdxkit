@@ -629,6 +629,27 @@ def test_a_group_heading_that_would_cover_a_neighbouring_group_is_refused():
         Diagram("T", [page]).build(layout=builder.LayoutOptions(direction="top_down"))
 
 
+def test_labels_of_parallel_edges_do_not_overlap(tmp_path):
+    edges = [Edge("a", "b", "yes"), Edge("a", "b", "no"), Edge("a", "b", "maybe"), Edge("a", "b", "later")]
+    document = Document.open(Diagram("T", [Page("P", [_node("a"), _node("b")], edges)]).save(tmp_path / "p.vsdx"))
+    labels = [_box(s) for s in _kinds(document, "edge_label")]
+    assert len(labels) == 4
+    for i, a in enumerate(labels):
+        for b in labels[i + 1 :]:
+            assert not _meets(a, b)
+
+
+@pytest.mark.parametrize("direction", ["left_to_right", "top_down"])
+def test_an_edge_label_wider_than_the_gap_does_not_cover_either_end_node(tmp_path, direction):
+    page = Page("P", [_node("a"), _node("b")], [Edge("a", "b", "x" * 20)])
+    diagram = Diagram("T", [page])
+    document = Document.open(diagram.build(layout=builder.LayoutOptions(direction=direction)).save(tmp_path / "w.vsdx"))
+    label = _box(_kinds(document, "edge_label")[0])
+    for node in _by_source(document).values():
+        if _rows(node)["Kind"] in NODE_KINDS:
+            assert not _meets(label, _box(node))
+
+
 @pytest.mark.parametrize("label", ["G", "\n".join(["Review"] * 3)], ids=["one line", "three lines"])
 @pytest.mark.parametrize("direction", ["left_to_right", "top_down"])
 def test_no_connector_is_drawn_through_a_group_heading(tmp_path, direction, label):
@@ -689,3 +710,13 @@ def test_a_user_shape_whose_kind_matches_a_decoration_is_still_a_member(kind):
     add_data_rows(mine, {"Source": "mine", "Kind": kind})
     assert mine in diagram.shapes_in(lane)
     diagram.move_to_lane(mine, lane)
+
+
+def test_a_group_with_an_empty_label_reserves_no_heading_strip(tmp_path):
+    page = Page("P", [_node("a"), _node("b")], [Edge("a", "b")], groups=[Group("g", "", ["b"])])
+    document = Document.open(
+        Diagram("T", [page]).build(layout=builder.LayoutOptions(direction="top_down")).save(tmp_path / "e.vsdx")
+    )
+    node = _box(_by_source(document)["b"])
+    end = _absolute_points(_kinds(document, "flow")[0])[-1]
+    assert abs(end[1] - (node.y + node.height / 2)) < 1e-6, "the edge enters the top of the node, with no heading to avoid"

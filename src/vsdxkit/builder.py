@@ -12,7 +12,6 @@ import os
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from itertools import pairwise
 from pathlib import Path
 from typing import Literal, get_args
 
@@ -193,7 +192,8 @@ class Diagram:
         :param layout: spacing and flow direction; the defaults flow left to right
         :raises GraphError: as :meth:`validate`, and when a laid-out page with lanes is wider than 60 inches of diagram,
             a lane is more than 6 inches tall, a lane label is longer than 11 characters for each inch of its lane, or
-            the layout refuses the graph, including a group heading with no room clear of the nodes and other groups
+            the layout refuses the graph, including an edge label or group heading with no room clear of the nodes and
+            other labels
         """
         links = self.validate()
         options = layout if layout is not None else LayoutOptions()
@@ -401,23 +401,13 @@ def _draw_page(page: Page, target: VisioPage, options: LayoutOptions, links: Map
         tuple((e.source, e.target) for e in page.edges if e.kind != "page-link"),
         tuple(lane.id for lane in page.lanes),
         tuple(g.id for g in _all_groups(page)),
-        replace(options, parents=tuple(parents), headings=tuple((g.id, *_heading_size(g.label)) for g in _all_groups(page))),
+        replace(
+            options,
+            parents=tuple(parents),
+            headings=tuple((g.id, *_heading_size(g.label)) for g in _all_groups(page) if g.label.strip()),
+            edge_labels=tuple(label_size(e.label) if e.label else None for e in page.edges if e.kind != "page-link"),
+        ),
     )
-    spots = _label_spots(page, layout)
-    layout = replace(
-        layout,
-        width=max([layout.width, *(w for _x, _y, w, _h in spots.values())]),
-        height=max([layout.height, *(h for _x, _y, _w, h in spots.values())]),
-    )
-    spots = {
-        n: (
-            snap(min(max(x, w / 2), layout.width - w / 2)),
-            snap(min(max(y, h / 2), layout.height - h / 2)),
-            w,
-            h,
-        )
-        for n, (x, y, w, h) in spots.items()
-    }
     if page.lanes:
         low, high = DIAGRAM_WIDTHS
         if layout.width - 2 * _LANE_LEFT > high:
@@ -428,7 +418,7 @@ def _draw_page(page: Page, target: VisioPage, options: LayoutOptions, links: Map
         layout = replace(layout, width=max(layout.width, low + 2 * _LANE_LEFT))
     target.width = layout.width
     target.height = layout.height
-    _draw_layout(page, target, layout, sizes, links, spots)
+    _draw_layout(page, target, layout, sizes, links)
 
 
 def _heading_size(text: str) -> tuple[float, float]:
@@ -437,29 +427,12 @@ def _heading_size(text: str) -> tuple[float, float]:
     return snap(0.09 * max(len(line) for line in lines) + 0.5), snap(0.25 * len(lines))
 
 
-def _label_spots(page: Page, layout: Layout) -> dict[int, tuple[float, float, float, float]]:
-    """By edge number, the centre, width and height of each edge label, on the middle of its route's longest segment."""
-    spots: dict[int, tuple[float, float, float, float]] = {}
-    parallel: dict[tuple[str, str], int] = {}
-    for number, edge in enumerate(page.edges):
-        if edge.kind == "page-link":
-            continue
-        n = parallel.get((edge.source, edge.target), 0)
-        parallel[(edge.source, edge.target)] = n + 1
-        if edge.label:
-            points = layout.routes[(edge.source, edge.target, n)]
-            (x1, y1), (x2, y2) = max(pairwise(points), key=lambda s: abs(s[0][0] - s[1][0]) + abs(s[0][1] - s[1][1]))
-            spots[number] = (snap((x1 + x2) / 2), snap((y1 + y2) / 2), *label_size(edge.label))
-    return spots
-
-
 def _draw_layout(
     page: Page,
     target: VisioPage,
     layout: Layout,
     sizes: Mapping[str, tuple[float, float]],
     links: Mapping[str, Mapping[str, str]],
-    spots: Mapping[int, tuple[float, float, float, float]],
 ) -> None:
     """Draw lane bands, group boxes, nodes and edges where `layout` put them."""
     if page.lanes:
@@ -502,7 +475,7 @@ def _draw_layout(
         text = node.label if node.sublabel is None else f"{node.label}\n{node.sublabel}"
         add_data_rows(draw_node(target, node.kind, box.x, box.y, *sizes[node.id], text), _rows(node, links), clear=True)
     parallel: dict[tuple[str, str], int] = {}
-    for number, edge in enumerate(page.edges):
+    for edge in page.edges:
         if edge.kind == "page-link":
             continue
         n = parallel.get((edge.source, edge.target), 0)
@@ -515,7 +488,9 @@ def _draw_layout(
             clear=True,
         )
         if edge.label:
-            x, y, _width, _height = spots[number]
+            label = layout.labels[(edge.source, edge.target, n)]
             add_data_rows(
-                draw_label(target, x, y, edge.label), {"Source": source, "Kind": "edge_label", DECORATION_ROW: "1"}, clear=True
+                draw_label(target, label.x, label.y, edge.label),
+                {"Source": source, "Kind": "edge_label", DECORATION_ROW: "1"},
+                clear=True,
             )
