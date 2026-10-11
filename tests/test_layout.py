@@ -325,3 +325,34 @@ def test_random_small_graphs_with_parallel_edges_and_loops_route_cleanly(seed, l
     assert len(layout.routes) == len(edges)
     _check(layout, nodes, parents)
     _check_routes(layout)
+
+
+@pytest.mark.parametrize("direction", ["left_to_right", "top_down"])
+@pytest.mark.parametrize("loops", [False, True])
+def test_a_node_too_small_for_its_parallel_edges_is_refused_by_name(direction, loops):
+    pair = ("tiny", "tiny") if loops else ("tiny", "b")
+    nodes = (LayoutNode("tiny", 0.01, 0.01), LayoutNode("b", 1, 1))
+    with pytest.raises(GraphError, match=r"'tiny'.*3"):
+        layered_layout(nodes, (pair, pair, pair), options=LayoutOptions(direction=direction))
+
+
+@pytest.mark.parametrize("direction", ["left_to_right", "top_down"])
+@pytest.mark.parametrize("loops", [False, True])
+def test_a_node_just_wide_enough_for_its_parallel_edges_keeps_them_apart(direction, loops):
+    pair = ("a", "a") if loops else ("a", "b")
+    nodes = (LayoutNode("a", 0.06, 0.06), LayoutNode("b", 1, 1))
+    layout = layered_layout(nodes, (pair, pair, pair), options=LayoutOptions(direction=direction))
+    _check_routes(layout)
+
+
+@pytest.mark.parametrize("seed", range(10))
+@pytest.mark.parametrize("direction", ["left_to_right", "top_down"])
+def test_random_tiny_nodes_with_parallel_edges_are_refused_or_distinct(seed, direction):
+    rows, edges, _lanes, _groups, _parents = random_graph(seed, 6, 8, 0, 0)
+    nodes = tuple(LayoutNode(r[0], 0.01 * (1 + seed % 3), 0.01 * (1 + seed % 3)) for r in rows)
+    edges = (*edges, ("n0", "n1"), ("n0", "n1"), ("n0", "n1"), ("n2", "n2"), ("n2", "n2"), ("n2", "n2"))
+    try:
+        layout = layered_layout(nodes, edges, options=LayoutOptions(direction=direction))
+    except GraphError:
+        return
+    _check_routes(layout)

@@ -37,9 +37,14 @@ def _even(value: float) -> float:
     return snap(math.ceil(value / (2 * GRID) - 1e-9) * 2 * GRID)
 
 
-def _spread(count: int, extent: float) -> list[float]:
-    """Offsets, in inches on the grid and about zero, that keep `count` parallel routes apart inside `extent`."""
-    step = min(10, round(extent / GRID) // count)  # ponytail: an extent under `count` steps puts the routes on one line
+def _spread(count: int, extent: float, node: object) -> list[float]:
+    """Offsets, in inches on the grid and about zero, that keep `count` parallel routes apart inside `extent`.
+
+    :raises GraphError: when `extent` has fewer grid steps than `count`, so two routes would coincide
+    """
+    step = min(10, round(extent / GRID) // count)
+    if step == 0:
+        raise GraphError(f"node {node!r} is too small for {count} parallel edges; each needs a grid step of its border")
     start = -((count - 1) * step // 2)
     return [snap((start + i * step) * GRID) for i in range(count)]
 
@@ -229,7 +234,7 @@ def layered_layout(
     :param groups: every group id; a node names its innermost group
     :raises GraphError: lanes with a top-down direction, an edge naming a missing node, a node in an unknown lane or group
         or without a lane when lanes are declared, a node size that is not finite and positive, a repeated node, lane or
-        group id, a group whose members sit in different lanes, or a parent that is undeclared, repeated for one child or
+        group id, a node too small to give each of its parallel edges a grid step of its border, a group whose members sit in different lanes, or a parent that is undeclared, repeated for one child or
         nests more than one level
     """
     opts = options if options is not None else LayoutOptions()
@@ -438,8 +443,8 @@ def layered_layout(
         twin_at[ends] = i + 1
         if source == target:
             r = first_slot.v_extent / 2 + 0.2 + 0.1 * i
-            c = centre_u(first_slot) - _spread(twins[ends], first_slot.u_extent)[i]
-            dv = _spread(twins[ends], first_slot.v_extent)[i]
+            c = centre_u(first_slot) - _spread(twins[ends], first_slot.u_extent, source)[i]
+            dv = _spread(twins[ends], first_slot.v_extent, source)[i]
             bends = [
                 (right_u(first_slot), first_slot.v + dv),
                 (right_u(first_slot) + 0.3 + 0.1 * i, first_slot.v + dv),
@@ -449,8 +454,8 @@ def layered_layout(
             ]
         else:
             # parallel edges leave and arrive at different points along the border so they never overlay
-            room = min(first_slot.v_extent, slots[chain[-1]].v_extent)
-            off = _spread(twins[ends], room)[i]
+            narrow = min((source, target), key=lambda k: slots[k].v_extent)
+            off = _spread(twins[ends], slots[narrow].v_extent, narrow)[i]
             vs = [slots[k].v for k in chain]
             vs[0] += off
             vs[-1] += off
