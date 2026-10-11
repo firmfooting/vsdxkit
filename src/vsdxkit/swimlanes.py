@@ -242,6 +242,7 @@ def _renew(value: float, sizes: Sequence[tuple[_Size, _Size]]) -> float | None:
     dimension, or half of one, becomes the same dimension afterwards; a value a short way under the top edge
     of the first shape keeps that distance from the new top edge.
     """
+    # these matches hold only while the donor's dimensions stay distinct from each other and from their halves
     for (old_w, old_h), (new_w, new_h) in sizes:
         for old, new in ((old_w, new_w), (old_h, new_h)):
             if math.isclose(value, old, abs_tol=1e-6):
@@ -312,7 +313,7 @@ def _resync(shape: Shape, sizes: Sequence[tuple[_Size, _Size]]) -> None:
             if renewed is not None:
                 cell = member._write_cell(name, v=xml_value(renewed), keep_formula=True)
                 if inherited:
-                    cell.formula = "Inh"  # the master's own formula names the master's shapes by Sheet.N; Visio evaluates Inh in the instance
+                    cell.formula = "Inh"  # the master's formula names its own shapes by Sheet.N; with Inh the oracle showed the right numbers
     for member in (shape, *shape.descendants):
         for section in member.xml.iterfind(f'{namespace}Section[@N="Geometry"]'):
             for vertex in section.iter(f"{namespace}Cell"):

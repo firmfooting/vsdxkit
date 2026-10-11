@@ -843,13 +843,13 @@ class Page:
         """Create a cross-functional flowchart on this page: a container, a Swimlane List and one lane for each band.
 
         The lanes are horizontal and stack downwards from ``top``, in the order given. The diagram is a copy of
-        the one Visio draws for its Cross-Functional Flowchart template, so it keeps Visio's behaviour for lanes.
+        one Visio drew for its Cross-Functional Flowchart template, and each lane is a copy of a lane in that diagram.
 
         :param bands: each lane's label and height in inches, top to bottom
         :param left: the page x of the diagram's left edge, in inches
         :param top: the page y of the top edge of the first lane; the container's title bar sits above it
         :param width: the diagram's width in inches
-        :raises InvalidOperationError: if the page is no longer in its document, already has a diagram, or ``bands`` is empty or has a height that is not positive
+        :raises InvalidOperationError: if the page is no longer in its document, already has a diagram, ``bands`` is empty, or a lane height or ``width`` is not positive
         :returns: the new diagram
         """
         if not self._attached():

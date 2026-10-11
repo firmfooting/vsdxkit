@@ -225,3 +225,26 @@ def test_a_headings_text_block_is_as_wide_as_its_heading_is_after_the_resize():
         heading = list(lane.children)[1]
         assert float(heading.cell_value("TxtWidth")) == pytest.approx(height)
         assert float(heading.cell_value("TxtPinX")) == pytest.approx(height / 2)
+
+
+RECORDING = Path(__file__).resolve().parent / "fixtures" / "visio_observations" / "swimlanes.json"
+"""What Visio computed for the ``swimlanes`` case, recorded by ``visio_verify.py record``."""
+
+
+def test_the_title_bars_pins_are_the_numbers_visio_computed_for_the_case():
+    """The cached PinY of the container and of the title sub-shapes hang from the top edge, and Visio's recalculation agreed."""
+    import importlib.util
+    import json
+
+    spec = importlib.util.spec_from_file_location(
+        "swimlanes_case", Path(__file__).parent / "fixtures" / "diagrams" / "swimlanes.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    page = module.build().pages[0]
+    recorded = {
+        s["id"]: {c["name"]: c["result"] for c in s["cells"]}
+        for s in json.loads(RECORDING.read_text("utf-8"))["pages"][0]["shapes"]
+    }
+    for shape_id in (1, 3, 6, 8):
+        assert page.shapes.by_id(str(shape_id)).y == pytest.approx(recorded[shape_id]["PinY"]), shape_id
