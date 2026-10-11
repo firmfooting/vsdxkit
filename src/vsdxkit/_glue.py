@@ -15,7 +15,6 @@ The sheet references are written `SheetN!`; Visio writes `Sheet.N!` (#400).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TypeAlias
 from xml.etree.ElementTree import Element
 
 from vsdxkit.glue import Routing
@@ -71,7 +70,7 @@ class CellInherit:
     """The cell's name, such as ``BegTrigger`` on a floating end or ``GlueType`` without dynamic glue."""
 
 
-CellChange: TypeAlias = CellWrite | CellFreeze | CellInherit
+type CellChange = CellWrite | CellFreeze | CellInherit
 """One change `_change_cell` applies to a connector's cell: write it, freeze it, or drop it to inherit."""
 
 

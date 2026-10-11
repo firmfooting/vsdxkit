@@ -10,7 +10,7 @@ import xml.dom.minidom as minidom
 import xml.etree.ElementTree as ET
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TYPE_CHECKING
 
 from vsdxkit import namespace
 from vsdxkit.errors import MalformedPackageError, MissingPartError, PartParseError
@@ -20,7 +20,7 @@ from vsdxkit.errors import MalformedPackageError, MissingPartError, PartParseErr
 # made `typing.get_type_hints` raise. Type checkers see the precise type, and
 # the runtime sees the class.
 if TYPE_CHECKING:
-    PartTree: TypeAlias = ET.ElementTree[ET.Element]
+    type PartTree = ET.ElementTree[ET.Element]
 else:
     PartTree = ET.ElementTree
     """A parsed part: `ET.ElementTree`, typed precisely for checkers by the `TYPE_CHECKING` branch above."""
@@ -200,7 +200,7 @@ def _prefix_table() -> dict[str, str]:
 
 
 @contextmanager
-def _serialising(root: ET.Element) -> Generator[None, None, None]:
+def _serialising(root: ET.Element) -> Generator[None]:
     """Install this part's prefix map for the duration of one write.
 
     ElementTree resolves prefixes through a single module-level table, so a

@@ -60,6 +60,6 @@ def test_public_annotations_resolve_at_runtime():
     for qualified_name, function in signatures.items():
         try:
             typing.get_type_hints(function)
-        except (NameError, TypeError, AttributeError):
+        except NameError, TypeError, AttributeError:
             unresolved.add(qualified_name)
     assert unresolved == set(), "public annotations that do not resolve at runtime"

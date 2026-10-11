@@ -20,7 +20,7 @@ def _rounded(value):
     """A cell value as a number to nine places where it is one: a placed line's values are recomputed."""
     try:
         return round(float(value), 9)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return value
 
 
