@@ -7,6 +7,7 @@ and routes on every platform. Ties are broken by the order of the arguments.
 
 from __future__ import annotations
 
+import heapq
 import math
 from collections import Counter
 from dataclasses import dataclass
@@ -121,6 +122,10 @@ class Layout:
     """Page height in inches."""
 
 
+_Rect = tuple[float, float, float, float]
+"""A rectangle as (low along the flow, high along the flow, low across it, high across it)."""
+
+
 @dataclass
 class _Slot:
     """A place in a layer: a real node, or a dummy an edge passes through."""
@@ -218,6 +223,97 @@ def _order(rows: list[list[_Key]], slots: dict[_Key, _Slot], chains: list[list[_
             sweep(layer, down)
 
 
+def _enters(a: tuple[float, float], b: tuple[float, float], rect: _Rect) -> bool:
+    """Whether the axis-parallel segment a-b passes through the open inside of `rect`."""
+    if a[0] == b[0]:
+        return rect[0] < a[0] < rect[1] and max(min(a[1], b[1]), rect[2]) < min(max(a[1], b[1]), rect[3])
+    return rect[2] < a[1] < rect[3] and max(min(a[0], b[0]), rect[0]) < min(max(a[0], b[0]), rect[1])
+
+
+_STEPS = ((1, 0), (-1, 0), (0, 1), (0, -1))
+"""Unit steps along the flow, against it, across it and back, indexed as a heading."""
+
+
+def _heading(a: tuple[float, float], b: tuple[float, float]) -> int:
+    """The index into _STEPS of the direction from a to b."""
+    return 0 if b[0] > a[0] else 1 if b[0] < a[0] else 2 if b[1] > a[1] else 3
+
+
+def _detour(
+    path: list[tuple[float, float]], xs: set[float], ys: set[float], solid: list[_Rect]
+) -> list[tuple[float, float]] | None:
+    """The shortest few-bend orthogonal path from `path`'s first point to its last that avoids `solid`, or None.
+
+    It leaves in the direction `path` does and arrives in the direction `path` does, and turns only on the lines
+    `xs` and `ys`. Ties break by insertion order, so the result depends on the arguments alone.
+    """
+    start, end = path[0], path[-1]
+    first, last = _heading(path[0], path[1]), _heading(path[-2], path[-1])
+    gx, gy = sorted(xs | {start[0], end[0]}), sorted(ys | {start[1], end[1]})
+    rows = [[(r[0], r[1]) for r in solid if r[2] < y < r[3]] for y in gy]
+    cols = [[(r[2], r[3]) for r in solid if r[0] < x < r[1]] for x in gx]
+
+    def free(i: int, j: int, d: int) -> tuple[int, int] | None:
+        """The next grid point from (i, j) heading d, or None when off the grid or blocked."""
+        ni, nj = i + _STEPS[d][0], j + _STEPS[d][1]
+        if not (0 <= ni < len(gx) and 0 <= nj < len(gy)):
+            return None
+        if d < 2:
+            low, high = sorted((gx[i], gx[ni]))
+            blocked = any(a < high and low < b for a, b in rows[j])
+        else:
+            low, high = sorted((gy[j], gy[nj]))
+            blocked = any(a < high and low < b for a, b in cols[i])
+        return None if blocked else (ni, nj)
+
+    i0, j0 = gx.index(start[0]), gy.index(start[1])
+    goal = (gx.index(end[0]), gy.index(end[1]))
+    hop = free(i0, j0, first)
+    if hop is None:
+        return None
+
+    def cost(i: int, j: int, ni: int, nj: int) -> float:
+        """The length of the step from (i, j) to (ni, nj)."""
+        return abs(gx[ni] - gx[i]) + abs(gy[nj] - gy[j])
+
+    def estimate(i: int, j: int) -> float:
+        """A lower bound on the distance left from (i, j) to the goal."""
+        return abs(gx[goal[0]] - gx[i]) + abs(gy[goal[1]] - gy[j])
+
+    bend = 0.5
+    best = {(hop[0], hop[1], first): cost(i0, j0, *hop)}
+    came: dict[tuple[int, int, int], tuple[int, int, int] | None] = {(hop[0], hop[1], first): None}
+    heap = [(best[(hop[0], hop[1], first)] + estimate(*hop), 0, hop[0], hop[1], first)]
+    count = 0
+    while heap:
+        _f, _c, i, j, d = heapq.heappop(heap)
+        if (i, j) == goal and d == last:
+            points = [(gx[i], gy[j])]
+            at: tuple[int, int, int] | None = (i, j, d)
+            while at is not None:
+                points.append((gx[at[0]], gy[at[1]]))
+                at = came[at]
+            points.append(start)
+            return points[::-1]
+        if _f - estimate(i, j) > best[(i, j, d)] + 1e-9:
+            continue
+        moves = [(d, 0.0)]
+        if (i, j) != goal:
+            moves += [(nd, bend) for nd in (0, 1, 2, 3) if (nd < 2) != (d < 2)]
+        for nd, extra in moves:
+            nxt = free(i, j, nd)
+            if nxt is None:
+                continue
+            g = best[(i, j, d)] + extra + cost(i, j, *nxt)
+            key = (nxt[0], nxt[1], nd)
+            if g < best.get(key, math.inf) - 1e-9:
+                best[key] = g
+                came[key] = (i, j, d)
+                count += 1
+                heapq.heappush(heap, (g + estimate(*nxt), count, nxt[0], nxt[1], nd))
+    return None
+
+
 def layered_layout(
     nodes: tuple[LayoutNode, ...],
     edges: tuple[tuple[str, str], ...],
@@ -234,11 +330,21 @@ def layered_layout(
     :param groups: every group id; a node names its innermost group
     :raises GraphError: lanes with a top-down direction, an edge naming a missing node, a node in an unknown lane or group
         or without a lane when lanes are declared, a node size that is not finite and positive, a repeated node, lane or
-        group id, a node too small to give each of its parallel edges a grid step of its border, a group whose members sit in different lanes, or a parent that is undeclared, repeated for one child or
-        nests more than one level
+        group id, an option that is not a finite non-negative number, a layer_gap too small for the edges that cross it,
+        a node too small to give each of its parallel edges a grid step of its border, an edge that cannot be routed
+        round the groups it does not belong to, a group whose members sit in different lanes, or a parent that is
+        undeclared, repeated for one child or nests more than one level
     """
     opts = options if options is not None else LayoutOptions()
     top_down = opts.direction == "top_down"
+    for name in ("layer_gap", "node_gap", "margin", "group_padding", "lane_padding", "lane_heading"):
+        value = getattr(opts, name)
+        if not (isinstance(value, int | float) and math.isfinite(value) and value >= 0):
+            raise GraphError(f"option {name} is {value!r}; it must be a finite number of inches, zero or more")
+    if not (isinstance(opts.sweeps, int) and opts.sweeps >= 1):
+        raise GraphError(f"option sweeps is {opts.sweeps!r}; it must be a whole number, one or more")
+    if opts.direction not in ("left_to_right", "top_down"):
+        raise GraphError(f"option direction is {opts.direction!r}; it must be 'left_to_right' or 'top_down'")
     if lanes and top_down:
         raise GraphError("lanes need direction='left_to_right'; a top-down layout has no bands to put them in")
     by_id = {n.id: n for n in nodes}
@@ -333,7 +439,8 @@ def layered_layout(
 
     n_lanes = max(len(lanes), 1)
     # a lane band must contain the padding of the group boxes that touch its edges, and the snapping of their coordinates
-    lane_pad = max(opts.lane_padding, opts.group_padding * (2 if parent_of else 1) + 2 * GRID) if lanes else 0.0
+    loop_reach = 0.2 + 0.1 * (most_loops - 1) + 2 * GRID if most_loops else 0.0
+    lane_pad = max(opts.lane_padding, opts.group_padding * (2 if parent_of else 1) + 2 * GRID, loop_reach) if lanes else 0.0
     track_keys = sorted({(s.lane, s.track) for s in slots.values()})
     track_height: dict[tuple[int, tuple[int, int]], float] = {}
     for key in track_keys:
@@ -371,34 +478,6 @@ def layered_layout(
                 m.v = snap(at + m.v_extent / 2)  # on the grid, so even extents put both borders on it
                 at += m.v_extent + v_gap
 
-    def pad_of(g: str) -> float:
-        """The padding of a group's box: a parent clears its children's boxes too."""
-        return opts.group_padding * (2 if g in parent_of.values() else 1)
-
-    # a group box can reach past the margin, so the page grows and shifts to hold it, plus a step for snapping
-    lo_u = lo_v = 0.0
-    hi_u, hi_v = u_total, v_total
-    for g, member_ids in members_of.items():
-        for m in member_ids:
-            s = slots[m]
-            c = col_left[s.layer] + col_width[s.layer] / 2
-            reach = pad_of(g) + GRID
-            lo_u, hi_u = min(lo_u, c - s.u_extent / 2 - reach), max(hi_u, c + s.u_extent / 2 + reach)
-            lo_v, hi_v = min(lo_v, s.v - s.v_extent / 2 - reach), max(hi_v, s.v + s.v_extent / 2 + reach)
-    loop_count = Counter(source for source, target in edges if source == target)
-    for node_id, count in loop_count.items():
-        s = slots[node_id]
-        right = col_left[s.layer] + col_width[s.layer] / 2 + s.u_extent / 2
-        reach = 0.2 + 0.1 * (count - 1) + GRID
-        lo_v, hi_u = min(lo_v, s.v - s.v_extent / 2 - reach), max(hi_u, right + 0.3 + 0.1 * (count - 1) + GRID)
-    shift_u, shift_v = _ceil(-lo_u), _ceil(-lo_v)
-    u_total, v_total = _ceil(hi_u + shift_u), _ceil(hi_v + shift_v)
-
-    def page(u: float, v: float) -> tuple[float, float]:
-        """Map a point from (along the flow, across it) to page inches."""
-        u, v = u + shift_u, v + shift_v
-        return (snap(v), snap(u_total - u)) if top_down else (snap(u), snap(v_total - v))
-
     def centre_u(slot: _Slot) -> float:
         """The middle of a slot's column, along the flow."""
         return snap(col_left[slot.layer] + col_width[slot.layer] / 2)
@@ -410,6 +489,54 @@ def layered_layout(
     def left_u(slot: _Slot) -> float:
         """Where an edge arrives at a slot: its near border, or the column's for a dummy."""
         return centre_u(slot) - (slot.u_extent if slot.real else col_width[slot.layer]) / 2
+
+    loop_count = Counter(source for source, target in edges if source == target)
+
+    def rect_of(node_id: str) -> _Rect:
+        """A node's rectangle as (u low, u high, v low, v high)."""
+        s = slots[node_id]
+        return (left_u(s), right_u(s), s.v - s.v_extent / 2, s.v + s.v_extent / 2)
+
+    def pad_of(g: str) -> float:
+        """The padding of a group's box: a parent clears its children's boxes too."""
+        return opts.group_padding * (2 if g in parent_of.values() else 1)
+
+    # a group box holds its members, their padding and the loops on them
+    group_rect: dict[str, _Rect] = {}
+    for g, member_ids in members_of.items():
+        rects = []
+        for m in member_ids:
+            lo_a, hi_a, lo_b, hi_b = rect_of(m)
+            pad = pad_of(g)
+            rects.append((lo_a - pad, hi_a + pad, lo_b - pad, hi_b + pad))
+            if m in loop_count:
+                extra = 0.1 * (loop_count[m] - 1)
+                rects.append((lo_a, hi_a + 0.3 + extra + GRID, lo_b - 0.2 - extra - GRID, hi_b))
+        if rects:
+            group_rect[g] = (
+                min(r[0] for r in rects),
+                max(r[1] for r in rects),
+                min(r[2] for r in rects),
+                max(r[3] for r in rects),
+            )
+
+    # a group box can reach past the margin, so the page grows and shifts to hold it, plus a step for snapping
+    lo_u = lo_v = 0.0
+    hi_u, hi_v = u_total, v_total
+    for r in group_rect.values():
+        lo_u, hi_u = min(lo_u, r[0] - GRID), max(hi_u, r[1] + GRID)
+        lo_v, hi_v = min(lo_v, r[2] - GRID), max(hi_v, r[3] + GRID)
+    for node_id, count in loop_count.items():
+        lo_a, hi_a, lo_b, _hi_b = rect_of(node_id)
+        extra = 0.1 * (count - 1)
+        lo_v, hi_u = min(lo_v, lo_b - 0.2 - extra - GRID), max(hi_u, hi_a + 0.3 + extra + GRID)
+    shift_u, shift_v = _ceil(-lo_u), _ceil(-lo_v)
+    u_total, v_total = _ceil(hi_u + shift_u), _ceil(hi_v + shift_v)
+
+    def page(u: float, v: float) -> tuple[float, float]:
+        """Map a point from (along the flow, across it) to page inches."""
+        u, v = u + shift_u, v + shift_v
+        return (snap(v), snap(u_total - u)) if top_down else (snap(u), snap(v_total - v))
 
     boxes = {
         n.id: Box(
@@ -427,8 +554,34 @@ def layered_layout(
     for layer, items in gap_edges.items():
         items.sort()
         left = col_left[layer] + col_width[layer]
+        if u_gap < (len(items) + 1) * GRID:
+            raise GraphError(
+                f"option layer_gap is {opts.layer_gap}; {len(items)} edges cross that gap and need at least "
+                f"{(len(items) + 1) * GRID - GRID:g} inches to keep their channels apart"
+            )
         for k, (_low, _high, n, hop) in enumerate(items):
             channel[(n, hop)] = left + u_gap * (k + 1) / (len(items) + 1)
+
+    # lines a detour may turn on: the middle of each gap between columns, round each group, and between the tracks
+    base_xs = {-shift_u, u_total - shift_u} if not lanes else {u_total - shift_u}
+    for layer in range(n_layers - 1):
+        base_xs.add(col_left[layer] + col_width[layer] + u_gap / 2)
+    for ulo, uhi, _vlo, _vhi in group_rect.values():
+        base_xs |= {ulo - 2 * GRID, uhi + 2 * GRID}
+    flat_ys = (
+        {y for lane in range(n_lanes) for y in (lane_top[lane] + GRID, lane_bottom[lane] - GRID)}
+        if lanes
+        else {-shift_v, v_total - shift_v}
+    )
+    for a, b in pairwise(track_keys):
+        if a[0] == b[0]:
+            flat_ys.add((track_top[a] + track_height[a] + track_top[b]) / 2)
+    for _ulo, _uhi, vlo, vhi in group_rect.values():
+        flat_ys |= {vlo - 2 * GRID, vhi + 2 * GRID}
+    base_xs = {x for x in base_xs if -shift_u <= x <= u_total - shift_u}
+    flat_ys = {y for y in flat_ys if -shift_v <= y <= v_total - shift_v}
+    solids = [rect_of(n.id) for n in nodes]
+    groups_of = {n.id: {g for g, ms in members_of.items() if n.id in ms} for n in nodes}
 
     twins = Counter((c[0], c[-1]) for c in chains)
     twin_at: dict[tuple[_Key, _Key], int] = {}
@@ -467,6 +620,22 @@ def layered_layout(
                     bends.append((right_u(sb), vs[hop + 1]))
             if flip:
                 bends.reverse()
+        foreign = [
+            (r[0] - GRID, r[1] + GRID, r[2] - GRID, r[3] + GRID)
+            for g, r in group_rect.items()
+            if g not in groups_of[source] | groups_of[target]
+        ]
+        lines = [(a, b) for a, b in pairwise(bends) if a != b]
+        if source != target and any(_enters(a, b, r) for a, b in lines for r in foreign):
+            # the direct channels cross a group the edge does not belong to, so search for a way round
+            low = lane_top[min(slots[chain[0]].lane, slots[chain[-1]].lane)] if lanes else -shift_v
+            high = lane_bottom[max(slots[chain[0]].lane, slots[chain[-1]].lane)] if lanes else v_total - shift_v
+            ys = {y for y in flat_ys if low <= y <= high}
+            path = [bends[0], *(b for a, b in pairwise(bends) if a != b)]
+            around = _detour(path, base_xs, ys, [*solids, *foreign])
+            if around is None:
+                raise GraphError(f"edge {source!r} -> {target!r} cannot be routed round the groups it does not belong to")
+            bends = around
         mapped: list[tuple[float, float]] = []
         for p in (page(u, v) for u, v in bends):
             if not mapped or mapped[-1] != p:
@@ -490,12 +659,8 @@ def layered_layout(
         for i, name in enumerate(lanes)
     }
     group_boxes: dict[str, Box] = {}
-    for g, member_ids in members_of.items():
-        if member_ids:
-            pad = pad_of(g)
-            left = min(boxes[m].x - boxes[m].width / 2 for m in member_ids) - pad
-            right = max(boxes[m].x + boxes[m].width / 2 for m in member_ids) + pad
-            bottom = min(boxes[m].y - boxes[m].height / 2 for m in member_ids) - pad
-            top = max(boxes[m].y + boxes[m].height / 2 for m in member_ids) + pad
-            group_boxes[g] = Box(snap((left + right) / 2), snap((bottom + top) / 2), snap(right - left), snap(top - bottom))
+    for g, (ulo, uhi, vlo, vhi) in group_rect.items():
+        (x1, y1), (x2, y2) = page(ulo, vlo), page(uhi, vhi)
+        left, right, bottom, top = min(x1, x2), max(x1, x2), min(y1, y2), max(y1, y2)
+        group_boxes[g] = Box(snap((left + right) / 2), snap((bottom + top) / 2), snap(right - left), snap(top - bottom))
     return Layout(boxes, group_boxes, lane_boxes, routes, width, height)

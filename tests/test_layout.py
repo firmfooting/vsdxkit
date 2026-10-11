@@ -53,6 +53,25 @@ def _check(layout: Layout, nodes: tuple[LayoutNode, ...], parents: tuple[tuple[s
         while g is not None:
             members.setdefault(g, set()).add(node.id)
             g = parent.get(g)
+    by_id = {node.id: node for node in nodes}
+    for (source, target, _n), points in layout.routes.items():
+        mine = {g for g, ids in members.items() if source in ids or target in ids}
+        for g, box in layout.groups.items():
+            for p, q in pairwise(points):
+                if g not in mine:
+                    assert not _segment_enters(p, q, box), f"{source}->{target} runs through group {g}"
+                elif source == target:
+                    assert (
+                        box.x - box.width / 2 - SHRINK <= min(p[0], q[0]) and max(p[0], q[0]) <= box.x + box.width / 2 + SHRINK
+                    )
+                    assert (
+                        box.y - box.height / 2 - SHRINK <= min(p[1], q[1])
+                        and max(p[1], q[1]) <= box.y + box.height / 2 + SHRINK
+                    )
+        ends = [layout.lanes[by_id[i].lane] for i in (source, target) if by_id[i].lane is not None]
+        if ends:
+            low, high = min(b.y - b.height / 2 for b in ends), max(b.y + b.height / 2 for b in ends)
+            assert all(low - SHRINK <= y <= high + SHRINK for _x, y in points), f"{source}->{target} leaves its lanes"
     for g, box in layout.groups.items():
         for node_id, other in boxes.items():
             if node_id not in members[g]:
@@ -355,4 +374,73 @@ def test_random_tiny_nodes_with_parallel_edges_are_refused_or_distinct(seed, dir
         layout = layered_layout(nodes, edges, options=LayoutOptions(direction=direction))
     except GraphError:
         return
+    _check_routes(layout)
+
+
+def _n(node_id, lane=None, group=None):
+    return LayoutNode(node_id, 1, 0.6, lane, group)
+
+
+def test_a_route_goes_round_a_group_it_does_not_belong_to():
+    nodes = (_n("p"), _n("g1", group="G"), _n("m"), _n("g3", group="G"), _n("q", group="H"))
+    edges = (("g1", "m"), ("m", "g3"), ("p", "q"))
+    layout = layered_layout(nodes, edges, groups=("G", "H"))
+    _check(layout, nodes, ())
+    _check_routes(layout)
+
+
+def test_many_self_loops_stay_inside_their_lane():
+    nodes = (_n("a", "A"), _n("b", "B"))
+    layout = layered_layout(nodes, (("a", "a"),) * 5, ("A", "B"))
+    _check(layout, nodes, ())
+    _check_routes(layout)
+
+
+@pytest.mark.parametrize("lanes", [(), ("A",)])
+def test_a_self_loop_stays_inside_its_group_box(lanes):
+    nodes = (_n("a", lanes[0] if lanes else None, "G"),)
+    layout = layered_layout(nodes, (("a", "a"),) * 2, lanes, ("G",))
+    _check(layout, nodes, ())
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"layer_gap": -1.0},
+        {"node_gap": float("nan")},
+        {"margin": float("inf")},
+        {"group_padding": -0.1},
+        {"lane_padding": -0.1},
+        {"lane_heading": float("-inf")},
+        {"sweeps": 0},
+    ],
+)
+def test_an_option_that_is_not_a_valid_size_is_refused_by_name(options):
+    (name,) = options
+    with pytest.raises(GraphError, match=name):
+        layered_layout((_n("a"),), (), options=LayoutOptions(**options))
+
+
+def test_a_layer_gap_too_small_for_its_channels_is_refused_by_name():
+    nodes = tuple(_n(c) for c in "abcdef")
+    edges = (("a", "d"), ("b", "e"), ("c", "f"), ("a", "e"), ("b", "f"))
+    with pytest.raises(GraphError, match="layer_gap"):
+        layered_layout(nodes, edges, options=LayoutOptions(layer_gap=0.0))
+    _check_routes(layered_layout(nodes, edges, options=LayoutOptions(layer_gap=0.05)))
+
+
+@pytest.mark.parametrize("seed", range(25))
+@pytest.mark.parametrize(
+    ("lanes", "groups", "direction"),
+    [(0, 3, "left_to_right"), (0, 3, "top_down"), (2, 3, "left_to_right"), (3, 3, "left_to_right"), (1, 2, "left_to_right")],
+)
+@pytest.mark.parametrize("gaps", ["default", "minimum"])
+def test_random_grouped_graphs_with_loops_avoid_foreign_groups_and_stay_in_lanes(seed, lanes, groups, direction, gaps):
+    rows, edges, lane_ids, group_ids, parents = random_graph(seed, 9, 14, lanes, groups)
+    edges = (*edges, ("n0", "n0"), ("n0", "n0"), ("n1", "n1"), ("n3", "n3"), ("n2", "n4"), ("n2", "n4"))
+    nodes = tuple(LayoutNode(*row) for row in rows)
+    small = {"node_gap": 0.0, "layer_gap": 0.0, "margin": 0.0, "group_padding": 0.05} if gaps == "minimum" else {}
+    options = LayoutOptions(direction=direction, parents=parents, **small)
+    layout = layered_layout(nodes, edges, lane_ids, group_ids, options)
+    _check(layout, nodes, parents)
     _check_routes(layout)
