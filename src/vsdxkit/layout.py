@@ -1326,6 +1326,19 @@ def _boxes_meet(a: Box, b: Box) -> bool:
     return abs(a.x - b.x) < (a.width + b.width) / 2 - _EPS and abs(a.y - b.y) < (a.height + b.height) / 2 - _EPS
 
 
+def _label_gap(
+    chain: Sequence[_Key], need: float, gaps: Sequence[float], slots: Mapping[_Key, _Slot], first: bool = False
+) -> int:
+    """The layer whose gap a label on `chain` takes: the one needing the least extra width, the lowest on a tie.
+
+    A label that is marked first takes the first gap of its chain.
+    """
+    layers = [slots[a].layer for a, _b in pairwise(chain)]
+    if first:
+        return layers[0]
+    return min(layers, key=lambda layer: (max(0.0, need - gaps[layer]), layer))
+
+
 def layered_layout(
     nodes: tuple[LayoutNode, ...],
     edges: tuple[tuple[str, str], ...],
@@ -1658,13 +1671,19 @@ def _lay_out(
     crossing = Counter(slots[a].layer for chain in flow if chain[0] != chain[-1] for a, _b in pairwise(chain))
     u_gap = max([u_gap, *(loop_zone.get(layer, 0.0) + (crossing[layer] + 1) * GRID for layer in {*crossing, *loop_zone})])
 
-    # a label sits on its route inside a gap, so each gap its route crosses is as long as its label along the flow,
-    # and as long as all the labels of parallel edges together, which cannot share the same stretch of it
+    # a label sits on its route inside one gap: the one its edge crosses that needs the least extra width, and the gaps
+    # of its other crossings stay as they are; labels of parallel edges between one pair cannot share a stretch of it
     stacked: dict[tuple[int, _Key, _Key], list[float]] = {}
+    label_layer: dict[int, int] = {}
     for n, (chain, size) in enumerate(zip(chains, opts.edge_labels or (None,) * len(chains), strict=True)):
         if size is not None and chain[0] != chain[-1] and n not in corridor:
-            for a, _b in pairwise(chain):
-                stacked.setdefault((slots[a].layer, chain[0], chain[-1]), []).append(size[1] if top_down else size[0])
+            need = (size[1] if top_down else size[0]) + 0.1
+            pair = next(
+                (label_layer[m] for m in sorted(label_layer) if (chains[m][0], chains[m][-1]) == (chain[0], chain[-1])), None
+            )
+            layer = pair if pair is not None else _label_gap(chain, need, [u_gap] * n_layers, slots)
+            label_layer[n] = layer
+            stacked.setdefault((layer, chain[0], chain[-1]), []).append(need - 0.1)
     gaps = [u_gap] * n_layers
     for (layer, _first, _last), extents in stacked.items():
         gaps[layer] = max(gaps[layer], math.fsum(extents) + 0.1)
@@ -1735,11 +1754,16 @@ def _lay_out(
 
     lifts = [reach(g) - base for g in groups if members_of[g]]
     lift = _ceil(max([0.0, *lifts]))
-    lane_pad = (
-        max(opts.lane_padding, opts.group_padding * (2 if parent_of else 1) + (3 + slack) * GRID + lift, loop_reach)
-        if lanes or n_bands > 1
-        else 0.0
-    )
+
+    # a heading's lift is above the members only, so only the padding on the heading side takes it
+    def lane_pad_for(extra: float) -> float:
+        """The padding of a lane or band side whose heading adds `extra`."""
+        if not (lanes or n_bands > 1):
+            return 0.0
+        return max(opts.lane_padding, opts.group_padding * (2 if parent_of else 1) + (3 + slack) * GRID + extra, loop_reach)
+
+    lane_pad_bottom = lane_pad_for(0.0)
+    lane_pad_top = lane_pad_for(lift)
     # between tracks, a group's loops and padding reach the track below, which keeps a grid step clear of them and two more for snapping
     track_clear = max(base, 0.2 + 0.1 * (most_loops - 1) + GRID if most_loops else 0.0) + base + (3 + slack) * GRID
     track_keys = sorted({(s.lane, s.track) for s in slots.values()})
@@ -1755,15 +1779,19 @@ def _lay_out(
     lane_top: list[float] = []
     lane_bottom: list[float] = []
     # a lane holds the labels of the edges that stay in it, stacked if they must, since a label stays inside its lanes
-    stacked_here: dict[int, list[float]] = {}
-    for (source, target), size in zip(edges, opts.edge_labels or (None,) * len(edges), strict=True):
+    # the allowance is the tallest stack in any one gap, since labels in different gaps do not share a column
+    per_gap: dict[tuple[int, int], list[float]] = {}
+    for n, ((source, target), size) in enumerate(zip(edges, opts.edge_labels or (None,) * len(edges), strict=True)):
         ends = {lane_index[lane] for i in (source, target) if (lane := by_id[i].lane) is not None}
         if size is not None and len(ends) == 1:
-            stacked_here.setdefault(ends.pop(), []).append(size[1] + 0.02)
+            per_gap.setdefault((ends.pop(), label_layer.get(n, layer_of[source])), []).append(size[1] + 0.02)
+    stacked_here: dict[int, float] = {}
+    for (lane, _layer), extents in per_gap.items():
+        stacked_here[lane] = max(stacked_here.get(lane, 0.0), math.fsum(extents))
     cursor = margin
     for lane in range(n_lanes):
         lane_top.append(cursor)
-        cursor += lane_pad
+        cursor += lane_pad_top
         first = True
         for key in (k for k in track_keys if k[0] == lane):
             if not first:
@@ -1771,7 +1799,7 @@ def _lay_out(
             first = False
             track_top[key] = cursor
             cursor += track_height[key]
-        cursor += lane_pad + math.fsum(stacked_here.get(lane, ()))
+        cursor += lane_pad_bottom + stacked_here.get(lane, 0.0)
         lane_bottom.append(cursor)
     v_total = cursor + margin
     for row in rows:
@@ -2419,9 +2447,9 @@ def _lay_out(
         ports = [port for port in ports if port[2] not in corridor]
         if not ports:
             continue
-        # a corridor of 2 * lane_pad lies on the boundary; levels are a channel apart, or closer when it is crowded
-        top_level = lane_bottom[band] - lane_pad
-        step = min(_CHANNEL, 2 * lane_pad / (len(ports) + len(u_at.get(band, ())) + 1))
+        # a corridor of lane_pad_top + lane_pad_bottom lies on the boundary; levels are a channel apart, or closer when it is crowded
+        top_level = lane_bottom[band] - lane_pad_bottom
+        step = min(_CHANNEL, (lane_pad_top + lane_pad_bottom) / (len(ports) + len(u_at.get(band, ())) + 1))
         right = ports[0][1] > ports[0][0]
         # the edge with the larger start column takes the higher level for a jog to the right, the smaller for a jog to the left
         by_level = sorted(ports, key=lambda port: -port[0] if right else port[0])
@@ -2432,9 +2460,9 @@ def _lay_out(
             fold_plan[(n, h)] = (ua, ub, ya, yb, top_level + (level_rank + 1) * step)
     for band, found_u in u_at.items():
         taken = sum(1 for _v, n, _h in fold_hops.get(band, ()) if n not in corridor)
-        step = min(_CHANNEL, 2 * lane_pad / (taken + len(found_u) + 1))
+        step = min(_CHANNEL, (lane_pad_top + lane_pad_bottom) / (taken + len(found_u) + 1))
         for rank, n in enumerate(found_u):
-            u_routes[n] = u_route(n, snap(lane_bottom[band] - lane_pad + (taken + rank + 1) * step))
+            u_routes[n] = u_route(n, snap(lane_bottom[band] - lane_pad_bottom + (taken + rank + 1) * step))
 
     routes: dict[tuple[str, str, int], tuple[tuple[float, float], ...]] = {}
     seen_pairs: dict[tuple[str, str], int] = {}

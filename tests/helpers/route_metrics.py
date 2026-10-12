@@ -152,7 +152,7 @@ def aspect(layout: Any) -> float:
     return layout.width / layout.height
 
 
-def _interiors_meet(a: Any, b: Any) -> bool:
+def _interiors_meet(a: _Box, b: _Box) -> bool:
     """Whether the interiors of two boxes overlap by more than EPS on both axes."""
     return (
         min(a.x + a.width / 2, b.x + b.width / 2) - max(a.x - a.width / 2, b.x - b.width / 2) > EPS
@@ -160,7 +160,7 @@ def _interiors_meet(a: Any, b: Any) -> bool:
     )
 
 
-def _segment_meets(seg: tuple[Point, Point], box: Any) -> bool:
+def _segment_meets(seg: tuple[Point, Point], box: _Box) -> bool:
     """Whether the axis-parallel `seg` passes through the interior of `box` (the box shrunk by EPS)."""
     left, right = box.x - box.width / 2 + EPS, box.x + box.width / 2 - EPS
     bottom, top = box.y - box.height / 2 + EPS, box.y + box.height / 2 - EPS
@@ -174,7 +174,7 @@ def _on_segment(seg: tuple[Point, Point], p: Point) -> bool:
     return min(x1, x2) - EPS <= p[0] <= max(x1, x2) + EPS and min(y1, y2) - EPS <= p[1] <= max(y1, y2) + EPS
 
 
-def label_violations(layout: Any, obstacles: Collection[Any] = ()) -> list[str]:
+def label_violations(layout: _LabelLayout, obstacles: Collection[_Box] = ()) -> list[str]:
     """A7: one line for each label whose centre is off its own route, that straddles a lane border, or that meets a node, another label, an obstacle box or another route's segment."""
     bad = []
     for key in sorted(layout.labels):
@@ -217,6 +217,15 @@ class _Box(Protocol):
     y: float
     width: float
     height: float
+
+
+class _LabelLayout(Protocol):
+    """The parts of a layout that the label check reads."""
+
+    nodes: Mapping[str, _Box]
+    routes: Mapping[Key, tuple[Point, ...]]
+    labels: Mapping[Key, _Box]
+    lanes: Mapping[str, _Box]
 
 
 class _Layout(Protocol):

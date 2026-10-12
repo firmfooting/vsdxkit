@@ -7,6 +7,7 @@ import pytest
 from helpers import route_metrics as rm
 
 from vsdxkit.errors import GraphError
+from vsdxkit.layout import LayoutNode, LayoutOptions, layered_layout
 
 
 def box(x, y, w, h):
@@ -61,3 +62,29 @@ def test_labels_in_lanes_stay_in_one_band(seed):
     except GraphError:
         return
     assert rm.label_violations(layout) == []
+
+
+def test_a_label_spanning_layers_widens_one_gap():
+    nodes = tuple(LayoutNode(f"s{i}", 2, 1, "L0") for i in range(8))
+    chain = tuple((f"s{i}", f"s{i + 1}") for i in range(7))
+    plain = layered_layout(nodes, chain, ("L0",), options=LayoutOptions(page=None))
+    labels = (None,) * 7 + ((8.0, 0.3),)
+    labelled = layered_layout(nodes, (*chain, ("s0", "s7")), ("L0",), options=LayoutOptions(page=None, edge_labels=labels))
+    assert labelled.width - plain.width < 9.0  # one gap, not seven
+
+
+def test_a_chain_of_labelled_edges_in_one_lane_does_not_grow_the_lane_by_the_sum():
+    nodes = tuple(LayoutNode(f"s{i}", 2, 1, "L0") for i in range(16))
+    edges = tuple((f"s{i}", f"s{i + 1}") for i in range(15))
+    labels = tuple((1.0, 0.3) for _ in edges)
+    lay_ = layered_layout(nodes, edges, ("L0",), options=LayoutOptions(page=None, edge_labels=labels))
+    assert lay_.lanes["L0"].height < 3.0
+
+
+def test_a_tall_heading_adds_clearance_on_its_own_side_only():
+    nodes = (LayoutNode("a", 2, 1, "L0", "g"),)
+    lay_ = layered_layout(nodes, (), ("L0",), ("g",), LayoutOptions(page=None, headings=(("g", 3.0, 2.75),)))
+    node, group, lane = lay_.nodes["a"], lay_.groups["g"], lay_.lanes["L0"]
+    below_node = (node.y - node.height / 2) - (lane.y - lane.height / 2)
+    above_node = (lane.y + lane.height / 2) - (node.y + node.height / 2)
+    assert above_node > below_node + 1.0 and group.height < lane.height  # not a symmetric lift
