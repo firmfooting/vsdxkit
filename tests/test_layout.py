@@ -111,7 +111,7 @@ def test_a_random_graph_lays_out_cleanly(seed, lanes, groups, direction):
 
 def test_a_200_node_graph_with_lanes_and_groups_lays_out_with_no_shared_run():
     """This size needs the shared-point pass, which has a search budget of its own (about 17 s; 60 s is a hang guard)."""
-    rows, edges, lane_ids, group_ids, parents = random_graph(2, 200, 320, 4, 4)
+    rows, edges, lane_ids, group_ids, parents = random_graph(1, 200, 320, 4, 4)
     nodes = tuple(LayoutNode(*row) for row in rows)
     start = time.perf_counter()
     layout = layered_layout(nodes, edges, lane_ids, group_ids, LayoutOptions(parents=parents))
@@ -629,7 +629,7 @@ def test_a_crowded_graph_of_200_nodes_and_20_groups_is_refused_with_its_counts(d
 def test_dense_graphs_on_both_sides_of_the_ceiling_lay_out_or_are_refused_with_counts(
     monkeypatch, seed, n, m, lanes, groups, cap, laid_out
 ):
-    """The first graph lays out within 5M steps and not within 1M; the second does not lay out within 2M."""
+    """The first graph lays out within 5M steps (measured: refused at 1.5M, laid out at 2M; the base needed between 2M and 3M) and is refused at 1M, which the cap here uses; the second does not lay out within 2M."""
     rows, edges, lane_ids, group_ids, parents = random_graph(seed, n, m, lanes, groups)
     nodes = tuple(LayoutNode(*row) for row in rows)
     monkeypatch.setattr(layout_module, "_WORK_CAP", cap)

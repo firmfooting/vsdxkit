@@ -287,6 +287,32 @@ def _break_cycles(ids: list[str], edges: list[tuple[str, str]]) -> list[bool]:
     return flipped
 
 
+def _check_pins(pinned: Sequence[tuple[str, int]], ids: list[str], edges: list[tuple[str, str]]) -> None:
+    """Refuse a pin on an id that is not a node, a second pin for one node, and a pin on a node that lies on a cycle (its layer would depend on which edge was broken)."""
+    known = set(ids)
+    seen: set[str] = set()
+    for name, _layer in pinned:
+        if name not in known:
+            raise GraphError(f"node {name!r} is pinned to a layer, but the page has no such node")
+        if name in seen:
+            raise GraphError(f"node {name!r} is pinned more than once")
+        seen.add(name)
+    out: dict[str, list[str]] = {}
+    for source, target in edges:
+        if source != target:
+            out.setdefault(source, []).append(target)
+    for name in sorted(seen):
+        reached: set[str] = set()
+        stack = list(out.get(name, ()))
+        while stack:
+            node = stack.pop()
+            if node not in reached:
+                reached.add(node)
+                stack.extend(out.get(node, ()))
+        if name in reached:
+            raise GraphError(f"node {name!r} is pinned to a layer, but it lies on a cycle, so its layer depends on which edge is reversed")
+
+
 def _layers(
     ids: list[str], edges: list[tuple[str, str]], flipped: list[bool], pinned: Mapping[str, int] | None = None
 ) -> dict[str, int]:
@@ -1564,6 +1590,7 @@ def _lay_out(
 
     ids = [n.id for n in nodes]
     flipped = _break_cycles(ids, list(edges))
+    _check_pins(opts.pinned, ids, list(edges))
     layer_of = _layers(ids, list(edges), flipped, dict(opts.pinned))
     blocks = _check_aligned(opts.aligned, set(ids), layer_of)
     # with no lanes a feedback edge that jumps layers runs in a corridor outside the drawing, so it takes no dummy slots
@@ -2328,64 +2355,6 @@ def _lay_out(
     flat_ys |= {*(f(end_ys) for f in (min, max) if end_ys)}
     solids = [rect_of(n.id) for n in nodes]
 
-    # the hops that cross a row boundary leave the near-boundary side of one column and enter the other, by a level of their own
-    fold_hops: dict[int, list[tuple[float, int, int]]] = {}
-    for n, chain in enumerate(chains):
-        if chain[0] != chain[-1]:
-            for hop, (a, b) in enumerate(pairwise(chain)):
-                if band_of_layer[slots[a].layer] != band_of_layer[slots[b].layer]:
-                    fold_hops.setdefault(band_of_layer[slots[a].layer], []).append((slots[a].v, n, hop))
-    loop_extra: dict[_Key, int] = {}  # fold arrivals that share a self-looped node's top with its loops
-    fold_plan: dict[tuple[int, int], tuple[float, float, float, float, float]] = {}  # (n, hop) -> (ua, ub, ya, yb, level)
-    for band, found in fold_hops.items():
-        found.sort()
-        count = len(found)
-        width = min(
-            min(
-                (slots[chains[n][h]].u_extent if slots[chains[n][h]].real else col_width[slots[chains[n][h]].layer])
-                for _v, n, h in found
-            ),
-            min(
-                (
-                    slots[chains[n][h + 1]].u_extent
-                    if slots[chains[n][h + 1]].real
-                    else col_width[slots[chains[n][h + 1]].layer]
-                )
-                for _v, n, h in found
-            ),
-        )
-        # a boundary too narrow for a port each keeps the column centre, and the search or the spacing pass separates the routes
-        offsets = _spread(count, width, band, opts.channel_pitch) if round(width / GRID) // count else [0.0] * count
-        ports = [
-            (centre_u(slots[chains[n][h]]) + off, centre_u(slots[chains[n][h + 1]]) + off, n, h)
-            for off, (_v, n, h) in zip(offsets, found, strict=True)
-        ]
-        # a self-loop uses border points on the top of its node, so the folds that arrive there share that node's spread with it
-        arriving: dict[_Key, list[int]] = {}
-        for idx, (_ua, _ub, n, h) in enumerate(ports):
-            key = chains[n][h + 1]
-            if slots[key].real and key in loop_count:
-                arriving.setdefault(key, []).append(idx)
-        for key, idxs in arriving.items():
-            loops = twins[(key, key)]
-            if round(slots[key].u_extent / GRID) // (loops + len(idxs)):
-                loop_extra[key] = loop_extra.get(key, 0) + len(idxs)
-                spread = _spread(loops + loop_extra[key], slots[key].u_extent, key, opts.port_pitch)
-                for rank, idx in enumerate(idxs):
-                    ua, _ub, n, h = ports[idx]
-                    ports[idx] = (ua, centre_u(slots[key]) - spread[loops + loop_extra[key] - len(idxs) + rank], n, h)
-        # a corridor of 2 * lane_pad lies on the boundary; levels are a channel apart, or closer when it is crowded
-        top_level = lane_bottom[band] - lane_pad
-        step = min(_CHANNEL, 2 * lane_pad / (count + 1))
-        right = ports[0][1] > ports[0][0]
-        # the edge with the larger start column takes the higher level for a jog to the right, the smaller for a jog to the left
-        by_level = sorted(ports, key=lambda port: -port[0] if right else port[0])
-        for level_rank, (ua, ub, n, h) in enumerate(by_level):
-            sa, sb = slots[chains[n][h]], slots[chains[n][h + 1]]
-            ya = sa.v + sa.v_extent / 2 if sa.real else rows_of[n][h]
-            yb = sb.v - sb.v_extent / 2 if sb.real else rows_of[n][h + 1]
-            fold_plan[(n, h)] = (ua, ub, ya, yb, top_level + (level_rank + 1) * step)
-
     # the corridor routes between two rows share that corridor with the fold hops, each on a level of its own
     u_at: dict[int, list[int]] = {}
     for n in sorted(corridor_side, key=lambda n: (layer_of[edges[n][0]] - layer_of[edges[n][1]], n)):
@@ -2395,7 +2364,7 @@ def _lay_out(
     # the hops that cross a row boundary leave the near-boundary side of one column and enter the other, by a level of their own
     fold_hops: dict[int, list[tuple[float, int, int]]] = {}
     for n, chain in enumerate(chains):
-        if chain[0] != chain[-1]:
+        if chain[0] != chain[-1] and n not in corridor:
             for hop, (a, b) in enumerate(pairwise(chain)):
                 if band_of_layer[slots[a].layer] != band_of_layer[slots[b].layer]:
                     fold_hops.setdefault(band_of_layer[slots[a].layer], []).append((slots[a].v, n, hop))

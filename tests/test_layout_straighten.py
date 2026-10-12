@@ -86,6 +86,41 @@ def test_a_pin_pushes_a_successor_and_does_not_collide_with_a_dummy():
     assert xs["b"] < xs["c"] and len({round(x, 2) for x in xs.values()}) == 4
 
 
+def test_a_pin_into_a_layer_a_long_edge_crosses_shares_no_box_or_run():
+    nodes = tuple(LayoutNode(i, 2, 1) for i in "abcde")
+    edges = (("a", "b"), ("b", "d"), ("d", "e"), ("a", "e"))  # a -> e crosses layers 1 to 2 on dummy slots
+    lay = layered_layout(nodes, edges, options=LayoutOptions(page=None, pinned=(("c", 2),)))
+    boxes = list(lay.nodes.values())
+    for i, p in enumerate(boxes):
+        for q in boxes[i + 1 :]:
+            assert abs(p.x - q.x) >= (p.width + q.width) / 2 or abs(p.y - q.y) >= (p.height + q.height) / 2
+    assert lay.nodes["c"].x == lay.nodes["d"].x > lay.nodes["b"].x
+    assert rm.shared_runs(lay) == []
+
+
+def test_a_pin_on_a_node_in_a_cycle_names_it():
+    nodes = tuple(LayoutNode(i, 2, 1) for i in "abc")
+    edges = (("a", "b"), ("b", "c"), ("c", "a"))
+    for name in "abc":
+        with pytest.raises(lo.GraphError, match=rf"'{name}' is pinned to a layer, but it lies on a cycle"):
+            layered_layout(nodes, edges, options=LayoutOptions(pinned=((name, 4),)))
+
+
+def test_a_pin_on_an_id_that_is_not_a_node_names_it():
+    with pytest.raises(lo.GraphError, match=r"'ghost' is pinned to a layer, but the page has no such node"):
+        layered_layout((LayoutNode("a", 2, 1),), (), options=LayoutOptions(pinned=(("ghost", 1),)))
+
+
+def test_a_node_pinned_twice_is_refused_naming_it():
+    with pytest.raises(lo.GraphError, match=r"'a' is pinned more than once"):
+        layered_layout((LayoutNode("a", 2, 1),), (), options=LayoutOptions(pinned=(("a", 1), ("a", 2))))
+
+
+def test_a_negative_pin_is_refused():
+    with pytest.raises(lo.GraphError, match=r"'a' is pinned to layer -1"):
+        layered_layout((LayoutNode("a", 2, 1),), (), options=LayoutOptions(pinned=(("a", -1),)))
+
+
 def test_aligned_nodes_share_a_row():
     nodes = tuple(LayoutNode(i, 2, 1) for i in "abcd")
     lay = layered_layout(nodes, (("a", "b"), ("a", "c"), ("c", "d")), options=LayoutOptions(page=None, aligned=(("b", "d"),)))
