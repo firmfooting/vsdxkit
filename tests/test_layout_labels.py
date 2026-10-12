@@ -58,6 +58,12 @@ def test_a_label_sits_on_its_own_segment_or_the_build_raises(seed):
     assert rm.label_violations(layout) == []
 
 
+@pytest.mark.parametrize("name", ["lanes3", "chain25"])
+def test_the_labelled_fixtures_have_every_label_placed_and_clear(name):
+    layout = corpus.fixture_layout(name)
+    assert len(layout.labels) >= 2 and rm.label_violations(layout) == []
+
+
 @pytest.mark.parametrize("seed", range(5))
 def test_labels_in_lanes_stay_in_one_band(seed):
     try:

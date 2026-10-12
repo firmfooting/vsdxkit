@@ -48,12 +48,20 @@ Node kinds are ``start``, ``end``, ``process``, ``decision``, ``data_store``,
 ``external``, ``document``, ``subprocess`` and ``off_page``. Edge kinds are
 ``flow``, ``yes-path``, ``no-path``, ``data``, ``call`` and ``page-link``. The
 ``no-path``, ``data`` and ``call`` edges are drawn dashed. An edge label is
-drawn on an opaque white background. The layout leaves room for each edge label
-and each group heading: a gap widens to hold the labels that cross it, a group
-box widens and grows at the top to hold its heading, and a label or heading that
-cannot be placed clear of the nodes, headings, other groups and other labels, or
-a heading that would make its box cover a node or group that is not its own, is
-refused.
+drawn on an opaque white background, centred on a straight stretch of its own
+connector inside one lane, clear of every node, heading, other group, other
+label and other route. The layout leaves room for each edge label and each group
+heading: a gap widens to hold the labels that cross it, a group box widens and
+grows at the top to hold its heading. A label with no such stretch is not
+refused at once: the layout is retried on one row, then with the spacing
+multiplied by 1.5, 2, 3, 4 and 6, then without a page target, and last with
+labels allowed where other routes cross them (``Layout.fallbacks`` counts the
+steps taken). A label still without a place, a heading with no place clear of the
+nodes, groups and labels, and a heading that would make its box cover a node or
+group that is not its own are refused, naming the edge or group. A
+``LayoutOptions.edge_first`` entry makes an edge's label prefer the first segment
+of its route, and the builder sets it for the edges of a decision and for
+``yes-path`` and ``no-path`` edges.
 
 :meth:`~vsdxkit.builder.Diagram.validate` refuses a description that cannot be
 drawn, naming the first thing wrong, as :class:`~vsdxkit.errors.GraphError`.

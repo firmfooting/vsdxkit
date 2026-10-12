@@ -1473,8 +1473,11 @@ def layered_layout(
     steps, the layout raises instead of returning routes that overlap. The limit holds for each of the two passes
     (border points of their own, then shared points). Measured with random graphs and the default options, these
     lay out: 60 nodes, 200 edges, 6 groups; 150 nodes, 240 edges, 4 lanes, 4 groups; 200 nodes, 320 edges, 4 lanes,
-    4 groups (about 17 s); 200 nodes, 400 edges, no groups or lanes. 200 nodes and 400 edges in 20 groups is refused
-    (after about 40 s). The ceiling falls with the number of groups and lanes more than with nodes.
+    4 groups (about 27 s); 200 nodes, 400 edges, no groups or lanes. 200 nodes and 400 edges in 20 groups is refused
+    (after about 55 s). The ceiling falls with the number of groups and lanes more than with nodes. Edge labels cost
+    placement checks and lower it. With every third edge labelled, 150 nodes, 240 edges, 4 lanes, 4 groups lays out
+    (about 130 s) and so does 200 nodes, 400 edges left to right (about 23 s), but 60 nodes, 200 edges, 6 groups,
+    200 nodes, 320 edges, 4 lanes, 4 groups and 200 nodes, 400 edges top down are refused.
 
     ``LayoutOptions.page`` is the page shape to aim for (a ``PageTarget``, 16:9 by default; ``None`` keeps one row).
     A page without lanes whose flow is left to right is cut into rows of layers, chosen so that the page's aspect,
@@ -1488,8 +1491,11 @@ def layered_layout(
     from the other layout, a laned page or a larger page flows left to right. A ``LayoutOptions.direction`` you give is
     always kept; ``PageTarget(direction=...)`` pins one too, and ``page=None`` turns the target off.
 
-    A label that fits no straight stretch of its route is not refused at once. The layout is tried again, each step
-    once and in this order: the page with ``wrap="none"`` (one row, the pinned or chosen direction kept), then that
+    An edge label (``LayoutOptions.edge_labels``) is centred on a straight stretch of its own connector inside one lane
+    band, clear of every node, heading, other group, other label and other route. The longest stretch is preferred, and
+    the first segment of the route when ``LayoutOptions.edge_first`` asks for it (the builder asks for it on a decision's edges and
+    on ``yes-path`` and ``no-path`` edges). A label that fits no straight stretch of its route is not refused at once.
+    The layout is tried again, each step once and in this order: the page with ``wrap="none"`` (one row, the pinned or chosen direction kept), then that
     with ``layer_gap``, ``node_gap``, ``port_pitch`` and ``channel_pitch`` multiplied by 1.5, 2, 3, 4 and 6, then the last
     of those with no page target, then the layout as given with ``loose_labels``, which lets a label sit where other
     routes cross it. A step taken adds one to ``Layout.fallbacks`` (the step's number). Only when the ladder is
