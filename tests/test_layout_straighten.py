@@ -96,3 +96,40 @@ def test_a_pin_pushes_a_successor_and_does_not_collide_with_a_dummy():
     lay = layered_layout(nodes, (("a", "b"), ("b", "c"), ("a", "d")), options=LayoutOptions(page=None, pinned=(("b", 3),)))
     xs = {k: b.x for k, b in lay.nodes.items()}
     assert xs["b"] < xs["c"] and len({round(x, 2) for x in xs.values()}) == 4
+
+
+def test_aligned_nodes_share_a_row():
+    nodes = tuple(LayoutNode(i, 2, 1) for i in "abcd")
+    lay = layered_layout(nodes, (("a", "b"), ("a", "c"), ("c", "d")), options=LayoutOptions(page=None, aligned=(("b", "d"),)))
+    assert lay.nodes["b"].y == lay.nodes["d"].y
+
+
+def test_aligned_nodes_share_a_row_without_sweeps():
+    nodes = tuple(LayoutNode(i, 2, 1) for i in "abcd")
+    lay = layered_layout(
+        nodes,
+        (("a", "b"), ("a", "c"), ("c", "d")),
+        options=LayoutOptions(page=None, straighten_sweeps=0, aligned=(("b", "d"),)),
+    )
+    assert lay.nodes["b"].y == lay.nodes["d"].y
+
+
+def test_two_members_of_one_group_in_one_layer_are_refused():
+    nodes = tuple(LayoutNode(i, 2, 1) for i in "abc")
+    with pytest.raises(lo.GraphError, match=r"'b'.*'c'"):
+        layered_layout(nodes, (("a", "b"), ("a", "c")), options=LayoutOptions(aligned=(("b", "c"),)))
+
+
+def test_an_align_group_naming_an_unknown_node_or_repeating_one_is_refused():
+    nodes = tuple(LayoutNode(i, 2, 1) for i in "abcd")
+    edges = (("a", "b"), ("b", "c"), ("c", "d"))
+    with pytest.raises(lo.GraphError, match="'z'"):
+        layered_layout(nodes, edges, options=LayoutOptions(aligned=(("a", "z"),)))
+    with pytest.raises(lo.GraphError, match=r"'b'.*two align groups"):
+        layered_layout(nodes, edges, options=LayoutOptions(aligned=(("a", "b"), ("b", "c"))))
+
+
+def test_an_align_group_that_cannot_share_a_row_is_refused_naming_its_members():
+    nodes = (LayoutNode("a", 2, 1, "L0"), LayoutNode("b", 2, 1, "L1"))
+    with pytest.raises(lo.GraphError, match=r"align group.*'a'.*'b'"):
+        layered_layout(nodes, (("a", "b"),), lanes=("L0", "L1"), options=LayoutOptions(aligned=(("a", "b"),)))

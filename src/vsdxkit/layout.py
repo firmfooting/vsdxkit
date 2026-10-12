@@ -189,6 +189,8 @@ class LayoutOptions:
     """How many down-and-up passes move boxes toward their neighbours within their track; zero keeps each run centred."""
     pinned: tuple[tuple[str, int], ...] = ()
     """Pairs of (node id, layer): the node sits in that layer, which must come after every layer that feeds it, and its successors move after it. Layers left empty keep a column of width zero."""
+    aligned: tuple[tuple[str, ...], ...] = ()
+    """Groups of node ids drawn on one row (one column when flowing top down). The members of a group are in different layers, one lane and one track, and a node is in at most one group."""
 
 
 @dataclass(frozen=True)
@@ -519,6 +521,31 @@ def _fit(wants: Sequence[float], extents: Sequence[float], low: float, high: flo
     return [snap(p) for p in pos]
 
 
+def _check_aligned(aligned: Sequence[Sequence[str]], known: set[str], layer_of: Mapping[str, int]) -> list[tuple[str, ...]]:
+    """The align groups of two or more nodes as blocks, refusing an unknown id, a node in two groups and two members in one layer."""
+    seen: set[str] = set()
+    blocks: list[tuple[str, ...]] = []
+    for group in aligned:
+        if isinstance(group, str):
+            raise GraphError(f"option aligned has {group!r}, a string; give each group as a tuple of ids")
+        by_layer: dict[int, str] = {}
+        for node_id in group:
+            if node_id not in known:
+                raise GraphError(f"option aligned names {node_id!r}, which is not a node")
+            if node_id in seen:
+                raise GraphError(f"node {node_id!r} is in two align groups")
+            seen.add(node_id)
+            if layer_of[node_id] in by_layer:
+                raise GraphError(
+                    f"align group {list(group)!r} has {by_layer[layer_of[node_id]]!r} and {node_id!r} in one layer; "
+                    "they cannot share a row"
+                )
+            by_layer[layer_of[node_id]] = node_id
+        if len(group) > 1:
+            blocks.append(tuple(group))
+    return blocks
+
+
 def _straighten(
     rows: list[list[_Key]],
     slots: dict[_Key, _Slot],
@@ -527,8 +554,15 @@ def _straighten(
     track_bounds: dict[tuple[int, tuple[int, int]], tuple[float, float]],
     gap: float,
     sweeps: int,
+    blocks: Sequence[tuple[_Key, ...]] = (),
 ) -> None:
-    """Refit each (lane, track) run toward the lower median of its neighbours' centres, down then up, `sweeps` times."""
+    """Refit each (lane, track) run toward the lower median of its neighbours' centres, down then up, `sweeps` times; the members of a block share the lower median of their members' wants."""
+    block_of = {k: b for b in blocks for k in b}
+
+    def want(k: _Key, near: dict[_Key, list[_Key]]) -> float:
+        """The lower median of the centres of `k`'s neighbours, or its own centre with none."""
+        centres = sorted(slots[n].v for n in near[k])
+        return centres[(len(centres) - 1) // 2] if centres else slots[k].v
 
     def refit(layer: int, near: dict[_Key, list[_Key]]) -> None:
         """Move one layer's runs toward their `near` neighbours, each inside its track."""
@@ -538,8 +572,11 @@ def _straighten(
         for key, keys in runs.items():
             wants = []
             for k in keys:
-                centres = sorted(slots[n].v for n in near[k])
-                wants.append(centres[(len(centres) - 1) // 2] if centres else slots[k].v)
+                if k in block_of:
+                    mates = sorted(want(m, near) for m in block_of[k])
+                    wants.append(mates[(len(mates) - 1) // 2])
+                else:
+                    wants.append(want(k, near))
             low, high = track_bounds[key]
             fitted = _fit(wants, [slots[k].v_extent for k in keys], low, high, gap)
             for k, v in zip(keys, fitted, strict=True):
@@ -550,6 +587,53 @@ def _straighten(
             refit(layer, up)
         for layer in range(len(rows) - 2, -1, -1):
             refit(layer, down)
+
+
+def _align_blocks(
+    rows: list[list[_Key]],
+    slots: dict[_Key, _Slot],
+    track_bounds: dict[tuple[int, tuple[int, int]], tuple[float, float]],
+    gap: float,
+    blocks: Sequence[tuple[_Key, ...]],
+) -> None:
+    """Give each block's members one centre, the lower median of theirs or else the first of theirs every member can take, or refuse the block."""
+    row_of = {k: row for row in rows for k in row}
+    for block in blocks:
+        centres = sorted(slots[k].v for k in block)
+        tried = [centres[(len(centres) - 1) // 2], *(slots[k].v for k in block)]
+        for target in dict.fromkeys(tried):
+            moved = {k: slots[k].v for k in block}
+            for k in block:
+                slots[k].v = target
+            if all(_fits_in_run(k, row_of[k], slots, track_bounds, gap) for k in block):
+                break
+            for k, v in moved.items():
+                slots[k].v = v
+        else:
+            raise GraphError(
+                f"align group {list(block)!r} cannot share a row: a member's track or its neighbours leave no room at one coordinate"
+            )
+
+
+def _fits_in_run(
+    key: _Key,
+    row: list[_Key],
+    slots: dict[_Key, _Slot],
+    track_bounds: dict[tuple[int, tuple[int, int]], tuple[float, float]],
+    gap: float,
+) -> bool:
+    """Whether `key` is inside its track and clear of the keys beside it in its layer."""
+    me = slots[key]
+    low, high = track_bounds[(me.lane, me.track)]
+    half = me.v_extent / 2
+    if me.v - half < low - 1e-6 or me.v + half > high + 1e-6:
+        return False
+    for other in row:
+        o = slots[other]
+        same_track = other != key and (o.lane, o.track) == (me.lane, me.track)
+        if same_track and abs(o.v - me.v) < (o.v_extent + me.v_extent) / 2 + gap - 1e-6:
+            return False
+    return True
 
 
 def _count_crossings(upper: Sequence[_Key], lower: Sequence[_Key], links: Collection[tuple[_Key, _Key]]) -> int:
@@ -1434,6 +1518,7 @@ def _lay_out(
     ids = [n.id for n in nodes]
     flipped = _break_cycles(ids, list(edges))
     layer_of = _layers(ids, list(edges), flipped, dict(opts.pinned))
+    blocks = _check_aligned(opts.aligned, set(ids), layer_of)
     n_layers = max(layer_of.values(), default=-1) + 1
 
     slots: dict[_Key, _Slot] = {}
@@ -1603,6 +1688,7 @@ def _lay_out(
             for m in members:
                 m.v = snap(at + m.v_extent / 2)  # on the grid, so even extents put both borders on it
                 at += m.v_extent + v_gap
+    bounds = {key: (track_top[key], track_top[key] + track_height[key]) for key in track_keys}
     if opts.straighten_sweeps > 0:
         near_up: dict[_Key, list[_Key]] = {k: [] for k in slots}
         near_down: dict[_Key, list[_Key]] = {k: [] for k in slots}
@@ -1610,8 +1696,8 @@ def _lay_out(
             for a, b in pairwise(chain):
                 near_down[a].append(b)
                 near_up[b].append(a)
-        bounds = {key: (track_top[key], track_top[key] + track_height[key]) for key in track_keys}
-        _straighten(rows, slots, near_up, near_down, bounds, v_gap, opts.straighten_sweeps)
+        _straighten(rows, slots, near_up, near_down, bounds, v_gap, opts.straighten_sweeps, blocks)
+    _align_blocks(rows, slots, bounds, v_gap, blocks)
 
     def centre_u(slot: _Slot) -> float:
         """The middle of a slot's column, along the flow."""

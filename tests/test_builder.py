@@ -37,7 +37,7 @@ def _fields(cls: type) -> list[str]:
 def test_the_graph_contract_is_the_one_the_spec_states():
     """Fails if a field the docs generator builds against is renamed, reordered or dropped."""
     assert _fields(Diagram) == ["title", "pages"]
-    assert _fields(Page) == ["name", "nodes", "edges", "groups", "lanes"]
+    assert _fields(Page) == ["name", "nodes", "edges", "groups", "lanes", "align"]
     assert _fields(Node) == ["id", "kind", "label", "sublabel", "data", "layer"]
     assert _fields(Edge) == ["source", "target", "label", "kind"]
     assert _fields(Group) == ["id", "label", "node_ids", "groups"]
@@ -835,3 +835,38 @@ def test_a_layer_that_is_not_a_whole_number_of_zero_or_more_is_refused_by_name(l
 def test_node_still_takes_five_positional_arguments_and_layer_defaults_to_none():
     node = Node("a", "process", "A", None, {})
     assert node.layer is None
+
+
+def _three_nodes(**page_args):
+    nodes = tuple(Node(i, "process", i.upper()) for i in "abc")
+    return Page("p", nodes, (Edge("a", "b"), Edge("b", "c")), **page_args)
+
+
+def test_align_is_held_as_tuples_and_a_bare_string_is_refused():
+    assert _three_nodes(align=[["a", "c"]]).align == (("a", "c"),)
+    with pytest.raises(GraphError, match="align"):
+        _three_nodes(align="ac")
+
+
+def test_an_align_id_not_on_the_page_is_refused_by_name():
+    with pytest.raises(GraphError, match="'z'"):
+        Diagram("t", (_three_nodes(align=[["a", "z"]]),)).validate()
+
+
+def test_a_node_in_two_align_groups_is_refused_by_name():
+    with pytest.raises(GraphError, match="'b'"):
+        Diagram("t", (_three_nodes(align=[["a", "b"], ["b", "c"]]),)).validate()
+
+
+def test_align_members_in_different_lanes_are_refused():
+    page = _three_nodes(align=[["a", "b"]], lanes=(Lane("l1", "One", ["a", "c"]), Lane("l2", "Two", ["b"])))
+    with pytest.raises(GraphError, match="lane"):
+        Diagram("t", (page,)).validate()
+
+
+def test_aligned_nodes_are_drawn_on_one_row():
+    nodes = tuple(Node(i, "process", i.upper()) for i in "abcd")
+    edges = (Edge("a", "b"), Edge("a", "c"), Edge("c", "d"))
+    document = Diagram("t", (Page("p", nodes, edges, align=[["b", "d"]]),)).build()
+    by_source = _by_source(document)
+    assert by_source["b"].y == by_source["d"].y
