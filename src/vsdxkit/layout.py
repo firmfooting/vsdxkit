@@ -937,6 +937,12 @@ def layered_layout(
     4 groups (about 17 s); 200 nodes, 400 edges, no groups or lanes. 200 nodes and 400 edges in 20 groups is refused
     (after about 40 s). The ceiling falls with the number of groups and lanes more than with nodes.
 
+    ``LayoutOptions.page`` is the page shape to aim for (a ``PageTarget``, 16:9 by default; ``None`` keeps one row).
+    A page without lanes whose flow is left to right is cut into rows of layers, chosen so that the page's aspect,
+    snapped to the grid, is nearest the target's in log terms (the fewer rows on a tie). With ``wrap="snake"`` odd rows
+    run against the flow, with ``"rows"`` every row runs with it, and ``"none"`` does not wrap. A group is never split
+    across rows. Lanes and top-down flows are not wrapped, and the page has no maximum size.
+
     The page target steers the direction too. With ``PageTarget.direction`` left at ``auto``, a page without lanes of at
     most 80 nodes and two edges per node whose aspect lies outside the target's band is also laid out the other way, and the result nearer the
     target is kept, so a top-down request can return a left-to-right page. A tie, an error from the other direction, a
@@ -948,7 +954,9 @@ def layered_layout(
     :param groups: every group id; a node names its innermost group
     :raises GraphError: lanes with a top-down direction, an edge naming a missing node, a node in an unknown lane or
         group or without a lane when lanes are declared, a node size that is not finite and positive, a repeated node,
-        lane or group id, an option that is not a finite non-negative number, a layer_gap too small for the edges that
+        lane or group id, a ``page`` that is not a PageTarget or None, a ``page.aspect`` that is not a finite number above
+        zero, a ``page.tolerance`` that is not a finite number of zero or more, a ``page.wrap`` or ``page.direction``
+        outside its choices, an option that is not a finite non-negative number, a layer_gap too small for the edges that
         cross it, a node too small to give each of its parallel edges a grid step of its border, an edge that cannot
         be routed round the groups it does not belong to, two edges that cannot be kept on lines of their own, a
         layout past the search limit, a group whose members sit in different lanes, or a parent that is undeclared,
