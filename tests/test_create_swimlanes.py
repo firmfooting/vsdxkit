@@ -925,3 +925,31 @@ def test_a_sized_decision_and_start_end_carry_what_their_masters_formulas_give_a
     assert rows[("1", "X")] == pytest.approx(0.4)  # MIN(Height/2, Width/4)
     assert rows[("2", "X")] == pytest.approx(2.6)  # Width-Geometry1.X1
     assert rows[("3", "A")] == pytest.approx(3.0)
+
+
+def test_renaming_a_lane_refreshes_the_function_value_of_the_steps_in_it():
+    document, diagram = _diagram()
+    step = _step(document)
+    diagram.set_lane_label(diagram.lanes[1], "Auditor")
+    assert step.data_properties["Function"].value == "Auditor"
+
+
+def test_a_disabled_matching_event_is_enabled():
+    document = Document.new()
+    root = _document_root(document)
+    root.append(
+        ET.fromstring(
+            f"<EventList xmlns='{namespace[1:-1]}'><EventItem ID='0' EventCode='1' Action='0' Enabled='0' Target='CFF14' TargetArgs=''/></EventList>"
+        )
+    )
+    _page(document).create_swimlanes(BANDS, left=0.5, top=7.0, width=10.0)
+    _, items = _hooks(_document_root(document))
+    first = next(i for i in items if i["EventCode"] == "1")
+    assert (first["Action"], first["Enabled"]) == ("1", "1") and len(items) == 2
+
+
+def test_a_page_of_two_diagrams_still_takes_the_kinds_that_do_not_depend_on_one():
+    document, diagram = _diagram()
+    page = _page(document)
+    diagram.container.copy(page)
+    assert page.create_shape(ShapeKind.RECTANGLE, x=3.0, y=4.0)

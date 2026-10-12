@@ -31,6 +31,7 @@ from vsdxkit import namespace
 from vsdxkit._shape_tree import SHEET_REFERENCE, remap_sheet_references
 from vsdxkit._xmlio import xml_value
 from vsdxkit.errors import InvalidOperationError
+from vsdxkit.shape_kind import ShapeKind
 from vsdxkit.shapes import PageView, Shape, _is_connector, _is_name_or_copy
 
 
@@ -197,6 +198,10 @@ def _diagram_on(page: _DiagramPage) -> SwimlaneDiagram | None:
     return SwimlaneDiagram(containers[0]) if containers else None
 
 
+STEP_KINDS = frozenset({ShapeKind.PROCESS, ShapeKind.START_END, ShapeKind.DECISION})
+"""The kinds a page that holds a diagram makes as instances of Visio's flowchart masters."""
+
+
 def _in_diagram(page: _DiagramPage) -> bool:
     """Whether the page holds a CFF container, as :func:`_diagram_on` finds one but without refusing a page that holds several."""
     return any(_named(shape, _CONTAINER_NAME) for shape in page.children)
@@ -240,10 +245,17 @@ def _write_flowchart_hooks(root: ET.Element) -> None:
         events = ET.SubElement(root, f"{namespace}EventList")
     items = events.findall(f"{namespace}EventItem")
     for item_id, code, args in _FLOWCHART_EVENTS:
-        if any(
-            (i.attrib.get("Target"), i.attrib.get("EventCode"), i.attrib.get("TargetArgs", "")) == ("CFF14", code, args)
-            for i in items
-        ):
+        match = next(
+            (
+                i
+                for i in items
+                if (i.attrib.get("Target"), i.attrib.get("EventCode"), i.attrib.get("TargetArgs", "")) == ("CFF14", code, args)
+            ),
+            None,
+        )
+        if match is not None:
+            match.attrib["Action"] = "1"  # a matching event that is switched off cannot run the add-on
+            match.attrib["Enabled"] = "1"
             continue
         taken = {i.attrib.get("ID") for i in events.findall(f"{namespace}EventItem")}
         free = item_id if item_id not in taken else str(next(n for n in range(1, len(taken) + 2) if str(n) not in taken))
@@ -931,6 +943,8 @@ class SwimlaneDiagram:
         """
         self._require_lane(lane)
         self._write_label(lane, label, subject=f"shape {lane.ID}")
+        for member in self.shapes_in(lane):
+            _relate_step(member, self._page)  # a step's cached Function is its lane's heading
 
     def move_to_lane(self, shape: Shape, lane: Shape) -> None:
         """Put a shape in a lane by centring it on the lane's band, keeping its PinX.

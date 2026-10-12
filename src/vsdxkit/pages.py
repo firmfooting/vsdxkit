@@ -47,6 +47,7 @@ from vsdxkit.shapes import (
     _wrap_descendants,
 )
 from vsdxkit.swimlanes import (
+    STEP_KINDS,
     SwimlaneDiagram,
     _create_diagram,
     _diagram_on,
@@ -919,7 +920,7 @@ class Page:
         in_diagram = False
         if isinstance(kind_or_prototype, ShapeKind):
             in_diagram = _in_diagram(self)
-            if in_diagram:
+            if in_diagram and kind_or_prototype in STEP_KINDS:
                 _diagram_on(self)  # refuses a page of several diagrams before anything is copied
             source = self._document._kind_source(kind_or_prototype, in_diagram=in_diagram)
         elif isinstance(kind_or_prototype, Shape):
