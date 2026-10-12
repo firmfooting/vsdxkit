@@ -739,6 +739,7 @@ def layered_layout(
         return _lay_out(nodes, edges, lanes, groups, options, True, work)
     except _Crowded:
         # every edge at a node had a border point of its own; a graph too dense for that shares them, as it did before
+        # ponytail: a whole second layout, so a dense graph pays twice (150 nodes took 2.3 s, now 14 s); share points per node instead if that bites
         return _lay_out(nodes, edges, lanes, groups, options, False, work)
 
 
