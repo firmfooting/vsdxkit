@@ -53,13 +53,14 @@ def _even(value: float) -> float:
 def _spread(count: int, extent: float, node: object, pitch: float = 0.2) -> list[float]:
     """Offsets, in inches on the grid and about zero, that keep `count` parallel routes `pitch` apart inside `extent`.
 
-    The pitch shrinks to the side divided by (count + 1) on a short side, and the ports cover at most 80 percent of the side.
+    The pitch shrinks to the side divided by (count + 1) on a short side but never below 0.1 inch, and the ports cover at most 80 percent of the side
+    unless that would push the pitch below 0.1 inch; only a side too short to hold the ports 0.1 inch apart shrinks them further.
 
     :raises GraphError: when `extent` has fewer grid steps than `count`, so two routes would coincide
     """
     step = min(round(max(0.1, min(pitch, extent / (count + 1))) / GRID), round(extent / GRID) // count)
     if count > 1:
-        step = min(step, int(0.8 * extent / GRID + 1e-9) // (count - 1))
+        step = min(step, max(int(0.8 * extent / GRID + 1e-9) // (count - 1), round(0.1 / GRID)))
     if step == 0:
         raise GraphError(f"node {node!r} is too small for {count} parallel edges; each needs a grid step of its border")
     start = -((count - 1) * step // 2)
@@ -116,10 +117,6 @@ class LayoutOptions:
     """Inches left of the first layer for lane labels, when there are lanes."""
     sweeps: int = 8
     """How many up-and-down passes order the boxes within their layers."""
-    port_pitch: float = 0.2
-    """Inches between the points where parallel routes meet one side of a box, at least 0.1; a short side shrinks it."""
-    channel_pitch: float = 0.2
-    """Inches between parallel routes in a channel between layers, at least one grid step."""
     page: PageTarget | None = field(default_factory=PageTarget)
     """The page shape to aim for, or None for none."""
     parents: tuple[tuple[str, str], ...] = ()
@@ -128,6 +125,10 @@ class LayoutOptions:
     """Per group, (group id, width, height) in inches of its heading text. The group's box is widened to the width and grows at the top to clear the height above its members; a box that then covers a node or group that is not its own is refused."""
     edge_labels: tuple[tuple[float, float] | None, ...] = ()
     """Per edge, in the order of ``edges``, the (width, height) in inches of its label, or None for none; empty means no edge has one. Each label is placed at its route, at the nearest spot clear of every node, heading, other group, lane heading and other label, so it may sit beside its route and not on it; the gaps it crosses are widened to hold it."""
+    port_pitch: float = 0.2
+    """Inches between the points where parallel routes meet one side of a box, at least 0.1; a short side shrinks it."""
+    channel_pitch: float = 0.2
+    """Inches between parallel routes in a channel between layers, at least one grid step."""
 
 
 @dataclass(frozen=True)
