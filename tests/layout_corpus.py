@@ -26,24 +26,48 @@ def _load(stem: str) -> ModuleType:
     return module
 
 
-def fixture_layout(stem: str, override: LayoutOptions | None = None) -> Layout:
-    """The layout of fixture `stem` under its own options, as the builder would draw it; `override` replaces only the options' page target."""
+def _fixture_page(stem: str, override: LayoutOptions | None = None) -> tuple[Page, LayoutOptions]:
+    """Fixture `stem`'s page and its options; `override` replaces only the options' page target."""
     module = _load(stem)
     options = module.OPTIONS or LayoutOptions()
     if override is not None:
         options = replace(options, page=override.page)
-    return builder._layout_page(module.page(), options)[0]
+    return module.page(), options
+
+
+def _random_page(seed: int, n: int, m: int) -> Page:
+    """A seeded random page of `n` nodes and `m` edges, no lanes or groups."""
+    rows, edges, *_ = random_graph(seed, n, m, 0, 0)
+    nodes = [Node(row[0], KINDS[i % len(KINDS)], f"Step {i}") for i, row in enumerate(rows)]
+    return Page("rand", nodes, [Edge(s, t) for s, t in edges])
+
+
+def fixture_layout(stem: str, override: LayoutOptions | None = None) -> Layout:
+    """The layout of fixture `stem` under its own options, as the builder would draw it; `override` replaces only the options' page target."""
+    page, options = _fixture_page(stem, override)
+    return builder._layout_page(page, options)[0]
 
 
 def random_layout(seed: int, n: int, m: int, override: LayoutOptions | None = None) -> Layout:
     """A seeded random page of `n` nodes and `m` edges, no lanes or groups, default options (or `override`)."""
-    rows, edges, *_ = random_graph(seed, n, m, 0, 0)
-    nodes = [Node(row[0], KINDS[i % len(KINDS)], f"Step {i}") for i, row in enumerate(rows)]
-    return builder._layout_page(Page("rand", nodes, [Edge(s, t) for s, t in edges]), override or LayoutOptions())[0]
+    return builder._layout_page(_random_page(seed, n, m), override or LayoutOptions())[0]
+
+
+def _drawn(page: Page, options: LayoutOptions) -> dict[tuple[str, str, int], tuple[tuple[float, float], ...]]:
+    """The connector points the builder draws for `page`, from the builder's own function."""
+    layout, sizes = builder._layout_page(page, options)
+    return builder._drawn_paths(page, layout, sizes)
 
 
 def all_layouts() -> dict[str, Layout]:
     """Every corpus layout by name: the fixtures, then rand-0 to rand-4 (40 nodes, 60 edges)."""
     out = {stem: fixture_layout(stem) for stem in FIXTURES}
     out.update({f"rand-{seed}": random_layout(seed, 40, 60) for seed in range(5)})
+    return out
+
+
+def all_drawn() -> dict[str, dict[tuple[str, str, int], tuple[tuple[float, float], ...]]]:
+    """Every corpus entry's drawn connector points by name, keyed like `all_layouts`."""
+    out = {stem: _drawn(*_fixture_page(stem)) for stem in FIXTURES}
+    out.update({f"rand-{seed}": _drawn(_random_page(seed, 40, 60), LayoutOptions()) for seed in range(5)})
     return out

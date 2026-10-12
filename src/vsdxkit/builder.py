@@ -412,6 +412,31 @@ def _layout_page(page: Page, options: LayoutOptions) -> tuple[Layout, dict[str, 
     return layout, sizes
 
 
+def _drawn_edges(page: Page) -> list[tuple[Edge, tuple[str, str, int]]]:
+    """Each routed edge of `page` with its layout key (source, target, parallel index), in input order."""
+    parallel: dict[tuple[str, str], int] = {}
+    out = []
+    for edge in page.edges:
+        if edge.kind == "page-link":
+            continue
+        n = parallel.get((edge.source, edge.target), 0)
+        parallel[(edge.source, edge.target)] = n + 1
+        out.append((edge, (edge.source, edge.target, n)))
+    return out
+
+
+def _drawn_paths(
+    page: Page, layout: Layout, sizes: Mapping[str, tuple[float, float]]
+) -> dict[tuple[str, str, int], tuple[tuple[float, float], ...]]:
+    """The points each edge is drawn through, its route clipped to the node outlines; the digest hashes these."""
+    kinds = {node.id: node.kind for node in page.nodes}
+    out = {}
+    for edge, key in _drawn_edges(page):
+        ends = [(kinds[i], (layout.nodes[i].x, layout.nodes[i].y, *sizes[i])) for i in (edge.source, edge.target)]
+        out[key] = tuple(clip_route(layout.routes[key], *ends))
+    return out
+
+
 def _draw_page(page: Page, target: VisioPage, options: LayoutOptions, links: Mapping[str, Mapping[str, str]]) -> None:
     """Lay `page` out and draw it onto `target`: backdrops first, then nodes, then edges, so ids follow input order within each."""
     layout, sizes = _layout_page(page, options)
@@ -481,15 +506,9 @@ def _draw_layout(
         box = layout.nodes[node.id]
         text = node.label if node.sublabel is None else f"{node.label}\n{node.sublabel}"
         add_data_rows(draw_node(target, node.kind, box.x, box.y, *sizes[node.id], text), _rows(node, links), clear=True)
-    nodes_by_id = {node.id: node for node in page.nodes}
-    parallel: dict[tuple[str, str], int] = {}
-    for edge in page.edges:
-        if edge.kind == "page-link":
-            continue
-        n = parallel.get((edge.source, edge.target), 0)
-        parallel[(edge.source, edge.target)] = n + 1
-        ends = [(nodes_by_id[i].kind, (layout.nodes[i].x, layout.nodes[i].y, *sizes[i])) for i in (edge.source, edge.target)]
-        points = clip_route(layout.routes[(edge.source, edge.target, n)], *ends)
+    drawn = _drawn_paths(page, layout, sizes)
+    for edge, key in _drawn_edges(page):
+        points = drawn[key]
         source = f"{edge.source}->{edge.target}"
         add_data_rows(
             draw_path(target, points, arrow=True, dashed=edge.kind in _DASHED_EDGES),
@@ -497,7 +516,7 @@ def _draw_layout(
             clear=True,
         )
         if edge.label:
-            label = layout.labels[(edge.source, edge.target, n)]
+            label = layout.labels[key]
             add_data_rows(
                 draw_label(target, label.x, label.y, edge.label),
                 {"Source": source, "Kind": "edge_label", DECORATION_ROW: "1"},

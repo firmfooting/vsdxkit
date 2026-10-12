@@ -81,16 +81,37 @@ def measure_dense() -> dict[str, dict[str, float | str]]:
     return out
 
 
+MISSING = "n/a"
+"""What a table cell shows for a case or column the reference revision does not have."""
+
+
 def _table(rows: dict[str, dict[str, float | int]], other: dict[str, dict[str, float | int]] | None = None) -> str:
-    """A markdown table of `rows`; with `other`, each cell reads `other -> rows` where they differ."""
+    """A markdown table of `rows`; with `other`, each cell reads `other -> rows` where they differ, `n/a` for a missing one."""
     lines = ["| case | " + " | ".join(COLUMNS) + " |", "| --- |" + " --- |" * len(COLUMNS)]
-    for name, row in rows.items():
+    for name in rows if other is None else sorted(set(rows) | set(other)):
         cells = []
         for column in COLUMNS:
-            before = None if other is None else other.get(name, {}).get(column)
-            cells.append(str(row[column]) if before in (None, row[column]) else f"{before} -> {row[column]}")
+            now = rows.get(name, {}).get(column, MISSING)
+            before = now if other is None else other.get(name, {}).get(column, MISSING)
+            cells.append(str(now) if before == now else f"{before} -> {now}")
         lines.append(f"| {name} | " + " | ".join(cells) + " |")
     return "\n".join(lines)
+
+
+def render(
+    metrics: dict[str, dict[str, float | int]],
+    dense: dict[str, dict[str, float | str]],
+    reference: dict[str, dict[str, float | int]] | None,
+    as_json: bool,
+) -> str:
+    """The report in one mode: JSON always carries metrics, dense and (with a reference) the reference; the table prints dense below."""
+    if as_json:
+        record: dict = {"metrics": metrics, "dense": dense}
+        if reference is not None:
+            record["against"] = reference
+        return json.dumps(record, indent=2, sort_keys=True)
+    out = _table(metrics, reference)
+    return out + ("\n\n" + json.dumps(dense, indent=2, sort_keys=True) if dense else "")
 
 
 def _reference(ref: str) -> dict[str, dict[str, float | int]]:
@@ -103,7 +124,8 @@ def _reference(ref: str) -> dict[str, dict[str, float | int]]:
             raise SystemExit(f"{ref} has no tools/layout_metrics.py; REF must contain Phase 0")
         env = {**os.environ, "PYTHONPATH": str(Path(tmp) / "src")}
         result = subprocess.run([sys.executable, str(tool), "--json"], capture_output=True, text=True, check=True, env=env)
-        return json.loads(result.stdout)
+        data = json.loads(result.stdout)
+        return data.get("metrics", data)  # a Phase 0 revision prints the bare metrics
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -121,14 +143,7 @@ def main(argv: list[str] | None = None) -> int:
         with open(args.write, "w", encoding="utf-8", newline="\n") as handle:
             json.dump(record, handle, indent=2, sort_keys=True)
             handle.write("\n")
-    if args.json:
-        print(json.dumps(metrics, indent=2, sort_keys=True))
-    elif args.against:
-        print(_table(metrics, _reference(args.against)))
-    else:
-        print(_table(metrics))
-        if dense:
-            print("\n" + json.dumps(dense, indent=2, sort_keys=True))
+    print(render(metrics, dense, _reference(args.against) if args.against else None, args.json))
     return 0
 
 

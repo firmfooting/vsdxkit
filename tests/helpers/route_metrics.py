@@ -152,8 +152,17 @@ def aspect(layout: Any) -> float:
     return layout.width / layout.height
 
 
-def layout_digest(layouts: Mapping[str, Any]) -> str:
-    """A sha256 over the boxes, routes, labels and size of each named layout, every float to two decimals."""
+def route_key(key: Key) -> str:
+    """`key` as an unambiguous string: JSON, so a delimiter inside an id cannot make two keys collide."""
+    return json.dumps(list(key), separators=(",", ":"))
+
+
+def layout_digest(layouts: Mapping[str, Any], drawn: Mapping[str, Mapping[Key, Any]] | None = None) -> str:
+    """A sha256 over the boxes, routes, labels and size of each named layout, every float to two decimals.
+
+    `drawn` is each name's connector points as the builder draws them (the corpus gets them from the builder's own
+    function); when given they are hashed too, so the digest cannot pass while the drawn paths differ.
+    """
 
     def f(v: float) -> str:
         return f"{v + 0.0:.2f}".replace("-0.00", "0.00")
@@ -165,8 +174,13 @@ def layout_digest(layouts: Mapping[str, Any]) -> str:
         name: {
             "size": [f(lay.width), f(lay.height)],
             "nodes": {k: b(v) for k, v in lay.nodes.items()},
-            "routes": {"|".join(map(str, k)): [[f(x), f(y)] for x, y in r] for k, r in sorted(lay.routes.items())},
-            "labels": {"|".join(map(str, k)): b(v) for k, v in sorted(lay.labels.items())},
+            "routes": {route_key(k): [[f(x), f(y)] for x, y in r] for k, r in sorted(lay.routes.items())},
+            "labels": {route_key(k): b(v) for k, v in sorted(lay.labels.items())},
+            **(
+                {"drawn": {route_key(k): [[f(x), f(y)] for x, y in r] for k, r in sorted(drawn[name].items())}}
+                if drawn is not None
+                else {}
+            ),
         }
         for name, lay in sorted(layouts.items())
     }
