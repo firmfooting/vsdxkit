@@ -165,10 +165,7 @@ def test_lanes_never_wrap_and_a_top_down_flow_is_not_cut():
     nodes, edges = _chain(25)
     laned = tuple(LayoutNode(n.id, n.width, n.height, "l") for n in nodes)
     assert layered_layout(laned, edges, ("l",)).rows == ()
-    assert (
-        layered_layout(nodes, edges, options=LayoutOptions(direction="top_down", page=PageTarget(direction="top_down"))).rows
-        == ()
-    )
+    assert layered_layout(nodes, edges, options=LayoutOptions(direction="top_down")).rows == ()
 
 
 def _straight_down(route):
@@ -266,58 +263,50 @@ def test_a_blocked_fold_route_falls_back_to_the_search_and_the_page_still_lays_o
     rows, edges, lane_ids, group_ids, parents = random_graph(17, 9, 14, 0, 3)
     edges = (*edges, ("n2", "n4"), ("n2", "n4"), ("n2", "n4"), ("n1", "n3"), ("n1", "n3"))
     nodes = tuple(LayoutNode(*row) for row in rows)
-    tight = LayoutOptions(
-        parents=parents,
-        node_gap=0.0,
-        layer_gap=0.2,
-        margin=0.0,
-        group_padding=0.05,
-        page=PageTarget(direction="left_to_right"),
-    )
+    tight = LayoutOptions(parents=parents, node_gap=0.0, layer_gap=0.2, margin=0.0, group_padding=0.05)
     lay = layered_layout(nodes, edges, lane_ids, group_ids, tight)
     assert len(lay.rows) > 1
     _check(lay, nodes, parents)
     _check_routes(lay, clear_of_borders=False)
 
 
-def _miss(lay):
-    return abs(math.log(lay.width / lay.height / (16 / 9)))
-
-
 def _hub(n):
-    kids = tuple(LayoutNode(f"c{i}", 2.4, 1.0) for i in range(n))
-    return (LayoutNode("hub", 2.4, 1.0), *kids), tuple(("hub", k.id) for k in kids)
+    kids = tuple(LayoutNode(f"c{i}", 1.0, 1.0) for i in range(n))
+    return (LayoutNode("hub", 1.0, 1.0), *kids), tuple(("hub", k.id) for k in kids)
 
 
-def test_a_wide_hub_top_down_becomes_a_left_to_right_page():
-    nodes, edges = _hub(10)
-    down = layered_layout(nodes, edges, options=LayoutOptions(direction="top_down", page=PageTarget(direction="top_down")))
-    auto = layered_layout(nodes, edges, options=LayoutOptions(direction="top_down"))
-    assert _miss(auto) < _miss(down)
+def test_an_unset_direction_lets_the_page_target_flip_a_tall_hub_to_top_down():
+    nodes, edges = _hub(5)
+    assert layered_layout(nodes, edges, options=LayoutOptions(direction="left_to_right")).height > 5
+    auto = layered_layout(nodes, edges)
+    assert auto.width > auto.height
+    assert auto.nodes["hub"].y > auto.nodes["c0"].y
 
 
-def test_a_pinned_direction_is_not_second_guessed():
+def test_an_explicit_direction_is_kept_on_the_same_hub():
+    nodes, edges = _hub(5)
+    down = layered_layout(nodes, edges, options=LayoutOptions(direction="top_down"))
+    across = layered_layout(nodes, edges, options=LayoutOptions(direction="left_to_right"))
+    assert down.nodes["hub"].y > down.nodes["c0"].y
+    assert across.nodes["hub"].x < across.nodes["c0"].x and across.height > across.width
+
+
+def test_a_pinned_page_direction_is_not_second_guessed():
     nodes, edges = _chain(3)
     lay = layered_layout(nodes, edges, options=LayoutOptions(page=PageTarget(direction="top_down")))
     assert lay.height > lay.width
 
 
-def test_a_tie_or_a_page_in_the_band_keeps_the_configured_direction():
+def test_a_page_in_the_band_flows_left_to_right():
     nodes = (LayoutNode("a", 2, 2), LayoutNode("b", 2, 2))
-    ltr = layered_layout(nodes, (("a", "b"),))
-    pinned = layered_layout(nodes, (("a", "b"),), options=LayoutOptions(page=PageTarget(direction="left_to_right")))
-    assert (ltr.width, ltr.height) == (pinned.width, pinned.height)
-    down = layered_layout(
-        nodes, (("a", "b"),), options=LayoutOptions(direction="top_down", page=PageTarget(direction="top_down"))
-    )
-    assert down.height > down.width
+    lay = layered_layout(nodes, (("a", "b"),))
+    assert lay.nodes["a"].x < lay.nodes["b"].x
 
 
-def test_a_large_page_keeps_the_configured_direction():
+def test_a_large_page_flows_left_to_right():
     nodes, edges = _hub(lo._AUTO_DIRECTION_NODES)
-    auto = layered_layout(nodes, edges, options=LayoutOptions(direction="top_down"))
-    pinned = layered_layout(nodes, edges, options=LayoutOptions(direction="top_down", page=PageTarget(direction="top_down")))
-    assert (auto.width, auto.height) == (pinned.width, pinned.height)
+    lay = layered_layout(nodes, edges)
+    assert lay.nodes["hub"].x < lay.nodes["c0"].x
 
 
 def test_lanes_ignore_the_page_target():
@@ -328,21 +317,29 @@ def test_lanes_ignore_the_page_target():
     assert lay.rows == () and set(lay.lanes) == {"L0", "L1"}
 
 
-def test_a_second_layout_that_is_no_nearer_keeps_the_configured_direction(monkeypatch):
+def test_a_second_layout_that_is_no_nearer_keeps_left_to_right(monkeypatch):
     calls = []
     real = lo._laid_out
     monkeypatch.setattr(lo, "_laid_out", lambda *a: calls.append(a) or real(*a))
     nodes = (LayoutNode("a", 2, 2),)
-    lay = layered_layout(nodes, (), options=LayoutOptions(direction="top_down"))
+    lay = layered_layout(nodes, ())
     assert len(calls) == 2, "a square page is outside the band, so the other direction was tried"
-    assert lay == real(nodes, (), (), (), LayoutOptions(direction="top_down"))
+    assert lay == real(nodes, (), (), (), None)
 
 
-def test_a_dense_page_keeps_the_configured_direction(monkeypatch):
+def test_a_dense_page_flows_left_to_right(monkeypatch):
     calls = []
     real = lo._laid_out
     monkeypatch.setattr(lo, "_laid_out", lambda *a: calls.append(a) or real(*a))
     nodes = tuple(LayoutNode(f"n{i}", 2, 2) for i in range(4))
     edges = tuple((f"n{i}", f"n{j}") for i in range(4) for j in range(i + 1, 4)) * 2
-    layered_layout(nodes, edges, options=LayoutOptions(direction="top_down"))
+    layered_layout(nodes, edges)
     assert len(edges) > 2 * len(nodes) and len(calls) == 1
+
+
+def test_an_explicit_direction_skips_the_second_layout(monkeypatch):
+    calls = []
+    real = lo._laid_out
+    monkeypatch.setattr(lo, "_laid_out", lambda *a: calls.append(a) or real(*a))
+    layered_layout((LayoutNode("a", 2, 2),), (), options=LayoutOptions(direction="top_down"))
+    assert len(calls) == 1

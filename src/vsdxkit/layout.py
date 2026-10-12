@@ -93,15 +93,15 @@ class PageTarget:
     wrap: Literal["snake", "rows", "none"] = "snake"
     """How a long flow is cut into rows: ``snake`` runs odd rows against the flow so a row ends above the next one's start, ``rows`` runs every row with the flow and accepts a long edge back to the start, ``none`` does not wrap."""
     direction: Literal["auto", "left_to_right", "top_down"] = "auto"
-    """``auto`` lays the page out both ways and keeps the one nearer the aspect, ``LayoutOptions.direction`` winning a tie."""
+    """``auto`` lets the page target choose when ``LayoutOptions.direction`` is not given: the page is laid out both ways and the one nearer the aspect is kept, left to right on a tie. A ``LayoutOptions.direction`` you give is kept. ``left_to_right`` or ``top_down`` pins the direction and overrides ``LayoutOptions.direction``."""
 
 
 @dataclass(frozen=True)
 class LayoutOptions:
     """How a layout is spaced and which way it flows."""
 
-    direction: Literal["left_to_right", "top_down"] = "left_to_right"
-    """The way the flow runs. Lanes need ``left_to_right``."""
+    direction: Literal["left_to_right", "top_down"] | None = None
+    """The way the flow runs, or None for not given, which flows left to right unless ``PageTarget.direction`` is ``auto`` and the other way fits the page target better. A direction you give is kept. Lanes need ``left_to_right``."""
     layer_gap: float = 1.0
     """Inches between one layer's column and the next, where edges run. The default widens for a gap crossed by many edges; a smaller value of your own that cannot hold them is refused."""
     node_gap: float = 0.4
@@ -992,11 +992,11 @@ def layered_layout(
     run against the flow, with ``"rows"`` every row runs with it, and ``"none"`` does not wrap. A group is never split
     across rows. Lanes and top-down flows are not wrapped, and the page has no maximum size.
 
-    The page target steers the direction too. With ``PageTarget.direction`` left at ``auto``, a page without lanes of at
-    most 80 nodes and two edges per node whose aspect lies outside the target's band is also laid out the other way, and the result nearer the
-    target is kept, so a top-down request can return a left-to-right page. A tie, an error from the other direction, a
-    laned page or a larger page keeps the configured ``LayoutOptions.direction``. Pin it with
-    ``PageTarget(direction=...)``, or pass ``page=None``.
+    The page target steers the direction only when ``LayoutOptions.direction`` is not given. With it unset and
+    ``PageTarget.direction`` at ``auto``, a page without lanes of at most 80 nodes and two edges per node whose aspect
+    lies outside the target's band is also laid out top down, and the result nearer the target is kept. A tie, an error
+    from the other layout, a laned page or a larger page flows left to right. A ``LayoutOptions.direction`` you give is
+    always kept; ``PageTarget(direction=...)`` pins one too, and ``page=None`` turns the target off.
 
     :param edges: pairs of (source id, target id); a repeat is a parallel edge, a pair of one id a self-loop
     :param lanes: lane ids, top to bottom
@@ -1016,15 +1016,15 @@ def layered_layout(
     target = opts.page
     if (
         not isinstance(target, PageTarget)
+        or opts.direction is not None
         or target.direction != "auto"
         or lanes
         or len(nodes) > _AUTO_DIRECTION_NODES
         or len(edges) > _AUTO_DIRECTION_EDGES_PER_NODE * len(nodes)
-        or opts.direction not in ("left_to_right", "top_down")
         or _aspect_miss(first, target) <= snap(math.log1p(target.tolerance))
     ):
         return first
-    other = "left_to_right" if opts.direction == "top_down" else "top_down"
+    other = "top_down"
     try:
         second = _laid_out(nodes, edges, lanes, groups, replace(opts, direction=other))
     except GraphError:
@@ -1125,7 +1125,8 @@ def _lay_out(
     """`layered_layout`, with `own_points` saying whether each edge at a node gets a border point of its own, and its search steps charged to `spent`. `slack` grid steps are added to the lane padding and the clearance between tracks, which a layout whose rounded group boxes came out too close asks for."""
     opts = options if options is not None else LayoutOptions()
     page_direction = opts.page.direction if isinstance(opts.page, PageTarget) else "auto"
-    top_down = (opts.direction if lanes or page_direction == "auto" else page_direction) == "top_down"
+    direction = opts.direction or "left_to_right"
+    top_down = (direction if lanes or page_direction == "auto" else page_direction) == "top_down"
     for name in ("layer_gap", "node_gap", "margin", "group_padding", "lane_padding", "lane_heading"):
         value = getattr(opts, name)
         if not (isinstance(value, int | float) and math.isfinite(value) and value >= 0):
@@ -1151,9 +1152,9 @@ def _lay_out(
             and all(isinstance(v, int | float) and math.isfinite(v) and v > 0 for v in entry)
         ):
             raise GraphError(f"a label or heading size is {entry!r}; give (width, height), both finite and positive")
-    if opts.direction not in ("left_to_right", "top_down"):
-        raise GraphError(f"option direction is {opts.direction!r}; it must be 'left_to_right' or 'top_down'")
-    if lanes and opts.direction == "top_down":
+    if opts.direction not in (None, "left_to_right", "top_down"):
+        raise GraphError(f"option direction is {opts.direction!r}; it must be 'left_to_right', 'top_down' or None")
+    if lanes and direction == "top_down":
         raise GraphError("lanes need direction='left_to_right'; a top-down layout has no bands to put them in")
     by_id = {n.id: n for n in nodes}
     for source, target in edges:
