@@ -27,6 +27,9 @@ class _LabelRefused(GraphError):
     """A label with no straight stretch of its route to sit on; a page cut into rows may still fit it in one row."""
 
 
+_ROOM_FACTORS = (1.5, 2.0, 3.0, 4.0, 6.0)
+"""How much a label that fits nowhere multiplies layer_gap, node_gap, port_pitch and channel_pitch, in order."""
+
 _Key = str | tuple[int, int]
 """A slot's key: a node's id, or (edge number, layer) for a dummy, which no string id can equal."""
 
@@ -159,7 +162,7 @@ class PageTarget:
     wrap: Literal["snake", "rows", "none"] = "snake"
     """How a long flow is cut into rows: ``snake`` runs odd rows against the flow so a row ends above the next one's start, ``rows`` runs every row with the flow and accepts a long edge back to the start, ``none`` does not wrap."""
     direction: Literal["auto", "left_to_right", "top_down"] = "auto"
-    """``auto`` lets the page target choose when ``LayoutOptions.direction`` is not given: the page is laid out both ways and the one nearer the aspect is kept, left to right on a tie. A ``LayoutOptions.direction`` you give is kept. ``left_to_right`` or ``top_down`` pins the direction and overrides ``LayoutOptions.direction``."""
+    """``auto`` lets the page target choose when ``LayoutOptions.direction`` is not given: the page is laid out both ways and the one nearer the aspect is kept, left to right on a tie. A ``LayoutOptions.direction`` you give is kept. ``left_to_right`` or ``top_down`` pins the direction and overrides ``LayoutOptions.direction``. A label that fits nowhere may override the page shape and the spacing: ``layered_layout`` tries one row, then wider spacing, then no page target, before refusing it."""
 
 
 @dataclass(frozen=True)
@@ -1482,6 +1485,12 @@ def layered_layout(
     from the other layout, a laned page or a larger page flows left to right. A ``LayoutOptions.direction`` you give is
     always kept; ``PageTarget(direction=...)`` pins one too, and ``page=None`` turns the target off.
 
+    A label that fits no straight stretch of its route is not refused at once. The layout is tried again, each step
+    once and in this order: the page with ``wrap="none"`` (one row, the pinned or chosen direction kept), then that
+    with ``layer_gap``, ``node_gap``, ``port_pitch`` and ``channel_pitch`` multiplied by 1.5, 2, 3, 4 and 6, then the last
+    of those with no page target. A step taken adds one to ``Layout.fallbacks`` (the step's number). Only when the
+    ladder is exhausted is the label refused, naming its edge, so a label may override the page shape and the spacing.
+
     :param edges: pairs of (source id, target id); a repeat is a parallel edge, a pair of one id a self-loop
     :param lanes: lane ids, top to bottom
     :param groups: every group id; a node names its innermost group
@@ -1528,15 +1537,39 @@ def _laid_out(
     groups: tuple[str, ...],
     options: LayoutOptions | None,
 ) -> Layout:
-    """One layout in the configured direction; a label that fits nowhere on a page cut into rows is tried again in one row."""
+    """One layout in the configured direction; a label that fits nowhere climbs the fallback ladder, each rung tried once and counted in ``Layout.fallbacks``."""
+    opts = options if options is not None else LayoutOptions()
+    rungs: list[LayoutOptions] = []
+    unwrapped = opts
+    if isinstance(opts.page, PageTarget):
+        unwrapped = replace(opts, page=replace(opts.page, wrap="none"))
+        if unwrapped != opts:
+            rungs.append(unwrapped)  # the ends of rows leave a label no clear stretch; the page shape is only a target
+    for factor in _ROOM_FACTORS:
+        rungs.append(
+            replace(
+                unwrapped,
+                layer_gap=unwrapped.layer_gap * factor,
+                node_gap=unwrapped.node_gap * factor,
+                port_pitch=unwrapped.port_pitch * factor,
+                channel_pitch=unwrapped.channel_pitch * factor,
+            )
+        )
+    if isinstance(opts.page, PageTarget):
+        pinned = opts.page.direction if opts.page.direction != "auto" else opts.direction
+        rungs.append(replace(rungs[-1], page=None, direction=pinned))  # page=None alone would drop a pinned direction
     try:
-        return _laid_out_once(nodes, edges, lanes, groups, options)
-    except _LabelRefused:
-        # the ends of rows leave a label no clear stretch; the page shape is only a target, so one row gives way to the label
-        opts = options if options is not None else LayoutOptions()
-        if opts.page is None:
-            raise
-        return _laid_out_once(nodes, edges, lanes, groups, replace(opts, page=None))
+        return _laid_out_once(nodes, edges, lanes, groups, opts)
+    except _LabelRefused as refusal:
+        error = refusal
+    for used, rung in enumerate(rungs, 1):
+        try:
+            laid = _laid_out_once(nodes, edges, lanes, groups, rung)
+        except _LabelRefused as refusal:
+            error = refusal
+            continue
+        return replace(laid, fallbacks=laid.fallbacks + used)
+    raise error
 
 
 def _laid_out_once(

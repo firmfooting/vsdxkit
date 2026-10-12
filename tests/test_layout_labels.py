@@ -1,13 +1,15 @@
 """Label placement (A7): a label sits on its own route, in one lane band, clear of everything else."""
 
+import random
 from types import SimpleNamespace as NS
 
 import layout_corpus as corpus
 import pytest
 from helpers import route_metrics as rm
 
+from vsdxkit import layout as layout_module
 from vsdxkit.errors import GraphError
-from vsdxkit.layout import LayoutNode, LayoutOptions, layered_layout
+from vsdxkit.layout import LayoutNode, LayoutOptions, PageTarget, layered_layout
 
 
 def box(x, y, w, h):
@@ -164,3 +166,70 @@ def test_ordinary_labelled_graphs_are_rarely_refused():
         except GraphError:
             refused += 1
     assert refused <= 1  # 0 of 20 today; a page cut into rows falls back to one row when a label fits nowhere
+
+
+# graphs that laid out before the label refusal and were refused once labels needed a clear stretch
+_ONCE_REFUSED = [("random", s) for s in (1, 11, 12, 16, 26, 36, 37)] + [("lanes", s) for s in (2, 18, 32)]
+
+
+@pytest.mark.parametrize(("kind", "seed"), _ONCE_REFUSED)
+def test_graphs_once_refused_for_a_label_now_lay_out(kind, seed):
+    lay_ = corpus.labelled_random_layout(seed, 40, 60) if kind == "random" else corpus.labelled_lane_layout(seed)
+    assert rm.label_violations(lay_) == []
+
+
+def test_a_label_that_fits_nowhere_climbs_the_ladder_and_keeps_a_pinned_direction(monkeypatch):
+    seen = []
+    real = layout_module._laid_out_once
+
+    def refuse_until_pageless(nodes, edges, lanes, groups, options):
+        seen.append(options)
+        if options.page is not None:
+            raise layout_module._LabelRefused("no room")
+        return real(nodes, edges, lanes, groups, options)
+
+    monkeypatch.setattr(layout_module, "_laid_out_once", refuse_until_pageless)
+    nodes = tuple(LayoutNode(i, 2, 1) for i in "abc")
+    options = LayoutOptions(page=PageTarget(direction="top_down"), edge_labels=((1.0, 0.3), None))
+    lay_ = layered_layout(nodes, (("a", "b"), ("b", "c")), options=options)
+    assert seen[0] == options and seen[1].page.wrap == "none"
+    assert seen[-1].page is None and seen[-1].direction == "top_down"
+    assert lay_.fallbacks == len(seen) - 1 and lay_.height > lay_.width
+
+
+def test_a_label_refused_after_the_whole_ladder_names_its_edge(monkeypatch):
+    calls = []
+
+    def refuse(nodes, edges, lanes, groups, options):
+        calls.append(options)
+        raise layout_module._LabelRefused("the label of edge 'a' -> 'b' cannot be placed")
+
+    monkeypatch.setattr(layout_module, "_laid_out_once", refuse)
+    with pytest.raises(GraphError, match=r"'a' -> 'b'"):
+        layered_layout(
+            (LayoutNode("a", 1, 1), LayoutNode("b", 1, 1)), (("a", "b"),), options=LayoutOptions(edge_labels=((1.0, 0.3),))
+        )
+    assert len({id(o) for o in calls}) == len(calls) == 1 + 1 + len(layout_module._ROOM_FACTORS) + 1
+
+
+def _flow_page(seed):
+    """A documentation-flow-like page: up to 8 stages, decisions with yes/no labels, a feedback edge, labels 1.0 to 1.5 wide."""
+    rng = random.Random(seed)
+    stages = rng.randint(4, 8)
+    nodes, edges = [LayoutNode(f"s{i}", 2.0, 1.0) for i in range(stages)], []
+    for i in range(stages - 1):
+        if rng.random() < 0.4 and i + 2 < stages:
+            nodes.append(LayoutNode(f"x{i}", 1.4, 1.0))
+            edges += [(f"s{i}", f"s{i + 1}"), (f"s{i}", f"x{i}"), (f"x{i}", f"s{i + 2}")]
+        else:
+            edges.append((f"s{i}", f"s{i + 1}"))
+    edges.append((f"s{stages - 1}", f"s{rng.randrange(stages - 1)}"))
+    labels = tuple((round(rng.uniform(1.0, 1.5), 2), 0.3) for _ in edges)
+    return tuple(nodes), tuple(edges), labels
+
+
+@pytest.mark.parametrize("seed", range(40))
+def test_flow_like_pages_lay_out_with_clean_labels(seed):
+    nodes, edges, labels = _flow_page(seed)
+    lay_ = layered_layout(nodes, edges, options=LayoutOptions(edge_labels=labels))
+    assert len(lay_.labels) == len(edges) and rm.label_violations(lay_) == []
