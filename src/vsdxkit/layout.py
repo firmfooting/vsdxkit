@@ -1587,13 +1587,74 @@ def _lay_out(
         side_edges.setdefault((chain[0], True), []).append((1, slots[chain[1]].v, n))
         side_edges.setdefault((chain[-1], False), []).append((1, slots[chain[-2]].v, n))
     end_offset: dict[tuple[int, bool], float] = {}
+    side_order: dict[tuple[_Key, bool], list[int]] = {}
     for (key, leaving), items in side_edges.items():
         extent = slots[key].v_extent
         if own_points and round(extent / GRID) // len(
             items
         ):  # a node too small for them all keeps the offsets its parallel edges had
+            side_order[(key, leaving)] = [n for _kind, _v, n in sorted(items)]
             for rank, (_kind, _v, n) in enumerate(sorted(items)):
                 end_offset[(n, leaving)] = _spread(len(items), extent, key, opts.port_pitch)[rank]
+
+    def port_window(n: int, leaving: bool) -> tuple[float, float]:
+        """The rows edge `n`'s port on its box may take: on the side, and a pitch from its neighbours, which keeps their order."""
+        key = chains[n][0] if leaving else chains[n][-1]
+        slot = slots[key]
+        order = side_order[(key, leaving)]
+        at = order.index(n)
+        reach = min(0.4 * slot.v_extent, slot.v_extent / 2 - GRID)
+        offsets = [end_offset[(m, leaving)] for m in order]
+        # a side already packed tighter than the pitch is held to the gap it has
+        gap = min(
+            max(0.1, min(opts.port_pitch, slot.v_extent / (len(order) + 1))), *(b - a for a, b in pairwise(offsets)), 1.0
+        )
+        low = slot.v - reach if not at else max(slot.v - reach, slot.v + offsets[at - 1] + gap)
+        high = slot.v + reach if at == len(order) - 1 else min(slot.v + reach, slot.v + offsets[at + 1] - gap)
+        return low, high
+
+    def align_ports() -> None:
+        """Give an edge between adjacent layers one row at both ends when its boxes overlap by a port pitch, so it runs straight."""
+        hops: dict[int, list[tuple[int, int]]] = {}
+        for m, chain in enumerate(chains):
+            if chain[0] != chain[-1]:
+                for i in range(len(chain) - 1):
+                    hops.setdefault(slots[chain[i]].layer, []).append((m, i))
+
+        def row_at(m: int, i: int) -> float:
+            """Where edge `m` currently meets the slot at index `i` of its chain."""
+            chain = chains[m]
+            extra = (
+                end_offset.get((m, True), 0.0) if i == 0 else end_offset.get((m, False), 0.0) if i == len(chain) - 1 else 0.0
+            )
+            return slots[chain[i]].v + extra
+
+        for n, chain in enumerate(chains):
+            if len(chain) != 2 or chain[0] == chain[1] or (n, True) not in end_offset or (n, False) not in end_offset:
+                continue
+            a, b = slots[chain[0]], slots[chain[1]]
+            if band_of_layer[a.layer] != band_of_layer[b.layer]:
+                continue
+            top = min(a.v + a.v_extent / 2, b.v + b.v_extent / 2)
+            bottom = max(a.v - a.v_extent / 2, b.v - b.v_extent / 2)
+            if top - bottom < opts.port_pitch - 1e-9:
+                continue
+            (a_low, a_high), (b_low, b_high) = port_window(n, True), port_window(n, False)
+            first, last = math.ceil(max(a_low, b_low) / GRID - 1e-9), math.floor(min(a_high, b_high) / GRID + 1e-9)
+            if first > last:
+                continue
+            # nearest the middle of the overlap on the grid, the lower line on a tie
+            row = snap(min(max(math.floor((top + bottom) / 2 / GRID + 0.5 - 1e-9), first), last) * GRID)
+            if any(
+                min(row_at(m, i), row_at(m, i + 1)) - GRID / 2 < row < max(row_at(m, i), row_at(m, i + 1)) + GRID / 2
+                for m, i in hops.get(a.layer, ())
+                if m != n
+            ):
+                continue
+            end_offset[(n, True)] = row - a.v
+            end_offset[(n, False)] = row - b.v
+
+    align_ports()
     rows_of: list[list[float]] = []
     for chain, (source, target) in zip(chains, edges, strict=True):
         ends = (chain[0], chain[-1])

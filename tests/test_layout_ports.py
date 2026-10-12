@@ -50,7 +50,7 @@ def test_the_new_options_are_appended_after_the_existing_fields():
 
 
 def test_a_port_pitch_reaches_the_ports_of_a_layout():
-    nodes = (LayoutNode("hub", 2, 4), *(LayoutNode(f"t{i}", 1, 1) for i in range(3)))
+    nodes = (LayoutNode("hub", 2, 2), *(LayoutNode(f"t{i}", 1, 1) for i in range(3)))
     edges = tuple(("hub", f"t{i}") for i in range(3))
 
     def gap(pitch):
@@ -224,3 +224,27 @@ def test_a_gap_busier_than_the_pitched_channels_still_lays_out_with_clear_channe
         assert all(a != b for a, b in pairwise(route))
     columns = sorted({round(r[2][0], 2) for r in lay.routes.values() if len(rm.simplified(r)) == 4})
     assert all(b - a >= 0.01 - 1e-9 for a, b in pairwise(columns))
+
+
+def test_a_chain_of_equal_boxes_has_straight_edges():
+    nodes = tuple(LayoutNode(f"s{i}", 2, 1) for i in range(4))
+    lay = layered_layout(nodes, tuple((f"s{i}", f"s{i + 1}") for i in range(3)), options=LayoutOptions(page=None))
+    assert all(rm.bends(r) == 0 for r in lay.routes.values())
+
+
+def test_the_middle_child_of_a_hub_is_reached_by_a_straight_edge():
+    lay = corpus.fixture_layout("hub5")
+    children = sorted((k for k in lay.nodes if k.startswith("c")), key=lambda k: lay.nodes[k].x)
+    assert rm.bends(lay.routes[("hub", children[2], 0)]) == 0
+
+
+def test_two_edges_for_one_straight_run_do_not_share_it():
+    nodes = (LayoutNode("a", 2, 1), LayoutNode("b", 2, 1), LayoutNode("c", 2, 1))
+    lay = layered_layout(nodes, (("a", "c"), ("b", "c")), options=LayoutOptions(page=None))
+    assert rm.shared_runs(lay) == [] and rm.port_gap_violations(lay) == []
+
+
+def test_the_two_drops_into_the_sink_of_the_top_down_hub_have_no_jog():
+    lay = corpus.fixture_layout("hub5_top_down")
+    assert rm.bends(lay.routes[("c4", "archive", 0)]) == 0
+    assert rm.bends(lay.routes[("c2", "archive", 0)]) <= 2
