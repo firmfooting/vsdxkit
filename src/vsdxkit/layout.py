@@ -236,11 +236,8 @@ def _layers(ids: list[str], edges: list[tuple[str, str]], flipped: list[bool]) -
 
 
 def _partition(widths: Sequence[float], rows: int, forbidden: frozenset[int] = frozenset()) -> tuple[int, ...]:
-    """Start indices that cut `widths` into at most `rows` contiguous groups with the least widest sum (linear partition by dynamic programming, O(L squared times rows)); ties go to the earlier cut."""
+    """Start indices that cut `widths` into at most `rows` contiguous groups with the least widest sum (linear partition by dynamic programming, O(L squared times rows)); where the last cut can fall in more than one place, the earliest is kept."""
     n = len(widths)
-    prefix = [0.0]
-    for w in widths:
-        prefix.append(snap(prefix[-1] + w))
     rows = max(1, min(rows, n))
     best = [[math.inf] * (n + 1) for _ in range(rows + 1)]
     cut = [[0] * (n + 1) for _ in range(rows + 1)]
@@ -250,7 +247,7 @@ def _partition(widths: Sequence[float], rows: int, forbidden: frozenset[int] = f
             for j in range(k - 1, i):
                 if k > 1 and j in forbidden:
                     continue
-                cost = max(best[k - 1][j], snap(prefix[i] - prefix[j]))
+                cost = max(best[k - 1][j], snap(math.fsum(widths[j:i])))
                 if cost < best[k][i] - _EPS:
                     best[k][i], cut[k][i] = cost, j
     for k in range(rows, 0, -1):  # the most rows that the forbidden cuts allow
@@ -267,7 +264,7 @@ def _partition(widths: Sequence[float], rows: int, forbidden: frozenset[int] = f
 def _estimate(widths: Sequence[float], heights: Sequence[float], starts: Sequence[int], row_gap: float) -> tuple[float, float]:
     """The page width and height if the layers are cut into rows at `starts`: the widest row, and the rows' tallest layers plus the gaps between rows."""
     ends = [*starts[1:], len(widths)]
-    width = max(sum(widths[a:b]) for a, b in zip(starts, ends, strict=True))
+    width = max(math.fsum(widths[a:b]) for a, b in zip(starts, ends, strict=True))
     height = sum(max(heights[a:b]) for a, b in zip(starts, ends, strict=True)) + row_gap * (len(starts) - 1)
     return snap(width), snap(height)
 
@@ -285,13 +282,14 @@ def _choose_starts(
     chosen: tuple[int, ...] = (0,)
     nearest = math.inf
     seen: set[tuple[int, ...]] = set()
+    # ponytail: tries every row count, O(L^4) in layers; cap the count or stop early if flows reach hundreds of layers
     for rows in range(1, len(widths) + 1):
         starts = _partition(widths, rows, forbidden)
         if starts in seen:
             continue
         seen.add(starts)
         w, h = _estimate(widths, heights, starts, row_gap)
-        distance = abs(math.log(snap(w / h) / target.aspect))
+        distance = abs(math.log(max(GRID, snap(w / h)) / target.aspect))
         if distance < nearest - _EPS:
             chosen, nearest = starts, distance
     return chosen

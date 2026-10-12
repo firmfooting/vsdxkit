@@ -77,3 +77,15 @@ def test_the_chosen_row_count_is_the_minimiser_over_every_row_count():
     chosen = lo._choose_starts(widths, heights, 0.5, target, frozenset())
     every = [lo._partition(widths, r) for r in range(1, len(widths) + 1)]
     assert distance(chosen) == min(distance(s) for s in every)
+
+
+def test_a_very_tall_narrow_estimate_does_not_break_the_log():
+    assert lo._choose_starts([0.1] * 3, [10.0] * 3, 0.5, lo.PageTarget(), frozenset())
+
+
+def test_the_partition_and_the_estimate_agree_on_the_widest_row():
+    widths = [0.1, 0.2, 0.7, 0.3, 0.1, 0.6] * 3
+    starts = lo._partition(widths, 4)
+    ends = [*starts[1:], len(widths)]
+    widest = max(lo.snap(math.fsum(widths[a:b])) for a, b in zip(starts, ends, strict=True))
+    assert lo._estimate(widths, [1.0] * len(widths), starts, 0.5)[0] == widest
