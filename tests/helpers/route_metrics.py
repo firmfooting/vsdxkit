@@ -152,6 +152,59 @@ def aspect(layout: Any) -> float:
     return layout.width / layout.height
 
 
+def _interiors_meet(a: Any, b: Any) -> bool:
+    """Whether the interiors of two boxes overlap by more than EPS on both axes."""
+    return (
+        min(a.x + a.width / 2, b.x + b.width / 2) - max(a.x - a.width / 2, b.x - b.width / 2) > EPS
+        and min(a.y + a.height / 2, b.y + b.height / 2) - max(a.y - a.height / 2, b.y - b.height / 2) > EPS
+    )
+
+
+def _segment_meets(seg: tuple[Point, Point], box: Any) -> bool:
+    """Whether the axis-parallel `seg` passes through the interior of `box` (the box shrunk by EPS)."""
+    left, right = box.x - box.width / 2 + EPS, box.x + box.width / 2 - EPS
+    bottom, top = box.y - box.height / 2 + EPS, box.y + box.height / 2 - EPS
+    (x1, y1), (x2, y2) = seg
+    return min(x1, x2) <= right and max(x1, x2) >= left and min(y1, y2) <= top and max(y1, y2) >= bottom
+
+
+def _on_segment(seg: tuple[Point, Point], p: Point) -> bool:
+    """Whether `p` is within EPS of the axis-parallel `seg`."""
+    (x1, y1), (x2, y2) = seg
+    return min(x1, x2) - EPS <= p[0] <= max(x1, x2) + EPS and min(y1, y2) - EPS <= p[1] <= max(y1, y2) + EPS
+
+
+def label_violations(layout: Any, obstacles: Collection[Any] = ()) -> list[str]:
+    """A7: one line for each label whose centre is off its own route, that straddles a lane border, or that meets a node, another label, an obstacle box or another route's segment."""
+    bad = []
+    for key in sorted(layout.labels):
+        box = layout.labels[key]
+        name = route_key(key)
+        own = layout.routes.get(key, ())
+        if not any(_on_segment(s, (box.x, box.y)) for s in pairwise(own)):
+            bad.append(f"{name}: label centre is off its own route")
+        for lane_id, lane in sorted(layout.lanes.items()):
+            leaves = (
+                box.y - box.height / 2 < lane.y - lane.height / 2 - EPS
+                or box.y + box.height / 2 > lane.y + lane.height / 2 + EPS
+            )
+            if _interiors_meet(box, lane) and leaves:
+                bad.append(f"{name}: label straddles the border of lane {lane_id}")
+        bad.extend(f"{name}: label meets node {n}" for n, node in sorted(layout.nodes.items()) if _interiors_meet(box, node))
+        bad.extend(
+            f"{name}: label meets label {route_key(k)}"
+            for k, other in sorted(layout.labels.items())
+            if k > key and _interiors_meet(box, other)
+        )
+        bad.extend(f"{name}: label meets an obstacle" for ob in obstacles if _interiors_meet(box, ob))
+        bad.extend(
+            f"{name}: label is on a segment of route {route_key(k)}"
+            for k, route in sorted(layout.routes.items())
+            if k != key and any(_segment_meets(s, box) for s in pairwise(route))
+        )
+    return bad
+
+
 def route_key(key: Key) -> str:
     """`key` as an unambiguous string: JSON, so a delimiter inside an id cannot make two keys collide."""
     return json.dumps(list(key), separators=(",", ":"))
