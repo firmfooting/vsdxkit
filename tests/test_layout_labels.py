@@ -92,13 +92,15 @@ def test_a_tall_heading_adds_clearance_on_its_own_side_only():
     assert above_node > below_node + 1.0 and group.height < lane.height  # not a symmetric lift
 
 
-def test_labels_that_no_port_pitch_can_clear_raise_naming_the_edge():
+def test_labels_that_no_port_pitch_can_clear_lay_out_with_the_last_rung_of_the_ladder():
     nodes = (LayoutNode("a", 1, 1), LayoutNode("b", 1, 1))
     options = LayoutOptions(
         page=None, direction="left_to_right", edge_labels=((2.0, 0.5),) * 6
     )  # six routes need 1.25 inches of side
-    with pytest.raises(GraphError, match=r"'a' -> 'b'"):
-        layered_layout(nodes, (("a", "b"),) * 6, options=options)
+    laid = layered_layout(nodes, (("a", "b"),) * 6, options=options)
+    assert laid.fallbacks == len(layout_module._ROOM_FACTORS) + 1  # every spacing rung failed, the loose one served
+    boxes = list(laid.labels.values())
+    assert not any(layout_module._boxes_meet(a, b) for i, a in enumerate(boxes) for b in boxes[i + 1 :])
 
 
 @pytest.mark.parametrize("direction", ["left_to_right", "top_down"])
@@ -209,7 +211,7 @@ def test_a_label_refused_after_the_whole_ladder_names_its_edge(monkeypatch):
         layered_layout(
             (LayoutNode("a", 1, 1), LayoutNode("b", 1, 1)), (("a", "b"),), options=LayoutOptions(edge_labels=((1.0, 0.3),))
         )
-    assert len({id(o) for o in calls}) == len(calls) == 1 + 1 + len(layout_module._ROOM_FACTORS) + 1
+    assert len({id(o) for o in calls}) == len(calls) == 1 + 1 + len(layout_module._ROOM_FACTORS) + 2
 
 
 def _flow_page(seed):
@@ -233,3 +235,30 @@ def test_flow_like_pages_lay_out_with_clean_labels(seed):
     nodes, edges, labels = _flow_page(seed)
     lay_ = layered_layout(nodes, edges, options=LayoutOptions(edge_labels=labels))
     assert len(lay_.labels) == len(edges) and rm.label_violations(lay_) == []
+
+
+def _hub_page():
+    """One records hub that thirteen routes meet, six neighbours of it linked both ways, every edge labelled (a regression)."""
+    hub = "records"
+    names = ["intake", "review", "archive", "audit", "export", "sync", "notify", "report", "mirror"]
+    wide = {"notify", "report", "mirror"}
+    nodes = tuple(LayoutNode(n, 2.48 if n in wide else 2.2, 0.9, group="site") for n in (*names, hub))
+    pairs = [
+        ("intake", hub), (hub, "review"), ("review", hub), (hub, "archive"), ("archive", hub), ("archive", "mirror"),
+        (hub, "audit"), ("export", hub), (hub, "export"), ("export", "notify"), ("export", "report"),
+        ("sync", "mirror"), ("notify", hub), (hub, "notify"), ("notify", hub), ("report", hub),
+    ]  # fmt: skip
+    widths = [0.9, 0.78, 1.14, 0.78, 0.9, 1.02, 0.78, 1.74, 0.78, 0.9, 0.9, 1.02, 1.74, 0.78, 0.9, 1.74]
+    options = LayoutOptions(
+        edge_labels=tuple((w, 0.3) for w in widths),
+        headings=(("site", 1.58, 0.25),),
+        page=PageTarget(aspect=16 / 9, tolerance=0.25, wrap="snake"),
+    )
+    return nodes, tuple(pairs), ("site",), options
+
+
+def test_a_hub_with_thirteen_routes_lays_out_with_its_labels_clear_of_every_node():
+    nodes, edges, groups, options = _hub_page()
+    laid = layered_layout(nodes, edges, (), groups, options)
+    assert len(laid.labels) == len(edges)
+    assert not any(layout_module._boxes_meet(label, box) for label in laid.labels.values() for box in laid.nodes.values())

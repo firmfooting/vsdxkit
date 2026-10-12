@@ -192,9 +192,11 @@ class LayoutOptions:
     headings: tuple[tuple[str, float, float], ...] = ()
     """Per group, (group id, width, height) in inches of its heading text. The group's box is widened to the width and grows at the top to clear the height above its members; a box that then covers a node or group that is not its own is refused."""
     edge_labels: tuple[tuple[float, float] | None, ...] = ()
-    """Per edge, in the order of ``edges``, the (width, height) in inches of its label, or None for none; empty means no edge has one. Each label is centred on a straight stretch of its own route, in one lane band and clear of every node, heading, other group, lane heading, other label and other route, or the layout is refused; the gaps it crosses are widened to hold it."""
+    """Per edge, in the order of ``edges``, the (width, height) in inches of its label, or None for none; empty means no edge has one. Each label is centred on a straight stretch of its own route, in one lane band and clear of every node, heading, other group, lane heading, other label and other route, or, as the last step of the fallback ladder, any of those but the other route, or the layout is refused; the gaps it crosses are widened to hold it."""
     edge_first: tuple[bool, ...] = ()
     """Per edge, in the order of ``edges``, whether its label prefers the first segment of its route; empty means none does, and the longest segment is preferred."""
+    loose_labels: bool = False
+    """Whether a label may sit where other routes cross it; the fallback ladder sets it as its last rung, and a caller need not."""
     port_pitch: float = 0.2
     """Inches between the points where parallel routes meet one side of a box, at least 0.1; a short side shrinks it."""
     channel_pitch: float = 0.2
@@ -1302,13 +1304,15 @@ def _place_labels(
     work: list[int],
     lanes: Mapping[str, Box],
     first: Sequence[bool],
+    loose: bool = False,
 ) -> tuple[dict[tuple[str, str, int], Box], int]:
     """Each labelled edge's label box, centred on a segment of its own route, and how many edges took a fallback route.
 
     A label is tried on the first segment when `first` says so and otherwise on the longest, sliding along each
     stretch of a segment within one lane band in quarter-label steps. It must meet no box of `fixed` or of its own
     `foreign` boxes, no earlier label, no other route's segment and no lane border. An edge no segment serves takes the next route from `_candidates` that is clear and is tried once
-    more; when none serves, the layout is refused naming the edge.
+    more; when none serves, the layout is refused naming the edge. A `loose` placement ignores other routes, as the
+    layout did before labels were kept off them, so a hub too crowded for any clear stretch still lays out.
     """
     placed: dict[tuple[str, str, int], Box] = {}
     keys: list[tuple[str, str, int]] = []
@@ -1320,8 +1324,8 @@ def _place_labels(
     fallbacks = 0
 
     def others(key: tuple[str, str, int]) -> list[Box]:
-        """The thin boxes of every route's segments but `key`'s."""
-        return [_thin(a, b) for k, route in routes.items() if k != key for a, b in pairwise(route) if a != b]
+        """The thin boxes of every route's segments but `key`'s; none when `loose`, which lets a label sit on a crossing."""
+        return [] if loose else [_thin(a, b) for k, route in routes.items() if k != key for a, b in pairwise(route) if a != b]
 
     sizes = sizes or (None,) * len(edges)
     twins: list[list[tuple[float, float]]] = []  # the labels of the edges that share this edge's ends, in order
@@ -1488,8 +1492,9 @@ def layered_layout(
     A label that fits no straight stretch of its route is not refused at once. The layout is tried again, each step
     once and in this order: the page with ``wrap="none"`` (one row, the pinned or chosen direction kept), then that
     with ``layer_gap``, ``node_gap``, ``port_pitch`` and ``channel_pitch`` multiplied by 1.5, 2, 3, 4 and 6, then the last
-    of those with no page target. A step taken adds one to ``Layout.fallbacks`` (the step's number). Only when the
-    ladder is exhausted is the label refused, naming its edge, so a label may override the page shape and the spacing.
+    of those with no page target, then the layout as given with ``loose_labels``, which lets a label sit where other
+    routes cross it. A step taken adds one to ``Layout.fallbacks`` (the step's number). Only when the ladder is
+    exhausted is the label refused, naming its edge, so a label may override the page shape and the spacing.
 
     :param edges: pairs of (source id, target id); a repeat is a parallel edge, a pair of one id a self-loop
     :param lanes: lane ids, top to bottom
@@ -1558,6 +1563,7 @@ def _laid_out(
     if isinstance(opts.page, PageTarget):
         pinned = opts.page.direction if opts.page.direction != "auto" else opts.direction
         rungs.append(replace(rungs[-1], page=None, direction=pinned))  # page=None alone would drop a pinned direction
+    rungs.append(replace(opts, loose_labels=True))  # last, so a graph that lays out only with labels on crossings still does
     try:
         return _laid_out_once(nodes, edges, lanes, groups, opts)
     except _LabelRefused as refusal:
@@ -3042,7 +3048,15 @@ def _lay_out(
         fixed.append(Box(strip / 2, height / 2, strip, height))
     foreign = [[b for g, b in group_boxes.items() if g not in groups_of[s] | groups_of[t]] for s, t in edges]
     labels, label_fallbacks = _place_labels(
-        opts.edge_labels, edges, routes, fixed, foreign, spent, lane_boxes, opts.edge_first or (False,) * len(edges)
+        opts.edge_labels,
+        edges,
+        routes,
+        fixed,
+        foreign,
+        spent,
+        lane_boxes,
+        opts.edge_first or (False,) * len(edges),
+        opts.loose_labels,
     )
     # a label centred on a route near the left or bottom edge can hang past the margin; the drawing moves to make room
     left_room = _ceil(max([0.0, *(margin - (b.x - b.width / 2) for b in labels.values())]))
