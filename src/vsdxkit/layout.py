@@ -1619,9 +1619,8 @@ def _lay_out(
     routes: dict[tuple[str, str, int], tuple[tuple[float, float], ...]] = {}
     seen_pairs: dict[tuple[str, str], int] = {}
     built: list[tuple[list[tuple[float, float]], str, str, list[_Key], int]] = []
-    stubs: dict[
-        int, list[tuple[float, float]]
-    ] = {}  # per fold edge, the path the search starts from if its fold route is blocked
+    # per fold edge, the path the search starts from if its fold route is blocked
+    stubs: dict[int, list[tuple[float, float]]] = {}
     for n, ((source, target), flip, chain) in enumerate(zip(edges, flipped, chains, strict=True)):
         parallel = seen_pairs.get((source, target), 0)
         seen_pairs[(source, target)] = parallel + 1

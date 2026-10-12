@@ -1,6 +1,7 @@
 import math
 from itertools import pairwise
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from helpers.route_metrics import crossings, layout_digest, shared_runs
@@ -208,6 +209,8 @@ def test_disconnected_chains_wrap_and_every_edge_has_a_route():
     eb = tuple((f"t{i}", f"t{i + 1}") for i in range(13))
     lay = layered_layout((*a, *b), (*ea, *eb))
     assert len(lay.routes) == 26 and len(lay.nodes) == 28
+    _check(lay, (*a, *b), ())
+    _check_routes(lay)
 
 
 def test_two_edges_that_fold_together_do_not_share_a_run():
@@ -234,3 +237,46 @@ def test_fold_routes_and_a_shifted_snake_stay_on_the_page_and_out_of_every_node(
                         inside_x = hx > box.x - box.width / 2 and lx < box.x + box.width / 2
                         inside_y = hy > box.y - box.height / 2 and ly < box.y + box.height / 2
                         assert not (inside_x and inside_y), f"{source}->{target} enters {node_id}"
+
+
+def test_several_folds_at_one_boundary_keep_their_levels_apart():
+    nodes, edges = _chain(25)
+    edges = (*edges, ("s0", "s5"), ("s2", "s5"), ("s3", "s5"))  # four edges fold into s5 from different start columns
+    lay = layered_layout(nodes, edges, options=LayoutOptions(page=PageTarget(wrap="rows")))
+    assert lay.rows[0][-1] == "s4"
+    pieces = {}  # the last long run of each route, which is its level in the corridor, with the two drops that join it
+    for key, route in lay.routes.items():
+        if key[1] == "s5":
+            long_runs = [i for i, (p, q) in enumerate(pairwise(route)) if p[1] == q[1] and abs(p[0] - q[0]) > lay.width / 2]
+            i = long_runs[-1]
+            pieces.update({(key, j): (route[j], route[j + 1]) for j in (i - 1, i, i + 1)})
+    assert len(pieces) == 12
+    group = SimpleNamespace(routes=pieces)
+    assert shared_runs(group) == [] and crossings(group) == 0
+
+
+def test_a_node_with_a_loop_that_receives_a_fold_keeps_the_loop_and_the_fold_on_different_points():
+    nodes, edges = _chain(25)
+    head = layered_layout(nodes, edges).rows[1][0]
+    looped = (*edges, (head, head))
+    lay = layered_layout(nodes, looped)
+    assert head in lay.rows[1]
+    _check(lay, nodes, ())
+    _check_routes(lay)
+    fold = next(r for (a, b, _n), r in lay.routes.items() if b == head and a != head)
+    loop_points = {p for (a, b, _n), r in lay.routes.items() if a == b == head for p in (r[0], r[-1])}
+    assert fold[-1] not in loop_points
+
+
+def test_a_blocked_fold_route_falls_back_to_the_search_and_the_page_still_lays_out():
+    """A tight grouped page whose fold route runs into a foreign group: without the fallback the edge cannot be routed."""
+    from test_layout import random_graph
+
+    rows, edges, lane_ids, group_ids, parents = random_graph(17, 9, 14, 0, 3)
+    edges = (*edges, ("n2", "n4"), ("n2", "n4"), ("n2", "n4"), ("n1", "n3"), ("n1", "n3"))
+    nodes = tuple(LayoutNode(*row) for row in rows)
+    tight = LayoutOptions(parents=parents, node_gap=0.0, layer_gap=0.2, margin=0.0, group_padding=0.05)
+    lay = layered_layout(nodes, edges, lane_ids, group_ids, tight)
+    assert len(lay.rows) > 1
+    _check(lay, nodes, parents)
+    _check_routes(lay, clear_of_borders=False)
