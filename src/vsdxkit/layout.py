@@ -50,17 +50,22 @@ def _even(value: float) -> float:
     return snap(math.ceil(value / (2 * GRID) - 1e-9) * 2 * GRID)
 
 
-def _spread(count: int, extent: float, node: object, pitch: float = 0.2) -> list[float]:
+def _spread(count: int, extent: float, node: object, pitch: float = 0.2, least: float = 0.0) -> list[float]:
     """Offsets, in inches on the grid and about zero, that keep `count` parallel routes `pitch` apart inside `extent`.
 
     The pitch shrinks to the side divided by (count + 1) on a short side but never below 0.1 inch, and the ports cover at most 80 percent of the side
     unless that would push the pitch below 0.1 inch; only a side too short to hold the ports 0.1 inch apart shrinks them further.
 
+    A `least` pitch (half the label size across the flow, so a label centred on one route clears its neighbours) is
+    honoured as far as the outer ports can stay 0.05 inch inside the side.
+
     :raises GraphError: when `extent` has fewer grid steps than `count`, so two routes would coincide
     """
     step = min(round(max(0.1, min(pitch, extent / (count + 1))) / GRID), round(extent / GRID) // count)
     if count > 1:
-        step = min(step, max(int(0.8 * extent / GRID + 1e-9) // (count - 1), round(0.1 / GRID)))
+        room = int(0.8 * extent / GRID + 1e-9) // (count - 1)
+        step = min(step, max(room, round(0.1 / GRID)))
+        step = max(step, min(math.ceil(least / GRID - 1e-9), int((extent - 0.1) / GRID + 1e-9) // (count - 1)))
     if step == 0:
         raise GraphError(f"node {node!r} is too small for {count} parallel edges; each needs a grid step of its border")
     start = -((count - 1) * step // 2)
@@ -1337,11 +1342,12 @@ def _place_labels(
                 flat = start[1] == end[1]
                 length = abs(end[0] - start[0]) + abs(end[1] - start[1])
                 step = (width if flat else height) / 2
-                reach = int(length / step + _EPS)
                 # the first-segment role slides from the end nearest the source, any other from the middle
                 # labels of parallel edges start side by side, so the first does not take the middle all the others need
                 extents = [size[0 if flat else 1] for size in twins[n]]
                 apart = math.fsum(extents[: twin_rank[n]]) + step - math.fsum(extents) / 2
+                # the slide must reach either end of the stretch from where the label would sit beside its twins
+                reach = int(length / step + _EPS) if lead else int((length / 2 + abs(apart)) / step + _EPS)
                 offsets = [j * step for j in range(reach + 1)] if lead else [apart + j * step for j in _steps(reach)]
                 for off in offsets:
                     t = (off if lead else length / 2 + off) / length
@@ -2135,17 +2141,26 @@ def _lay_out(
         side_edges.setdefault((chain[0], True), []).append((1, slots[chain[1]].v, n))
         side_edges.setdefault((chain[-1], False), []).append((1, slots[chain[-2]].v, n))
     end_offset: dict[tuple[int, bool], float] = {}
+    # half of each label's size across the flow: ports closer than this put a neighbour's route under the label
+    half_label = [
+        (size[0] if top_down else size[1]) / 2 if size is not None else 0.0
+        for size in opts.edge_labels or (None,) * len(chains)
+    ]
     side_order: dict[tuple[_Key, bool], list[int]] = {}
+    label_extent = [
+        (size[1] if top_down else size[0]) if size is not None else 0.0 for size in opts.edge_labels or (None,) * len(chains)
+    ]
 
     def spread_side(key: _Key, leaving: bool, items: list[tuple[int, float, int]]) -> None:
         """Give the edges of one side of a box ports of their own, ordered by `items`, unless the box is too small for them all."""
         extent = slots[key].v_extent
+        least = max((half_label[n] for _kind, _v, n in items), default=0.0)
         if own_points and round(extent / GRID) // len(
             items
         ):  # a node too small for them all keeps the offsets its parallel edges had
             side_order[(key, leaving)] = [n for _kind, _v, n in sorted(items)]
             for rank, (_kind, _v, n) in enumerate(sorted(items)):
-                end_offset[(n, leaving)] = _spread(len(items), extent, key, opts.port_pitch)[rank]
+                end_offset[(n, leaving)] = _spread(len(items), extent, key, opts.port_pitch, least)[rank]
 
     layer_slots: list[list[_Slot]] = [[] for _ in range(n_layers)]
     for slot in slots.values():
@@ -2278,7 +2293,9 @@ def _lay_out(
         offsets = [end_offset[(m, leaving)] for m in order]
         # a side already packed tighter than the pitch is held to the gap it has
         gap = min(
-            max(0.1, min(opts.port_pitch, slot.v_extent / (len(order) + 1))), *(b - a for a, b in pairwise(offsets)), 1.0
+            max(0.1, min(opts.port_pitch, slot.v_extent / (len(order) + 1)), *(half_label[m] for m in order)),
+            *(b - a for a, b in pairwise(offsets)),
+            1.0,
         )
         low = slot.v - reach if not at else max(slot.v - reach, slot.v + offsets[at - 1] + gap)
         high = slot.v + reach if at == len(order) - 1 else min(slot.v + reach, slot.v + offsets[at + 1] - gap)
@@ -2338,7 +2355,7 @@ def _lay_out(
         if source != target:
             # parallel edges leave and arrive at different points along the border so they never overlay
             narrow = min((source, target), key=lambda k: slots[k].v_extent)
-            off = _spread(twins[ends], slots[narrow].v_extent, narrow, opts.port_pitch)[twin_rank[-1]]
+            off = _spread(twins[ends], slots[narrow].v_extent, narrow, opts.port_pitch, half_label[n])[twin_rank[-1]]
             vs[0] += end_offset.get((n, True), off)
             vs[-1] += end_offset.get((n, False), off)
         rows_of.append(vs)
@@ -2510,7 +2527,10 @@ def _lay_out(
             ),
         )
         # a boundary too narrow for a port each keeps the column centre, and the search or the spacing pass separates the routes
-        offsets = _spread(count, width, band) if round(width / GRID) // count else [0.0] * count
+        along = max(
+            (label_extent[n] / 2 for _v, n, _h in found), default=0.0
+        )  # a label drops with its route, so it needs this pitch
+        offsets = _spread(count, width, band, least=along) if round(width / GRID) // count else [0.0] * count
         ports = [
             (centre_u(slots[chains[n][h]]) + off, centre_u(slots[chains[n][h + 1]]) + off, n, h)
             for off, (_v, n, h) in zip(offsets, found, strict=True)

@@ -90,11 +90,23 @@ def test_a_tall_heading_adds_clearance_on_its_own_side_only():
     assert above_node > below_node + 1.0 and group.height < lane.height  # not a symmetric lift
 
 
-def test_a_label_that_fits_no_segment_raises_naming_the_edge():
+def test_labels_that_no_port_pitch_can_clear_raise_naming_the_edge():
     nodes = (LayoutNode("a", 1, 1), LayoutNode("b", 1, 1))
-    options = LayoutOptions(page=None, edge_labels=((2.0, 0.5), (2.0, 0.5)))  # parallel routes 0.2 apart under a 0.5 label
+    options = LayoutOptions(
+        page=None, direction="left_to_right", edge_labels=((2.0, 0.5),) * 6
+    )  # six routes need 1.25 inches of side
     with pytest.raises(GraphError, match=r"'a' -> 'b'"):
-        layered_layout(nodes, (("a", "b"), ("a", "b")), options=options)
+        layered_layout(nodes, (("a", "b"),) * 6, options=options)
+
+
+@pytest.mark.parametrize("direction", ["left_to_right", "top_down"])
+@pytest.mark.parametrize("count", [2, 3, 4])
+@pytest.mark.parametrize("page", [None, "default"])
+def test_parallel_labelled_edges_lay_out_on_their_own_routes(direction, count, page):
+    nodes = (LayoutNode("a", 1.5, 0.8), LayoutNode("b", 1.5, 0.8))
+    extra = {} if page == "default" else {"page": None}
+    options = LayoutOptions(direction=direction, edge_labels=((0.66, 0.3),) * count, **extra)
+    assert rm.label_violations(layered_layout(nodes, (("a", "b"),) * count, options=options)) == []
 
 
 def test_a_label_never_hides_another_loops_run():
@@ -120,3 +132,25 @@ def test_a_decision_label_sits_on_the_first_segment():
         (x1, y1), (x2, y2) = layout.routes[key][:2]
         assert min(x1, x2) - 1e-6 <= label.x <= max(x1, x2) + 1e-6
         assert min(y1, y2) - 1e-6 <= label.y <= max(y1, y2) + 1e-6
+
+
+def _on_border(point, node, tol=1e-6):
+    """Whether `point` lies on the outline of the box `node`."""
+    x, y = point
+    inside_x = abs(x - node.x) <= node.width / 2 + tol
+    inside_y = abs(y - node.y) <= node.height / 2 + tol
+    on_x = abs(abs(x - node.x) - node.width / 2) <= tol
+    on_y = abs(abs(y - node.y) - node.height / 2) <= tol
+    return (on_x and inside_y) or (on_y and inside_x)
+
+
+def test_the_shift_that_makes_room_for_a_label_leaves_routes_on_their_nodes():
+    options = LayoutOptions(
+        page=None, direction="top_down", edge_labels=((3.0, 0.3),)
+    )  # a wide loop label hangs past the margin
+    layout = layered_layout((LayoutNode("a", 1, 1),), (("a", "a"),), options=options)
+    assert layout.nodes["a"].x > 1.0  # the drawing moved right to keep the label a margin from the left edge
+    for (source, target, _rank), route in layout.routes.items():
+        assert _on_border(route[0], layout.nodes[source]), (source, target)
+        assert _on_border(route[-1], layout.nodes[target]), (source, target)
+    assert rm.label_violations(layout) == []
