@@ -824,6 +824,32 @@ def _blame(
     return None
 
 
+def _blame(
+    group_rect: dict[str, _Rect],
+    grown: set[str],
+    nodes: tuple[LayoutNode, ...],
+    members_of: dict[str, list[str]],
+    parent_of: dict[str, str],
+    rect_of: Callable[[str], _Rect],
+    heading_of: dict[str, tuple[float, float]],
+) -> str | None:
+    """What a grown group box covers that is not its own, as an error message, or None."""
+    for g in sorted(grown):
+        ulo, uhi, vlo, vhi = group_rect[g]
+        why = "heading" if g in heading_of else "padding"
+        fix = "shorten the heading" if g in heading_of else "add spacing between them"
+        for n in nodes:
+            if n.id not in members_of[g]:
+                a, b, c, d = rect_of(n.id)
+                if a < uhi - _EPS and b > ulo + _EPS and c < vhi - _EPS and d > vlo + _EPS:
+                    return f"the {why} of group {g!r} makes its box cover node {n.id!r}; {fix}"
+        for other, (a, b, c, d) in group_rect.items():
+            related = parent_of.get(g) == other or parent_of.get(other) == g
+            if other != g and not related and a < uhi - _EPS and b > ulo + _EPS and c < vhi - _EPS and d > vlo + _EPS:
+                return f"the {why} of group {g!r} makes its box cover group {other!r}; {fix}"
+    return None
+
+
 def _lay_out(
     nodes: tuple[LayoutNode, ...],
     edges: tuple[tuple[str, str], ...],
