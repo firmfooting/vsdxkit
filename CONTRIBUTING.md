@@ -69,8 +69,8 @@ do not need to run those locally; the list above is what to run before
 submitting.
 
 Every definition in `src/vsdxkit` has a docstring, private ones included, and
-the API reference is generated from them by sphinx-autoapi: there is no list
-of members to keep by hand. A new public name therefore needs a docstring
+the API reference is generated from them by sphinx.ext.autosummary: there is
+no list of members to keep by hand. A new public name therefore needs a docstring
 that says what it is for; `tools/check_docstrings.py` finds a missing one, and
 `tools/check_api_documented.py` finds an exported name the reference lacks.
 

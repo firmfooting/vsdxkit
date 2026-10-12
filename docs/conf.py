@@ -20,28 +20,36 @@ version = vsdxkit.__version__
 default_role = "py:obj"
 
 extensions = [
-    "autoapi.extension",
+    "sphinx.ext.autodoc",
+    "sphinx.ext.autosummary",
 ]
 
-# The API reference is generated from the docstrings (#424): autoapi reads
-# src/vsdxkit statically, with astroid, and writes one page per public module
-# under api/. A module or name with a leading underscore is private and is
-# left out; nothing is listed by hand. `inherited-members` shows
+# The API reference is generated from the docstrings (#424): autosummary walks
+# the public modules of vsdxkit and writes one page per module under api/. A
+# module or name with a leading underscore is private and is left out; nothing
+# is listed by hand. `inherited-members` (set in the module template) shows
 # `GeometryRow.inherited` and `make_local`, which the row takes from
 # `vsdxkit._inheritance.InheritedRow`, on the class a reader looks them up on.
-autoapi_dirs = ["../src/vsdxkit"]
-autoapi_root = "api"
-autoapi_type = "python"
-autoapi_add_toctree_entry = True
-autoapi_member_order = "bysource"
-autoapi_python_class_content = "class"
-autoapi_options = [
-    "members",
-    "undoc-members",
-    "show-inheritance",
-    "show-module-summary",
-    "inherited-members",
-]
+autosummary_generate = True
+autosummary_generate_overwrite = True
+
+
+def skip_builtin_members(app, what, name, obj, skip, options):
+    """Leave out members that `inherited-members` takes from a builtin base.
+
+    An exception deriving from OSError would otherwise list `errno` and
+    `with_traceback`, which the reference never carried.
+    """
+    if name == "msg":  # PartParseError documents its own `msg`, which shadows SyntaxError's
+        return None
+    owner = getattr(obj, "__objclass__", None)
+    return True if getattr(owner, "__module__", None) == "builtins" else None
+
+
+def setup(app):
+    """Register the member filter."""
+    app.connect("autodoc-skip-member", skip_builtin_members)
+
 
 templates_path = ["_templates"]
 # docs/maintainers/ holds Markdown notes for this project's maintainers. They
