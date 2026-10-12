@@ -638,41 +638,73 @@ def _fits_in_run(
 
 def _count_crossings(upper: Sequence[_Key], lower: Sequence[_Key], links: Collection[tuple[_Key, _Key]]) -> int:
     """Pairs of links between two adjacent layers whose ends are in opposite order; a shared end does not count."""
-    # ponytail: quadratic in links per layer pair, an accumulator tree is the upgrade if a corpus needs it
     top = {k: i for i, k in enumerate(upper)}
-    low = {k: i for i, k in enumerate(lower)}
+    low = {k: i + 1 for i, k in enumerate(lower)}
     ends = sorted((top[a], low[b]) for a, b in links)
-    return sum(1 for i, (a, b) in enumerate(ends) for c, d in ends[i + 1 :] if a < c and b > d)
+    tree = [0] * (len(lower) + 1)  # Fenwick tree over lower positions of the links in earlier upper positions
+    size = len(tree)
+    crossings = 0
+    placed = 0  # links in earlier upper positions
+    pending: list[int] = []
+    last = -1
+    for t, d in ends:
+        if t != last:
+            for j in pending:
+                while j < size:
+                    tree[j] += 1
+                    j += j & -j
+            placed += len(pending)
+            pending.clear()
+            last = t
+        j = d
+        below = 0
+        while j:
+            below += tree[j]
+            j &= j - 1
+        crossings += placed - below
+        pending.append(d)
+    return crossings
 
 
 def _transpose(
     rows: list[list[_Key]], slots: dict[_Key, _Slot], between: list[list[tuple[_Key, _Key]]], position: dict[_Key, float]
 ) -> None:
     """Swap adjacent keys of one layer, in index order, while that lowers the crossings; lane and track order stay."""
+    index = {k: i for row in rows for i, k in enumerate(row)}
+    above: dict[_Key, list[_Key]] = {k: [] for k in index}  # neighbours one layer up, once per link
+    below: dict[_Key, list[_Key]] = {k: [] for k in index}
+    for links in between:
+        for a, b in links:
+            below[a].append(b)
+            above[b].append(a)
 
-    def local(layer: int) -> int:
-        """Crossings of the links on both sides of `layer`."""
-        count = 0
-        if layer > 0:
-            count += _count_crossings(rows[layer - 1], rows[layer], between[layer - 1])
-        if layer < len(rows) - 1:
-            count += _count_crossings(rows[layer], rows[layer + 1], between[layer])
-        return count
+    def crossed(left: _Key, right: _Key) -> tuple[int, int]:
+        """Crossings among the links of `left` and `right` as they stand, and as they would be swapped."""
+        kept = swapped = 0
+        for near in (above, below):
+            theirs = [index[y] for y in near[right]]
+            for x in near[left]:
+                at = index[x]
+                for y in theirs:
+                    if at > y:
+                        kept += 1
+                    elif at < y:
+                        swapped += 1
+        return kept, swapped
 
     improved = True
     while improved:
         improved = False
-        for layer, row in enumerate(rows):
+        for row in rows:
             for i in range(len(row) - 1):
                 a, b = row[i], row[i + 1]
                 if (slots[a].lane, slots[a].track) != (slots[b].lane, slots[b].track):
                     continue
-                before = local(layer)
-                row[i], row[i + 1] = b, a
-                if local(layer) < before:
+                kept, swapped = crossed(a, b)
+                if swapped < kept:
+                    row[i], row[i + 1] = b, a
+                    index[a], index[b] = i + 1, i
                     improved = True
-                else:
-                    row[i], row[i + 1] = a, b
     position.update({k: float(i) for row in rows for i, k in enumerate(row)})
 
 
