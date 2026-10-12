@@ -37,7 +37,7 @@ def _fields(cls: type) -> list[str]:
 def test_the_graph_contract_is_the_one_the_spec_states():
     """Fails if a field the docs generator builds against is renamed, reordered or dropped."""
     assert _fields(Diagram) == ["title", "pages"]
-    assert _fields(Page) == ["name", "nodes", "edges", "groups", "lanes", "align"]
+    assert _fields(Page) == ["name", "nodes", "edges", "groups", "lanes", "align", "title_bar"]
     assert _fields(Node) == ["id", "kind", "label", "sublabel", "data", "layer"]
     assert _fields(Edge) == ["source", "target", "label", "kind"]
     assert _fields(Group) == ["id", "label", "node_ids", "groups"]
@@ -889,3 +889,39 @@ def test_layer_and_align_do_not_make_the_bytes_depend_on_the_insertion_order(tmp
     one = diagram(["x", "y", "z"]).save(tmp_path / "1.vsdx", layout=unwrapped)
     two = diagram(["z", "y", "x"]).save(tmp_path / "2.vsdx", layout=unwrapped)
     assert one.read_bytes() == two.read_bytes()
+
+
+def _bar_text(path):
+    swim = Document.open(path).pages[0].swimlanes
+    return next(s.text for s in swim.container.children if s.master_shape_ID == "7")
+
+
+def _titled(name="Intake flow", **kw):
+    return Page(name, [Node("a", "process", "A")], lanes=[Lane("l", "Lane", ["a"])], **kw)
+
+
+def test_the_bar_carries_the_page_name_by_default(tmp_path):
+    assert _bar_text(Diagram("D", [_titled()]).save(tmp_path / "t.vsdx")) == "Intake flow"
+
+
+def test_blank_writes_an_explicit_empty_bar(tmp_path):
+    assert _bar_text(Diagram("D", [_titled(title_bar="blank")]).save(tmp_path / "t.vsdx")) == ""
+
+
+def test_none_is_refused_because_the_probe_found_no_clean_removal():
+    with pytest.raises(GraphError, match="title_bar"):
+        Diagram("D", [_titled("P", title_bar="none")]).build()
+
+
+def test_title_bar_on_a_page_without_lanes_is_ignored(tmp_path):
+    Diagram("D", [Page("P", [Node("a", "process", "A")], title_bar="none")]).save(tmp_path / "t.vsdx")
+
+
+@pytest.mark.parametrize("name", ["A & B <C>", "x" * 80, "Naïve – flow"])
+def test_a_long_or_awkward_page_name_is_written_whole_and_escaped(tmp_path, name):
+    assert _bar_text(Diagram("D", [_titled(name)]).save(tmp_path / "t.vsdx")) == name
+
+
+def test_a_title_bar_value_that_is_not_known_is_refused_by_name():
+    with pytest.raises(GraphError, match="title_bar"):
+        Page("P", [Node("a", "process", "A")], title_bar="top")

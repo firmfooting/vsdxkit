@@ -164,6 +164,10 @@ from one lane only, and groups nest one level. ``node_ids`` of a lane or a group
 is a list of ids; a bare string is refused, because it would read as one id per
 character.
 
+The title bar above the first lane reads the page's name. ``Page(title_bar="blank")`` leaves it
+empty. ``"none"`` is refused: Visio redraws a deleted, zero-height or lifted bar, and its Phase
+List band stays above the first lane either way.
+
 A page with lanes is drawn with the swimlane support described in
 :doc:`swimlanes`, so it has the same limits: at most five lanes, each 0.5 to 6
 inches tall, a lane label of at most 11 characters for each inch of the lane's

@@ -95,6 +95,10 @@ LINES: tuple[tuple[str, str], ...] = (
     ),
     ("lanes_one", "lanes_one: a cross-functional flowchart of one lane; every shape where it was written"),
     ("lanes_two", "lanes_two: two lanes, a process in each; every shape where it was written"),
+    (
+        "lanes_title",
+        "lanes_title: two laned steps built by the builder, the title bar reading the page name; every shape where it was written",
+    ),
     ("lanes_four", "lanes_four: four lanes, one labelled with the widest letters; every shape where it was written"),
     (
         "lanes_extremes",
