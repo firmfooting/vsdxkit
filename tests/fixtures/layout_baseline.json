@@ -103,6 +103,20 @@
       "shared_runs": 0,
       "width": 23.81
     },
+    "pins": {
+      "aspect": 3.187,
+      "crossings": 0,
+      "edges": 4,
+      "fallbacks": 0,
+      "height": 3.21,
+      "max_bends": 1,
+      "nodes": 4,
+      "port_gap_violations": 0,
+      "port_order_violations": 0,
+      "seconds": 0.001,
+      "shared_runs": 0,
+      "width": 10.23
+    },
     "rand-0": {
       "aspect": 2.177,
       "crossings": 278,

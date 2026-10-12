@@ -12,8 +12,8 @@ from vsdxkit.layout import LayoutNode, layered_layout
 BASELINE = json.loads((Path(__file__).parent / "fixtures" / "layout_baseline.json").read_text(encoding="utf-8"))
 
 
-# Phase 1 wraps these into rows, and the fold adds crossings the one-row 0.10 layout did not have; Phases 2 and 3 remove the entries.
-WRAPPED_CEILING = {"chain25": 1, "rand-2": 244, "rand-3": 252}
+# Phase 1 wraps these into rows, and the fold adds crossings the one-row 0.10 layout did not have; the random pages are still over their 0.10 count.
+WRAPPED_CEILING = {"rand-2": 244, "rand-3": 252}
 
 
 def _ratchet_failures(layouts, baseline):
@@ -33,8 +33,8 @@ def test_crossings_do_not_exceed_the_0_10_baseline():
     assert _ratchet_failures(corpus.all_layouts(), BASELINE["metrics"]) == []
 
 
-@pytest.mark.parametrize("name", ["hub5", "hub5_top_down", "fanin"])
-def test_the_fan_fixtures_have_no_crossing(name):
+@pytest.mark.parametrize("name", ["hub5", "hub5_top_down", "fanin", "chain25", "lanes3", "pins"])
+def test_the_named_fixtures_have_no_crossing(name):
     assert rm.crossings(corpus.fixture_layout(name)) == 0
 
 
