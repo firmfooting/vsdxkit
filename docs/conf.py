@@ -31,7 +31,6 @@ extensions = [
 # `GeometryRow.inherited` and `make_local`, which the row takes from
 # `vsdxkit._inheritance.InheritedRow`, on the class a reader looks them up on.
 autosummary_generate = True
-autosummary_generate_overwrite = True
 
 
 def skip_builtin_members(app, what, name, obj, skip, options):
