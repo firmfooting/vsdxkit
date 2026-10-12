@@ -187,6 +187,8 @@ class LayoutOptions:
     """Inches between parallel routes in a channel between layers, at least one grid step. A default layer gap holds up to eight channels at this spacing; a busier gap keeps that width and its channels are spaced evenly in it, closer than this."""
     straighten_sweeps: int = 6
     """How many down-and-up passes move boxes toward their neighbours within their track; zero keeps each run centred."""
+    pinned: tuple[tuple[str, int], ...] = ()
+    """Pairs of (node id, layer): the node sits in that layer, which must come after every layer that feeds it, and its successors move after it. Layers left empty keep a column of width zero."""
 
 
 @dataclass(frozen=True)
@@ -281,8 +283,11 @@ def _break_cycles(ids: list[str], edges: list[tuple[str, str]]) -> list[bool]:
     return flipped
 
 
-def _layers(ids: list[str], edges: list[tuple[str, str]], flipped: list[bool]) -> dict[str, int]:
-    """The longest-path layer of each node over the edges that remain once cycles are broken."""
+def _layers(
+    ids: list[str], edges: list[tuple[str, str]], flipped: list[bool], pinned: Mapping[str, int] | None = None
+) -> dict[str, int]:
+    """The longest-path layer of each node over the edges that remain once cycles are broken, with a pinned node in its pinned layer."""
+    pins = pinned or {}
     preds: dict[str, list[str]] = {i: [] for i in ids}
     for (source, target), flip in zip(edges, flipped, strict=True):
         if source != target:
@@ -300,6 +305,15 @@ def _layers(ids: list[str], edges: list[tuple[str, str]], flipped: list[bool]) -
                 stack.extend(pending)
             else:
                 layer[node] = 1 + max((layer[p] for p in preds[node]), default=-1)
+                if node in pins:
+                    if pins[node] < 0:
+                        raise GraphError(f"node {node!r} is pinned to layer {pins[node]}; a layer is zero or more")
+                    if pins[node] < layer[node]:
+                        feeder = max(preds[node], key=lambda p: layer[p])
+                        raise GraphError(
+                            f"node {node!r} is pinned to layer {pins[node]}, but {feeder!r}, which feeds it, is in layer {layer[feeder]}"
+                        )
+                    layer[node] = pins[node]
                 stack.pop()
     return layer
 
@@ -1419,7 +1433,7 @@ def _lay_out(
 
     ids = [n.id for n in nodes]
     flipped = _break_cycles(ids, list(edges))
-    layer_of = _layers(ids, list(edges), flipped)
+    layer_of = _layers(ids, list(edges), flipped, dict(opts.pinned))
     n_layers = max(layer_of.values(), default=-1) + 1
 
     slots: dict[_Key, _Slot] = {}

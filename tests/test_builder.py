@@ -38,7 +38,7 @@ def test_the_graph_contract_is_the_one_the_spec_states():
     """Fails if a field the docs generator builds against is renamed, reordered or dropped."""
     assert _fields(Diagram) == ["title", "pages"]
     assert _fields(Page) == ["name", "nodes", "edges", "groups", "lanes"]
-    assert _fields(Node) == ["id", "kind", "label", "sublabel", "data"]
+    assert _fields(Node) == ["id", "kind", "label", "sublabel", "data", "layer"]
     assert _fields(Edge) == ["source", "target", "label", "kind"]
     assert _fields(Group) == ["id", "label", "node_ids", "groups"]
     assert _fields(Lane) == ["id", "label", "node_ids"]
@@ -823,3 +823,15 @@ def test_text_shape_data_values_carry_u_str_as_visio_writes_them():
     cells = [c for page in document.pages for shape in page.shapes for c in _string_value_cells(shape.xml)]
     assert len(cells) >= 4
     assert {c.get("U") for c in cells} == {"STR"}
+
+
+@pytest.mark.parametrize("layer", [-1, True, 1.5])
+def test_a_layer_that_is_not_a_whole_number_of_zero_or_more_is_refused_by_name(layer):
+    page = Page("p", (Node("a", "process", "A", layer=layer),), ())
+    with pytest.raises(GraphError, match="'a'"):
+        Diagram("t", (page,)).validate()
+
+
+def test_node_still_takes_five_positional_arguments_and_layer_defaults_to_none():
+    node = Node("a", "process", "A", None, {})
+    assert node.layer is None

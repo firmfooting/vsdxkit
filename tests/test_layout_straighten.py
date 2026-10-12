@@ -77,3 +77,22 @@ def test_straightening_never_leaves_a_lane_or_raises_it():
         box, lane = on.nodes[name], on.lanes["L1"]
         assert lane.y - lane.height / 2 <= box.y - box.height / 2
         assert box.y + box.height / 2 <= lane.y + lane.height / 2
+
+
+def test_a_pin_places_a_node_in_its_layer():
+    nodes = (LayoutNode("a", 2, 1), LayoutNode("b", 2, 1), LayoutNode("c", 2, 1))
+    lay = layered_layout(nodes, (("a", "b"),), options=LayoutOptions(page=None, pinned=(("c", 2),)))
+    assert lay.nodes["c"].x > lay.nodes["b"].x
+
+
+def test_a_pin_at_or_before_a_predecessor_names_both_ids():
+    nodes = (LayoutNode("a", 2, 1), LayoutNode("b", 2, 1))
+    with pytest.raises(lo.GraphError, match=r"'b' is pinned to layer 0.*'a'.*layer 0"):
+        layered_layout(nodes, (("a", "b"),), options=LayoutOptions(pinned=(("a", 0), ("b", 0))))
+
+
+def test_a_pin_pushes_a_successor_and_does_not_collide_with_a_dummy():
+    nodes = tuple(LayoutNode(i, 2, 1) for i in "abcd")
+    lay = layered_layout(nodes, (("a", "b"), ("b", "c"), ("a", "d")), options=LayoutOptions(page=None, pinned=(("b", 3),)))
+    xs = {k: b.x for k, b in lay.nodes.items()}
+    assert xs["b"] < xs["c"] and len({round(x, 2) for x in xs.values()}) == 4
