@@ -53,6 +53,7 @@ Where to go next
    templating
    find_shape
    migration-1.0
+   api/index
 
 Format support
 --------------
