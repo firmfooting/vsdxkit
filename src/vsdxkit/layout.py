@@ -452,7 +452,7 @@ _SHARING = 1000.0
 """Extra cost per inch of a detour that runs along another route, so a free line is preferred to a shared one."""
 
 _BORDER_CLEAR = 0.05
-"""Inches a route keeps from a group's border where it runs parallel to it, so it does not look like part of the box."""
+"""Most inches a route keeps from a group's border where it runs parallel to it, so it does not look like part of the box. A layout spaced tighter than this keeps what it has room for."""
 
 _STEPS = ((1, 0), (-1, 0), (0, 1), (0, -1))
 """Unit steps along the flow, against it, across it and back, indexed as a heading."""
@@ -471,10 +471,11 @@ def _detour(
     occupied: dict[tuple[int, float], list[tuple[float, float]]],
     work: list[int],
     borders: list[tuple[int, float, float, float]],
+    clear: float,
 ) -> list[tuple[float, float]] | None:
     """The shortest few-bend orthogonal path from `path`'s first point to its last that avoids `solid`, or None.
 
-    It also keeps `_BORDER_CLEAR` off the length of every border in `borders`, which a route may still cross.
+    It also keeps `clear` inches off the length of every border in `borders`, which a route may still cross.
 
     It leaves in the direction `path` does and arrives in the direction `path` does, and turns only on the lines
     `xs` and `ys`. Ties break by insertion order, so the result depends on the arguments alone.
@@ -509,7 +510,7 @@ def _detour(
     for kind, coord, lo, hi in borders:
         # a line close beside a border is blocked along the border's length, so a route crosses it and never rides it
         lines, along, flags = (gx, gy, blocked_v) if kind == 1 else (gy, gx, blocked_h)
-        for i in range(bisect_right(lines, coord - _BORDER_CLEAR + _EPS), bisect_left(lines, coord + _BORDER_CLEAR - _EPS)):
+        for i in range(bisect_right(lines, coord - clear + _EPS), bisect_left(lines, coord + clear - _EPS)):
             for k in range(max(bisect_right(along, lo + _EPS) - 1, 0), min(bisect_left(along, hi - _EPS), len(flags[i]))):
                 flags[i][k] = 1
 
@@ -606,8 +607,8 @@ def _detour(
     return None
 
 
-def _beside(pts: list[tuple[float, float]], borders: list[tuple[int, float, float, float]]) -> list[int]:
-    """The segments of `pts` that run parallel to a border closer than `_BORDER_CLEAR`.
+def _beside(pts: list[tuple[float, float]], borders: list[tuple[int, float, float, float]], clear: float) -> list[int]:
+    """The segments of `pts` that run parallel to a border closer than `clear`.
 
     A border is (axis, coordinate, low, high) in the form `_runs` uses: axis 0 is a line of constant second coordinate.
     """
@@ -616,7 +617,7 @@ def _beside(pts: list[tuple[float, float]], borders: list[tuple[int, float, floa
         axis = 0 if a[1] == b[1] else 1
         low, high = sorted((a[axis], b[axis]))
         if any(
-            kind == axis and abs(a[1 - axis] - coord) < _BORDER_CLEAR - _EPS and min(high, hi) - max(low, lo) > _EPS
+            kind == axis and abs(a[1 - axis] - coord) < clear - _EPS and min(high, hi) - max(low, lo) > _EPS
             for kind, coord, lo, hi in borders
         ):
             found.append(i)
@@ -759,6 +760,8 @@ def _lay_out(
         value = getattr(opts, name)
         if not (isinstance(value, int | float) and math.isfinite(value) and value >= 0):
             raise GraphError(f"option {name} is {value!r}; it must be a finite number of inches, zero or more")
+    # spacing tighter than the clearance leaves room for less of it, so a layout that fitted without the clearance still does
+    clear = snap(math.floor(min(_BORDER_CLEAR, opts.group_padding, opts.node_gap, opts.layer_gap) / GRID + 1e-9) * GRID)
     if not (isinstance(opts.sweeps, int) and not isinstance(opts.sweeps, bool) and opts.sweeps >= 1):
         raise GraphError(f"option sweeps is {opts.sweeps!r}; it must be a whole number, one or more")
     if opts.edge_labels and len(opts.edge_labels) != len(edges):
@@ -1176,7 +1179,9 @@ def _lay_out(
     for layer in range(n_layers - 1):
         base_xs.add(col_left[layer] + col_width[layer] + gaps[layer] / 2)
     end_xs = {
-        x for ulo, uhi, _vlo, _vhi in group_rect.values() for x in (ulo - _BORDER_CLEAR - GRID, uhi + _BORDER_CLEAR + GRID)
+        x
+        for ulo, uhi, _vlo, _vhi in group_rect.values()
+        for x in (ulo - max(clear, GRID) - GRID, uhi + max(clear, GRID) + GRID)
     }
     flat_ys = (
         {y for lane in range(n_lanes) for y in (lane_top[lane] + GRID, lane_bottom[lane] - GRID)}
@@ -1187,7 +1192,9 @@ def _lay_out(
         if a[0] == b[0]:
             flat_ys.add((track_top[a] + track_height[a] + track_top[b]) / 2)
     end_ys = {
-        y for _ulo, _uhi, vlo, vhi in group_rect.values() for y in (vlo - _BORDER_CLEAR - GRID, vhi + _BORDER_CLEAR + GRID)
+        y
+        for _ulo, _uhi, vlo, vhi in group_rect.values()
+        for y in (vlo - max(clear, GRID) - GRID, vhi + max(clear, GRID) + GRID)
     }
     base_xs = {x for x in base_xs | end_xs if -shift_u <= x <= u_total - shift_u} - end_xs
     flat_ys = {y for y in flat_ys | end_ys if -shift_v <= y <= v_total - shift_v} - end_ys
@@ -1263,10 +1270,10 @@ def _lay_out(
         [
             *(
                 (
-                    r[0] - _BORDER_CLEAR + GRID,
-                    r[1] + _BORDER_CLEAR - GRID,
-                    r[2] - _BORDER_CLEAR + GRID,
-                    r[3] + _BORDER_CLEAR - GRID,
+                    r[0] - max(clear - GRID, GRID),
+                    r[1] + max(clear - GRID, GRID),
+                    r[2] - max(clear - GRID, GRID),
+                    r[3] + max(clear - GRID, GRID),
                 )
                 for g, r in group_rect.items()
                 if g not in groups_of[source] | groups_of[target]
@@ -1370,7 +1377,7 @@ def _lay_out(
                 )
                 if -shift_u <= x <= u_total - shift_u
             }
-            around = _detour(path, xs, ys, [*solids, *foreign_of[n]], others, spent, borders)
+            around = _detour(path, xs, ys, [*solids, *foreign_of[n]], others, spent, borders, clear)
             if around is not None:
                 break
         return around
@@ -1405,7 +1412,7 @@ def _lay_out(
 
     def fits(n: int, pts: list[tuple[float, float]]) -> bool:
         """Whether `pts` is legal and clear of every group's border."""
-        return legal(n, pts) and not _beside(pts, borders)
+        return legal(n, pts) and not _beside(pts, borders, clear)
 
     def reroute(n: int) -> list[tuple[float, float]] | None:
         """Edge `n` searched again, knowing every other route as it now stands."""
@@ -1419,15 +1426,15 @@ def _lay_out(
 
     for n, pts in enumerate(paths):
         # a segment beside a border moves aside a grid step at a time, as far as it takes, and stays if none is clear
-        while built[n][1] != built[n][2] and (beside := [i for i in _beside(pts, borders) if 1 <= i <= len(pts) - 3]):
+        while built[n][1] != built[n][2] and (beside := [i for i in _beside(pts, borders, clear) if 1 <= i <= len(pts) - 3]):
             moved = next(
                 (
                     m
-                    for k in range(1, 3 * round(_BORDER_CLEAR / GRID))
+                    for k in range(1, 3 * round(clear / GRID))
                     for sign in (1, -1)
                     if (m := _shifted(pts, beside[0], sign * k * GRID)) is not None
                     and legal(n, m)
-                    and len(_beside(m, borders)) < len(_beside(pts, borders))
+                    and len(_beside(m, borders, clear)) < len(_beside(pts, borders, clear))
                 ),
                 None,
             )
