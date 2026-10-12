@@ -50,16 +50,77 @@ def _even(value: float) -> float:
     return snap(math.ceil(value / (2 * GRID) - 1e-9) * 2 * GRID)
 
 
-def _spread(count: int, extent: float, node: object) -> list[float]:
-    """Offsets, in inches on the grid and about zero, that keep `count` parallel routes apart inside `extent`.
+def _spread(count: int, extent: float, node: object, pitch: float = 0.2) -> list[float]:
+    """Offsets, in inches on the grid and about zero, that keep `count` parallel routes `pitch` apart inside `extent`.
+
+    The pitch shrinks to the side divided by (count + 1) on a short side but never below 0.1 inch, and the ports cover at most 80 percent of the side
+    unless that would push the pitch below 0.1 inch; only a side too short to hold the ports 0.1 inch apart shrinks them further.
 
     :raises GraphError: when `extent` has fewer grid steps than `count`, so two routes would coincide
     """
-    step = min(10, round(extent / GRID) // count)
+    step = min(round(max(0.1, min(pitch, extent / (count + 1))) / GRID), round(extent / GRID) // count)
+    if count > 1:
+        step = min(step, max(int(0.8 * extent / GRID + 1e-9) // (count - 1), round(0.1 / GRID)))
     if step == 0:
         raise GraphError(f"node {node!r} is too small for {count} parallel edges; each needs a grid step of its border")
     start = -((count - 1) * step // 2)
     return [snap((start + i * step) * GRID) for i in range(count)]
+
+
+def _break_cycle(left_over: set[int], before: Sequence[Sequence[int]], after: Sequence[Sequence[int]]) -> int:
+    """The hop to place when every hop left waits on another: one on a cycle, the one most others wait on, else the lowest index.
+
+    A hop that is only blocked by a cycle, because it waits on a member, must not go before that member.
+    """
+    seen: dict[int, int] = {}
+    walk: list[int] = []
+    at = min(left_over)
+    while at not in seen:
+        seen[at] = len(walk)
+        walk.append(at)
+        at = min(f for f in before[at] if f in left_over)
+    cycle = walk[seen[at] :]
+
+    def waiting(f: int) -> tuple[int, int]:
+        """Sort key: the most hops waiting on `f` first, then the lowest index."""
+        return (-sum(1 for g in after[f] if g in left_over), f)
+
+    return min(cycle, key=waiting)
+
+
+def _nests_left(
+    items: Sequence[tuple[float, float, int, int]], rows_of: Sequence[Sequence[float]], chains: Sequence[Sequence[_Key]]
+) -> list[list[int]]:
+    """For each hop of a gap (low, high, edge, hop), the hops whose channel must lie nearer the layer the gap follows.
+
+    Two hops that leave one node in the same direction nest the farthest target nearest the layer; two that arrive at one
+    node from the same direction nest the nearest origin nearest the layer. A hop whose end lies strictly inside the run
+    of another is ordered the same way, which covers hops of different nodes. In each case the vertical run of one is not
+    crossed by the horizontal run of the other.
+    """
+    ends: dict[tuple[_Key, bool, bool], list[tuple[float, int]]] = {}
+    for idx, (_lo, _hi, n, hop) in enumerate(items):
+        delta = rows_of[n][hop + 1] - rows_of[n][hop]
+        if delta:
+            ends.setdefault((chains[n][hop], True, delta > 0), []).append((abs(delta), idx))
+            ends.setdefault((chains[n][hop + 1], False, delta > 0), []).append((abs(delta), idx))
+    nest: list[set[int]] = [set() for _ in items]
+    for (_node, leaving, _up), group in ends.items():
+        for dist_i, i in group:
+            nest[i].update(j for dist_j, j in group if j != i and (dist_j > dist_i if leaving else dist_j < dist_i))
+    # an end of one hop inside the run of another is crossed by it unless the channels are ordered: a hop that leaves
+    # inside lies nearer the layer, and one that arrives inside lies farther
+    starts = sorted((rows_of[n][hop], idx) for idx, (_lo, _hi, n, hop) in enumerate(items))
+    stops = sorted((rows_of[n][hop + 1], idx) for idx, (_lo, _hi, n, hop) in enumerate(items))
+    for i, (_lo, _hi, n, hop) in enumerate(items):
+        low, high = sorted((rows_of[n][hop], rows_of[n][hop + 1]))
+        for _row, j in starts[bisect_right(starts, (low + _EPS, -1)) : bisect_left(starts, (high - _EPS, -1))]:
+            nest[i].add(j)
+        for _row, j in stops[bisect_right(stops, (low + _EPS, -1)) : bisect_left(stops, (high - _EPS, -1))]:
+            nest[j].add(i)
+    for i in range(len(items)):
+        nest[i].discard(i)
+    return [sorted(found) for found in nest]
 
 
 @dataclass(frozen=True)
@@ -120,6 +181,10 @@ class LayoutOptions:
     """Per group, (group id, width, height) in inches of its heading text. The group's box is widened to the width and grows at the top to clear the height above its members; a box that then covers a node or group that is not its own is refused."""
     edge_labels: tuple[tuple[float, float] | None, ...] = ()
     """Per edge, in the order of ``edges``, the (width, height) in inches of its label, or None for none; empty means no edge has one. Each label is placed at its route, at the nearest spot clear of every node, heading, other group, lane heading and other label, so it may sit beside its route and not on it; the gaps it crosses are widened to hold it."""
+    port_pitch: float = 0.2
+    """Inches between the points where parallel routes meet one side of a box, at least 0.1; a short side shrinks it."""
+    channel_pitch: float = 0.2
+    """Inches between parallel routes in a channel between layers, at least one grid step. A default layer gap holds up to eight channels at this spacing; a busier gap keeps that width and its channels are spaced evenly in it, closer than this."""
 
 
 @dataclass(frozen=True)
@@ -156,6 +221,8 @@ class Layout:
     """Each labelled edge's label box, by the same key as its route: near the route, clear of nodes, headings and other labels. The page holds them, a margin from its edge."""
     rows: tuple[tuple[str, ...], ...] = ()
     """Node ids by wrapped row; empty when the layout is not wrapped."""
+    fallbacks: int = 0
+    """How many routes no straight, one-bend or channel route could serve, so they were searched for."""
 
 
 _Rect = tuple[float, float, float, float]
@@ -607,6 +674,9 @@ _AUTO_DIRECTION_NODES = 80
 _AUTO_DIRECTION_EDGES_PER_NODE = 2
 """The most edges per node for which an ``auto`` direction also tries the other way; a dense page spends seconds in routing, and a second layout would double them."""
 
+_PITCHED_CHANNELS = 8
+"""The most channels a default layer gap widens to hold at the channel pitch; hops that do not meet share a channel line, and a 200 node graph with lanes and groups stops laying out when its gaps are much wider."""
+
 _NUDGES = (0.03, -0.03, 0.07, -0.07, 0.09, -0.09)
 """Inches a dummy's row may move off its centre; none is zero, and the largest stays inside the dummy's 0.2 in slot."""
 
@@ -653,6 +723,28 @@ _STEPS = ((1, 0), (-1, 0), (0, 1), (0, -1))
 def _heading(a: tuple[float, float], b: tuple[float, float]) -> int:
     """The index into _STEPS of the direction from a to b."""
     return 0 if b[0] > a[0] else 1 if b[0] < a[0] else 2 if b[1] > a[1] else 3
+
+
+def _candidates(path: list[tuple[float, float]]) -> list[list[tuple[float, float]]]:
+    """The routes with fewer bends than `path` between its ends that leave and arrive as it does: straight, then one bend.
+
+    The straight run and the two corners are in that order, so the first free one has the fewest bends; a
+    corner that makes the route leave or arrive another way is not offered, because the ports are fixed.
+    """
+    start, end = path[0], path[-1]
+    first, last = _heading(path[0], path[1]), _heading(path[-2], path[-1])
+    tries = [[start, end]] if start[0] == end[0] or start[1] == end[1] else []
+    tries += [[start, (end[0], start[1]), end], [start, (start[0], end[1]), end]]
+    found = []
+    for route in tries:
+        if (
+            start != end
+            and _heading(route[0], route[1]) == first
+            and _heading(route[-2], route[-1]) == last
+            and len(_simplify(route)) < len(_simplify(path))
+        ):
+            found.append(route)
+    return found
 
 
 class _Sparse[T](dict[int, T]):
@@ -975,6 +1067,10 @@ def layered_layout(
     too dense for routes with points of their own to keep apart. Routes keep 0.05 inch off the length of a group's
     border (a self-loop stays inside its group's box, a grid step from it), except where spacing is tighter than that.
 
+    Routes between layers run in channels, one line for each route, spaced ``LayoutOptions.channel_pitch`` apart (spread
+    evenly in a gap too busy to hold them at that pitch). A run of edges that leave one box for boxes in line with it
+    stays straight. The pitch between border points on one side of a box is ``LayoutOptions.port_pitch``.
+
     A dense graph may be refused: when routes cannot all be given lines of their own within a fixed number of search
     steps, the layout raises instead of returning routes that overlap. The limit holds for each of the two passes
     (border points of their own, then shared points). Measured with random graphs and the default options, these
@@ -1117,8 +1213,9 @@ def _lay_out(
     own_points: bool,
     spent: list[int],
     slack: int = 0,
+    no_l: frozenset[int] = frozenset(),
 ) -> Layout:
-    """`layered_layout`, with `own_points` saying whether each edge at a node gets a border point of its own, and its search steps charged to `spent`. `slack` grid steps are added to the lane padding and the clearance between tracks, which a layout whose rounded group boxes came out too close asks for."""
+    """`layered_layout`, with `own_points` saying whether each edge at a node gets a border point of its own, and its search steps charged to `spent`. `slack` grid steps are added to the lane padding and the clearance between tracks, which a layout whose rounded group boxes came out too close asks for. The edges of `no_l` keep their Z routes, which a layout whose L route ran into something asks for."""
     opts = options if options is not None else LayoutOptions()
     page_direction = opts.page.direction if isinstance(opts.page, PageTarget) else "auto"
     direction = opts.direction or "left_to_right"
@@ -1132,6 +1229,12 @@ def _lay_out(
     clear = snap(math.floor(min(_BORDER_CLEAR, opts.group_padding, opts.node_gap, opts.layer_gap) / GRID + 1e-9) * GRID)
     if not (isinstance(opts.sweeps, int) and not isinstance(opts.sweeps, bool) and opts.sweeps >= 1):
         raise GraphError(f"option sweeps is {opts.sweeps!r}; it must be a whole number, one or more")
+    for name, least in (("port_pitch", 0.1), ("channel_pitch", GRID)):
+        value = getattr(opts, name)
+        if not (
+            isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value) and value >= least - 1e-9
+        ):
+            raise GraphError(f"option {name} is {value!r}; it must be a finite number of inches, {least} or more")
     _check_page(opts.page)
     if opts.edge_labels and len(opts.edge_labels) != len(edges):
         raise GraphError(f"option edge_labels has {len(opts.edge_labels)} entries for {len(edges)} edges; give one per edge")
@@ -1235,13 +1338,14 @@ def _lay_out(
     busiest = max(
         Counter(slots[a].layer for chain in chains if chain[0] != chain[-1] for a, _b in pairwise(chain)).values(), default=0
     )
-    if u_gap < (busiest + 1) * GRID:
-        if opts.layer_gap != LayoutOptions.layer_gap:
-            raise GraphError(
-                f"option layer_gap is {opts.layer_gap}; {busiest} edges cross one gap and need at least "
-                f"{busiest * GRID:g} inches to keep their channels apart"
-            )
-        u_gap = (busiest + 1) * GRID
+    explicit_gap = opts.layer_gap != LayoutOptions.layer_gap
+    if u_gap < (busiest + 1) * GRID and explicit_gap:
+        raise GraphError(
+            f"option layer_gap is {opts.layer_gap}; {busiest} edges cross one gap and need at least "
+            f"{busiest * GRID:g} inches to keep their channels apart"
+        )
+    if not explicit_gap:
+        u_gap = max(u_gap, (min(busiest, _PITCHED_CHANNELS) + 1) * opts.channel_pitch)
     # channels start beyond the loops on the column, so no loop shares a line with a channel
     loop_count = Counter(source for source, target in edges if source == target)
     loop_zone: dict[int, float] = {}
@@ -1465,7 +1569,7 @@ def _lay_out(
     if blame is not None or escaped:
         # ponytail: a whole further layout per step; derive the slack from the boxes if a graph ever needs more than a few
         if slack < 3:
-            return _lay_out(nodes, edges, lanes, groups, options, own_points, spent, slack + 1)
+            return _lay_out(nodes, edges, lanes, groups, options, own_points, spent, slack + 1, no_l)
         if blame is not None:
             raise GraphError(blame)
 
@@ -1503,6 +1607,7 @@ def _lay_out(
         for n in nodes
     }
 
+    groups_of = {n.id: {g for g, ms in members_of.items() if n.id in ms} for n in nodes}
     twins = Counter((c[0], c[-1]) for c in chains)
     twin_seen: Counter[tuple[_Key, _Key]] = Counter()
     twin_rank: list[int] = []
@@ -1516,13 +1621,189 @@ def _lay_out(
         side_edges.setdefault((chain[0], True), []).append((1, slots[chain[1]].v, n))
         side_edges.setdefault((chain[-1], False), []).append((1, slots[chain[-2]].v, n))
     end_offset: dict[tuple[int, bool], float] = {}
-    for (key, leaving), items in side_edges.items():
+    side_order: dict[tuple[_Key, bool], list[int]] = {}
+
+    def spread_side(key: _Key, leaving: bool, items: list[tuple[int, float, int]]) -> None:
+        """Give the edges of one side of a box ports of their own, ordered by `items`, unless the box is too small for them all."""
         extent = slots[key].v_extent
         if own_points and round(extent / GRID) // len(
             items
         ):  # a node too small for them all keeps the offsets its parallel edges had
+            side_order[(key, leaving)] = [n for _kind, _v, n in sorted(items)]
             for rank, (_kind, _v, n) in enumerate(sorted(items)):
-                end_offset[(n, leaving)] = _spread(len(items), extent, key)[rank]
+                end_offset[(n, leaving)] = _spread(len(items), extent, key, opts.port_pitch)[rank]
+
+    layer_slots: list[list[_Slot]] = [[] for _ in range(n_layers)]
+    for slot in slots.values():
+        layer_slots[slot.layer].append(slot)
+
+    def l_side(n: int, leaving: bool) -> str | None:
+        """The side across the flow (`low` or `high`) edge `n` takes for an L route, or None when it keeps its Z route.
+
+        With `leaving` the edge leaves its source by that side, drops to the target's row and runs along it; without, it
+        runs along the source's row and enters the target by that side. It needs boxes that do not overlap by a port
+        pitch, so no straight run exists. The stub must be clear of every other slot in its box's layer, the run clear of
+        every real box in the layers it crosses, and neither may enter a group the edge does not belong to.
+        """
+        chain = chains[n]
+        if not own_points or n_bands > 1 or chain[0] == chain[-1] or n in banned:
+            return None
+        a, b = slots[chain[0]], slots[chain[-1]]
+        if (n, not leaving) not in end_offset:
+            return None
+        if (
+            min(a.v + a.v_extent / 2, b.v + b.v_extent / 2) - max(a.v - a.v_extent / 2, b.v - b.v_extent / 2)
+            >= opts.port_pitch - 1e-9
+        ):
+            return None
+        stem_key, stem, other = (chain[0], a, b) if leaving else (chain[-1], b, a)
+        row = other.v + end_offset[(n, not leaving)]
+        side = "high" if row > stem.v else "low"
+        if abs(row - stem.v) < stem.v_extent / 2 + opts.port_pitch:
+            return None  # the row lies on the stem's box or too near it for a stub of any length
+        if side == "low" and stem_key in loop_count:
+            return None  # the loops of a node leave by its low side
+        border = stem.v + (stem.v_extent if side == "high" else -stem.v_extent) / 2
+        low, high = sorted((border, row))
+        if any(
+            slot is not stem and slot.v - slot.v_extent / 2 - GRID < high and slot.v + slot.v_extent / 2 + GRID > low
+            for slot in layer_slots[stem.layer]
+        ):
+            return None
+        if any(
+            slot.real and slot.v - slot.v_extent / 2 - GRID < row < slot.v + slot.v_extent / 2 + GRID
+            for layer in range(a.layer + 1, b.layer)
+            for slot in layer_slots[layer]
+        ):
+            return None
+        own = groups_of[str(chain[0])] | groups_of[str(chain[-1])]
+        keep = max(clear - GRID, GRID)
+        reach = centre_u(stem) - stem.u_extent / 2, centre_u(stem), centre_u(stem) + stem.u_extent / 2
+        run_from, run_to = (reach[0], left_u(b)) if leaving else (right_u(a), reach[2])
+        for g, (ulo, uhi, vlo, vhi) in group_rect.items():
+            if g not in own:
+                fenced = (ulo - keep, uhi + keep, vlo - keep, vhi + keep)
+                if _enters((run_from, row), (run_to, row), fenced) or any(
+                    _enters((x, border), (x, row), fenced) for x in reach
+                ):
+                    return None
+        return side
+
+    # an L edge takes a port on the low or high side of its stem box, the stubs nested so they do not cross: along the
+    # flow, arrivals come first and the nearest of them first, then departures and the farthest of them first
+    banned = set(no_l)
+    l_off: dict[int, float] = {}
+    l_side_of: dict[int, str] = {}
+    l_leaving: dict[int, bool] = {}
+    for attempt in range(4):
+        end_offset.clear()
+        side_order.clear()
+        l_off.clear()
+        sides = {k: list(v) for k, v in side_edges.items()}
+        for (key, leaving), items in sides.items():
+            spread_side(key, leaving, items)
+        l_found: dict[tuple[_Key, str], list[tuple[int, float, int]]] = {}
+        l_taken: dict[int, tuple[bool, str]] = {}
+        for n, chain in enumerate(chains):
+            for leaving in (True, False):
+                side = l_side(n, leaving) if (n, leaving) in end_offset else None
+                if side is not None:
+                    far = abs(
+                        slots[chain[-1]].v
+                        + end_offset.get((n, False), 0.0)
+                        - slots[chain[0]].v
+                        - end_offset.get((n, True), 0.0)
+                    )
+                    key = chain[0] if leaving else chain[-1]
+                    l_found.setdefault((key, side), []).append((1, -far, n) if leaving else (0, far, n))
+                    l_taken[n] = (leaving, side)
+                    break
+        for (key, _side), ports in l_found.items():
+            if round(slots[key].u_extent / GRID) // len(ports) == 0:
+                for _kind, _far, n in ports:  # a box too narrow for a port each keeps its Z routes
+                    del l_taken[n]
+                continue
+            for (_kind, _far, n), off in zip(
+                sorted(ports), _spread(len(ports), slots[key].u_extent, key, opts.port_pitch), strict=True
+            ):
+                l_off[n] = off
+        l_leaving.clear()
+        l_side_of.clear()
+        for n, (leaving, side) in l_taken.items():
+            l_leaving[n], l_side_of[n] = leaving, side
+            key, was = (chains[n][0], True) if leaving else (chains[n][-1], False)
+            sides[(key, was)] = [item for item in sides[(key, was)] if item[2] != n]
+            end_offset.pop((n, was), None)
+        for key, was in dict.fromkeys(
+            (chains[n][0], True) if leaving else (chains[n][-1], False) for n, (leaving, _s) in l_taken.items()
+        ):
+            side_order.pop((key, was), None)
+            if sides[(key, was)]:
+                spread_side(key, was, sides[(key, was)])
+        bad = {n for n, (leaving, _s) in l_taken.items() if l_side(n, leaving) is None}
+        if not bad:
+            break
+        # a third failure gives every L route up, so the last pass has none left to check
+        banned |= bad if attempt < 2 else set(l_taken)
+
+    def port_window(n: int, leaving: bool) -> tuple[float, float]:
+        """The rows edge `n`'s port on its box may take: on the side, and a pitch from its neighbours, which keeps their order."""
+        key = chains[n][0] if leaving else chains[n][-1]
+        slot = slots[key]
+        order = side_order[(key, leaving)]
+        at = order.index(n)
+        reach = min(0.4 * slot.v_extent, slot.v_extent / 2 - GRID)
+        offsets = [end_offset[(m, leaving)] for m in order]
+        # a side already packed tighter than the pitch is held to the gap it has
+        gap = min(
+            max(0.1, min(opts.port_pitch, slot.v_extent / (len(order) + 1))), *(b - a for a, b in pairwise(offsets)), 1.0
+        )
+        low = slot.v - reach if not at else max(slot.v - reach, slot.v + offsets[at - 1] + gap)
+        high = slot.v + reach if at == len(order) - 1 else min(slot.v + reach, slot.v + offsets[at + 1] - gap)
+        return low, high
+
+    def align_ports() -> None:
+        """Give an edge between adjacent layers one row at both ends when its boxes overlap by a port pitch, so it runs straight."""
+        hops: dict[int, list[tuple[int, int]]] = {}
+        for m, chain in enumerate(chains):
+            if chain[0] != chain[-1] and m not in l_off:
+                for i in range(len(chain) - 1):
+                    hops.setdefault(slots[chain[i]].layer, []).append((m, i))
+
+        def row_at(m: int, i: int) -> float:
+            """Where edge `m` currently meets the slot at index `i` of its chain."""
+            chain = chains[m]
+            extra = (
+                end_offset.get((m, True), 0.0) if i == 0 else end_offset.get((m, False), 0.0) if i == len(chain) - 1 else 0.0
+            )
+            return slots[chain[i]].v + extra
+
+        for n, chain in enumerate(chains):
+            if len(chain) != 2 or chain[0] == chain[1] or (n, True) not in end_offset or (n, False) not in end_offset:
+                continue
+            a, b = slots[chain[0]], slots[chain[1]]
+            if band_of_layer[a.layer] != band_of_layer[b.layer]:
+                continue
+            top = min(a.v + a.v_extent / 2, b.v + b.v_extent / 2)
+            bottom = max(a.v - a.v_extent / 2, b.v - b.v_extent / 2)
+            if top - bottom < opts.port_pitch - 1e-9:
+                continue
+            (a_low, a_high), (b_low, b_high) = port_window(n, True), port_window(n, False)
+            first, last = math.ceil(max(a_low, b_low) / GRID - 1e-9), math.floor(min(a_high, b_high) / GRID + 1e-9)
+            if first > last:
+                continue
+            # nearest the middle of the overlap on the grid, the lower line on a tie
+            row = snap(min(max(math.floor((top + bottom) / 2 / GRID + 0.5 - 1e-9), first), last) * GRID)
+            if any(
+                min(row_at(m, i), row_at(m, i + 1)) - GRID / 2 < row < max(row_at(m, i), row_at(m, i + 1)) + GRID / 2
+                for m, i in hops.get(a.layer, ())
+                if m != n
+            ):
+                continue
+            end_offset[(n, True)] = row - a.v
+            end_offset[(n, False)] = row - b.v
+
+    align_ports()
     rows_of: list[list[float]] = []
     for chain, (source, target) in zip(chains, edges, strict=True):
         ends = (chain[0], chain[-1])
@@ -1535,15 +1816,15 @@ def _lay_out(
         if source != target:
             # parallel edges leave and arrive at different points along the border so they never overlay
             narrow = min((source, target), key=lambda k: slots[k].v_extent)
-            off = _spread(twins[ends], slots[narrow].v_extent, narrow)[twin_rank[-1]]
+            off = _spread(twins[ends], slots[narrow].v_extent, narrow, opts.port_pitch)[twin_rank[-1]]
             vs[0] += end_offset.get((n, True), off)
             vs[-1] += end_offset.get((n, False), off)
         rows_of.append(vs)
 
     gap_edges: dict[int, list[tuple[float, float, int, int]]] = {}
     for n, chain in enumerate(chains):
-        if chain[0] == chain[-1]:
-            continue  # a loop has no channel
+        if chain[0] == chain[-1] or n in l_off:
+            continue  # a loop has no channel, and an L route runs on its own row
         for hop, (a, b) in enumerate(pairwise(chain)):
             if band_of_layer[slots[a].layer] != band_of_layer[slots[b].layer]:
                 continue  # a fold hop has no channel of its own in a gap
@@ -1577,7 +1858,11 @@ def _lay_out(
                 [f for f in starts.get(round(rows_of[n][hop + 1], 6), []) if f != idx]
                 for idx, (_lo, _hi, n, hop) in enumerate(items)
             ]
-            before = [list(preds) for preds in need]
+            # nesting only orders channels; it never moves a row, so a cycle of it falls back to the heap's index order
+            before = [
+                sorted({*preds, *nested}) for preds, nested in zip(need, _nests_left(items, rows_of, chains), strict=True)
+            ]
+            preds_of = [list(preds) for preds in before]
             after: list[list[int]] = [[] for _ in items]
             for idx, preds in enumerate(before):
                 for f in preds:
@@ -1587,7 +1872,7 @@ def _lay_out(
             order: list[int] = []
             left_over = set(range(len(items)))
             while left_over:
-                idx = heapq.heappop(ready) if ready else min(left_over)
+                idx = heapq.heappop(ready) if ready else _break_cycle(left_over, before, after)
                 if idx not in left_over:
                     continue
                 left_over.discard(idx)
@@ -1596,17 +1881,28 @@ def _lay_out(
                     before[nxt] = [f for f in before[nxt] if f != idx]
                     if not before[nxt] and nxt in left_over:
                         heapq.heappush(ready, nxt)
-            position = {idx: k for k, idx in enumerate(order)}
+            # hops whose runs do not meet share a channel line, so siblings drop to one height unless a run is in the way
+            tier: dict[int, int] = {}
+            tier_runs: dict[int, list[tuple[float, float]]] = {}
+            for idx in order:
+                n, hop = items[idx][2], items[idx][3]
+                span = tuple(sorted((rows_of[n][hop], rows_of[n][hop + 1])))
+                slot_tier = max((tier[f] + 1 for f in preds_of[idx] if f in tier), default=0)
+                while any(span[0] <= b + GRID and a <= span[1] + GRID for a, b in tier_runs.get(slot_tier, ())):
+                    slot_tier += 1
+                tier[idx] = slot_tier
+                tier_runs.setdefault(slot_tier, []).append((span[0], span[1]))
             for idx, preds in enumerate(need):
                 for f in preds:
-                    if position[f] > position[idx]:
+                    if tier[f] >= tier[idx]:
                         stuck.append((items[idx][2], items[idx][3], items[f][2], items[f][3]))
             zone = loop_zone.get(layer, 0.0)
             # the gap of a mirrored layer lies on its physical left, and its channels fill it away from the column
             sign = -1 if mirrored[layer] else 1
             left = col_left[layer] - zone if mirrored[layer] else col_left[layer] + col_width[layer] + zone
-            for k, idx in enumerate(order):
-                channel[(items[idx][2], items[idx][3])] = left + sign * (gaps[layer] - zone) * (k + 1) / (len(items) + 1)
+            lines = max(tier.values(), default=-1) + 2
+            for idx in order:
+                channel[(items[idx][2], items[idx][3])] = left + sign * (gaps[layer] - zone) * (tier[idx] + 1) / lines
         if not stuck:
             break
         # two edges swapping rows cannot both be satisfied, so one of the two rows moves a little
@@ -1657,7 +1953,64 @@ def _lay_out(
     base_xs |= {*(f(end_xs) for f in (min, max) if end_xs)}
     flat_ys |= {*(f(end_ys) for f in (min, max) if end_ys)}
     solids = [rect_of(n.id) for n in nodes]
-    groups_of = {n.id: {g for g, ms in members_of.items() if n.id in ms} for n in nodes}
+
+    # the hops that cross a row boundary leave the near-boundary side of one column and enter the other, by a level of their own
+    fold_hops: dict[int, list[tuple[float, int, int]]] = {}
+    for n, chain in enumerate(chains):
+        if chain[0] != chain[-1]:
+            for hop, (a, b) in enumerate(pairwise(chain)):
+                if band_of_layer[slots[a].layer] != band_of_layer[slots[b].layer]:
+                    fold_hops.setdefault(band_of_layer[slots[a].layer], []).append((slots[a].v, n, hop))
+    loop_extra: dict[_Key, int] = {}  # fold arrivals that share a self-looped node's top with its loops
+    fold_plan: dict[tuple[int, int], tuple[float, float, float, float, float]] = {}  # (n, hop) -> (ua, ub, ya, yb, level)
+    for band, found in fold_hops.items():
+        found.sort()
+        count = len(found)
+        width = min(
+            min(
+                (slots[chains[n][h]].u_extent if slots[chains[n][h]].real else col_width[slots[chains[n][h]].layer])
+                for _v, n, h in found
+            ),
+            min(
+                (
+                    slots[chains[n][h + 1]].u_extent
+                    if slots[chains[n][h + 1]].real
+                    else col_width[slots[chains[n][h + 1]].layer]
+                )
+                for _v, n, h in found
+            ),
+        )
+        # a boundary too narrow for a port each keeps the column centre, and the search or the spacing pass separates the routes
+        offsets = _spread(count, width, band, opts.channel_pitch) if round(width / GRID) // count else [0.0] * count
+        ports = [
+            (centre_u(slots[chains[n][h]]) + off, centre_u(slots[chains[n][h + 1]]) + off, n, h)
+            for off, (_v, n, h) in zip(offsets, found, strict=True)
+        ]
+        # a self-loop uses border points on the top of its node, so the folds that arrive there share that node's spread with it
+        arriving: dict[_Key, list[int]] = {}
+        for idx, (_ua, _ub, n, h) in enumerate(ports):
+            key = chains[n][h + 1]
+            if slots[key].real and key in loop_count:
+                arriving.setdefault(key, []).append(idx)
+        for key, idxs in arriving.items():
+            loops = twins[(key, key)]
+            if round(slots[key].u_extent / GRID) // (loops + len(idxs)):
+                loop_extra[key] = loop_extra.get(key, 0) + len(idxs)
+                spread = _spread(loops + loop_extra[key], slots[key].u_extent, key, opts.port_pitch)
+                for rank, idx in enumerate(idxs):
+                    ua, _ub, n, h = ports[idx]
+                    ports[idx] = (ua, centre_u(slots[key]) - spread[loops + loop_extra[key] - len(idxs) + rank], n, h)
+        # a corridor of 2 * lane_pad lies on the boundary; levels are a channel apart, or closer when it is crowded
+        top_level = lane_bottom[band] - lane_pad
+        step = min(_CHANNEL, 2 * lane_pad / (count + 1))
+        right = ports[0][1] > ports[0][0]
+        # the edge with the larger start column takes the higher level for a jog to the right, the smaller for a jog to the left
+        by_level = sorted(ports, key=lambda port: -port[0] if right else port[0])
+        for level_rank, (ua, ub, n, h) in enumerate(by_level):
+            sa, sb = slots[chains[n][h]], slots[chains[n][h + 1]]
+            ya = sa.v + sa.v_extent / 2 if sa.real else rows_of[n][h]
+            yb = sb.v - sb.v_extent / 2 if sb.real else rows_of[n][h + 1]
+            fold_plan[(n, h)] = (ua, ub, ya, yb, top_level + (level_rank + 1) * step)
 
     # the hops that cross a row boundary leave the near-boundary side of one column and enter the other, by a level of their own
     fold_hops: dict[int, list[tuple[float, int, int]]] = {}
@@ -1730,8 +2083,11 @@ def _lay_out(
         i = twin_rank[n]
         if source == target:
             r = first_slot.v_extent / 2 + 0.2 + 0.1 * i
-            c = centre_u(first_slot) - _spread(twins[ends] + loop_extra.get(chain[0], 0), first_slot.u_extent, source)[i]
-            dv = end_offset.get((n, True), _spread(twins[ends], first_slot.v_extent, source)[i])
+            c = (
+                centre_u(first_slot)
+                - _spread(twins[ends] + loop_extra.get(chain[0], 0), first_slot.u_extent, source, opts.port_pitch)[i]
+            )
+            dv = end_offset.get((n, True), _spread(twins[ends], first_slot.v_extent, source, opts.port_pitch)[i])
             out_u = right_u(first_slot) + (-1 if mirrored[first_slot.layer] else 1) * (0.3 + 0.1 * i)
             bends = [
                 (right_u(first_slot), first_slot.v + dv),
@@ -1742,9 +2098,20 @@ def _lay_out(
             ]
         else:
             vs = rows_of[n]
-            bends: list[tuple[float, float]] = [] if (n, 0) in fold_plan else [(right_u(first_slot), vs[0])]
+            if n in l_off:
+                last_slot = slots[chain[-1]]
+                if l_leaving[n]:
+                    stem = centre_u(first_slot) + l_off[n]
+                    edge_v = first_slot.v + (first_slot.v_extent if l_side_of[n] == "high" else -first_slot.v_extent) / 2
+                    bends: list[tuple[float, float]] = [(stem, edge_v), (stem, vs[-1]), (left_u(last_slot), vs[-1])]
+                else:
+                    stem = centre_u(last_slot) + l_off[n]
+                    edge_v = last_slot.v + (last_slot.v_extent if l_side_of[n] == "high" else -last_slot.v_extent) / 2
+                    bends = [(right_u(first_slot), vs[0]), (stem, vs[0]), (stem, edge_v)]
+            else:
+                bends = [] if (n, 0) in fold_plan else [(right_u(first_slot), vs[0])]
             stub = [(right_u(first_slot), vs[0])]
-            for hop, sb in enumerate(slots[k] for k in chain[1:]):
+            for hop, sb in enumerate(slots[k] for k in ([] if n in l_off else chain[1:])):
                 sa = slots[chain[hop]]
                 if (n, hop) in channel:
                     cu = channel[(n, hop)]
@@ -1785,6 +2152,16 @@ def _lay_out(
                 occupied.setdefault((0, round(a[1], 4)), []).append((min(a[0], b[0]), max(a[0], b[0]), n))
             elif a[0] == b[0] and a[1] != b[1]:
                 occupied.setdefault((1, round(a[0], 4)), []).append((min(a[1], b[1]), max(a[1], b[1]), n))
+
+    def shares_a_run(n: int, pts: list[tuple[float, float]]) -> bool:
+        """Whether `pts` runs along a route already placed, other than one that shares an end point with edge `n`."""
+        mine = {pts[0], pts[-1]}
+        for a, b in pairwise(pts):
+            key = (0, round(a[1], 4)) if a[1] == b[1] else (1, round(a[0], 4))
+            low, high = (min(a[0], b[0]), max(a[0], b[0])) if key[0] == 0 else (min(a[1], b[1]), max(a[1], b[1]))
+            if any(min(high, hi) - max(low, lo) > _EPS and not ends_of[m] & mine for lo, hi, m in occupied.get(key, ())):
+                return True
+        return False
 
     def lane_span(chain: list[_Key]) -> tuple[float, float]:
         """The range across the flow that an edge between the ends of `chain` may use."""
@@ -1836,7 +2213,7 @@ def _lay_out(
                     far = pts[-1] if end == 0 else pts[0]
                     off = own_offset.get((n, end))
                     if off is None:
-                        off = _spread(twins[(chain[0], chain[-1])], slot.u_extent, node_id)[twin_rank[n]]
+                        off = _spread(twins[(chain[0], chain[-1])], slot.u_extent, node_id, opts.port_pitch)[twin_rank[n]]
                     # self-loops leave and arrive on the low side, so a node that has one is entered on the other
                     low = far[1] < slot.v and node_id not in loop_count
                     arrivals.setdefault((node_id, low), []).append((n, end))
@@ -1850,11 +2227,19 @@ def _lay_out(
                 built[n] = (pts, source, target, chain, _parallel)
 
     reattach(False)
+    if l_off:
+        # a heading moves an end to its box's low or high side, where the ports of an L route are, so those edges keep their Z routes
+        taken_sides = {(node_id, "low" if low else "high") for node_id, low in arrivals}
+        clash = frozenset(
+            n for n in l_off if n in rerouted or (chains[n][0 if l_leaving[n] else -1], l_side_of[n]) in taken_sides
+        )
+        if clash:
+            return _lay_out(nodes, edges, lanes, groups, options, own_points, spent, slack, no_l | clash)
     for (node_id, _low), ends_here in arrivals.items():
         extent = slots[node_id].u_extent
         if own_points and round(extent / GRID) // len(ends_here):  # as for the ends on a box's far and near sides
             for rank, end_key in enumerate(ends_here):
-                own_offset[end_key] = _spread(len(ends_here), extent, node_id)[rank]
+                own_offset[end_key] = _spread(len(ends_here), extent, node_id, opts.port_pitch)[rank]
     arrivals.clear()
     rerouted.clear()
     reattach(True)
@@ -1881,15 +2266,31 @@ def _lay_out(
         """The boxes that a horizontal segment a-b might enter: those whose bottom edge lies within a box height below it."""
         return by_bottom[bisect_left(solid_bottoms, a[1] - tallest - _EPS) : bisect_right(solid_bottoms, a[1] + _EPS)]
 
+    def runs_into_something(n: int, bends: list[tuple[float, float]]) -> bool:
+        """Whether a route through `bends` enters a box or a group edge `n` does not belong to."""
+        return any(
+            _enters(a, b, r)
+            for a, b in pairwise(bends)
+            if a != b
+            for r in (*foreign_of[n], *(_solids_at(a, b) if a[0] == b[0] else _solids_across(a, b)))
+        )
+
+    if l_off:
+        blocked = frozenset(n for n in l_off if runs_into_something(n, built[n][0]))
+        if blocked:  # the whole layout is redone with those edges on their Z routes, which the search can always start from
+            return _lay_out(nodes, edges, lanes, groups, options, own_points, spent, slack, no_l | blocked)
     pending = []
     for n, (bends, source, target, chain, _parallel) in enumerate(built):
         foreign = foreign_of[n]
-        lines = [(a, b) for a, b in pairwise(bends) if a != b]
-        hits = any(
-            _enters(a, b, r)
-            for a, b in lines
-            for r in (*foreign, *(_solids_at(a, b) if a[0] == b[0] else _solids_across(a, b)))
-        )
+        hits = runs_into_something(n, bends)
+        if source != target and n not in rerouted and n not in stubs and n not in l_off and len(_simplify(bends)) > 2:
+            mine = {bends[0], bends[-1]}
+            for cand in _candidates(_simplify(bends)):
+                _spend(spent, len(cand))
+                if not runs_into_something(n, cand) and not shares_a_run(n, cand):
+                    bends, hits = cand, False
+                    built[n] = (cand, source, target, chain, _parallel)
+                    break
         if hits and n in stubs:
             built[n] = (stubs[n], source, target, chain, _parallel)
         if source != target and (n in rerouted or hits):
@@ -2057,4 +2458,4 @@ def _lay_out(
         if n_bands > 1
         else ()
     )
-    return Layout(boxes, group_boxes, lane_boxes, routes, page_width, page_height, labels, wrapped_rows)
+    return Layout(boxes, group_boxes, lane_boxes, routes, page_width, page_height, labels, wrapped_rows, len(pending))

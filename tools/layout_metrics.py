@@ -38,6 +38,7 @@ COLUMNS = (
     "port_gap_violations",
     "port_order_violations",
     "shared_runs",
+    "fallbacks",
     "seconds",
 )
 """The measured columns, in table order."""
@@ -56,6 +57,7 @@ def _row(layout, seconds: float) -> dict[str, float | int]:
         "port_gap_violations": len(rm.port_gap_violations(layout)),
         "port_order_violations": len(rm.port_order_violations(layout)),
         "shared_runs": len(rm.shared_runs(layout)),
+        "fallbacks": getattr(layout, "fallbacks", 0),
         "seconds": round(seconds, 3),
     }
 
@@ -76,7 +78,7 @@ def measure_dense() -> dict[str, dict[str, float | str]]:
     """Seconds and outcome of each dense cell at seed 0, keyed by its parameters."""
     out = {}
     for n, m, lanes, groups, direction in dense_matrix.CELLS:
-        seconds, _steps, outcome = dense_matrix.measure(0, n, m, lanes, groups, direction)
+        seconds, _steps, _searched, outcome = dense_matrix.measure(0, n, m, lanes, groups, direction)
         out[f"{n}-{m}-{lanes}-{groups}-{direction}"] = {"seconds": round(seconds, 2), "outcome": outcome}
     return out
 

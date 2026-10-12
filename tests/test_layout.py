@@ -503,12 +503,18 @@ def _n(node_id, lane=None, group=None):
     return LayoutNode(node_id, 1, 0.6, lane, group)
 
 
-def test_a_route_goes_round_a_group_it_does_not_belong_to():
+def _group_detour_case():
+    """The layout in which the edge p -> q has to go round group G, with the checks that it is a legal one."""
     nodes = (_n("p"), _n("g1", group="G"), _n("m"), _n("g3", group="G"), _n("q", group="H"))
     edges = (("g1", "m"), ("m", "g3"), ("p", "q"))
     layout = layered_layout(nodes, edges, groups=("G", "H"))
     _check(layout, nodes, ())
     _check_routes(layout)
+    return layout
+
+
+def test_a_route_goes_round_a_group_it_does_not_belong_to():
+    _group_detour_case()
 
 
 def test_many_self_loops_stay_inside_their_lane():
