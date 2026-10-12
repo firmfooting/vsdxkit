@@ -1,5 +1,6 @@
 import pytest
 
+from vsdxkit import layout as lo
 from vsdxkit.errors import GraphError
 from vsdxkit.layout import LayoutNode, LayoutOptions, PageTarget, layered_layout
 
@@ -28,3 +29,35 @@ def test_a_page_target_that_is_not_valid_is_refused_by_name(page, name):
 
 def test_none_turns_the_target_off():
     assert layered_layout(TWO, (("a", "b"),), options=LayoutOptions(page=None)).rows == ()
+
+
+def test_the_partition_minimises_the_widest_row_and_breaks_ties_early():
+    assert lo._partition([4, 1, 1, 4], 2) == (0, 2)
+    assert lo._partition([1, 1, 1, 1], 2) == (0, 2)
+    assert lo._partition([3, 3, 3], 2) == (0, 1)  # (3 | 6) and (6 | 3) tie at 6; the earlier cut wins
+
+
+def test_the_row_count_is_clamped_to_the_layer_count():
+    assert lo._partition([2, 2], 5) == (0, 1)
+    assert lo._partition([2], 3) == (0,)
+
+
+def test_a_forbidden_cut_is_never_taken():
+    assert lo._partition([1, 1, 1, 1], 2, forbidden=frozenset({2})) in {(0, 1), (0, 3)}
+    assert lo._partition([1, 1, 1], 3, forbidden=frozenset({1, 2})) == (0,)
+
+
+def test_the_row_choice_lands_a_long_chain_in_the_band():
+    widths = [3.2] * 25
+    heights = [1.0] * 25
+    starts = lo._choose_starts(widths, heights, 0.5, lo.PageTarget(), frozenset())
+    w, h = lo._estimate(widths, heights, starts, 0.5)
+    assert 1.33 <= w / h <= 2.22 and len(starts) > 1
+
+
+def test_a_page_already_in_the_band_is_not_wrapped():
+    assert lo._choose_starts([1.0, 0.8], [1.0, 1.0], 0.5, lo.PageTarget(), frozenset()) == (0,)
+
+
+def test_wrap_none_never_wraps():
+    assert lo._choose_starts([3.2] * 25, [1.0] * 25, 0.5, lo.PageTarget(wrap="none"), frozenset()) == (0,)
