@@ -998,6 +998,44 @@ def test_zero_padding_zero_gap_and_off_grid_margins_keep_their_clearance(seed, d
     _check_clearance(layout, nodes, parents, options)
 
 
+def _check_lanes_hold_groups(layout: Layout) -> None:
+    """Every group box lies inside the lane bands its members are in."""
+    for g, box in layout.groups.items():
+        assert any(
+            lane.y - lane.height / 2 <= box.y - box.height / 2 + 1e-9
+            and box.y + box.height / 2 <= lane.y + lane.height / 2 + 1e-9
+            for lane in layout.lanes.values()
+        ), f"group {g} leaves its lane"
+
+
+def test_nested_off_grid_groups_stay_inside_their_lane():
+    nodes = [
+        LayoutNode("c1", 0.1, 1.0, "L", "C"),
+        LayoutNode("c2", 1.01, 0.1, "L", "C"),
+        LayoutNode("p1", 0.1, 1.0, "L", "P"),
+        LayoutNode("p2", 0.02, 0.1, "L", "P"),
+        LayoutNode("u", 0.1, 0.02, "L", None),
+    ]
+    options = LayoutOptions(parents=(("C", "P"),), group_padding=0.013, lane_padding=0.004, node_gap=0.013)
+    layout = layered_layout(tuple(nodes), (), ("L",), ("C", "P"), options)
+    _check_lanes_hold_groups(layout)
+
+
+def test_nested_off_grid_groups_beside_a_sibling_group_lay_out_apart():
+    nodes = [
+        LayoutNode("u", 1.0, 0.1, None, None),
+        LayoutNode("c1", 0.1, 0.02, None, "C"),
+        LayoutNode("c2", 0.1, 0.1, None, "C"),
+        LayoutNode("p1", 1.01, 0.5, None, "P"),
+        LayoutNode("p2", 0.5, 0.5, None, "P"),
+        LayoutNode("s1", 1.01, 0.5, None, "S"),
+    ]
+    options = LayoutOptions(direction="top_down", parents=(("C", "P"),), group_padding=0.004, node_gap=0.013)
+    _clearance_of(
+        nodes, [], ("C", "P", "S"), **{k: getattr(options, k) for k in ("direction", "parents", "group_padding", "node_gap")}
+    )
+
+
 def _clearance_of(nodes, edges, groups, **options):
     options = LayoutOptions(**options)
     layout = layered_layout(tuple(nodes), tuple(edges), (), groups, options)
