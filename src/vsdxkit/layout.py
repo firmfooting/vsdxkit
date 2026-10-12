@@ -586,6 +586,9 @@ _NUDGES = (0.03, -0.03, 0.07, -0.07, 0.09, -0.09)
 _CORRIDOR = 0.5
 """Inches of clear space kept round a group box, so a route has somewhere to go round it."""
 
+_CHANNEL = 0.2
+"""Inches between the levels that fold routes use in the corridor between two rows."""
+
 _LANE_STEP = 0.02
 """Inches between the neighbouring lines a detour may use along one gap or corridor, so detours can run side by side."""
 
@@ -1555,9 +1558,70 @@ def _lay_out(
     solids = [rect_of(n.id) for n in nodes]
     groups_of = {n.id: {g for g, ms in members_of.items() if n.id in ms} for n in nodes}
 
+    # the hops that cross a row boundary leave the near-boundary side of one column and enter the other, by a level of their own
+    fold_hops: dict[int, list[tuple[float, int, int]]] = {}
+    for n, chain in enumerate(chains):
+        if chain[0] != chain[-1]:
+            for hop, (a, b) in enumerate(pairwise(chain)):
+                if band_of_layer[slots[a].layer] != band_of_layer[slots[b].layer]:
+                    fold_hops.setdefault(band_of_layer[slots[a].layer], []).append((slots[a].v, n, hop))
+    loop_extra: dict[_Key, int] = {}  # fold arrivals that share a self-looped node's top with its loops
+    fold_plan: dict[tuple[int, int], tuple[float, float, float, float, float]] = {}  # (n, hop) -> (ua, ub, ya, yb, level)
+    for band, found in fold_hops.items():
+        found.sort()
+        count = len(found)
+        width = min(
+            min(
+                (slots[chains[n][h]].u_extent if slots[chains[n][h]].real else col_width[slots[chains[n][h]].layer])
+                for _v, n, h in found
+            ),
+            min(
+                (
+                    slots[chains[n][h + 1]].u_extent
+                    if slots[chains[n][h + 1]].real
+                    else col_width[slots[chains[n][h + 1]].layer]
+                )
+                for _v, n, h in found
+            ),
+        )
+        # a boundary too narrow for a port each keeps the column centre, and the search or the spacing pass separates the routes
+        offsets = _spread(count, width, band) if round(width / GRID) // count else [0.0] * count
+        ports = [
+            (centre_u(slots[chains[n][h]]) + off, centre_u(slots[chains[n][h + 1]]) + off, n, h)
+            for off, (_v, n, h) in zip(offsets, found, strict=True)
+        ]
+        # a self-loop uses border points on the top of its node, so the folds that arrive there share that node's spread with it
+        arriving: dict[_Key, list[int]] = {}
+        for idx, (_ua, _ub, n, h) in enumerate(ports):
+            key = chains[n][h + 1]
+            if slots[key].real and key in loop_count:
+                arriving.setdefault(key, []).append(idx)
+        for key, idxs in arriving.items():
+            loops = twins[(key, key)]
+            if round(slots[key].u_extent / GRID) // (loops + len(idxs)):
+                loop_extra[key] = loop_extra.get(key, 0) + len(idxs)
+                spread = _spread(loops + loop_extra[key], slots[key].u_extent, key)
+                for rank, idx in enumerate(idxs):
+                    ua, _ub, n, h = ports[idx]
+                    ports[idx] = (ua, centre_u(slots[key]) - spread[loops + loop_extra[key] - len(idxs) + rank], n, h)
+        # a corridor of 2 * lane_pad lies on the boundary; levels are a channel apart, or closer when it is crowded
+        top_level = lane_bottom[band] - lane_pad
+        step = min(_CHANNEL, 2 * lane_pad / (count + 1))
+        right = ports[0][1] > ports[0][0]
+        # the edge with the larger start column takes the higher level for a jog to the right, the smaller for a jog to the left
+        by_level = sorted(ports, key=lambda port: -port[0] if right else port[0])
+        for level_rank, (ua, ub, n, h) in enumerate(by_level):
+            sa, sb = slots[chains[n][h]], slots[chains[n][h + 1]]
+            ya = sa.v + sa.v_extent / 2 if sa.real else rows_of[n][h]
+            yb = sb.v - sb.v_extent / 2 if sb.real else rows_of[n][h + 1]
+            fold_plan[(n, h)] = (ua, ub, ya, yb, top_level + (level_rank + 1) * step)
+
     routes: dict[tuple[str, str, int], tuple[tuple[float, float], ...]] = {}
     seen_pairs: dict[tuple[str, str], int] = {}
     built: list[tuple[list[tuple[float, float]], str, str, list[_Key], int]] = []
+    stubs: dict[
+        int, list[tuple[float, float]]
+    ] = {}  # per fold edge, the path the search starts from if its fold route is blocked
     for n, ((source, target), flip, chain) in enumerate(zip(edges, flipped, chains, strict=True)):
         parallel = seen_pairs.get((source, target), 0)
         seen_pairs[(source, target)] = parallel + 1
@@ -1566,7 +1630,7 @@ def _lay_out(
         i = twin_rank[n]
         if source == target:
             r = first_slot.v_extent / 2 + 0.2 + 0.1 * i
-            c = centre_u(first_slot) - _spread(twins[ends], first_slot.u_extent, source)[i]
+            c = centre_u(first_slot) - _spread(twins[ends] + loop_extra.get(chain[0], 0), first_slot.u_extent, source)[i]
             dv = end_offset.get((n, True), _spread(twins[ends], first_slot.v_extent, source)[i])
             out_u = right_u(first_slot) + (-1 if mirrored[first_slot.layer] else 1) * (0.3 + 0.1 * i)
             bends = [
@@ -1578,20 +1642,33 @@ def _lay_out(
             ]
         else:
             vs = rows_of[n]
-            bends = [(right_u(first_slot), vs[0])]
+            bends: list[tuple[float, float]] = [] if (n, 0) in fold_plan else [(right_u(first_slot), vs[0])]
+            stub = [(right_u(first_slot), vs[0])]
             for hop, sb in enumerate(slots[k] for k in chain[1:]):
                 sa = slots[chain[hop]]
                 if (n, hop) in channel:
                     cu = channel[(n, hop)]
                     bends += [(cu, vs[hop]), (cu, vs[hop + 1]), (left_u(sb), vs[hop + 1])]
+                    stub += bends[-3:]
                 else:
-                    # a fold hop is a stub that leaves and arrives the way a route must; the search below routes it round the boxes
+                    # a fold hop drops from its column to a level in the corridor, runs across, and drops into the next row
+                    ua, ub, ya, yb, level = fold_plan[(n, hop)]
+                    if hop:
+                        bends.pop()  # the pass-through of the dummy before it, which now ends at the port column
+                        bends.append((ua, vs[hop]))
+                    bends += [(ua, ya), (ua, level), (ub, level), (ub, yb)]
+                    # the stub leaves and arrives the way a route must, for the search to route when the fold route is blocked
                     out_x = right_u(sa) + (-1 if mirrored[sa.layer] else 1) * gaps[sa.layer] / 2
                     in_x = left_u(sb) - (-1 if mirrored[sb.layer] else 1) * gaps[sb.layer - 1] / 2
                     mid = (vs[hop] + vs[hop + 1]) / 2
-                    bends += [(out_x, vs[hop]), (out_x, mid), (in_x, mid), (in_x, vs[hop + 1]), (left_u(sb), vs[hop + 1])]
+                    stub += [(out_x, vs[hop]), (out_x, mid), (in_x, mid), (in_x, vs[hop + 1]), (left_u(sb), vs[hop + 1])]
                 if hop + 1 < len(chain) - 1:
                     bends.append((right_u(sb), vs[hop + 1]))
+                    stub.append((right_u(sb), vs[hop + 1]))
+            if flip:
+                stub.reverse()
+            if any((n, k) in fold_plan for k in range(len(chain) - 1)):
+                stubs[n] = [(snap(u), snap(v)) for u, v in stub]
             if flip:
                 bends.reverse()
         # on the grid before any comparison, so two lines that print the same are the same line
@@ -1692,8 +1769,10 @@ def _lay_out(
     for n, (bends, source, target, chain, _parallel) in enumerate(built):
         foreign = foreign_of[n]
         lines = [(a, b) for a, b in pairwise(bends) if a != b]
-        folds = any(band_of_layer[slots[a].layer] != band_of_layer[slots[b].layer] for a, b in pairwise(chain))
-        if source != target and (n in rerouted or folds or any(_enters(a, b, r) for a, b in lines for r in foreign)):
+        hits = any(_enters(a, b, r) for a, b in lines for r in (*foreign, *solids))
+        if hits and n in stubs:
+            built[n] = (stubs[n], source, target, chain, _parallel)
+        if source != target and (n in rerouted or hits):
             pending.append((n, foreign))
         else:
             occupy(bends, n)

@@ -1,8 +1,10 @@
 import math
+from itertools import pairwise
 from pathlib import Path
 
 import pytest
-from helpers.route_metrics import layout_digest
+from helpers.route_metrics import crossings, layout_digest, shared_runs
+from test_layout import _check, _check_routes
 
 from vsdxkit import layout as lo
 from vsdxkit.errors import GraphError
@@ -175,3 +177,60 @@ def test_lanes_never_wrap_and_a_top_down_flow_is_not_cut():
     laned = tuple(LayoutNode(n.id, n.width, n.height, "l") for n in nodes)
     assert layered_layout(laned, edges, ("l",)).rows == ()
     assert layered_layout(nodes, edges, options=LayoutOptions(direction="top_down")).rows == ()
+
+
+def _straight_down(route):
+    return len({round(x, 2) for x, _y in route}) == 1
+
+
+def test_the_edge_that_crosses_a_fold_is_a_short_join():
+    nodes, edges = _chain(25)
+    lay = layered_layout(nodes, edges)
+    fold = [(row[-1], nxt[0]) for row, nxt in pairwise(lay.rows)]
+    assert fold
+    for a, b in fold:
+        route = lay.routes[(a, b, 0)]
+        assert _straight_down(route) and len(route) == 2
+
+
+def test_an_edge_that_spans_a_fold_is_routed_clear_of_every_node():
+    nodes, edges = _chain(25)
+    skip = (*edges, ("s10", "s16"), ("s22", "s2"))
+    lay = layered_layout(nodes, skip)
+    assert len(lay.routes) == len(skip)
+    _check(lay, nodes, ())
+    _check_routes(lay)
+
+
+def test_disconnected_chains_wrap_and_every_edge_has_a_route():
+    a, ea = _chain(14)
+    b = tuple(LayoutNode(f"t{i}", 2.4, 1.0) for i in range(14))
+    eb = tuple((f"t{i}", f"t{i + 1}") for i in range(13))
+    lay = layered_layout((*a, *b), (*ea, *eb))
+    assert len(lay.routes) == 26 and len(lay.nodes) == 28
+
+
+def test_two_edges_that_fold_together_do_not_share_a_run():
+    nodes = (*(LayoutNode(f"s{i}", 2.4, 1.0) for i in range(24)), LayoutNode("x", 2.4, 1.0))
+    edges = (*((f"s{i}", f"s{i + 1}") for i in range(23)), ("s11", "x"), ("s11", "s12"))
+    lay = layered_layout(nodes, edges)
+    assert shared_runs(lay) == [] and crossings(lay) == 0
+
+
+def test_fold_routes_and_a_shifted_snake_stay_on_the_page_and_out_of_every_node():
+    nodes, edges = _chain(25)
+    skip = (*edges, ("s10", "s16"), ("s22", "s2"), ("s5", "s20"))
+    for page in (PageTarget(), PageTarget(wrap="rows")):
+        lay = layered_layout(nodes, skip, options=LayoutOptions(page=page))
+        _check(lay, nodes, ())
+        for (source, target, _n), route in lay.routes.items():
+            for x, y in route:
+                assert 0 <= x <= lay.width and 0 <= y <= lay.height
+            for p, q in pairwise(route):
+                for node_id, box in lay.nodes.items():
+                    if node_id not in (source, target):
+                        lx, hx = sorted((p[0], q[0]))
+                        ly, hy = sorted((p[1], q[1]))
+                        inside_x = hx > box.x - box.width / 2 and lx < box.x + box.width / 2
+                        inside_y = hy > box.y - box.height / 2 and ly < box.y + box.height / 2
+                        assert not (inside_x and inside_y), f"{source}->{target} enters {node_id}"
