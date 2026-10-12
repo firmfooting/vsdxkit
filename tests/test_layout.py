@@ -809,9 +809,11 @@ _LABELLED_GRAPHS = [
     (3, 3, "left_to_right"),
     (0, 3, "top_down"),
 ]
-# Graphs here label every edge, loops and parallel edges included, so many cannot give every label a clear straight
-# stretch (A7) and are refused by name; this pins how many, so a change in either direction shows.
-_REFUSED_LABELLED_GRAPHS = 132
+# Graphs here label every edge of 7 nodes and 14 edges, loops, parallel and opposite edges included, with labels up to
+# 1.2 inches wide, so some leave no clear straight stretch (A7): a node with six or more routes on one side has them
+# closer than a label is tall, and routes crossing a loop's run cannot be moved by the label. They are refused by name;
+# this pins how many, so a change in either direction shows. Ordinary labelled graphs are refused far less often.
+_REFUSED_LABELLED_GRAPHS = 53
 
 
 def _labelled_graph(seed, lanes, groups, direction):

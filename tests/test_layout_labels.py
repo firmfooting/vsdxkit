@@ -154,3 +154,13 @@ def test_the_shift_that_makes_room_for_a_label_leaves_routes_on_their_nodes():
         assert _on_border(route[0], layout.nodes[source]), (source, target)
         assert _on_border(route[-1], layout.nodes[target]), (source, target)
     assert rm.label_violations(layout) == []
+
+
+def test_ordinary_labelled_graphs_are_rarely_refused():
+    refused = 0
+    for seed in range(20):
+        try:
+            corpus.labelled_random_layout(seed, 24, 36)
+        except GraphError:
+            refused += 1
+    assert refused <= 1  # 0 of 20 today; a page cut into rows falls back to one row when a label fits nowhere

@@ -23,6 +23,10 @@ class _Crowded(GraphError):
     """A layout that could not give its routes lines of their own; the same graph may still fit with fewer border points."""
 
 
+class _LabelRefused(GraphError):
+    """A label with no straight stretch of its route to sit on; a page cut into rows may still fit it in one row."""
+
+
 _Key = str | tuple[int, int]
 """A slot's key: a node's id, or (edge number, layer) for a dummy, which no string id can equal."""
 
@@ -1299,7 +1303,7 @@ def _place_labels(
     """Each labelled edge's label box, centred on a segment of its own route, and how many edges took a fallback route.
 
     A label is tried on the first segment when `first` says so and otherwise on the longest, sliding along each
-    stretch of a segment within one lane band in half-label steps. It must meet no box of `fixed` or of its own
+    stretch of a segment within one lane band in quarter-label steps. It must meet no box of `fixed` or of its own
     `foreign` boxes, no earlier label, no other route's segment and no lane border. An edge no segment serves takes the next route from `_candidates` that is clear and is tried once
     more; when none serves, the layout is refused naming the edge.
     """
@@ -1341,7 +1345,7 @@ def _place_labels(
             for start, end in _stretches(a, b, borders):
                 flat = start[1] == end[1]
                 length = abs(end[0] - start[0]) + abs(end[1] - start[1])
-                step = (width if flat else height) / 2
+                step = (width if flat else height) / 4
                 # the first-segment role slides from the end nearest the source, any other from the middle
                 # labels of parallel edges start side by side, so the first does not take the middle all the others need
                 extents = [size[0 if flat else 1] for size in twins[n]]
@@ -1349,8 +1353,21 @@ def _place_labels(
                 # the slide must reach either end of the stretch from where the label would sit beside its twins
                 reach = int(length / step + _EPS) if lead else int((length / 2 + abs(apart)) / step + _EPS)
                 offsets = [j * step for j in range(reach + 1)] if lead else [apart + j * step for j in _steps(reach)]
-                for off in offsets:
-                    t = (off if lead else length / 2 + off) / length
+                # a window between obstacles can be narrower than a step, so the label also tries sitting flush against each
+                flush = sorted(
+                    (
+                        (c - start[not flat]) / (end[not flat] - start[not flat])
+                        for o in (*fixed, *foreign[n], *placed.values(), *theirs)
+                        for c in (
+                            (o.x - (o.width + width) / 2, o.x + (o.width + width) / 2)
+                            if flat
+                            else (o.y - (o.height + height) / 2, o.y + (o.height + height) / 2)
+                        )
+                    ),
+                    key=lambda t: abs(t - 0.5),
+                )
+                ts = [(off if lead else length / 2 + off) / length for off in offsets] + flush
+                for t in ts:
                     if not -_EPS <= t <= 1 + _EPS:
                         continue
                     x, y = snap(start[0] + t * (end[0] - start[0])), snap(start[1] + t * (end[1] - start[1]))
@@ -1390,7 +1407,7 @@ def _place_labels(
                     fallbacks += 1
                     break
         if spot is None:
-            raise GraphError(
+            raise _LabelRefused(
                 f"the label of edge {source!r} -> {target!r} cannot be placed on a straight stretch of its route, clear of "
                 "the nodes, group headings, other groups, lane headings, other labels and other routes"
             )
@@ -1505,6 +1522,24 @@ def _aspect_miss(layout: Layout, target: PageTarget) -> float:
 
 
 def _laid_out(
+    nodes: tuple[LayoutNode, ...],
+    edges: tuple[tuple[str, str], ...],
+    lanes: tuple[str, ...],
+    groups: tuple[str, ...],
+    options: LayoutOptions | None,
+) -> Layout:
+    """One layout in the configured direction; a label that fits nowhere on a page cut into rows is tried again in one row."""
+    try:
+        return _laid_out_once(nodes, edges, lanes, groups, options)
+    except _LabelRefused:
+        # the ends of rows leave a label no clear stretch; the page shape is only a target, so one row gives way to the label
+        opts = options if options is not None else LayoutOptions()
+        if opts.page is None:
+            raise
+        return _laid_out_once(nodes, edges, lanes, groups, replace(opts, page=None))
+
+
+def _laid_out_once(
     nodes: tuple[LayoutNode, ...],
     edges: tuple[tuple[str, str], ...],
     lanes: tuple[str, ...],
@@ -1691,9 +1726,20 @@ def _lay_out(
             ),
         ]
     )
+    # a loop's top run clears its node by half its tallest label, so the label sits on the run without touching the node
+    loop_base = max(
+        [
+            0.2,
+            *(
+                (size[0] if top_down else size[1]) / 2 + 2 * GRID
+                for (source, target), size in zip(edges, opts.edge_labels or (None,) * len(edges), strict=True)
+                if size is not None and source == target
+            ),
+        ]
+    )
     # snapping moves each centre by up to half a grid step, so packed neighbours keep one step more than asked
     most_loops = max(Counter(source for source, target in edges if source == target).values(), default=0)
-    v_gap = max(opts.node_gap, 0.2 + loop_pitch * (most_loops - 1) if most_loops else 0.0) + GRID
+    v_gap = max(opts.node_gap, loop_base + loop_pitch * (most_loops - 1) if most_loops else 0.0) + GRID
     u_gap = max(opts.layer_gap, 0.3 + loop_pitch * (most_loops - 1) if most_loops else 0.0) + GRID
 
     ids = [n.id for n in nodes]
@@ -1779,8 +1825,15 @@ def _lay_out(
             label_layer[n] = layer
             stacked.setdefault((layer, chain[0], chain[-1]), []).append(need - _LABEL_ROOM)
     gaps = [u_gap] * n_layers
+    # a gap is wide enough for its channels and, besides them, the widest label stack, so the channels leave stretches of a run a label fits
+    label_window = [0.0] * n_layers
     for (layer, _first, _last), extents in stacked.items():
-        gaps[layer] = max(gaps[layer], math.fsum(extents) + _LABEL_ROOM)
+        label_window[layer] = max(label_window[layer], math.fsum(extents) + _LABEL_ROOM)
+    for layer, window in enumerate(label_window):
+        if window:
+            pitch = GRID if explicit_gap else opts.channel_pitch
+            band = (min(crossing[layer], _PITCHED_CHANNELS) + 1) * pitch
+            gaps[layer] = max(gaps[layer], loop_zone.get(layer, 0.0) + window + band)
 
     col_width = [max((slots[k].u_extent for k in row), default=0.0) for row in rows]
     if opts.columns == "even":
@@ -1830,7 +1883,7 @@ def _lay_out(
 
     n_lanes = n_bands if n_bands > 1 else max(len(lanes), 1)
     # a lane band must contain the padding of the group boxes that touch its edges, and the snapping of their coordinates
-    loop_reach = 0.2 + loop_pitch * (most_loops - 1) + 2 * GRID if most_loops else 0.0
+    loop_reach = loop_base + loop_pitch * (most_loops - 1) + 2 * GRID if most_loops else 0.0
     # a heading taller than a group's padding grows the box at its top, so the lane and the gap between tracks leave room
     pad = opts.group_padding
     base = pad * (2 if parent_of else 1)
@@ -1838,7 +1891,7 @@ def _lay_out(
     def loops_above(g: str) -> float:
         """How far a member's self-loops reach above it, where a heading must clear them: nothing in a top-down flow."""
         counts = [loop_count[m] for m in members_of[g] if m in loop_count]
-        return 0.0 if top_down or not counts else 0.2 + loop_pitch * (max(counts) - 1) + GRID
+        return 0.0 if top_down or not counts else loop_base + loop_pitch * (max(counts) - 1) + GRID
 
     def reach(g: str) -> float:
         """How far above its topmost member a group's box can reach: its padding or heading, and a parent's clears its children's."""
@@ -1859,7 +1912,9 @@ def _lay_out(
     lane_pad_bottom = lane_pad_for(0.0)
     lane_pad_top = lane_pad_for(lift)
     # between tracks, a group's loops and padding reach the track below, which keeps a grid step clear of them and two more for snapping
-    track_clear = max(base, 0.2 + loop_pitch * (most_loops - 1) + GRID if most_loops else 0.0) + base + (3 + slack) * GRID
+    track_clear = (
+        max(base, loop_base + loop_pitch * (most_loops - 1) + GRID if most_loops else 0.0) + base + (3 + slack) * GRID
+    )
     track_keys = sorted({(s.lane, s.track) for s in slots.values()})
     track_height: dict[tuple[int, tuple[int, int]], float] = {}
     for key in track_keys:
@@ -1988,9 +2043,9 @@ def _lay_out(
                 extra = loop_pitch * (loop_count[m] - 1)
                 reach_u = 0.3 + extra + GRID
                 rects.append(
-                    (lo_a - reach_u, hi_a, lo_b - 0.2 - extra - GRID, hi_b)
+                    (lo_a - reach_u, hi_a, lo_b - loop_base - extra - GRID, hi_b)
                     if mirrored[slots[m].layer]
-                    else (lo_a, hi_a + reach_u, lo_b - 0.2 - extra - GRID, hi_b)
+                    else (lo_a, hi_a + reach_u, lo_b - loop_base - extra - GRID, hi_b)
                 )
         if rects:
             group_rect[g] = (
@@ -2081,7 +2136,7 @@ def _lay_out(
             -1: min(
                 [rect_of(n.id)[2] for n in nodes]
                 + [r[2] for r in group_rect.values()]
-                + [rect_of(k)[2] - 0.2 - loop_pitch * (c - 1) - GRID for k, c in loop_count.items()]
+                + [rect_of(k)[2] - loop_base - loop_pitch * (c - 1) - GRID for k, c in loop_count.items()]
             ),
         }
         for side in (1, -1):
@@ -2104,7 +2159,7 @@ def _lay_out(
     for node_id, count in loop_count.items():
         lo_a, hi_a, lo_b, _hi_b = rect_of(node_id)
         extra = loop_pitch * (count - 1)
-        lo_v = min(lo_v, lo_b - 0.2 - extra - GRID)
+        lo_v = min(lo_v, lo_b - loop_base - extra - GRID)
         if mirrored[slots[node_id].layer]:
             lo_u = min(lo_u, lo_a - 0.3 - extra - GRID)
         else:
@@ -2584,7 +2639,7 @@ def _lay_out(
         ends = (chain[0], chain[-1])
         i = twin_rank[n]
         if source == target:
-            r = first_slot.v_extent / 2 + 0.2 + loop_pitch * i
+            r = first_slot.v_extent / 2 + loop_base + loop_pitch * i
             c = (
                 centre_u(first_slot)
                 - _spread(twins[ends] + loop_extra.get(chain[0], 0), first_slot.u_extent, source, opts.port_pitch)[i]
