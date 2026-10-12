@@ -2361,10 +2361,11 @@ def _lay_out(
         if n_bands > 1:
             u_at.setdefault(min(band_of_layer[layer_of[e]] for e in edges[n]), []).append(n)
 
-    # the hops that cross a row boundary leave the near-boundary side of one column and enter the other, by a level of their own
+    # the hops that cross a row boundary leave the near-boundary side of one column and enter the other, by a level of their own;
+    # a corridor edge takes a port from the same spread as the folds beside it, but no level here (it has its own in `u_at`)
     fold_hops: dict[int, list[tuple[float, int, int]]] = {}
     for n, chain in enumerate(chains):
-        if chain[0] != chain[-1] and n not in corridor:
+        if chain[0] != chain[-1]:
             for hop, (a, b) in enumerate(pairwise(chain)):
                 if band_of_layer[slots[a].layer] != band_of_layer[slots[b].layer]:
                     fold_hops.setdefault(band_of_layer[slots[a].layer], []).append((slots[a].v, n, hop))
@@ -2407,9 +2408,15 @@ def _lay_out(
                 for rank, idx in enumerate(idxs):
                     ua, _ub, n, h = ports[idx]
                     ports[idx] = (ua, centre_u(slots[key]) - spread[loops + loop_extra[key] - len(idxs) + rank], n, h)
+        for ua, ub, n, _h in ports:
+            if n in corridor:  # the corridor edge's chain runs from its target to its source
+                port_u[(n, True)], port_u[(n, False)] = snap(ua), snap(ub)
+        ports = [port for port in ports if port[2] not in corridor]
+        if not ports:
+            continue
         # a corridor of 2 * lane_pad lies on the boundary; levels are a channel apart, or closer when it is crowded
         top_level = lane_bottom[band] - lane_pad
-        step = min(_CHANNEL, 2 * lane_pad / (count + len(u_at.get(band, ())) + 1))
+        step = min(_CHANNEL, 2 * lane_pad / (len(ports) + len(u_at.get(band, ())) + 1))
         right = ports[0][1] > ports[0][0]
         # the edge with the larger start column takes the higher level for a jog to the right, the smaller for a jog to the left
         by_level = sorted(ports, key=lambda port: -port[0] if right else port[0])
@@ -2419,7 +2426,7 @@ def _lay_out(
             yb = sb.v - sb.v_extent / 2 if sb.real else rows_of[n][h + 1]
             fold_plan[(n, h)] = (ua, ub, ya, yb, top_level + (level_rank + 1) * step)
     for band, found_u in u_at.items():
-        taken = len(fold_hops.get(band, ()))
+        taken = sum(1 for _v, n, _h in fold_hops.get(band, ()) if n not in corridor)
         step = min(_CHANNEL, 2 * lane_pad / (taken + len(found_u) + 1))
         for rank, n in enumerate(found_u):
             u_routes[n] = u_route(n, snap(lane_bottom[band] - lane_pad + (taken + rank + 1) * step))
