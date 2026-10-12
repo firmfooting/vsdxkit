@@ -1663,7 +1663,7 @@ def _lay_out(
     l_off: dict[int, float] = {}
     l_side_of: dict[int, str] = {}
     l_leaving: dict[int, bool] = {}
-    for _attempt in range(3):
+    for attempt in range(4):
         end_offset.clear()
         side_order.clear()
         l_off.clear()
@@ -1711,7 +1711,8 @@ def _lay_out(
         bad = {n for n, (leaving, _s) in l_taken.items() if l_side(n, leaving) is None}
         if not bad:
             break
-        banned |= bad
+        # a third failure gives every L route up, so the last pass has none left to check
+        banned |= bad if attempt < 2 else set(l_taken)
 
     def port_window(n: int, leaving: bool) -> tuple[float, float]:
         """The rows edge `n`'s port on its box may take: on the side, and a pitch from its neighbours, which keeps their order."""

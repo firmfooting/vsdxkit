@@ -1,5 +1,6 @@
 """Port pitch: parallel routes meet a side of a box at a set spacing."""
 
+import sys
 from itertools import pairwise
 
 import layout_corpus as corpus
@@ -267,6 +268,16 @@ def test_an_l_route_is_not_taken_through_a_box_in_the_source_column():
     from test_layout import _check_routes
 
     _check_routes(lay)
+    route = lay.routes[("a", "b", 0)]
+    # the stub down from a would cross the blocker, so a runs along its own row and enters b by its top instead
+    assert rm.bends(route) == 1 and route[0][1] == route[1][1]
+
+
+def test_a_tall_target_is_reached_by_straight_runs_from_two_short_boxes():
+    nodes = (LayoutNode("a", 2, 1), LayoutNode("b", 2, 1), LayoutNode("c", 2, 3))
+    lay = layered_layout(nodes, (("a", "c"), ("b", "c")), options=LayoutOptions(page=None))
+    assert [rm.bends(r) for r in lay.routes.values()] == [0, 0]
+    assert rm.shared_runs(lay) == [] and rm.port_gap_violations(lay) == []
 
 
 def test_forward_edges_between_adjacent_layers_have_at_most_two_bends():
@@ -274,3 +285,103 @@ def test_forward_edges_between_adjacent_layers_have_at_most_two_bends():
         lay = corpus.fixture_layout(name)
         assert max(rm.bends(r) for r in lay.routes.values()) <= 2, name
     assert max(rm.bends(r) for r in corpus.fixture_layout("lanes3").routes.values()) <= 4
+
+
+def _hub(extra_group=False):
+    """A hub with three children one box height apart, so the outer two can only be reached by an L."""
+    nodes = (LayoutNode("h", 2, 1), *(LayoutNode(f"t{i}", 2, 1) for i in range(3)))
+    if extra_group:
+        nodes += (LayoutNode("x", 2, 1, None, "g"),)  # a group the edges do not belong to, so the group checks run
+    return nodes, tuple(("h", f"t{i}") for i in range(3))
+
+
+def _veto(monkeypatch, caller, when=lambda frame: True, times=1):
+    """Make `_enters` report a hit `times` times when called from a function named `caller`, to force a fallback."""
+    real = lo._enters
+    left = [times]
+
+    def fake(a, b, rect):
+        frame = sys._getframe(1)
+        for _ in range(4):
+            if frame.f_code.co_name == caller:
+                if left[0] and when(frame) and (caller != "runs_into_something" or a[0] == b[0] != 0):
+                    left[0] -= 1
+                    return True
+                break
+            frame = frame.f_back
+        return real(a, b, rect)
+
+    monkeypatch.setattr(lo, "_enters", fake)
+    return left
+
+
+def _is_l(lay, key):
+    return rm.bends(lay.routes[key]) <= 1
+
+
+def test_the_unforced_hub_takes_l_routes_for_its_outer_children():
+    nodes, edges = _hub(True)
+    lay = layered_layout(nodes, edges, groups=("g",), options=LayoutOptions(page=None))
+    assert [rm.bends(lay.routes[("h", f"t{i}", 0)]) for i in range(3)] == [1, 0, 1]
+
+
+def test_an_l_route_that_runs_into_something_falls_back_to_its_z_route(monkeypatch):
+    from test_layout import _check_routes
+
+    nodes, edges = _hub(True)
+    left = _veto(monkeypatch, "runs_into_something")
+    lay = layered_layout(nodes, edges, groups=("g",), options=LayoutOptions(page=None))
+    assert left == [0]  # the net fired
+    _check_routes(lay)
+    assert [rm.bends(lay.routes[("h", f"t{i}", 0)]) for i in range(3)] == [2, 0, 1]
+
+
+def test_an_l_route_whose_end_a_heading_moves_falls_back_to_its_z_route(monkeypatch):
+    from test_layout import _check_routes
+
+    nodes, edges = _hub(True)
+    options = LayoutOptions(page=None, headings=(("g", 1.0, 0.25),))
+    left = _veto(monkeypatch, "reattach")
+    lay = layered_layout(nodes, edges, groups=("g",), options=options)
+    assert left == [0]
+    _check_routes(lay)
+    assert rm.bends(lay.routes[("h", "t0", 0)]) >= 2
+
+
+def _verifying(frame):
+    """Whether the `l_side` call is the check of a decision already taken: the stem end has left `end_offset`."""
+    return (frame.f_locals["n"], frame.f_locals["leaving"]) not in frame.f_locals["end_offset"]
+
+
+def test_an_l_route_that_fails_its_check_once_is_retried_without_it(monkeypatch):
+    from test_layout import _check_routes
+
+    nodes, edges = _hub(True)
+    left = _veto(monkeypatch, "l_side", _verifying)
+    lay = layered_layout(nodes, edges, groups=("g",), options=LayoutOptions(page=None))
+    assert left == [0]
+    _check_routes(lay)
+    assert [rm.bends(lay.routes[("h", f"t{i}", 0)]) for i in range(3)] == [2, 0, 1]
+
+
+def test_l_routes_that_keep_failing_their_check_are_all_given_up(monkeypatch):
+    from test_layout import _check_routes
+
+    nodes, edges = _hub(True)
+    _veto(monkeypatch, "l_side", _verifying, times=10_000)
+    lay = layered_layout(nodes, edges, groups=("g",), options=LayoutOptions(page=None))
+    _check_routes(lay)
+    assert [rm.bends(lay.routes[("h", f"t{i}", 0)]) for i in range(3)] == [2, 0, 2]
+
+
+@pytest.mark.parametrize("pitch", [0.1, 0.4])
+def test_a_port_pitch_reaches_the_ports_of_the_top_and_bottom_sides(pitch):
+    nodes = (LayoutNode("h", 3, 1), *(LayoutNode(f"t{i}", 1, 1) for i in range(6)))
+    lay = layered_layout(nodes, tuple(("h", f"t{i}") for i in range(6)), options=LayoutOptions(port_pitch=pitch, page=None))
+    sides: dict[float, list[float]] = {}
+    for r in lay.routes.values():
+        if r[0][0] == r[1][0]:
+            sides.setdefault(r[0][1], []).append(r[0][0])
+    assert len(sides) == 2 and all(len(xs) == 2 for xs in sides.values())
+    for xs in sides.values():
+        assert round(max(xs) - min(xs), 2) == pitch
