@@ -1188,3 +1188,20 @@ def test_a_channel_nudge_does_not_bring_two_edges_to_one_border_point(direction)
     layout = layered_layout(nodes, edges, (), ("g",), options)
     _check(layout, nodes, ())
     _check_routes(layout)
+
+
+def test_detour_memory_follows_the_states_visited_not_the_grid() -> None:
+    """A huge grid must not allocate route tables up front; the search is bounded by its work cap, not by memory."""
+    import tracemalloc
+
+    xs = {float(i) for i in range(1, 1500)}
+    ys = {float(i) for i in range(1, 1500)}
+    path = [(0.0, 0.0), (1.0, 0.0), (1.0, 3.0), (3.0, 3.0)]
+    tracemalloc.start()
+    try:
+        route = layout_module._detour(path, xs, ys, [], {}, [0], [], 0.1)
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert route is not None
+    assert peak < 40_000_000

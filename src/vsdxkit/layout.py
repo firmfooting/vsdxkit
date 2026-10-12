@@ -14,7 +14,7 @@ from collections import Counter
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field, replace
 from itertools import pairwise
-from typing import Literal
+from typing import Literal, cast
 
 from vsdxkit.errors import GraphError
 
@@ -455,6 +455,9 @@ _LANE_STEP = 0.02
 _WORK_CAP = 12_000_000
 """Search steps one layout may spend routing round groups and parting routes, so a very crowded one fails instead of running on."""
 
+_DENSE_STATES = 4_000_000
+"""States above which a detour's tables are sparse, not flat lists (a 1000 by 1000 grid is about 96 MB); routes are the same either way."""
+
 _REROUTES = 2
 """How many times every route that runs along another is searched again, before single segments are moved aside."""
 
@@ -483,6 +486,24 @@ _STEPS = ((1, 0), (-1, 0), (0, 1), (0, -1))
 def _heading(a: tuple[float, float], b: tuple[float, float]) -> int:
     """The index into _STEPS of the direction from a to b."""
     return 0 if b[0] > a[0] else 1 if b[0] < a[0] else 2 if b[1] > a[1] else 3
+
+
+class _Sparse[T](dict[int, T]):
+    """A table that answers `default` for a state not yet set, so it grows with the states a search visits."""
+
+    def __init__(self, default: T) -> None:
+        """An empty table answering `default`."""
+        super().__init__()
+        self.default = default
+
+    def __missing__(self, key: int) -> T:
+        """`default`, without storing it."""
+        return self.default
+
+
+def _table[T](size: int, default: T) -> list[T]:
+    """A flat list of `size` copies of `default`, or a sparse table typed as one when a list is too big to allocate up front."""
+    return [default] * size if size <= _DENSE_STATES else cast("list[T]", _Sparse(default))
 
 
 def _detour(
@@ -592,9 +613,7 @@ def _detour(
     hop = (i0 + _STEPS[first][0]) * ny + j0 + _STEPS[first][1]
     to_go_x = [abs(x - gx[goal[0]]) for x in gx]
     to_go_y = [abs(y - gy[goal[1]]) for y in gy]
-    best = [math.inf] * (nx * ny * 4)
-    came = [-1] * (nx * ny * 4)
-    costs = [-2.0] * (nx * ny * 4)
+    best, came, costs = _table(nx * ny * 4, math.inf), _table(nx * ny * 4, -1), _table(nx * ny * 4, -2.0)
     pop, push = heapq.heappop, heapq.heappush
     bend = 0.5
     ahead = (ny, -ny, 1, -1)
