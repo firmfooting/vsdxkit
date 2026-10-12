@@ -291,6 +291,7 @@ class _Runs:
     """
 
     def __init__(self, paths: list[list[tuple[float, float]]]) -> None:
+        """Index `paths`, which this object updates in place as paths are replaced."""
         self.paths = paths
         self.lines: dict[tuple[int, float], list[tuple[float, float, int, int]]] = {}
         for n, pts in enumerate(paths):
@@ -765,7 +766,11 @@ def layered_layout(
     border (a self-loop stays inside its group's box, a grid step from it), except where spacing is tighter than that.
 
     A dense graph may be refused: when routes cannot all be given lines of their own within a fixed number of search
-    steps, the layout raises instead of returning routes that overlap.
+    steps, the layout raises instead of returning routes that overlap. The limit holds for each of the two passes
+    (border points of their own, then shared points). Measured with random graphs and the default options, these
+    lay out: 60 nodes, 200 edges, 6 groups; 150 nodes, 240 edges, 4 lanes, 4 groups; 200 nodes, 320 edges, 4 lanes,
+    4 groups (about 17 s); 200 nodes, 400 edges, no groups or lanes. 200 nodes and 400 edges in 20 groups is refused
+    (after about 40 s). The ceiling falls with the number of groups and lanes more than with nodes.
 
     :param edges: pairs of (source id, target id); a repeat is a parallel edge, a pair of one id a self-loop
     :param lanes: lane ids, top to bottom
@@ -784,7 +789,13 @@ def layered_layout(
         # every edge at a node had a border point of its own; a graph too dense for that shares them, as it did before
         # the second pass has a search budget of its own, so a first pass that spent most of its own does not starve it
         # ponytail: a whole second layout, so a dense graph pays twice (150 nodes took 2.3 s, now 14 s); share points per node instead if that bites
-        return _lay_out(nodes, edges, lanes, groups, options, False, [0])
+        try:
+            return _lay_out(nodes, edges, lanes, groups, options, False, [0])
+        except _Crowded as error:
+            raise _Crowded(
+                f"{error} ({len(nodes)} nodes, {len(edges)} edges, {len(groups)} groups and {len(lanes)} lanes; "
+                "fewer edges or groups lay out)"
+            ) from None
 
 
 def _lay_out(

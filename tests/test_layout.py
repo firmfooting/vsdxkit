@@ -109,12 +109,16 @@ def test_a_random_graph_lays_out_cleanly(seed, lanes, groups, direction):
     assert layout == layered_layout(nodes, edges, lane_ids, group_ids, options)
 
 
-def test_a_200_node_graph_with_lanes_and_groups_is_refused_not_drawn_with_shared_runs():
-    """This many routes round this many groups cannot all get a line of their own, so the layout fails closed."""
+def test_a_200_node_graph_with_lanes_and_groups_lays_out_with_no_shared_run():
+    """This size needs the shared-point pass, which has a search budget of its own (about 17 s; 60 s is a hang guard)."""
     rows, edges, lane_ids, group_ids, parents = random_graph(1, 200, 320, 4, 4)
     nodes = tuple(LayoutNode(*row) for row in rows)
-    with pytest.raises(GraphError, match=r"cannot be kept apart|too crowded"):
-        layered_layout(nodes, edges, lane_ids, group_ids, LayoutOptions(parents=parents))
+    start = time.perf_counter()
+    layout = layered_layout(nodes, edges, lane_ids, group_ids, LayoutOptions(parents=parents))
+    assert time.perf_counter() - start < 60
+    assert len(layout.routes) == 320
+    _check(layout, nodes, parents)
+    _check_routes(layout, own_points=False)
 
 
 def test_a_150_node_graph_with_lanes_and_groups_lays_out_with_no_shared_run():
@@ -602,12 +606,34 @@ def test_a_busy_grouped_graph_lays_out_with_no_shared_run(direction, n, m, group
 
 
 @pytest.mark.parametrize("direction", ["left_to_right", "top_down"])
-def test_a_crowded_graph_of_200_nodes_and_20_groups_is_refused_not_drawn_with_shared_runs(direction):
-    """About 18 s to reach the search limit."""
+def test_a_crowded_graph_of_200_nodes_and_20_groups_is_refused_with_its_counts(direction):
+    """Two passes of 12M steps each, about 40 s; the message names the graph's size and the limit."""
     rows, edges, lane_ids, group_ids, parents = random_graph(1, 200, 400, 0, 20)
     nodes = tuple(LayoutNode(*row) for row in rows)
-    with pytest.raises(GraphError, match=r"too crowded|cannot be kept apart"):
+    start = time.perf_counter()
+    with pytest.raises(GraphError, match=r"search limit of 12000000 steps \(200 nodes, 400 edges, 20 groups and 0 lanes"):
         layered_layout(nodes, edges, lane_ids, group_ids, LayoutOptions(direction=direction, parents=parents))
+    assert time.perf_counter() - start < 120
+
+
+@pytest.mark.parametrize(
+    ("seed", "n", "m", "lanes", "groups", "cap", "laid_out"),
+    [(793, 50, 200, 3, 6, 5_000_000, True), (793, 50, 200, 3, 6, 2_000_000, False), (325, 50, 250, 3, 6, 2_000_000, False)],
+)
+def test_dense_graphs_on_both_sides_of_the_ceiling_lay_out_or_are_refused_with_counts(
+    monkeypatch, seed, n, m, lanes, groups, cap, laid_out
+):
+    """The first graph needs 4.7M steps for its first pass and 2.1M for its second, so 5M holds each; at 2M neither graph lays out."""
+    rows, edges, lane_ids, group_ids, parents = random_graph(seed, n, m, lanes, groups)
+    nodes = tuple(LayoutNode(*row) for row in rows)
+    monkeypatch.setattr(layout_module, "_WORK_CAP", cap)
+    if laid_out:
+        layout = layered_layout(nodes, edges, lane_ids, group_ids, LayoutOptions(parents=parents))
+        _check(layout, nodes, parents)
+        _check_routes(layout, own_points=False)
+    else:
+        with pytest.raises(GraphError, match=rf"search limit of {cap} steps \({n} nodes, {m} edges, {groups} groups"):
+            layered_layout(nodes, edges, lane_ids, group_ids, LayoutOptions(parents=parents))
 
 
 @pytest.mark.parametrize("seed", range(40))
