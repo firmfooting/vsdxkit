@@ -79,6 +79,20 @@ class LayoutNode:
 
 
 @dataclass(frozen=True)
+class PageTarget:
+    """The page shape a layout aims for. There is no maximum size: the target steers the row count and the flow direction, and the page grows as large as the content needs."""
+
+    aspect: float = 16 / 9
+    """Width over height to aim for."""
+    tolerance: float = 0.25
+    """The band is ``aspect / (1 + tolerance)`` to ``aspect * (1 + tolerance)``."""
+    wrap: Literal["snake", "rows", "none"] = "snake"
+    """How a long flow is cut into rows: ``snake`` runs odd rows against the flow so a row ends above the next one's start, ``rows`` runs every row with the flow and accepts a long edge back to the start, ``none`` does not wrap."""
+    direction: Literal["auto", "left_to_right", "top_down"] = "auto"
+    """``auto`` lays the page out both ways and keeps the one nearer the aspect, ``LayoutOptions.direction`` winning a tie."""
+
+
+@dataclass(frozen=True)
 class LayoutOptions:
     """How a layout is spaced and which way it flows."""
 
@@ -98,6 +112,8 @@ class LayoutOptions:
     """Inches left of the first layer for lane labels, when there are lanes."""
     sweeps: int = 8
     """How many up-and-down passes order the boxes within their layers."""
+    page: PageTarget | None = field(default_factory=PageTarget)
+    """The page shape to aim for, or None for none."""
     parents: tuple[tuple[str, str], ...] = ()
     """Pairs of (child group id, parent group id): groups nest one level."""
     headings: tuple[tuple[str, float, float], ...] = ()
@@ -138,6 +154,8 @@ class Layout:
     """Page height in inches."""
     labels: dict[tuple[str, str, int], Box] = field(default_factory=dict)
     """Each labelled edge's label box, by the same key as its route: near the route, clear of nodes, headings and other labels. The page holds them, a margin from its edge."""
+    rows: tuple[tuple[str, ...], ...] = ()
+    """Node ids by wrapped row; empty when the layout is not wrapped."""
 
 
 _Rect = tuple[float, float, float, float]
@@ -215,6 +233,29 @@ def _layers(ids: list[str], edges: list[tuple[str, str]], flipped: list[bool]) -
                 layer[node] = 1 + max((layer[p] for p in preds[node]), default=-1)
                 stack.pop()
     return layer
+
+
+def _check_page(page: object) -> None:
+    """Refuse a page target that is not a PageTarget or None, or whose fields are out of range, naming the option."""
+    if page is None:
+        return
+    if not isinstance(page, PageTarget):
+        raise GraphError(f"option page is {page!r}; it must be a PageTarget or None")
+    for name, low in (("aspect", False), ("tolerance", True)):
+        value = getattr(page, name)
+        if not (
+            isinstance(value, int | float)
+            and not isinstance(value, bool)
+            and math.isfinite(value)
+            and (value >= 0 if low else value > 0)
+        ):
+            raise GraphError(
+                f"option page.{name} is {value!r}; it must be a finite number {'zero or more' if low else 'above zero'}"
+            )
+    if page.wrap not in ("snake", "rows", "none"):
+        raise GraphError(f"option page.wrap is {page.wrap!r}; it must be 'snake', 'rows' or 'none'")
+    if page.direction not in ("auto", "left_to_right", "top_down"):
+        raise GraphError(f"option page.direction is {page.direction!r}; it must be 'auto', 'left_to_right' or 'top_down'")
 
 
 def _order(rows: list[list[_Key]], slots: dict[_Key, _Slot], chains: list[list[_Key]], sweeps: int) -> None:
@@ -891,6 +932,7 @@ def _lay_out(
     clear = snap(math.floor(min(_BORDER_CLEAR, opts.group_padding, opts.node_gap, opts.layer_gap) / GRID + 1e-9) * GRID)
     if not (isinstance(opts.sweeps, int) and not isinstance(opts.sweeps, bool) and opts.sweeps >= 1):
         raise GraphError(f"option sweeps is {opts.sweeps!r}; it must be a whole number, one or more")
+    _check_page(opts.page)
     if opts.edge_labels and len(opts.edge_labels) != len(edges):
         raise GraphError(f"option edge_labels has {len(opts.edge_labels)} entries for {len(edges)} edges; give one per edge")
     for entry in (*opts.edge_labels, *(h[1:] if isinstance(h, tuple) and h else h for h in opts.headings)):
