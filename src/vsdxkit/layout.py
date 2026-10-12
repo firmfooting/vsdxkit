@@ -50,12 +50,16 @@ def _even(value: float) -> float:
     return snap(math.ceil(value / (2 * GRID) - 1e-9) * 2 * GRID)
 
 
-def _spread(count: int, extent: float, node: object) -> list[float]:
-    """Offsets, in inches on the grid and about zero, that keep `count` parallel routes apart inside `extent`.
+def _spread(count: int, extent: float, node: object, pitch: float = 0.2) -> list[float]:
+    """Offsets, in inches on the grid and about zero, that keep `count` parallel routes `pitch` apart inside `extent`.
+
+    The pitch shrinks to the side divided by (count + 1) on a short side, and the ports cover at most 80 percent of the side.
 
     :raises GraphError: when `extent` has fewer grid steps than `count`, so two routes would coincide
     """
-    step = min(10, round(extent / GRID) // count)
+    step = min(round(max(0.1, min(pitch, extent / (count + 1))) / GRID), round(extent / GRID) // count)
+    if count > 1:
+        step = min(step, int(0.8 * extent / GRID + 1e-9) // (count - 1))
     if step == 0:
         raise GraphError(f"node {node!r} is too small for {count} parallel edges; each needs a grid step of its border")
     start = -((count - 1) * step // 2)
@@ -112,6 +116,10 @@ class LayoutOptions:
     """Inches left of the first layer for lane labels, when there are lanes."""
     sweeps: int = 8
     """How many up-and-down passes order the boxes within their layers."""
+    port_pitch: float = 0.2
+    """Inches between the points where parallel routes meet one side of a box, at least 0.1; a short side shrinks it."""
+    channel_pitch: float = 0.2
+    """Inches between parallel routes in a channel between layers, at least one grid step."""
     page: PageTarget | None = field(default_factory=PageTarget)
     """The page shape to aim for, or None for none."""
     parents: tuple[tuple[str, str], ...] = ()
@@ -1127,6 +1135,12 @@ def _lay_out(
     clear = snap(math.floor(min(_BORDER_CLEAR, opts.group_padding, opts.node_gap, opts.layer_gap) / GRID + 1e-9) * GRID)
     if not (isinstance(opts.sweeps, int) and not isinstance(opts.sweeps, bool) and opts.sweeps >= 1):
         raise GraphError(f"option sweeps is {opts.sweeps!r}; it must be a whole number, one or more")
+    for name, least in (("port_pitch", 0.1), ("channel_pitch", GRID)):
+        value = getattr(opts, name)
+        if not (
+            isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value) and value >= least - 1e-9
+        ):
+            raise GraphError(f"option {name} is {value!r}; it must be a finite number of inches, {least} or more")
     _check_page(opts.page)
     if opts.edge_labels and len(opts.edge_labels) != len(edges):
         raise GraphError(f"option edge_labels has {len(opts.edge_labels)} entries for {len(edges)} edges; give one per edge")
@@ -1517,7 +1531,7 @@ def _lay_out(
             items
         ):  # a node too small for them all keeps the offsets its parallel edges had
             for rank, (_kind, _v, n) in enumerate(sorted(items)):
-                end_offset[(n, leaving)] = _spread(len(items), extent, key)[rank]
+                end_offset[(n, leaving)] = _spread(len(items), extent, key, opts.port_pitch)[rank]
     rows_of: list[list[float]] = []
     for chain, (source, target) in zip(chains, edges, strict=True):
         ends = (chain[0], chain[-1])
@@ -1530,7 +1544,7 @@ def _lay_out(
         if source != target:
             # parallel edges leave and arrive at different points along the border so they never overlay
             narrow = min((source, target), key=lambda k: slots[k].v_extent)
-            off = _spread(twins[ends], slots[narrow].v_extent, narrow)[twin_rank[-1]]
+            off = _spread(twins[ends], slots[narrow].v_extent, narrow, opts.port_pitch)[twin_rank[-1]]
             vs[0] += end_offset.get((n, True), off)
             vs[-1] += end_offset.get((n, False), off)
         rows_of.append(vs)
@@ -1696,7 +1710,7 @@ def _lay_out(
             loops = twins[(key, key)]
             if round(slots[key].u_extent / GRID) // (loops + len(idxs)):
                 loop_extra[key] = loop_extra.get(key, 0) + len(idxs)
-                spread = _spread(loops + loop_extra[key], slots[key].u_extent, key)
+                spread = _spread(loops + loop_extra[key], slots[key].u_extent, key, opts.port_pitch)
                 for rank, idx in enumerate(idxs):
                     ua, _ub, n, h = ports[idx]
                     ports[idx] = (ua, centre_u(slots[key]) - spread[loops + loop_extra[key] - len(idxs) + rank], n, h)
@@ -1725,8 +1739,11 @@ def _lay_out(
         i = twin_rank[n]
         if source == target:
             r = first_slot.v_extent / 2 + 0.2 + 0.1 * i
-            c = centre_u(first_slot) - _spread(twins[ends] + loop_extra.get(chain[0], 0), first_slot.u_extent, source)[i]
-            dv = end_offset.get((n, True), _spread(twins[ends], first_slot.v_extent, source)[i])
+            c = (
+                centre_u(first_slot)
+                - _spread(twins[ends] + loop_extra.get(chain[0], 0), first_slot.u_extent, source, opts.port_pitch)[i]
+            )
+            dv = end_offset.get((n, True), _spread(twins[ends], first_slot.v_extent, source, opts.port_pitch)[i])
             out_u = right_u(first_slot) + (-1 if mirrored[first_slot.layer] else 1) * (0.3 + 0.1 * i)
             bends = [
                 (right_u(first_slot), first_slot.v + dv),
@@ -1831,7 +1848,7 @@ def _lay_out(
                     far = pts[-1] if end == 0 else pts[0]
                     off = own_offset.get((n, end))
                     if off is None:
-                        off = _spread(twins[(chain[0], chain[-1])], slot.u_extent, node_id)[twin_rank[n]]
+                        off = _spread(twins[(chain[0], chain[-1])], slot.u_extent, node_id, opts.port_pitch)[twin_rank[n]]
                     # self-loops leave and arrive on the low side, so a node that has one is entered on the other
                     low = far[1] < slot.v and node_id not in loop_count
                     arrivals.setdefault((node_id, low), []).append((n, end))
@@ -1849,7 +1866,7 @@ def _lay_out(
         extent = slots[node_id].u_extent
         if own_points and round(extent / GRID) // len(ends_here):  # as for the ends on a box's far and near sides
             for rank, end_key in enumerate(ends_here):
-                own_offset[end_key] = _spread(len(ends_here), extent, node_id)[rank]
+                own_offset[end_key] = _spread(len(ends_here), extent, node_id, opts.port_pitch)[rank]
     arrivals.clear()
     rerouted.clear()
     reattach(True)

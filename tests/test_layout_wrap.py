@@ -1,6 +1,5 @@
 import math
 from itertools import pairwise
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -160,17 +159,6 @@ def test_a_page_that_already_fits_is_laid_out_as_before():
     assert wrapped.rows == ()
     plain = layered_layout(nodes, edges, options=LayoutOptions(page=None))
     assert layout_digest({"x": wrapped}) == layout_digest({"x": plain})
-
-
-def test_page_none_reproduces_the_0_10_routes():
-    """Expires when Phase 2 changes ports: delete it in that phase's first task."""
-    import layout_corpus as corpus
-
-    off = LayoutOptions(page=None)
-    layouts = {s: corpus.fixture_layout(s, off) for s in corpus.FIXTURES}
-    layouts.update({f"rand-{k}": corpus.random_layout(k, 40, 60, off) for k in range(5)})
-    want = (Path(__file__).parent / "fixtures" / "routes_unwrapped.sha256").read_text(encoding="utf-8").strip()
-    assert layout_digest(layouts) == want
 
 
 def test_lanes_never_wrap_and_a_top_down_flow_is_not_cut():
