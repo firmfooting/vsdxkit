@@ -40,6 +40,11 @@ def _ceil(value: float) -> float:
     return snap(math.ceil(value / GRID - 1e-9) * GRID)
 
 
+def _floor(value: float) -> float:
+    """Round `value` down to the grid."""
+    return snap(math.floor(value / GRID + 1e-9) * GRID)
+
+
 def _even(value: float) -> float:
     """Round `value` up to an even number of grid steps, so a snapped centre keeps both borders on the grid."""
     return snap(math.ceil(value / (2 * GRID) - 1e-9) * 2 * GRID)
@@ -744,6 +749,32 @@ def layered_layout(
         return _lay_out(nodes, edges, lanes, groups, options, False, work)
 
 
+def _blame(
+    group_rect: dict[str, _Rect],
+    grown: set[str],
+    nodes: tuple[LayoutNode, ...],
+    members_of: dict[str, list[str]],
+    parent_of: dict[str, str],
+    rect_of: Callable[[str], _Rect],
+    heading_of: dict[str, tuple[float, float]],
+) -> str | None:
+    """What a grown group box covers that is not its own, as an error message, or None."""
+    for g in sorted(grown):
+        ulo, uhi, vlo, vhi = group_rect[g]
+        why = "heading" if g in heading_of else "padding"
+        fix = "shorten the heading" if g in heading_of else "add spacing between them"
+        for n in nodes:
+            if n.id not in members_of[g]:
+                a, b, c, d = rect_of(n.id)
+                if a < uhi - _EPS and b > ulo + _EPS and c < vhi - _EPS and d > vlo + _EPS:
+                    return f"the {why} of group {g!r} makes its box cover node {n.id!r}; {fix}"
+        for other, (a, b, c, d) in group_rect.items():
+            related = parent_of.get(g) == other or parent_of.get(other) == g
+            if other != g and not related and a < uhi - _EPS and b > ulo + _EPS and c < vhi - _EPS and d > vlo + _EPS:
+                return f"the {why} of group {g!r} makes its box cover group {other!r}; {fix}"
+    return None
+
+
 def _lay_out(
     nodes: tuple[LayoutNode, ...],
     edges: tuple[tuple[str, str], ...],
@@ -752,14 +783,16 @@ def _lay_out(
     options: LayoutOptions | None,
     own_points: bool,
     spent: list[int],
+    slack: int = 0,
 ) -> Layout:
-    """`layered_layout`, with `own_points` saying whether each edge at a node gets a border point of its own, and its search steps charged to `spent`."""
+    """`layered_layout`, with `own_points` saying whether each edge at a node gets a border point of its own, and its search steps charged to `spent`. `slack` grid steps are added to the lane padding and the clearance between tracks, which a layout whose rounded group boxes came out too close asks for."""
     opts = options if options is not None else LayoutOptions()
     top_down = opts.direction == "top_down"
     for name in ("layer_gap", "node_gap", "margin", "group_padding", "lane_padding", "lane_heading"):
         value = getattr(opts, name)
         if not (isinstance(value, int | float) and math.isfinite(value) and value >= 0):
             raise GraphError(f"option {name} is {value!r}; it must be a finite number of inches, zero or more")
+    margin = _ceil(opts.margin)  # an off-grid margin would snap to less than was asked, even to nothing
     # spacing tighter than the clearance leaves room for less of it, so a layout that fitted without the clearance still does
     clear = snap(math.floor(min(_BORDER_CLEAR, opts.group_padding, opts.node_gap, opts.layer_gap) / GRID + 1e-9) * GRID)
     if not (isinstance(opts.sweeps, int) and not isinstance(opts.sweeps, bool) and opts.sweeps >= 1):
@@ -895,11 +928,11 @@ def _lay_out(
 
     col_width = [max((slots[k].u_extent for k in row), default=0.0) for row in rows]
     col_left: list[float] = []
-    cursor = opts.margin + (opts.lane_heading if lanes else 0.0)
+    cursor = margin + (opts.lane_heading if lanes else 0.0)
     for w, gap in zip(col_width, gaps, strict=True):
         col_left.append(cursor)
         cursor += w + gap
-    u_total = cursor - gaps[-1] + opts.margin if rows else 2 * opts.margin
+    u_total = cursor - gaps[-1] + margin if rows else 2 * margin
 
     n_lanes = max(len(lanes), 1)
     # a lane band must contain the padding of the group boxes that touch its edges, and the snapping of their coordinates
@@ -922,8 +955,12 @@ def _lay_out(
     lifts = [reach(g) - base for g in groups if members_of[g]]
     lift = _ceil(max([0.0, *lifts]))
     lane_pad = (
-        max(opts.lane_padding, opts.group_padding * (2 if parent_of else 1) + 2 * GRID + lift, loop_reach) if lanes else 0.0
+        max(opts.lane_padding, opts.group_padding * (2 if parent_of else 1) + (3 + slack) * GRID + lift, loop_reach)
+        if lanes
+        else 0.0
     )
+    # between tracks, a group's loops and padding reach the track below, which keeps a grid step clear of them and two more for snapping
+    track_clear = max(base, 0.2 + 0.1 * (most_loops - 1) + GRID if most_loops else 0.0) + base + (3 + slack) * GRID
     track_keys = sorted({(s.lane, s.track) for s in slots.values()})
     track_height: dict[tuple[int, tuple[int, int]], float] = {}
     for key in track_keys:
@@ -942,20 +979,20 @@ def _lay_out(
         ends = {lane_index[lane] for i in (source, target) if (lane := by_id[i].lane) is not None}
         if size is not None and len(ends) == 1:
             stacked_here.setdefault(ends.pop(), []).append(size[1] + 0.02)
-    cursor = opts.margin
+    cursor = margin
     for lane in range(n_lanes):
         lane_top.append(cursor)
         cursor += lane_pad
         first = True
         for key in (k for k in track_keys if k[0] == lane):
             if not first:
-                cursor += v_gap + 4 * opts.group_padding + (0.0 if top_down else lift)
+                cursor += max(v_gap + 4 * opts.group_padding + (0.0 if top_down else lift) + slack * GRID, track_clear)
             first = False
             track_top[key] = cursor
             cursor += track_height[key]
         cursor += lane_pad + math.fsum(stacked_here.get(lane, ()))
         lane_bottom.append(cursor)
-    v_total = cursor + opts.margin
+    v_total = cursor + margin
     for row in rows:
         runs: dict[tuple[int, tuple[int, int]], list[_Slot]] = {}
         for k in row:
@@ -1015,9 +1052,16 @@ def _lay_out(
         r = list(group_rect[g])
         kids = [c for c, p in parent_of.items() if p == g and c in group_rect]
         for c in kids:
-            if c in grown:
-                lo_a, hi_a, lo_b, hi_b = group_rect[c]
-                r = [min(r[0], lo_a - pad), max(r[1], hi_a + pad), min(r[2], lo_b - pad), max(r[3], hi_b + pad)]
+            # from the finished child box, which a self-loop may have pushed past its padding
+            lo_a, hi_a, lo_b, hi_b = group_rect[c]
+            wide = [
+                min(r[0], lo_a - opts.group_padding),
+                max(r[1], hi_a + opts.group_padding),
+                min(r[2], lo_b - opts.group_padding),
+                max(r[3], hi_b + opts.group_padding),
+            ]
+            if wide != r:
+                r = wide
                 grown.add(g)
         if g in heading_of:
             width, height = heading_of[g]
@@ -1033,23 +1077,31 @@ def _lay_out(
                 r[across] -= wider / 2
                 r[across + 1] += wider / 2
                 grown.add(g)
+        # borders go outward to the grid first, so the box keeps every inch asked of it; an odd span grows a step
+        # to keep its centre on the grid too
+        for lo in (0, 2):
+            r[lo], r[lo + 1] = _floor(r[lo]), _ceil(r[lo + 1])
+            r[lo + 1] = snap(r[lo + 1] + GRID * (round((r[lo + 1] - r[lo]) / GRID) % 2))
         group_rect[g] = (r[0], r[1], r[2], r[3])
-    for g in sorted(grown):
-        ulo, uhi, vlo, vhi = group_rect[g]
-        for n in nodes:
-            if n.id not in members_of[g]:
-                a, b, c, d = rect_of(n.id)
-                if a < uhi - _EPS and b > ulo + _EPS and c < vhi - _EPS and d > vlo + _EPS:
-                    raise GraphError(f"the heading of group {g!r} makes its box cover node {n.id!r}; shorten the heading")
-        for other, (a, b, c, d) in group_rect.items():
-            related = parent_of.get(g) == other or parent_of.get(other) == g
-            if other != g and not related and a < uhi - _EPS and b > ulo + _EPS and c < vhi - _EPS and d > vlo + _EPS:
-                raise GraphError(f"the heading of group {g!r} makes its box cover group {other!r}; shorten the heading")
+    # the rounded boxes decide whether the lanes and the gaps between tracks held them; if not, ask for a step more of each
+    blame = _blame(group_rect, grown, nodes, members_of, parent_of, rect_of, heading_of)
+    escaped = lanes and any(
+        r[2] < lane_top[lo] - _EPS or r[3] > lane_bottom[hi] + _EPS
+        for g, r in group_rect.items()
+        if (spanned := sorted({lane_index[lane] for m in members_of[g] if (lane := by_id[m].lane) is not None}))
+        for lo, hi in [(spanned[0], spanned[-1])]
+    )
+    if blame is not None or escaped:
+        # ponytail: a whole further layout per step; derive the slack from the boxes if a graph ever needs more than a few
+        if slack < 3:
+            return _lay_out(nodes, edges, lanes, groups, options, own_points, spent, slack + 1)
+        if blame is not None:
+            raise GraphError(blame)
 
     # a group box can reach past the margin, so the page grows and shifts to hold it, plus a step for snapping
     lo_u = lo_v = 0.0
     hi_u, hi_v = u_total, v_total
-    room = max(opts.margin, _CORRIDOR) + GRID  # clear space round a group, where a route can pass it
+    room = max(margin, _CORRIDOR) + GRID  # clear space round a group, where a route can pass it
     for r in group_rect.values():
         lo_u, hi_u = min(lo_u, r[0] - room), max(hi_u, r[1] + room)
         lo_v, hi_v = min(lo_v, r[2] - room), max(hi_v, r[3] + room)
@@ -1488,8 +1540,8 @@ def _lay_out(
         ends = [lane_boxes[lane] for i in (source, target) if (lane := by_id[i].lane) is not None]
         spans.append((min(b.y - b.height / 2 for b in ends), max(b.y + b.height / 2 for b in ends)) if ends else None)
     foreign = [[b for g, b in group_boxes.items() if g not in groups_of[s] | groups_of[t]] for s, t in edges]
-    labels = _place_labels(opts.edge_labels, edges, routes, fixed, foreign, spans, spent, opts.margin)
-    page_width = max([width, *(_ceil(b.x + b.width / 2 + opts.margin) for b in labels.values())])
-    page_height = max([height, *(_ceil(b.y + b.height / 2 + opts.margin) for b in labels.values())])
+    labels = _place_labels(opts.edge_labels, edges, routes, fixed, foreign, spans, spent, margin)
+    page_width = max([width, *(_ceil(b.x + b.width / 2 + margin) for b in labels.values())])
+    page_height = max([height, *(_ceil(b.y + b.height / 2 + margin) for b in labels.values())])
     lane_boxes = {name: replace(b, x=snap(page_width / 2), width=page_width) for name, b in lane_boxes.items()}
     return Layout(boxes, group_boxes, lane_boxes, routes, page_width, page_height, labels)
