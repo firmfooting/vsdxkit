@@ -386,8 +386,8 @@ def _rows(node: Node, links: Mapping[str, Mapping[str, str]]) -> dict[str, str]:
     return rows
 
 
-def _draw_page(page: Page, target: VisioPage, options: LayoutOptions, links: Mapping[str, Mapping[str, str]]) -> None:
-    """Lay `page` out and draw it onto `target`: backdrops first, then nodes, then edges, so ids follow input order within each."""
+def _layout_page(page: Page, options: LayoutOptions) -> tuple[Layout, dict[str, tuple[float, float]]]:
+    """Lay `page` out with `options` and return the layout and each node's size; nothing is drawn."""
     lane_of = {i: lane.id for lane in page.lanes for i in lane.node_ids}
     group_of: dict[str, str] = {}
     parents: list[tuple[str, str]] = []
@@ -409,6 +409,12 @@ def _draw_page(page: Page, target: VisioPage, options: LayoutOptions, links: Map
             edge_labels=tuple(label_size(e.label) if e.label else None for e in page.edges if e.kind != "page-link"),
         ),
     )
+    return layout, sizes
+
+
+def _draw_page(page: Page, target: VisioPage, options: LayoutOptions, links: Mapping[str, Mapping[str, str]]) -> None:
+    """Lay `page` out and draw it onto `target`: backdrops first, then nodes, then edges, so ids follow input order within each."""
+    layout, sizes = _layout_page(page, options)
     if page.lanes:
         low, high = DIAGRAM_WIDTHS
         if layout.width - 2 * _LANE_LEFT > high:
