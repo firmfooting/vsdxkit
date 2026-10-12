@@ -104,7 +104,7 @@ def render(
     reference: dict[str, dict[str, float | int]] | None,
     as_json: bool,
 ) -> str:
-    """The report in one mode: JSON always carries metrics, dense and (with a reference) the reference; the table prints dense below."""
+    """The report in one mode: JSON always carries metrics, dense and (with a reference) the reference's metrics only, not its dense cells; the table prints dense below."""
     if as_json:
         record: dict = {"metrics": metrics, "dense": dense}
         if reference is not None:
