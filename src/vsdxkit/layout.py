@@ -580,6 +580,12 @@ def _enters(a: tuple[float, float], b: tuple[float, float], rect: _Rect) -> bool
     return bottom < a[1] < top and max(min(a[0], b[0]), left) < min(max(a[0], b[0]), right)
 
 
+_AUTO_DIRECTION_NODES = 80
+"""The most nodes for which an ``auto`` direction also lays the page out the other way; trying both doubles a layout, so a larger page keeps the configured direction."""
+
+_AUTO_DIRECTION_EDGES_PER_NODE = 2
+"""The most edges per node for which an ``auto`` direction also tries the other way; a dense page spends seconds in routing, and a second layout would double them."""
+
 _NUDGES = (0.03, -0.03, 0.07, -0.07, 0.09, -0.09)
 """Inches a dummy's row may move off its centre; none is zero, and the largest stays inside the dummy's 0.2 in slot."""
 
@@ -908,10 +914,6 @@ def _boxes_meet(a: Box, b: Box) -> bool:
     return abs(a.x - b.x) < (a.width + b.width) / 2 - _EPS and abs(a.y - b.y) < (a.height + b.height) / 2 - _EPS
 
 
-_AUTO_DIRECTION_NODES = 80
-"""The most nodes for which an ``auto`` direction also lays the page out the other way; trying both doubles a layout, so a larger page keeps the configured direction."""
-
-
 def layered_layout(
     nodes: tuple[LayoutNode, ...],
     edges: tuple[tuple[str, str], ...],
@@ -935,6 +937,12 @@ def layered_layout(
     4 groups (about 17 s); 200 nodes, 400 edges, no groups or lanes. 200 nodes and 400 edges in 20 groups is refused
     (after about 40 s). The ceiling falls with the number of groups and lanes more than with nodes.
 
+    The page target steers the direction too. With ``PageTarget.direction`` left at ``auto``, a page without lanes of at
+    most 80 nodes and two edges per node whose aspect lies outside the target's band is also laid out the other way, and the result nearer the
+    target is kept, so a top-down request can return a left-to-right page. A tie, an error from the other direction, a
+    laned page or a larger page keeps the configured ``LayoutOptions.direction``. Pin it with
+    ``PageTarget(direction=...)``, or pass ``page=None``.
+
     :param edges: pairs of (source id, target id); a repeat is a parallel edge, a pair of one id a self-loop
     :param lanes: lane ids, top to bottom
     :param groups: every group id; a node names its innermost group
@@ -954,6 +962,7 @@ def layered_layout(
         or target.direction != "auto"
         or lanes
         or len(nodes) > _AUTO_DIRECTION_NODES
+        or len(edges) > _AUTO_DIRECTION_EDGES_PER_NODE * len(nodes)
         or opts.direction not in ("left_to_right", "top_down")
         or _aspect_miss(first, target) <= snap(math.log1p(target.tolerance))
     ):
@@ -967,7 +976,7 @@ def layered_layout(
 
 
 def _aspect_miss(layout: Layout, target: PageTarget) -> float:
-    """How far a layout's aspect lies from the target, as a log distance on the grid; the band edge is ``log1p(tolerance)``."""
+    """How far a layout's aspect lies from the target, as a log distance on the grid, or 0.0 for a layout of no size; the band edge is ``log1p(tolerance)``."""
     return snap(abs(math.log(layout.width / layout.height / target.aspect))) if layout.height > 0 and layout.width > 0 else 0.0
 
 

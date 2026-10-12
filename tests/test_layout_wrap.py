@@ -338,3 +338,23 @@ def test_lanes_ignore_the_page_target():
         nodes, (("a", "b"),), lanes=("L0", "L1"), options=LayoutOptions(page=PageTarget(direction="top_down"))
     )
     assert lay.rows == () and set(lay.lanes) == {"L0", "L1"}
+
+
+def test_a_second_layout_that_is_no_nearer_keeps_the_configured_direction(monkeypatch):
+    calls = []
+    real = lo._laid_out
+    monkeypatch.setattr(lo, "_laid_out", lambda *a: calls.append(a) or real(*a))
+    nodes = (LayoutNode("a", 2, 2),)
+    lay = layered_layout(nodes, (), options=LayoutOptions(direction="top_down"))
+    assert len(calls) == 2, "a square page is outside the band, so the other direction was tried"
+    assert lay == real(nodes, (), (), (), LayoutOptions(direction="top_down"))
+
+
+def test_a_dense_page_keeps_the_configured_direction(monkeypatch):
+    calls = []
+    real = lo._laid_out
+    monkeypatch.setattr(lo, "_laid_out", lambda *a: calls.append(a) or real(*a))
+    nodes = tuple(LayoutNode(f"n{i}", 2, 2) for i in range(4))
+    edges = tuple((f"n{i}", f"n{j}") for i in range(4) for j in range(i + 1, 4)) * 2
+    layered_layout(nodes, edges, options=LayoutOptions(direction="top_down"))
+    assert len(edges) > 2 * len(nodes) and len(calls) == 1
