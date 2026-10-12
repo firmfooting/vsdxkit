@@ -624,12 +624,12 @@ def test_a_crowded_graph_of_200_nodes_and_20_groups_is_refused_with_its_counts(d
 
 @pytest.mark.parametrize(
     ("seed", "n", "m", "lanes", "groups", "cap", "laid_out"),
-    [(793, 50, 200, 3, 6, 5_000_000, True), (793, 50, 200, 3, 6, 2_000_000, False), (325, 50, 250, 3, 6, 2_000_000, False)],
+    [(793, 50, 200, 3, 6, 5_000_000, True), (793, 50, 200, 3, 6, 1_000_000, False), (325, 50, 250, 3, 6, 2_000_000, False)],
 )
 def test_dense_graphs_on_both_sides_of_the_ceiling_lay_out_or_are_refused_with_counts(
     monkeypatch, seed, n, m, lanes, groups, cap, laid_out
 ):
-    """The first graph needs 4.7M steps for its first pass and 2.1M for its second, so 5M holds each; at 2M neither graph lays out."""
+    """The first graph lays out within 5M steps and not within 1M; the second does not lay out within 2M."""
     rows, edges, lane_ids, group_ids, parents = random_graph(seed, n, m, lanes, groups)
     nodes = tuple(LayoutNode(*row) for row in rows)
     monkeypatch.setattr(layout_module, "_WORK_CAP", cap)

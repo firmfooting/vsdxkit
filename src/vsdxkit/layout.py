@@ -185,6 +185,8 @@ class LayoutOptions:
     """Inches between the points where parallel routes meet one side of a box, at least 0.1; a short side shrinks it."""
     channel_pitch: float = 0.2
     """Inches between parallel routes in a channel between layers, at least one grid step. A default layer gap holds up to eight channels at this spacing; a busier gap keeps that width and its channels are spaced evenly in it, closer than this."""
+    straighten_sweeps: int = 6
+    """How many down-and-up passes move boxes toward their neighbours within their track; zero keeps each run centred."""
 
 
 @dataclass(frozen=True)
@@ -486,6 +488,54 @@ def _order(rows: list[list[_Key]], slots: dict[_Key, _Slot], chains: list[list[_
         row[:] = kept
     position.update({k: float(i) for row in rows for i, k in enumerate(row)})
     _transpose(rows, slots, between, position)
+
+
+def _fit(wants: Sequence[float], extents: Sequence[float], low: float, high: float, gap: float) -> list[float]:
+    """Centres in order, as near `wants` as the box extents, the `gap` and the bounds allow."""
+    pos = list(wants)
+    cursor = low
+    for i, half in enumerate(e / 2 for e in extents):
+        pos[i] = max(pos[i], cursor + half)
+        cursor = pos[i] + half + gap
+    limit = high
+    for i in range(len(pos) - 1, -1, -1):
+        half = extents[i] / 2
+        pos[i] = min(pos[i], limit - half)
+        limit = pos[i] - half - gap
+    return [snap(p) for p in pos]
+
+
+def _straighten(
+    rows: list[list[_Key]],
+    slots: dict[_Key, _Slot],
+    up: dict[_Key, list[_Key]],
+    down: dict[_Key, list[_Key]],
+    track_bounds: dict[tuple[int, tuple[int, int]], tuple[float, float]],
+    gap: float,
+    sweeps: int,
+) -> None:
+    """Refit each (lane, track) run toward the lower median of its neighbours' centres, down then up, `sweeps` times."""
+
+    def refit(layer: int, near: dict[_Key, list[_Key]]) -> None:
+        """Move one layer's runs toward their `near` neighbours, each inside its track."""
+        runs: dict[tuple[int, tuple[int, int]], list[_Key]] = {}
+        for k in rows[layer]:
+            runs.setdefault((slots[k].lane, slots[k].track), []).append(k)
+        for key, keys in runs.items():
+            wants = []
+            for k in keys:
+                centres = sorted(slots[n].v for n in near[k])
+                wants.append(centres[(len(centres) - 1) // 2] if centres else slots[k].v)
+            low, high = track_bounds[key]
+            fitted = _fit(wants, [slots[k].v_extent for k in keys], low, high, gap)
+            for k, v in zip(keys, fitted, strict=True):
+                slots[k].v = v
+
+    for _ in range(sweeps):
+        for layer in range(1, len(rows)):
+            refit(layer, up)
+        for layer in range(len(rows) - 2, -1, -1):
+            refit(layer, down)
 
 
 def _count_crossings(upper: Sequence[_Key], lower: Sequence[_Key], links: Collection[tuple[_Key, _Key]]) -> int:
@@ -1291,6 +1341,12 @@ def _lay_out(
     clear = snap(math.floor(min(_BORDER_CLEAR, opts.group_padding, opts.node_gap, opts.layer_gap) / GRID + 1e-9) * GRID)
     if not (isinstance(opts.sweeps, int) and not isinstance(opts.sweeps, bool) and opts.sweeps >= 1):
         raise GraphError(f"option sweeps is {opts.sweeps!r}; it must be a whole number, one or more")
+    if not (
+        isinstance(opts.straighten_sweeps, int)
+        and not isinstance(opts.straighten_sweeps, bool)
+        and opts.straighten_sweeps >= 0
+    ):
+        raise GraphError(f"option straighten_sweeps is {opts.straighten_sweeps!r}; it must be a whole number, zero or more")
     for name, least in (("port_pitch", 0.1), ("channel_pitch", GRID)):
         value = getattr(opts, name)
         if not (
@@ -1533,6 +1589,15 @@ def _lay_out(
             for m in members:
                 m.v = snap(at + m.v_extent / 2)  # on the grid, so even extents put both borders on it
                 at += m.v_extent + v_gap
+    if opts.straighten_sweeps > 0:
+        near_up: dict[_Key, list[_Key]] = {k: [] for k in slots}
+        near_down: dict[_Key, list[_Key]] = {k: [] for k in slots}
+        for chain in chains:
+            for a, b in pairwise(chain):
+                near_down[a].append(b)
+                near_up[b].append(a)
+        bounds = {key: (track_top[key], track_top[key] + track_height[key]) for key in track_keys}
+        _straighten(rows, slots, near_up, near_down, bounds, v_gap, opts.straighten_sweeps)
 
     def centre_u(slot: _Slot) -> float:
         """The middle of a slot's column, along the flow."""
