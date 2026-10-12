@@ -88,3 +88,35 @@ def test_a_tall_heading_adds_clearance_on_its_own_side_only():
     below_node = (node.y - node.height / 2) - (lane.y - lane.height / 2)
     above_node = (lane.y + lane.height / 2) - (node.y + node.height / 2)
     assert above_node > below_node + 1.0 and group.height < lane.height  # not a symmetric lift
+
+
+def test_a_label_that_fits_no_segment_raises_naming_the_edge():
+    nodes = (LayoutNode("a", 1, 1), LayoutNode("b", 1, 1))
+    options = LayoutOptions(page=None, edge_labels=((2.0, 0.5), (2.0, 0.5)))  # parallel routes 0.2 apart under a 0.5 label
+    with pytest.raises(GraphError, match=r"'a' -> 'b'"):
+        layered_layout(nodes, (("a", "b"), ("a", "b")), options=options)
+
+
+def test_a_label_never_hides_another_loops_run():
+    nodes = (LayoutNode("a", 2, 1),)
+    options = LayoutOptions(page=None, edge_labels=((1.0, 0.3), (1.0, 0.3)))
+    assert rm.label_violations(layered_layout(nodes, (("a", "a"), ("a", "a")), options=options)) == []
+
+
+def test_a_label_clears_a_group_heading():
+    nodes = (LayoutNode("a", 2, 1, None, "g"), LayoutNode("b", 2, 1, None, "g"))
+    options = LayoutOptions(page=None, headings=(("g", 2.0, 0.5),), edge_labels=((1.0, 0.3),))
+    layout = layered_layout(nodes, (("a", "b"),), (), ("g",), options)
+    group = layout.groups["g"]
+    heading = box(group.x, group.y + group.height / 2 - 0.25, 2.0, 0.5)
+    assert rm.label_violations(layout, obstacles=[heading]) == []
+
+
+def test_a_decision_label_sits_on_the_first_segment():
+    nodes = tuple(LayoutNode(i, 2, 1) for i in "dyn")
+    options = LayoutOptions(page=None, edge_labels=((0.6, 0.3), (0.6, 0.3)), edge_first=(True, True))
+    layout = layered_layout(nodes, (("d", "y"), ("d", "n")), options=options)
+    for key, label in layout.labels.items():
+        (x1, y1), (x2, y2) = layout.routes[key][:2]
+        assert min(x1, x2) - 1e-6 <= label.x <= max(x1, x2) + 1e-6
+        assert min(y1, y2) - 1e-6 <= label.y <= max(y1, y2) + 1e-6

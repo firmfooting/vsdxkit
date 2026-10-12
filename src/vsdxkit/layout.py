@@ -180,7 +180,9 @@ class LayoutOptions:
     headings: tuple[tuple[str, float, float], ...] = ()
     """Per group, (group id, width, height) in inches of its heading text. The group's box is widened to the width and grows at the top to clear the height above its members; a box that then covers a node or group that is not its own is refused."""
     edge_labels: tuple[tuple[float, float] | None, ...] = ()
-    """Per edge, in the order of ``edges``, the (width, height) in inches of its label, or None for none; empty means no edge has one. Each label is placed at its route, at the nearest spot clear of every node, heading, other group, lane heading and other label, so it may sit beside its route and not on it; the gaps it crosses are widened to hold it."""
+    """Per edge, in the order of ``edges``, the (width, height) in inches of its label, or None for none; empty means no edge has one. Each label is centred on a straight stretch of its own route, in one lane band and clear of every node, heading, other group, lane heading, other label and other route, or the layout is refused; the gaps it crosses are widened to hold it."""
+    edge_first: tuple[bool, ...] = ()
+    """Per edge, in the order of ``edges``, whether its label prefers the first segment of its route; empty means none does, and the longest segment is preferred."""
     port_pitch: float = 0.2
     """Inches between the points where parallel routes meet one side of a box, at least 0.1; a short side shrinks it."""
     channel_pitch: float = 0.2
@@ -226,7 +228,7 @@ class Layout:
     height: float
     """Page height in inches."""
     labels: dict[tuple[str, str, int], Box] = field(default_factory=dict)
-    """Each labelled edge's label box, by the same key as its route: near the route, clear of nodes, headings and other labels. The page holds them, a margin from its edge."""
+    """Each labelled edge's label box, by the same key as its route: centred on a segment of the route. The page holds them, a margin from its edge."""
     rows: tuple[tuple[str, ...], ...] = ()
     """Node ids by wrapped row; empty when the layout is not wrapped."""
     fallbacks: int = 0
@@ -982,6 +984,9 @@ _HURRY = 2.0
 _EPS = 1e-6
 """Tolerance, in inches, for a line that lies on a border: it is not inside."""
 
+_LABEL_ROOM = 0.1
+"""Inches a label's gap keeps beyond the label itself."""
+
 _SHARING = 1000.0
 """Extra cost per inch of a detour that runs along another route, so a free line is preferred to a shared one."""
 
@@ -1250,75 +1255,141 @@ def _steps(count: int) -> Iterator[int]:
         yield -k
 
 
+def _thin(a: tuple[float, float], b: tuple[float, float]) -> Box:
+    """The box of zero thickness that an axis-parallel segment a-b occupies."""
+    return Box((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, abs(a[0] - b[0]), abs(a[1] - b[1]))
+
+
+def _shares_a_run(a: Box, b: Box) -> bool:
+    """Whether two thin boxes lie on one line and overlap along it."""
+    if a.width == 0 and b.width == 0:
+        return abs(a.x - b.x) < _EPS and abs(a.y - b.y) < (a.height + b.height) / 2 - _EPS
+    if a.height == 0 and b.height == 0:
+        return abs(a.y - b.y) < _EPS and abs(a.x - b.x) < (a.width + b.width) / 2 - _EPS
+    return False
+
+
+def _stretches(
+    a: tuple[float, float], b: tuple[float, float], borders: Sequence[float]
+) -> list[tuple[tuple[float, float], tuple[float, float]]]:
+    """The pieces of segment a-b between lane borders, the piece nearest `a` first; a flat segment is one piece."""
+    if a[0] != b[0] or not borders:
+        return [(a, b)]
+    sign = 1 if b[1] > a[1] else -1
+    cuts = sorted({y for y in borders if min(a[1], b[1]) + _EPS < y < max(a[1], b[1]) - _EPS}, reverse=sign < 0)
+    ys = [a[1], *cuts, b[1]]
+    return [((a[0], lo), (a[0], hi)) for lo, hi in pairwise(ys)]
+
+
 def _place_labels(
     sizes: tuple[tuple[float, float] | None, ...],
     edges: tuple[tuple[str, str], ...],
     routes: dict[tuple[str, str, int], tuple[tuple[float, float], ...]],
     fixed: list[Box],
     foreign: list[list[Box]],
-    spans: list[tuple[float, float] | None],
     work: list[int],
-    margin: float,
-) -> dict[tuple[str, str, int], Box]:
-    """Each labelled edge's label box, near its route and clear of `fixed`, of its own `foreign` boxes and of earlier labels.
+    lanes: Mapping[str, Box],
+    first: Sequence[bool],
+) -> tuple[dict[tuple[str, str, int], Box], int]:
+    """Each labelled edge's label box, centred on a segment of its own route, and how many edges took a fallback route.
 
-    The box starts on a segment of the route and moves along it and then sideways until it is clear, so a crowded
-    route can leave its label beside the route and not touching it. `margin` is kept between a label and the page's
-    left and bottom edges.
-
-    A label is tried along each segment, longest first and the middle first, in steps of half its length, then moved
-    sideways in whole label heights or widths, nearest first, as far as there are labels to make room for. It stays
-    on the page's left and bottom, and inside the (low, high) range across the flow in `spans` when there is one.
-    The first spot that touches nothing wins; a label with no such spot is refused.
+    A label is tried on the first segment when `first` says so and otherwise on the longest, sliding along each
+    stretch of a segment within one lane band in half-label steps. It must meet no box of `fixed` or of its own
+    `foreign` boxes, no earlier label, no other route's segment and no lane border. An edge no segment serves takes the next route from `_candidates` that is clear and is tried once
+    more; when none serves, the layout is refused naming the edge.
     """
     placed: dict[tuple[str, str, int], Box] = {}
+    keys: list[tuple[str, str, int]] = []
     seen: Counter[tuple[str, str]] = Counter()
-    count = sum(size is not None for size in sizes)
-    for n, ((source, target), size) in enumerate(zip(edges, sizes or (None,) * len(edges), strict=True)):
-        key = (source, target, seen[(source, target)])
+    for source, target in edges:
+        keys.append((source, target, seen[(source, target)]))
         seen[(source, target)] += 1
+    borders = sorted({y for b in lanes.values() for y in (b.y - b.height / 2, b.y + b.height / 2)})
+    fallbacks = 0
+
+    def others(key: tuple[str, str, int]) -> list[Box]:
+        """The thin boxes of every route's segments but `key`'s."""
+        return [_thin(a, b) for k, route in routes.items() if k != key for a, b in pairwise(route) if a != b]
+
+    sizes = sizes or (None,) * len(edges)
+    twins: list[list[tuple[float, float]]] = []  # the labels of the edges that share this edge's ends, in order
+    for edge in edges:
+        twins.append([size for e, size in zip(edges, sizes, strict=True) if e == edge and size is not None])
+    twin_rank = [sum(1 for m in range(n) if edges[m] == edge and sizes[m] is not None) for n, edge in enumerate(edges)]
+
+    def try_route(
+        n: int, key: tuple[str, str, int], route: Sequence[tuple[float, float]], width: float, height: float
+    ) -> Box | None:
+        """The first spot for edge `n`'s label on `route`, or None."""
+        theirs = others(key)
+        indexed: list[tuple[int, tuple[float, float], tuple[float, float]]] = [
+            (i, a, b) for i, (a, b) in enumerate(pairwise(route)) if a != b
+        ]
+
+        def order(item: tuple[int, tuple[float, float], tuple[float, float]]) -> tuple[bool, float, int]:
+            """The first segment first when `first` asks, then the longest, then the earliest."""
+            return (not (first[n] and item[0] == 0), -abs(item[2][0] - item[1][0]) - abs(item[2][1] - item[1][1]), item[0])
+
+        segments = sorted(indexed, key=order)
+        for i, a, b in segments:
+            lead = first[n] and i == 0
+            for start, end in _stretches(a, b, borders):
+                flat = start[1] == end[1]
+                length = abs(end[0] - start[0]) + abs(end[1] - start[1])
+                step = (width if flat else height) / 2
+                reach = int(length / step + _EPS)
+                # the first-segment role slides from the end nearest the source, any other from the middle
+                # labels of parallel edges start side by side, so the first does not take the middle all the others need
+                extents = [size[0 if flat else 1] for size in twins[n]]
+                apart = math.fsum(extents[: twin_rank[n]]) + step - math.fsum(extents) / 2
+                offsets = [j * step for j in range(reach + 1)] if lead else [apart + j * step for j in _steps(reach)]
+                for off in offsets:
+                    t = (off if lead else length / 2 + off) / length
+                    if not -_EPS <= t <= 1 + _EPS:
+                        continue
+                    x, y = snap(start[0] + t * (end[0] - start[0])), snap(start[1] + t * (end[1] - start[1]))
+                    candidate = Box(x, y, width, height)
+                    if any(
+                        _boxes_meet(candidate, lane)
+                        and not (
+                            lane.y - lane.height / 2 - _EPS <= y - height / 2
+                            and y + height / 2 <= lane.y + lane.height / 2 + _EPS
+                        )
+                        for lane in lanes.values()
+                    ):
+                        continue
+                    _spend(work, len(fixed) + len(foreign[n]) + len(placed) + len(theirs))
+                    if not any(_boxes_meet(candidate, o) for o in (*fixed, *foreign[n], *placed.values(), *theirs)):
+                        return candidate
+        return None
+
+    def clear(n: int, key: tuple[str, str, int], route: Sequence[tuple[float, float]]) -> bool:
+        """Whether `route` enters no box of `fixed` or edge `n`'s foreign boxes and runs along no other route."""
+        theirs = others(key)
+        _spend(work, len(route) * (len(fixed) + len(foreign[n]) + len(theirs)))
+        return not any(
+            _boxes_meet(t, o) for a, b in pairwise(route) if a != b for t in [_thin(a, b)] for o in (*fixed, *foreign[n])
+        ) and not any(_shares_a_run(_thin(a, b), o) for a, b in pairwise(route) if a != b for o in theirs)
+
+    for n, ((source, target), size) in enumerate(zip(edges, sizes, strict=True)):
         if size is None:
             continue
+        key = keys[n]
         width, height = size
-        span = spans[n]
-        segments = sorted(
-            enumerate(pairwise(routes[key])),
-            key=lambda item: (-(abs(item[1][0][0] - item[1][1][0]) + abs(item[1][0][1] - item[1][1][1])), item[0]),
-        )
-        for _i, ((x1, y1), (x2, y2)) in segments:
-            flat = y1 == y2
-            length = abs(x2 - x1) + abs(y2 - y1)
-            along = (width if flat else height) / 2 + 0.01
-            slides = [*(j * along / length for j in _steps(int(length / along / 2) + 1)), 0.5, -0.5]
-            # a finer slide along the route, tried only on it, packs the labels of parallel runs that the coarse steps miss
-            fine = sorted((j * 0.05 / length for j in range(-int(length / 0.1), int(length / 0.1) + 1)), key=abs)
-            # on the route first, at every slide, and only then a step to its side, so a crowd of parallel runs shares them
-            for k in _steps(count + 3):
-                for slide in (*slides, *fine) if k == 0 else slides:
-                    t = min(max(0.5 + slide, 0.0), 1.0)
-                    unit = k * ((height if flat else width) + 0.02)
-                    # a label that would hang off the page's left or bottom is moved onto it; the page grows the other ways
-                    x = snap(max(x1 + t * (x2 - x1) + (0.0 if flat else unit), margin + width / 2))
-                    y = snap(max(y1 + t * (y2 - y1) + (unit if flat else 0.0), margin + height / 2))
-                    if span is not None and not (span[0] - _EPS <= y - height / 2 and y + height / 2 <= span[1] + _EPS):
-                        continue
-                    candidate = Box(x, y, width, height)
-                    _spend(work, len(fixed) + len(foreign[n]) + len(placed))
-                    if not any(_boxes_meet(candidate, other) for other in (*fixed, *foreign[n], *placed.values())):
-                        placed[key] = candidate
-                        break
-                else:
-                    continue
-                break
-            else:
-                continue
-            break
-        else:
+        spot = try_route(n, key, routes[key], width, height)
+        if spot is None:
+            for alt in _candidates(_simplify(list(routes[key]))):
+                if clear(n, key, alt) and (spot := try_route(n, key, alt, width, height)) is not None:
+                    routes[key] = tuple(alt)
+                    fallbacks += 1
+                    break
+        if spot is None:
             raise GraphError(
-                f"the label of edge {source!r} -> {target!r} cannot be placed clear of the nodes, group headings, "
-                "other groups, lane headings and other labels"
+                f"the label of edge {source!r} -> {target!r} cannot be placed on a straight stretch of its route, clear of "
+                "the nodes, group headings, other groups, lane headings, other labels and other routes"
             )
-    return placed
+        placed[key] = spot
+    return placed, fallbacks
 
 
 def _boxes_meet(a: Box, b: Box) -> bool:
@@ -1543,6 +1614,8 @@ def _lay_out(
         ):
             raise GraphError(f"option {name} is {value!r}; it must be a finite number of inches, {least} or more")
     _check_page(opts.page)
+    if opts.edge_first and len(opts.edge_first) != len(edges):
+        raise GraphError(f"option edge_first has {len(opts.edge_first)} entries for {len(edges)} edges; give one per edge")
     if opts.edge_labels and len(opts.edge_labels) != len(edges):
         raise GraphError(f"option edge_labels has {len(opts.edge_labels)} entries for {len(edges)} edges; give one per edge")
     for entry in (*opts.edge_labels, *(h[1:] if isinstance(h, tuple) and h else h for h in opts.headings)):
@@ -1601,10 +1674,21 @@ def _lay_out(
         if len(spanned) > 1:
             raise GraphError(f"group {g!r} has members in lanes {spanned}; its box would cover the lanes between them")
 
+    # the loops of a node are spaced to hold a label between neighbours, since a label sits on its own loop
+    loop_pitch = max(
+        [
+            0.1,
+            *(
+                (size[0] if top_down else size[1]) + 2 * GRID
+                for (source, target), size in zip(edges, opts.edge_labels or (None,) * len(edges), strict=True)
+                if size is not None and source == target
+            ),
+        ]
+    )
     # snapping moves each centre by up to half a grid step, so packed neighbours keep one step more than asked
     most_loops = max(Counter(source for source, target in edges if source == target).values(), default=0)
-    v_gap = max(opts.node_gap, 0.2 + 0.1 * (most_loops - 1) if most_loops else 0.0) + GRID
-    u_gap = max(opts.layer_gap, 0.3 + 0.1 * (most_loops - 1) if most_loops else 0.0) + GRID
+    v_gap = max(opts.node_gap, 0.2 + loop_pitch * (most_loops - 1) if most_loops else 0.0) + GRID
+    u_gap = max(opts.layer_gap, 0.3 + loop_pitch * (most_loops - 1) if most_loops else 0.0) + GRID
 
     ids = [n.id for n in nodes]
     flipped = _break_cycles(ids, list(edges))
@@ -1667,7 +1751,7 @@ def _lay_out(
     loop_zone: dict[int, float] = {}
     for node_id, count in loop_count.items():
         layer = slots[node_id].layer
-        loop_zone[layer] = max(loop_zone.get(layer, 0.0), 0.3 + 0.1 * (count - 1) + GRID)
+        loop_zone[layer] = max(loop_zone.get(layer, 0.0), 0.3 + loop_pitch * (count - 1) + GRID)
     crossing = Counter(slots[a].layer for chain in flow if chain[0] != chain[-1] for a, _b in pairwise(chain))
     u_gap = max([u_gap, *(loop_zone.get(layer, 0.0) + (crossing[layer] + 1) * GRID for layer in {*crossing, *loop_zone})])
 
@@ -1677,16 +1761,20 @@ def _lay_out(
     label_layer: dict[int, int] = {}
     for n, (chain, size) in enumerate(zip(chains, opts.edge_labels or (None,) * len(chains), strict=True)):
         if size is not None and chain[0] != chain[-1] and n not in corridor:
-            need = (size[1] if top_down else size[0]) + 0.1
+            need = (size[1] if top_down else size[0]) + _LABEL_ROOM
             pair = next(
                 (label_layer[m] for m in sorted(label_layer) if (chains[m][0], chains[m][-1]) == (chain[0], chain[-1])), None
             )
-            layer = pair if pair is not None else _label_gap(chain, need, [u_gap] * n_layers, slots)
+            layer = (
+                pair
+                if pair is not None
+                else _label_gap(chain, need, [u_gap] * n_layers, slots, bool(opts.edge_first) and opts.edge_first[n])
+            )
             label_layer[n] = layer
-            stacked.setdefault((layer, chain[0], chain[-1]), []).append(need - 0.1)
+            stacked.setdefault((layer, chain[0], chain[-1]), []).append(need - _LABEL_ROOM)
     gaps = [u_gap] * n_layers
     for (layer, _first, _last), extents in stacked.items():
-        gaps[layer] = max(gaps[layer], math.fsum(extents) + 0.1)
+        gaps[layer] = max(gaps[layer], math.fsum(extents) + _LABEL_ROOM)
 
     col_width = [max((slots[k].u_extent for k in row), default=0.0) for row in rows]
     if opts.columns == "even":
@@ -1736,7 +1824,7 @@ def _lay_out(
 
     n_lanes = n_bands if n_bands > 1 else max(len(lanes), 1)
     # a lane band must contain the padding of the group boxes that touch its edges, and the snapping of their coordinates
-    loop_reach = 0.2 + 0.1 * (most_loops - 1) + 2 * GRID if most_loops else 0.0
+    loop_reach = 0.2 + loop_pitch * (most_loops - 1) + 2 * GRID if most_loops else 0.0
     # a heading taller than a group's padding grows the box at its top, so the lane and the gap between tracks leave room
     pad = opts.group_padding
     base = pad * (2 if parent_of else 1)
@@ -1744,7 +1832,7 @@ def _lay_out(
     def loops_above(g: str) -> float:
         """How far a member's self-loops reach above it, where a heading must clear them: nothing in a top-down flow."""
         counts = [loop_count[m] for m in members_of[g] if m in loop_count]
-        return 0.0 if top_down or not counts else 0.2 + 0.1 * (max(counts) - 1) + GRID
+        return 0.0 if top_down or not counts else 0.2 + loop_pitch * (max(counts) - 1) + GRID
 
     def reach(g: str) -> float:
         """How far above its topmost member a group's box can reach: its padding or heading, and a parent's clears its children's."""
@@ -1765,7 +1853,7 @@ def _lay_out(
     lane_pad_bottom = lane_pad_for(0.0)
     lane_pad_top = lane_pad_for(lift)
     # between tracks, a group's loops and padding reach the track below, which keeps a grid step clear of them and two more for snapping
-    track_clear = max(base, 0.2 + 0.1 * (most_loops - 1) + GRID if most_loops else 0.0) + base + (3 + slack) * GRID
+    track_clear = max(base, 0.2 + loop_pitch * (most_loops - 1) + GRID if most_loops else 0.0) + base + (3 + slack) * GRID
     track_keys = sorted({(s.lane, s.track) for s in slots.values()})
     track_height: dict[tuple[int, tuple[int, int]], float] = {}
     for key in track_keys:
@@ -1891,7 +1979,7 @@ def _lay_out(
             pad = pad_of(g)
             rects.append((lo_a - pad, hi_a + pad, lo_b - pad, hi_b + pad))
             if m in loop_count:
-                extra = 0.1 * (loop_count[m] - 1)
+                extra = loop_pitch * (loop_count[m] - 1)
                 reach_u = 0.3 + extra + GRID
                 rects.append(
                     (lo_a - reach_u, hi_a, lo_b - 0.2 - extra - GRID, hi_b)
@@ -1987,7 +2075,7 @@ def _lay_out(
             -1: min(
                 [rect_of(n.id)[2] for n in nodes]
                 + [r[2] for r in group_rect.values()]
-                + [rect_of(k)[2] - 0.2 - 0.1 * (c - 1) - GRID for k, c in loop_count.items()]
+                + [rect_of(k)[2] - 0.2 - loop_pitch * (c - 1) - GRID for k, c in loop_count.items()]
             ),
         }
         for side in (1, -1):
@@ -2009,7 +2097,7 @@ def _lay_out(
         lo_v, hi_v = min(lo_v, r[2] - room), max(hi_v, r[3] + room)
     for node_id, count in loop_count.items():
         lo_a, hi_a, lo_b, _hi_b = rect_of(node_id)
-        extra = 0.1 * (count - 1)
+        extra = loop_pitch * (count - 1)
         lo_v = min(lo_v, lo_b - 0.2 - extra - GRID)
         if mirrored[slots[node_id].layer]:
             lo_u = min(lo_u, lo_a - 0.3 - extra - GRID)
@@ -2476,13 +2564,13 @@ def _lay_out(
         ends = (chain[0], chain[-1])
         i = twin_rank[n]
         if source == target:
-            r = first_slot.v_extent / 2 + 0.2 + 0.1 * i
+            r = first_slot.v_extent / 2 + 0.2 + loop_pitch * i
             c = (
                 centre_u(first_slot)
                 - _spread(twins[ends] + loop_extra.get(chain[0], 0), first_slot.u_extent, source, opts.port_pitch)[i]
             )
             dv = end_offset.get((n, True), _spread(twins[ends], first_slot.v_extent, source, opts.port_pitch)[i])
-            out_u = right_u(first_slot) + (-1 if mirrored[first_slot.layer] else 1) * (0.3 + 0.1 * i)
+            out_u = right_u(first_slot) + (-1 if mirrored[first_slot.layer] else 1) * (0.3 + loop_pitch * i)
             bends = [
                 (right_u(first_slot), first_slot.v + dv),
                 (out_u, first_slot.v + dv),
@@ -2844,12 +2932,25 @@ def _lay_out(
     if lanes and col_left:
         strip = snap(col_left[0] + shift_u)
         fixed.append(Box(strip / 2, height / 2, strip, height))
-    spans: list[tuple[float, float] | None] = []
-    for source, target in edges:
-        ends = [lane_boxes[lane] for i in (source, target) if (lane := by_id[i].lane) is not None]
-        spans.append((min(b.y - b.height / 2 for b in ends), max(b.y + b.height / 2 for b in ends)) if ends else None)
     foreign = [[b for g, b in group_boxes.items() if g not in groups_of[s] | groups_of[t]] for s, t in edges]
-    labels = _place_labels(opts.edge_labels, edges, routes, fixed, foreign, spans, spent, margin)
+    labels, label_fallbacks = _place_labels(
+        opts.edge_labels, edges, routes, fixed, foreign, spent, lane_boxes, opts.edge_first or (False,) * len(edges)
+    )
+    # a label centred on a route near the left or bottom edge can hang past the margin; the drawing moves to make room
+    left_room = _ceil(max([0.0, *(margin - (b.x - b.width / 2) for b in labels.values())]))
+    bottom_room = _ceil(max([0.0, *(margin - (b.y - b.height / 2) for b in labels.values())]))
+    if left_room or bottom_room:
+
+        def moved(b: Box) -> Box:
+            """`b` shifted by the room made."""
+            return replace(b, x=snap(b.x + left_room), y=snap(b.y + bottom_room))
+
+        boxes = {k: moved(b) for k, b in boxes.items()}
+        group_boxes = {k: moved(b) for k, b in group_boxes.items()}
+        lane_boxes = {k: moved(b) for k, b in lane_boxes.items()}
+        labels = {k: moved(b) for k, b in labels.items()}
+        routes = {k: tuple((snap(x + left_room), snap(y + bottom_room)) for x, y in pts) for k, pts in routes.items()}
+        width, height = snap(width + left_room), snap(height + bottom_room)
     page_width = max([width, *(_ceil(b.x + b.width / 2 + margin) for b in labels.values())])
     page_height = max([height, *(_ceil(b.y + b.height / 2 + margin) for b in labels.values())])
     lane_boxes = {name: replace(b, x=snap(page_width / 2), width=page_width) for name, b in lane_boxes.items()}
@@ -2861,4 +2962,6 @@ def _lay_out(
         if n_bands > 1
         else ()
     )
-    return Layout(boxes, group_boxes, lane_boxes, routes, page_width, page_height, labels, wrapped_rows, len(pending))
+    return Layout(
+        boxes, group_boxes, lane_boxes, routes, page_width, page_height, labels, wrapped_rows, len(pending) + label_fallbacks
+    )

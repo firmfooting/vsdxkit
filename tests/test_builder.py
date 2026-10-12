@@ -643,7 +643,10 @@ def test_a_group_heading_that_would_cover_a_neighbouring_group_is_refused():
 
 def test_labels_of_parallel_edges_do_not_overlap(tmp_path):
     edges = [Edge("a", "b", "yes"), Edge("a", "b", "no"), Edge("a", "b", "maybe"), Edge("a", "b", "later")]
-    document = Document.open(Diagram("T", [Page("P", [_node("a"), _node("b")], edges)]).save(tmp_path / "p.vsdx"))
+    diagram = Diagram("T", [Page("P", [_node("a"), _node("b")], edges)])
+    document = Document.open(
+        diagram.build(layout=builder.LayoutOptions(direction="left_to_right", page=None)).save(tmp_path / "p.vsdx")
+    )
     labels = [_box(s) for s in _kinds(document, "edge_label")]
     assert len(labels) == 4
     for i, a in enumerate(labels):
