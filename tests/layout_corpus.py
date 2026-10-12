@@ -1,6 +1,7 @@
 """The layouts the metrics, the ratchet and the digests measure: the fixtures plus a seeded random set."""
 
 import importlib.util
+from dataclasses import replace
 from pathlib import Path
 from types import ModuleType
 
@@ -25,17 +26,20 @@ def _load(stem: str) -> ModuleType:
     return module
 
 
-def fixture_layout(stem: str) -> Layout:
-    """The layout of fixture `stem` under its own options, as the builder would draw it."""
+def fixture_layout(stem: str, override: LayoutOptions | None = None) -> Layout:
+    """The layout of fixture `stem` under its own options, as the builder would draw it; `override` replaces only the options' page target."""
     module = _load(stem)
-    return builder._layout_page(module.page(), module.OPTIONS or LayoutOptions())[0]
+    options = module.OPTIONS or LayoutOptions()
+    if override is not None:
+        options = replace(options, page=override.page)
+    return builder._layout_page(module.page(), options)[0]
 
 
-def random_layout(seed: int, n: int, m: int) -> Layout:
-    """A seeded random page of `n` nodes and `m` edges, no lanes or groups, default options."""
+def random_layout(seed: int, n: int, m: int, override: LayoutOptions | None = None) -> Layout:
+    """A seeded random page of `n` nodes and `m` edges, no lanes or groups, default options (or `override`)."""
     rows, edges, *_ = random_graph(seed, n, m, 0, 0)
     nodes = [Node(row[0], KINDS[i % len(KINDS)], f"Step {i}") for i, row in enumerate(rows)]
-    return builder._layout_page(Page("rand", nodes, [Edge(s, t) for s, t in edges]), LayoutOptions())[0]
+    return builder._layout_page(Page("rand", nodes, [Edge(s, t) for s, t in edges]), override or LayoutOptions())[0]
 
 
 def all_layouts() -> dict[str, Layout]:
