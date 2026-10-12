@@ -8,6 +8,34 @@ From 0.7.1 onward this file is maintained by release-please, which writes a
 section per release from the conventional-commit subjects on `main`. Edit the
 release pull request rather than this file directly.
 
+## [0.10.0](https://github.com/firmfooting/vsdxkit/compare/v0.9.0...v0.10.0) (2026-10-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* require Python 3.15 and test it in one CI job ([#515](https://github.com/firmfooting/vsdxkit/issues/515))
+
+### Bug Fixes
+
+* **builder:** end routes on the drawn outline of non-rectangular nodes ([#521](https://github.com/firmfooting/vsdxkit/issues/521)) ([bec6e5f](https://github.com/firmfooting/vsdxkit/commit/bec6e5fb65ace7e3fcf7e91e75b64a8c4a3f6a74))
+* **builder:** reserve room for edge labels in the layout ([#512](https://github.com/firmfooting/vsdxkit/issues/512)) ([cac3d87](https://github.com/firmfooting/vsdxkit/commit/cac3d8702d3d08a517572123f5061201ec4351a0))
+* **builder:** reserve room for group headings in the layout ([#510](https://github.com/firmfooting/vsdxkit/issues/510)) ([48cc5a7](https://github.com/firmfooting/vsdxkit/commit/48cc5a7e16474989fd170a5bf665450c9e0f7988))
+* **layout:** give routes their own border points and keep them off group borders ([#524](https://github.com/firmfooting/vsdxkit/issues/524)) ([7b6c4be](https://github.com/firmfooting/vsdxkit/commit/7b6c4be9ed8ecef370c8fd6e10bbd2cdbbfac2f1))
+* **layout:** keep grid clearance for degenerate padding, gaps and margins ([#529](https://github.com/firmfooting/vsdxkit/issues/529)) ([0647ebe](https://github.com/firmfooting/vsdxkit/commit/0647ebe58be1e050e189b4967927198e69fee9a4))
+* **swimlanes:** keep builder decorations out of shapes_in ([#508](https://github.com/firmfooting/vsdxkit/issues/508)) ([92be735](https://github.com/firmfooting/vsdxkit/commit/92be735b03e43c8ed3eec32c3b8b0ecdf2efb5c8))
+* **swimlanes:** make created flowchart steps master instances and write the add-on hooks ([#519](https://github.com/firmfooting/vsdxkit/issues/519)) ([5e43995](https://github.com/firmfooting/vsdxkit/commit/5e439957108c7d1982d00b7f9541d073578a1317))
+* **tools:** match changelog entries for commits with several PR references ([#514](https://github.com/firmfooting/vsdxkit/issues/514)) ([c7f4b87](https://github.com/firmfooting/vsdxkit/commit/c7f4b87d68042b7c383dffd0de4da6c26e18626b))
+
+
+### Documentation
+
+* build the API reference without sphinx-autoapi ([#522](https://github.com/firmfooting/vsdxkit/issues/522)) ([f34fb73](https://github.com/firmfooting/vsdxkit/commit/f34fb7348d7f7d6d08825f46de47ca3cb72f5e7a))
+
+
+### Build System
+
+* require Python 3.15 and test it in one CI job ([#515](https://github.com/firmfooting/vsdxkit/issues/515)) ([56a75ba](https://github.com/firmfooting/vsdxkit/commit/56a75ba2f48ca9debc22df608e7e3652c067ac21))
+
 ## [0.9.0](https://github.com/firmfooting/vsdxkit/compare/v0.8.0...v0.9.0) (2026-10-11)
 
 
