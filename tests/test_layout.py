@@ -602,7 +602,7 @@ def test_random_graphs_either_lay_out_cleanly_or_are_refused(seed):
     except GraphError:
         return  # a node too small for its parallel edges, or a layout too crowded to keep apart, is refused
     _check(layout, nodes, parents)
-    _check_routes(layout)
+    _check_routes(layout, clear_of_borders=options.node_gap >= 0.05)
 
 
 def test_scanning_for_shared_runs_counts_against_the_search_limit(monkeypatch):
@@ -1013,3 +1013,13 @@ def test_a_parent_group_clears_its_child_by_the_padding_when_a_loop_reaches_past
 
 def test_an_off_grid_margin_is_rounded_out_to_the_grid():
     _clearance_of([LayoutNode("a", 1.0, 1.0)], [], (), margin=0.004)
+
+
+def test_groups_spaced_closer_than_the_border_clearance_still_lay_out():
+    """The clearance from group borders gives way to the spacing there is; this layout was accepted before it existed."""
+    rows, edges, lane_ids, group_ids, parents = random_graph(404, 17, 5, 0, 5)
+    nodes = tuple(LayoutNode(*row) for row in rows)
+    options = LayoutOptions(direction="top_down", parents=parents, group_padding=0.0, node_gap=0.05, layer_gap=0.1, margin=0.0)
+    layout = layered_layout(nodes, edges, lane_ids, group_ids, options)
+    _check(layout, nodes, parents)
+    _check_routes(layout, clear_of_borders=False)
