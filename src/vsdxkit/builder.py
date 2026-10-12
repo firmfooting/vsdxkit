@@ -18,6 +18,7 @@ from typing import Literal, get_args
 from vsdxkit._drawing import (
     KINDS,
     add_data_rows,
+    clip_route,
     draw_backdrop,
     draw_label,
     draw_node,
@@ -474,13 +475,15 @@ def _draw_layout(
         box = layout.nodes[node.id]
         text = node.label if node.sublabel is None else f"{node.label}\n{node.sublabel}"
         add_data_rows(draw_node(target, node.kind, box.x, box.y, *sizes[node.id], text), _rows(node, links), clear=True)
+    nodes_by_id = {node.id: node for node in page.nodes}
     parallel: dict[tuple[str, str], int] = {}
     for edge in page.edges:
         if edge.kind == "page-link":
             continue
         n = parallel.get((edge.source, edge.target), 0)
         parallel[(edge.source, edge.target)] = n + 1
-        points = layout.routes[(edge.source, edge.target, n)]
+        ends = [(nodes_by_id[i].kind, (layout.nodes[i].x, layout.nodes[i].y, *sizes[i])) for i in (edge.source, edge.target)]
+        points = clip_route(layout.routes[(edge.source, edge.target, n)], *ends)
         source = f"{edge.source}->{edge.target}"
         add_data_rows(
             draw_path(target, points, arrow=True, dashed=edge.kind in _DASHED_EDGES),
