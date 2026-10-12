@@ -14,7 +14,7 @@ from collections import Counter
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field, replace
 from itertools import pairwise
-from typing import Literal
+from typing import Literal, cast
 
 from vsdxkit.errors import GraphError
 
@@ -273,31 +273,47 @@ def _spend(work: list[int], amount: int) -> None:
         raise _Crowded(f"the layout is too crowded to route within its search limit of {_WORK_CAP} steps")
 
 
-def _runs(
-    paths: list[list[tuple[float, float]]], work: list[int], skip: int = -1
-) -> dict[tuple[int, float], list[tuple[float, float, int, int]]]:
-    """Every segment of every path but `skip`, by line: (low, high, path, segment) under (axis, coordinate).
+def _add_runs(
+    lines: dict[tuple[int, float], list[tuple[float, float, int, int]]], n: int, pts: list[tuple[float, float]]
+) -> None:
+    """Add every segment of path `n`, `pts`, to `lines`, by line: (low, high, path, segment) under (axis, coordinate)."""
+    for i, (a, b) in enumerate(pairwise(pts)):
+        if a[1] == b[1]:
+            lines.setdefault((0, round(a[1], 4)), []).append((min(a[0], b[0]), max(a[0], b[0]), n, i))
+        else:
+            lines.setdefault((1, round(a[0], 4)), []).append((min(a[1], b[1]), max(a[1], b[1]), n, i))
 
-    Each segment scanned is charged to `work`.
+
+class _Runs:
+    """The segments of every path, by line, kept up to date as paths are replaced instead of scanned again.
+
+    Each scan is still charged to `work` as a fresh one of every path but `skip` would be, so the cap keeps its meaning.
     """
-    lines: dict[tuple[int, float], list[tuple[float, float, int, int]]] = {}
-    for n, pts in enumerate(paths):
-        if n == skip:
-            continue
-        _spend(work, len(pts))
-        for i, (a, b) in enumerate(pairwise(pts)):
-            if a[1] == b[1]:
-                lines.setdefault((0, round(a[1], 4)), []).append((min(a[0], b[0]), max(a[0], b[0]), n, i))
-            else:
-                lines.setdefault((1, round(a[0], 4)), []).append((min(a[1], b[1]), max(a[1], b[1]), n, i))
-    return lines
+
+    def __init__(self, paths: list[list[tuple[float, float]]]) -> None:
+        """Index `paths`, which this object updates in place as paths are replaced."""
+        self.paths = paths
+        self.lines: dict[tuple[int, float], list[tuple[float, float, int, int]]] = {}
+        for n, pts in enumerate(paths):
+            _add_runs(self.lines, n, pts)
+
+    def scan(self, work: list[int], skip: int = -1) -> dict[tuple[int, float], list[tuple[float, float, int, int]]]:
+        """Charge a scan of every path but `skip`, and return all lines, which include path `skip`'s own segments."""
+        _spend(work, sum(len(pts) for n, pts in enumerate(self.paths) if n != skip))
+        return self.lines
+
+    def replace(self, n: int, pts: list[tuple[float, float]]) -> None:
+        """Make `pts` the path `n`."""
+        for a, b in pairwise(self.paths[n]):
+            key = (0, round(a[1], 4)) if a[1] == b[1] else (1, round(a[0], 4))
+            self.lines[key] = [r for r in self.lines[key] if r[2] != n]
+        self.paths[n] = pts
+        _add_runs(self.lines, n, pts)
 
 
-def _first_clash(
-    paths: list[list[tuple[float, float]]], ends: list[set[tuple[float, float]]], work: list[int]
-) -> tuple[int, int, int, int] | None:
+def _first_clash(known: _Runs, ends: list[set[tuple[float, float]]], work: list[int]) -> tuple[int, int, int, int] | None:
     """The first two segments (path, segment, path, segment) of different paths that run along one line, or None."""
-    lines = _runs(paths, work)
+    lines = known.scan(work)
     for key in sorted(lines):
         runs = sorted(lines[key])
         for x, (_lo, hi, n, i) in enumerate(runs):
@@ -314,7 +330,7 @@ def _apart(
     ends: list[set[tuple[float, float]]],
     fits: Callable[[int, list[tuple[float, float]]], bool],
     name: Callable[[int], tuple[str, str]],
-    reroute: Callable[[int], list[tuple[float, float]] | None],
+    reroute: Callable[[int, dict[tuple[int, float], list[tuple[float, float, int, int]]]], list[tuple[float, float]] | None],
     work: list[int],
 ) -> None:
     """Move segments aside, one grid step at a time, until no two paths run along one line, or raise GraphError.
@@ -324,19 +340,20 @@ def _apart(
     still legal. A pair that `_SEPARATIONS` steps either way cannot part is refused, and so is a layout whose
     scanning, with the route searches, passes `_WORK_CAP` steps in `work`.
     """
+    runs = _Runs(paths)
     for _round in range(_REROUTES):
         # every route that runs along another is searched again, now that the routes after it are known
         for n in range(len(paths)):
             if name(n)[0] == name(n)[1]:
                 continue
-            rest = _runs(paths, work, skip=n)
+            rest = runs.scan(work, skip=n)
             now = _clashes(paths[n], n, rest, ends)
             if now:
-                again = reroute(n)
+                again = reroute(n, runs.scan(work, skip=n))
                 if again is not None and fits(n, again) and _clashes(again, n, rest, ends) < now:
-                    paths[n] = again
+                    runs.replace(n, again)
     for _ in range(8 * len(paths) + 8):
-        clash = _first_clash(paths, ends, work)
+        clash = _first_clash(runs, ends, work)
         if clash is None:
             return
         n, i, m, j = clash
@@ -344,7 +361,7 @@ def _apart(
             pts = paths[who]
             if name(who)[0] == name(who)[1] or not 1 <= seg <= len(pts) - 3:
                 continue
-            others = _runs(paths, work, skip=who)
+            others = runs.scan(work, skip=who)
             before = _clashes(pts, who, others, ends)
             for step in range(1, _SEPARATIONS + 1):
                 moved = None
@@ -354,7 +371,7 @@ def _apart(
                         break
                     moved = None
                 if moved is not None:
-                    paths[who] = moved
+                    runs.replace(who, moved)
                     break
             else:
                 continue
@@ -364,19 +381,19 @@ def _apart(
             for who in (m, n) if m > n else (n, m):
                 if name(who)[0] == name(who)[1]:
                     continue
-                again = reroute(who)
-                rest = _runs(paths, work, skip=who)
+                again = reroute(who, runs.scan(work, skip=who))
+                rest = runs.scan(work, skip=who)
                 if (
                     again is not None
                     and fits(who, again)
                     and _clashes(again, who, rest, ends) < _clashes(paths[who], who, rest, ends)
                 ):
-                    paths[who] = again
+                    runs.replace(who, again)
                     break
             else:
                 a, b = name(n), name(m)
                 raise _Crowded(f"edge {a[0]!r} -> {a[1]!r} and edge {b[0]!r} -> {b[1]!r} cannot be kept apart")
-    clash = _first_clash(paths, ends, work)
+    clash = _first_clash(runs, ends, work)
     if clash is not None:
         a, b = name(clash[0]), name(clash[2])
         raise _Crowded(f"edge {a[0]!r} -> {a[1]!r} and edge {b[0]!r} -> {b[1]!r} cannot be kept apart")
@@ -438,6 +455,9 @@ _LANE_STEP = 0.02
 _WORK_CAP = 12_000_000
 """Search steps one layout may spend routing round groups and parting routes, so a very crowded one fails instead of running on."""
 
+_DENSE_STATES = 4_000_000
+"""States above which a detour's tables are sparse, not flat lists (a 1000 by 1000 grid is about 96 MB); routes are the same either way."""
+
 _REROUTES = 2
 """How many times every route that runs along another is searched again, before single segments are moved aside."""
 
@@ -466,6 +486,24 @@ _STEPS = ((1, 0), (-1, 0), (0, 1), (0, -1))
 def _heading(a: tuple[float, float], b: tuple[float, float]) -> int:
     """The index into _STEPS of the direction from a to b."""
     return 0 if b[0] > a[0] else 1 if b[0] < a[0] else 2 if b[1] > a[1] else 3
+
+
+class _Sparse[T](dict[int, T]):
+    """A table that answers `default` for a state not yet set, so it grows with the states a search visits."""
+
+    def __init__(self, default: T) -> None:
+        """An empty table answering `default`."""
+        super().__init__()
+        self.default = default
+
+    def __missing__(self, key: int) -> T:
+        """`default`, without storing it."""
+        return self.default
+
+
+def _table[T](size: int, default: T) -> list[T]:
+    """A flat list of `size` copies of `default`, or a sparse table typed as one when a list is too big to allocate up front."""
+    return [default] * size if size <= _DENSE_STATES else cast("list[T]", _Sparse(default))
 
 
 def _detour(
@@ -519,25 +557,17 @@ def _detour(
             for k in range(max(bisect_right(along, lo + _EPS) - 1, 0), min(bisect_left(along, hi - _EPS), len(flags[i]))):
                 flags[i][k] = 1
 
-    def free(i: int, j: int, d: int) -> tuple[int, int] | None:
-        """The next grid point from (i, j) heading d, or None when off the grid or blocked."""
-        ni, nj = i + _STEPS[d][0], j + _STEPS[d][1]
-        if not (0 <= ni < len(gx) and 0 <= nj < len(gy)):
-            return None
-        if d < 2:
-            return None if blocked_h[j][min(i, ni)] else (ni, nj)
-        return None if blocked_v[i][min(j, nj)] else (ni, nj)
-
+    nx, ny = len(gx), len(gy)
     i0, j0 = gx.index(start[0]), gy.index(start[1])
     goal = (gx.index(end[0]), gy.index(end[1]))
-    hop = free(i0, j0, first)
-    if hop is None:
-        return None
 
-    def covered(axis: int, coord: float) -> Callable[[float], float]:
-        """A function giving how much of one line, up to a position, earlier routes cover."""
+    def covered(axis: int, coord: float) -> Callable[[float], float] | None:
+        """A function giving how much of one line, up to a position, earlier routes cover, or None when none is covered."""
+        runs = occupied.get((axis, round(coord, 4)))
+        if not runs:
+            return None
         joined: list[tuple[float, float]] = []
-        for lo, hi in sorted(occupied.get((axis, round(coord, 4)), ())):
+        for lo, hi in sorted(runs):
             if joined and lo <= joined[-1][1]:
                 joined[-1] = (joined[-1][0], max(joined[-1][1], hi))
             else:
@@ -557,65 +587,93 @@ def _detour(
     along_x = [covered(0, y) for y in gy]
     along_y = [covered(1, x) for x in gx]
 
-    def cost(i: int, j: int, ni: int, nj: int) -> float:
-        """The length of the step from (i, j) to (ni, nj), dearer where an earlier route already runs."""
-        low, high = (gx[i], gx[ni]) if i != ni else (gy[j], gy[nj])
-        low, high = min(low, high), max(low, high)
-        up_to = along_x[j] if i != ni else along_y[i]
+    # ponytail: the search state lives in flat lists indexed by cell * 4 + heading, not dicts, because a dense graph
+    # runs this loop millions of times; a step's cost is -2.0 until first computed and -1.0 when the step is blocked
+    def step_cost(i: int, j: int, nd: int) -> float:
+        """The length of the step from (i, j) heading nd, dearer where an earlier route already runs, or -1.0 when blocked."""
+        if nd < 2:
+            ni = i + 1 if nd == 0 else i - 1
+            if not 0 <= ni < nx or blocked_h[j][min(i, ni)]:
+                return -1.0
+            low, high = (gx[i], gx[ni]) if nd == 0 else (gx[ni], gx[i])
+            up_to = along_x[j]
+        else:
+            nj = j + 1 if nd == 2 else j - 1
+            if not 0 <= nj < ny or blocked_v[i][min(j, nj)]:
+                return -1.0
+            low, high = (gy[j], gy[nj]) if nd == 2 else (gy[nj], gy[j])
+            up_to = along_y[i]
+        if up_to is None:
+            return high - low
         return high - low + _SHARING * (up_to(high) - up_to(low))
 
+    first_cost = step_cost(i0, j0, first)
+    if first_cost < 0:
+        return None
+    hop = (i0 + _STEPS[first][0]) * ny + j0 + _STEPS[first][1]
     to_go_x = [abs(x - gx[goal[0]]) for x in gx]
     to_go_y = [abs(y - gy[goal[1]]) for y in gy]
-    ny = len(gy)
+    best, came, costs = _table(nx * ny * 4, math.inf), _table(nx * ny * 4, -1), _table(nx * ny * 4, -2.0)
+    pop, push = heapq.heappop, heapq.heappush
     bend = 0.5
-    # a state is a grid point and the heading it was reached with, packed into one integer
-    first_state = (hop[0] * ny + hop[1]) * 4 + first
-    best = {first_state: cost(i0, j0, *hop)}
-    came: dict[int, int | None] = {first_state: None}
-    heap = [(best[first_state] + _HURRY * (to_go_x[hop[0]] + to_go_y[hop[1]]), 0, first_state)]
+    ahead = (ny, -ny, 1, -1)
+    di, dj = (1, -1, 0, 0), (0, 0, 1, -1)
+    options = ((0, 2, 3), (1, 2, 3), (2, 0, 1), (3, 0, 1))
+    first_state = hop * 4 + first
+    best[first_state] = first_cost
+    heap = [(first_cost + _HURRY * (to_go_x[i0 + _STEPS[first][0]] + to_go_y[j0 + _STEPS[first][1]]), 0, first_state)]
     count = 0
-    steps: dict[int, tuple[float, int, int] | None] = {}
     goal_cell = goal[0] * ny + goal[1]
-    while heap:
-        _f, _c, state = heapq.heappop(heap)
-        _spend(work, 1)
-        cell, d = divmod(state, 4)
-        i, j = divmod(cell, ny)
-        if cell == goal_cell and d == last:
-            points = [(gx[i], gy[j])]
-            at: int | None = state
-            while at is not None:
-                c, _d = divmod(at, 4)
-                points.append((gx[c // ny], gy[c % ny]))
-                at = came[at]
-            points.append(start)
-            return points[::-1]
-        g0 = best[state]
-        if _f - _HURRY * (to_go_x[i] + to_go_y[j]) > g0 + 1e-9:
-            continue
-        for nd in (d, *((2, 3) if d < 2 else (0, 1))) if cell != goal_cell else (d,):
-            key = cell * 4 + nd
-            if key in steps:
-                hopped = steps[key]
-            else:
-                nxt = free(i, j, nd)
-                hopped = steps[key] = None if nxt is None else (cost(i, j, *nxt), nxt[0], nxt[1])
-            if hopped is None:
+    room = _WORK_CAP - work[0]
+    pops = 0
+    try:
+        while heap:
+            _f, _c, state = pop(heap)
+            pops += 1
+            if pops > room:
+                work[0] += pops
+                pops = 0
+                _spend(work, 0)  # refuses the layout, with the message every other charge gives
+            cell, d = state >> 2, state & 3
+            if cell == goal_cell and d == last:
+                points = [(gx[cell // ny], gy[cell % ny])]
+                at = state
+                while at >= 0:
+                    points.append((gx[(at >> 2) // ny], gy[(at >> 2) % ny]))
+                    at = came[at]
+                points.append(start)
+                return points[::-1]
+            g0 = best[state]
+            i, j = divmod(cell, ny)
+            if _f - _HURRY * (to_go_x[i] + to_go_y[j]) > g0 + 1e-9:
                 continue
-            g = g0 + (0.0 if nd == d else bend) + hopped[0]
-            new_state = (hopped[1] * ny + hopped[2]) * 4 + nd
-            if g < best.get(new_state, math.inf) - 1e-9:
-                best[new_state] = g
-                came[new_state] = state
-                count += 1
-                heapq.heappush(heap, (g + _HURRY * (to_go_x[hopped[1]] + to_go_y[hopped[2]]), count, new_state))
-    return None
+            turned = g0 + bend
+            for nd in (d,) if cell == goal_cell else options[d]:
+                key = cell * 4 + nd
+                hopped = costs[key]
+                nxt = cell + ahead[nd]
+                if hopped == -2.0:
+                    hopped = costs[key] = step_cost(i, j, nd)
+                    if hopped >= 0:
+                        costs[nxt * 4 + (nd ^ 1)] = hopped  # the step back along the same gap costs the same
+                if hopped < 0:
+                    continue
+                g = (g0 if nd == d else turned) + hopped
+                new_state = nxt * 4 + nd
+                if g < best[new_state] - 1e-9:
+                    best[new_state] = g
+                    came[new_state] = state
+                    count += 1
+                    push(heap, (g + _HURRY * (to_go_x[i + di[nd]] + to_go_y[j + dj[nd]]), count, new_state))
+        return None
+    finally:
+        work[0] += pops
 
 
 def _beside(pts: list[tuple[float, float]], borders: list[tuple[int, float, float, float]], clear: float) -> list[int]:
     """The segments of `pts` that run parallel to a border closer than `clear`.
 
-    A border is (axis, coordinate, low, high) in the form `_runs` uses: axis 0 is a line of constant second coordinate.
+    A border is (axis, coordinate, low, high) in the form `_add_runs` uses: axis 0 is a line of constant second coordinate.
     """
     found = []
     for i, (a, b) in enumerate(pairwise(pts)):
@@ -727,7 +785,11 @@ def layered_layout(
     border (a self-loop stays inside its group's box, a grid step from it), except where spacing is tighter than that.
 
     A dense graph may be refused: when routes cannot all be given lines of their own within a fixed number of search
-    steps, the layout raises instead of returning routes that overlap.
+    steps, the layout raises instead of returning routes that overlap. The limit holds for each of the two passes
+    (border points of their own, then shared points). Measured with random graphs and the default options, these
+    lay out: 60 nodes, 200 edges, 6 groups; 150 nodes, 240 edges, 4 lanes, 4 groups; 200 nodes, 320 edges, 4 lanes,
+    4 groups (about 17 s); 200 nodes, 400 edges, no groups or lanes. 200 nodes and 400 edges in 20 groups is refused
+    (after about 40 s). The ceiling falls with the number of groups and lanes more than with nodes.
 
     :param edges: pairs of (source id, target id); a repeat is a parallel edge, a pair of one id a self-loop
     :param lanes: lane ids, top to bottom
@@ -740,13 +802,45 @@ def layered_layout(
         layout past the search limit, a group whose members sit in different lanes, or a parent that is undeclared,
         repeated for one child or nests more than one level
     """
-    work = [0]
     try:
-        return _lay_out(nodes, edges, lanes, groups, options, True, work)
+        return _lay_out(nodes, edges, lanes, groups, options, True, [0])
     except _Crowded:
         # every edge at a node had a border point of its own; a graph too dense for that shares them, as it did before
+        # the second pass has a search budget of its own, so a first pass that spent most of its own does not starve it
         # ponytail: a whole second layout, so a dense graph pays twice (150 nodes took 2.3 s, now 14 s); share points per node instead if that bites
-        return _lay_out(nodes, edges, lanes, groups, options, False, work)
+        try:
+            return _lay_out(nodes, edges, lanes, groups, options, False, [0])
+        except _Crowded as error:
+            raise _Crowded(
+                f"{error} ({len(nodes)} nodes, {len(edges)} edges, {len(groups)} groups and {len(lanes)} lanes; "
+                "fewer edges or groups lay out)"
+            ) from None
+
+
+def _blame(
+    group_rect: dict[str, _Rect],
+    grown: set[str],
+    nodes: tuple[LayoutNode, ...],
+    members_of: dict[str, list[str]],
+    parent_of: dict[str, str],
+    rect_of: Callable[[str], _Rect],
+    heading_of: dict[str, tuple[float, float]],
+) -> str | None:
+    """What a grown group box covers that is not its own, as an error message, or None."""
+    for g in sorted(grown):
+        ulo, uhi, vlo, vhi = group_rect[g]
+        why = "heading" if g in heading_of else "padding"
+        fix = "shorten the heading" if g in heading_of else "add spacing between them"
+        for n in nodes:
+            if n.id not in members_of[g]:
+                a, b, c, d = rect_of(n.id)
+                if a < uhi - _EPS and b > ulo + _EPS and c < vhi - _EPS and d > vlo + _EPS:
+                    return f"the {why} of group {g!r} makes its box cover node {n.id!r}; {fix}"
+        for other, (a, b, c, d) in group_rect.items():
+            related = parent_of.get(g) == other or parent_of.get(other) == g
+            if other != g and not related and a < uhi - _EPS and b > ulo + _EPS and c < vhi - _EPS and d > vlo + _EPS:
+                return f"the {why} of group {g!r} makes its box cover group {other!r}; {fix}"
+    return None
 
 
 def _blame(
@@ -1175,6 +1269,15 @@ def _lay_out(
         slot = slots[chains[n][i]]
         return abs(new - slot.v) <= slot.v_extent / 2 - GRID
 
+    def shares_point(n: int, i: int, new: float) -> bool:
+        """Whether moving row `i` of edge `n` to `new` puts its end on the border point another edge has on that side."""
+        if not own_points or i not in (0, len(chains[n]) - 1):
+            return False
+        end = 0 if i == 0 else -1
+        return any(
+            m != n and chains[m][end] == chains[n][i] and abs(rows_of[m][end] - new) < GRID / 2 for m in range(len(chains))
+        )
+
     for _round in range(6):
         stuck: list[tuple[int, int, int, int]] = []
         channel.clear()
@@ -1221,7 +1324,14 @@ def _lay_out(
         # two edges swapping rows cannot both be satisfied, so one of the two rows moves a little
         for en, eh, fn, fh in stuck:
             for n, i in ((en, eh + 1), (fn, fh)):
-                moved = next((d for d in (0.03, -0.03, 0.07, -0.07) if room_for(n, i, rows_of[n][i] + d)), None)
+                moved = next(
+                    (
+                        d
+                        for d in (0.03, -0.03, 0.07, -0.07)
+                        if room_for(n, i, rows_of[n][i] + d) and not shares_point(n, i, rows_of[n][i] + d)
+                    ),
+                    None,
+                )
                 if moved is not None:
                     rows_of[n][i] += moved
                     break
@@ -1466,12 +1576,13 @@ def _lay_out(
         """Whether `pts` is legal and clear of every group's border."""
         return legal(n, pts) and not _beside(pts, borders, clear)
 
-    def reroute(n: int) -> list[tuple[float, float]] | None:
-        """Edge `n` searched again, knowing every other route as it now stands."""
+    def reroute(
+        n: int, lines: dict[tuple[int, float], list[tuple[float, float, int, int]]]
+    ) -> list[tuple[float, float]] | None:
+        """Edge `n` searched again, knowing every other route as it now stands in `lines`."""
         mine = {paths[n][0], paths[n][-1]}
         others = {
-            key: [(lo, hi) for lo, hi, m, _j in runs if not border_ends[m] & mine]
-            for key, runs in _runs(paths, spent, skip=n).items()
+            key: [(lo, hi) for lo, hi, m, _j in found if m != n and not border_ends[m] & mine] for key, found in lines.items()
         }
         found = search(n, paths[n], others, n)
         return None if found is None else _simplify(found)

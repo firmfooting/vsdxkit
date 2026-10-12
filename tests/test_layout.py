@@ -109,12 +109,16 @@ def test_a_random_graph_lays_out_cleanly(seed, lanes, groups, direction):
     assert layout == layered_layout(nodes, edges, lane_ids, group_ids, options)
 
 
-def test_a_200_node_graph_with_lanes_and_groups_is_refused_not_drawn_with_shared_runs():
-    """This many routes round this many groups cannot all get a line of their own, so the layout fails closed."""
+def test_a_200_node_graph_with_lanes_and_groups_lays_out_with_no_shared_run():
+    """This size needs the shared-point pass, which has a search budget of its own (about 17 s; 60 s is a hang guard)."""
     rows, edges, lane_ids, group_ids, parents = random_graph(1, 200, 320, 4, 4)
     nodes = tuple(LayoutNode(*row) for row in rows)
-    with pytest.raises(GraphError, match=r"cannot be kept apart|too crowded"):
-        layered_layout(nodes, edges, lane_ids, group_ids, LayoutOptions(parents=parents))
+    start = time.perf_counter()
+    layout = layered_layout(nodes, edges, lane_ids, group_ids, LayoutOptions(parents=parents))
+    assert time.perf_counter() - start < 60
+    assert len(layout.routes) == 320
+    _check(layout, nodes, parents)
+    _check_routes(layout, own_points=False)
 
 
 def test_a_150_node_graph_with_lanes_and_groups_lays_out_with_no_shared_run():
@@ -338,17 +342,36 @@ def _check_no_shared_run(layout: Layout) -> None:
 def _check_distinct_ends(layout: Layout) -> None:
     """No two ends of different edges, and not both ends of a self-loop, meet at one point of a node's border.
 
-    A node with more route ends than its shorter side has grid steps is left out: it cannot give each a point of its own.
+    A side of a node is left out when the layout shares its points: `round(extent / GRID) // edges == 0`, where the
+    edges are those with an end on that side (a self-loop counts once) and the extent is the side's length. A route
+    against the flow ends on the side it would leave from, so the side is read off the end point, not the edge.
     """
-    count = Counter(node_id for key in layout.routes for node_id in key[:2])
-    at: dict[tuple[str, tuple[float, float]], tuple[str, str, int, int]] = {}
+    items: Counter[tuple[str, int, int]] = Counter()
+    at: dict[tuple[str, int, int], list[tuple[tuple[str, str, int], int, tuple[float, float]]]] = {}
+
+    def side(node_id: str, point: tuple[float, float]) -> tuple[str, int, int]:
+        box = layout.nodes[node_id]
+        dx, dy = point[0] - box.x, point[1] - box.y
+        if abs(abs(dx) - box.width / 2) < SHRINK:
+            return node_id, 0, 1 if dx > 0 else -1
+        return node_id, 1, 1 if dy > 0 else -1
+
     for key, points in layout.routes.items():
-        for end, node_id, point in ((0, key[0], points[0]), (-1, key[1], points[-1])):
-            box = layout.nodes[node_id]
-            if count[node_id] > round(min(box.width, box.height) / 0.01):
-                continue
-            other = at.setdefault((node_id, point), (*key, end))
-            assert other == (*key, end), f"{key} and {other[:3]} meet at {point} on {node_id}"
+        source, target, _n = key
+        first, last = side(source, points[0]), side(target, points[-1])
+        items[first] += 1
+        at.setdefault(first, []).append((key, 0, points[0]))
+        if source != target:
+            items[last] += 1
+        at.setdefault(last, []).append((key, -1, points[-1]))
+    for found_side, found in at.items():
+        box = layout.nodes[found_side[0]]
+        if round((box.height if found_side[1] == 0 else box.width) / GRID) // max(1, items[found_side]) == 0:
+            continue
+        seen: dict[tuple[float, float], tuple[tuple[str, str, int], int]] = {}
+        for key, end, point in found:
+            other = seen.setdefault(point, (key, end))
+            assert other == (key, end), f"{key} and {other} meet at {point} on {found_side[0]}"
 
 
 BORDER_CLEAR = 0.04
@@ -583,12 +606,34 @@ def test_a_busy_grouped_graph_lays_out_with_no_shared_run(direction, n, m, group
 
 
 @pytest.mark.parametrize("direction", ["left_to_right", "top_down"])
-def test_a_crowded_graph_of_200_nodes_and_20_groups_is_refused_not_drawn_with_shared_runs(direction):
-    """About 18 s to reach the search limit."""
+def test_a_crowded_graph_of_200_nodes_and_20_groups_is_refused_with_its_counts(direction):
+    """Two passes of 12M steps each, about 40 s; the message names the graph's size and the limit."""
     rows, edges, lane_ids, group_ids, parents = random_graph(1, 200, 400, 0, 20)
     nodes = tuple(LayoutNode(*row) for row in rows)
-    with pytest.raises(GraphError, match=r"too crowded|cannot be kept apart"):
+    start = time.perf_counter()
+    with pytest.raises(GraphError, match=r"search limit of 12000000 steps \(200 nodes, 400 edges, 20 groups and 0 lanes"):
         layered_layout(nodes, edges, lane_ids, group_ids, LayoutOptions(direction=direction, parents=parents))
+    assert time.perf_counter() - start < 120
+
+
+@pytest.mark.parametrize(
+    ("seed", "n", "m", "lanes", "groups", "cap", "laid_out"),
+    [(793, 50, 200, 3, 6, 5_000_000, True), (793, 50, 200, 3, 6, 2_000_000, False), (325, 50, 250, 3, 6, 2_000_000, False)],
+)
+def test_dense_graphs_on_both_sides_of_the_ceiling_lay_out_or_are_refused_with_counts(
+    monkeypatch, seed, n, m, lanes, groups, cap, laid_out
+):
+    """The first graph needs 4.7M steps for its first pass and 2.1M for its second, so 5M holds each; at 2M neither graph lays out."""
+    rows, edges, lane_ids, group_ids, parents = random_graph(seed, n, m, lanes, groups)
+    nodes = tuple(LayoutNode(*row) for row in rows)
+    monkeypatch.setattr(layout_module, "_WORK_CAP", cap)
+    if laid_out:
+        layout = layered_layout(nodes, edges, lane_ids, group_ids, LayoutOptions(parents=parents))
+        _check(layout, nodes, parents)
+        _check_routes(layout, own_points=False)
+    else:
+        with pytest.raises(GraphError, match=rf"search limit of {cap} steps \({n} nodes, {m} edges, {groups} groups"):
+            layered_layout(nodes, edges, lane_ids, group_ids, LayoutOptions(parents=parents))
 
 
 @pytest.mark.parametrize("seed", range(40))
@@ -1117,3 +1162,46 @@ def test_groups_spaced_closer_than_the_border_clearance_still_lay_out():
     layout = layered_layout(nodes, edges, lane_ids, group_ids, options)
     _check(layout, nodes, parents)
     _check_routes(layout, clear_of_borders=False)
+
+
+def test_the_shared_point_fallback_has_a_search_budget_of_its_own(monkeypatch):
+    """The first attempt spends about 4.7M steps and the fallback about 2.1M, so a 5M cap holds each but not both."""
+    rows, edges, lane_ids, group_ids, parents = random_graph(793, 50, 200, 3, 6)
+    nodes = tuple(LayoutNode(*row) for row in rows)
+    monkeypatch.setattr(layout_module, "_WORK_CAP", 5_000_000)
+    layout = layered_layout(nodes, edges, lane_ids, group_ids, LayoutOptions(parents=parents))
+    _check(layout, nodes, parents)
+    _check_routes(layout, own_points=False)
+
+
+@pytest.mark.parametrize("direction", ["top_down"])
+def test_a_channel_nudge_does_not_bring_two_edges_to_one_border_point(direction):
+    """Both edges into node 3 once ended at one point: the nudge that parts two swapped rows undid their separate points."""
+    nodes = (
+        LayoutNode("0", 0.1, 0.1, None, "g"),
+        LayoutNode("1", 0.06, 0.02),
+        LayoutNode("2", 0.02, 0.02, None, "g"),
+        LayoutNode("3", 0.06, 0.1),
+    )
+    edges = (("2", "3"), ("1", "3"), ("1", "0"))
+    options = LayoutOptions(direction=direction, group_padding=0.05, headings=(("g", 0.5, 0.05),))
+    layout = layered_layout(nodes, edges, (), ("g",), options)
+    _check(layout, nodes, ())
+    _check_routes(layout)
+
+
+def test_detour_memory_follows_the_states_visited_not_the_grid() -> None:
+    """A huge grid must not allocate route tables up front; the search is bounded by its work cap, not by memory."""
+    import tracemalloc
+
+    xs = {float(i) for i in range(1, 1500)}
+    ys = {float(i) for i in range(1, 1500)}
+    path = [(0.0, 0.0), (1.0, 0.0), (1.0, 3.0), (3.0, 3.0)]
+    tracemalloc.start()
+    try:
+        route = layout_module._detour(path, xs, ys, [], {}, [0], [], 0.1)
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert route is not None
+    assert peak < 40_000_000

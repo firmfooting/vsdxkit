@@ -98,6 +98,16 @@ out is known only after layout, so :meth:`~vsdxkit.builder.Diagram.build` refuse
 a laid-out page that does not fit, with a :class:`~vsdxkit.errors.GraphError`
 that says so. Fewer layers or nodes in a row bring it back within the limits.
 
+The layout keeps every route on a line of its own, and refuses a page it cannot
+do that for, within a fixed number of search steps for each of its two passes
+(border points of their own, then shared ones). Measured on random graphs, the
+default options lay out 60 nodes and 200 edges in 6 groups, 150 nodes and 240
+edges in 4 lanes and 4 groups, 200 nodes and 320 edges in 4 lanes and 4 groups
+(about 17 seconds), and 200 nodes and 400 edges with no groups. 200 nodes and
+400 edges in 20 groups is refused with a :class:`~vsdxkit.errors.GraphError`
+that names the counts, after about 40 seconds. Groups and lanes lower the
+ceiling more than nodes do; fewer edges or groups bring a refused page back.
+
 Shape Data
 ----------
 
