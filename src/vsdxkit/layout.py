@@ -18,6 +18,11 @@ from typing import Literal
 
 from vsdxkit.errors import GraphError
 
+
+class _Crowded(GraphError):
+    """A layout that could not give its routes lines of their own; the same graph may still fit with fewer border points."""
+
+
 _Key = str | tuple[int, int]
 """A slot's key: a node's id, or (edge number, layer) for a dummy, which no string id can equal."""
 
@@ -260,7 +265,7 @@ def _spend(work: list[int], amount: int) -> None:
     """Charge `amount` search steps to `work`, and refuse the layout once it is past `_WORK_CAP`."""
     work[0] += amount
     if work[0] > _WORK_CAP:
-        raise GraphError(f"the layout is too crowded to route within its search limit of {_WORK_CAP} steps")
+        raise _Crowded(f"the layout is too crowded to route within its search limit of {_WORK_CAP} steps")
 
 
 def _runs(
@@ -365,11 +370,11 @@ def _apart(
                     break
             else:
                 a, b = name(n), name(m)
-                raise GraphError(f"edge {a[0]!r} -> {a[1]!r} and edge {b[0]!r} -> {b[1]!r} cannot be kept apart")
+                raise _Crowded(f"edge {a[0]!r} -> {a[1]!r} and edge {b[0]!r} -> {b[1]!r} cannot be kept apart")
     clash = _first_clash(paths, ends, work)
     if clash is not None:
         a, b = name(clash[0]), name(clash[2])
-        raise GraphError(f"edge {a[0]!r} -> {a[1]!r} and edge {b[0]!r} -> {b[1]!r} cannot be kept apart")
+        raise _Crowded(f"edge {a[0]!r} -> {a[1]!r} and edge {b[0]!r} -> {b[1]!r} cannot be kept apart")
 
 
 def _shifted(pts: list[tuple[float, float]], seg: int, delta: float) -> list[tuple[float, float]] | None:
@@ -446,6 +451,9 @@ _EPS = 1e-6
 _SHARING = 1000.0
 """Extra cost per inch of a detour that runs along another route, so a free line is preferred to a shared one."""
 
+_BORDER_CLEAR = 0.05
+"""Most inches a route keeps from a group's border where it runs parallel to it, so it does not look like part of the box. A layout spaced tighter than this keeps what it has room for."""
+
 _STEPS = ((1, 0), (-1, 0), (0, 1), (0, -1))
 """Unit steps along the flow, against it, across it and back, indexed as a heading."""
 
@@ -462,8 +470,12 @@ def _detour(
     solid: list[_Rect],
     occupied: dict[tuple[int, float], list[tuple[float, float]]],
     work: list[int],
+    borders: list[tuple[int, float, float, float]],
+    clear: float,
 ) -> list[tuple[float, float]] | None:
     """The shortest few-bend orthogonal path from `path`'s first point to its last that avoids `solid`, or None.
+
+    It also keeps `clear` inches off the length of every border in `borders`, which a route may still cross.
 
     It leaves in the direction `path` does and arrives in the direction `path` does, and turns only on the lines
     `xs` and `ys`. Ties break by insertion order, so the result depends on the arguments alone.
@@ -495,6 +507,12 @@ def _detour(
         return flags
 
     blocked_h, blocked_v = spans(gx, rows), spans(gy, cols)
+    for kind, coord, lo, hi in borders:
+        # a line close beside a border is blocked along the border's length, so a route crosses it and never rides it
+        lines, along, flags = (gx, gy, blocked_v) if kind == 1 else (gy, gx, blocked_h)
+        for i in range(bisect_right(lines, coord - clear + _EPS), bisect_left(lines, coord + clear - _EPS)):
+            for k in range(max(bisect_right(along, lo + _EPS) - 1, 0), min(bisect_left(along, hi - _EPS), len(flags[i]))):
+                flags[i][k] = 1
 
     def free(i: int, j: int, d: int) -> tuple[int, int] | None:
         """The next grid point from (i, j) heading d, or None when off the grid or blocked."""
@@ -589,6 +607,23 @@ def _detour(
     return None
 
 
+def _beside(pts: list[tuple[float, float]], borders: list[tuple[int, float, float, float]], clear: float) -> list[int]:
+    """The segments of `pts` that run parallel to a border closer than `clear`.
+
+    A border is (axis, coordinate, low, high) in the form `_runs` uses: axis 0 is a line of constant second coordinate.
+    """
+    found = []
+    for i, (a, b) in enumerate(pairwise(pts)):
+        axis = 0 if a[1] == b[1] else 1
+        low, high = sorted((a[axis], b[axis]))
+        if any(
+            kind == axis and abs(a[1 - axis] - coord) < clear - _EPS and min(high, hi) - max(low, lo) > _EPS
+            for kind, coord, lo, hi in borders
+        ):
+            found.append(i)
+    return found
+
+
 def _steps(count: int) -> Iterator[int]:
     """0, 1, -1, 2, -2, ... up to `count` on each side."""
     yield 0
@@ -681,6 +716,11 @@ def layered_layout(
 
     An edge that spans layers passes through a dummy slot in each one it crosses, so no route meets a node.
 
+    Each edge that meets a node gets a border point of its own, ordered by where its other end lies, and self-loops
+    leave from the first. A node too small to give every edge a grid step shares them as before, and so does a graph
+    too dense for routes with points of their own to keep apart. Routes keep 0.05 inch off the length of a group's
+    border (a self-loop stays inside its group's box, a grid step from it), except where spacing is tighter than that.
+
     A dense graph may be refused: when routes cannot all be given lines of their own within a fixed number of search
     steps, the layout raises instead of returning routes that overlap.
 
@@ -695,12 +735,33 @@ def layered_layout(
         layout past the search limit, a group whose members sit in different lanes, or a parent that is undeclared,
         repeated for one child or nests more than one level
     """
+    work = [0]
+    try:
+        return _lay_out(nodes, edges, lanes, groups, options, True, work)
+    except _Crowded:
+        # every edge at a node had a border point of its own; a graph too dense for that shares them, as it did before
+        # ponytail: a whole second layout, so a dense graph pays twice (150 nodes took 2.3 s, now 14 s); share points per node instead if that bites
+        return _lay_out(nodes, edges, lanes, groups, options, False, work)
+
+
+def _lay_out(
+    nodes: tuple[LayoutNode, ...],
+    edges: tuple[tuple[str, str], ...],
+    lanes: tuple[str, ...],
+    groups: tuple[str, ...],
+    options: LayoutOptions | None,
+    own_points: bool,
+    spent: list[int],
+) -> Layout:
+    """`layered_layout`, with `own_points` saying whether each edge at a node gets a border point of its own, and its search steps charged to `spent`."""
     opts = options if options is not None else LayoutOptions()
     top_down = opts.direction == "top_down"
     for name in ("layer_gap", "node_gap", "margin", "group_padding", "lane_padding", "lane_heading"):
         value = getattr(opts, name)
         if not (isinstance(value, int | float) and math.isfinite(value) and value >= 0):
             raise GraphError(f"option {name} is {value!r}; it must be a finite number of inches, zero or more")
+    # spacing tighter than the clearance leaves room for less of it, so a layout that fitted without the clearance still does
+    clear = snap(math.floor(min(_BORDER_CLEAR, opts.group_padding, opts.node_gap, opts.layer_gap) / GRID + 1e-9) * GRID)
     if not (isinstance(opts.sweeps, int) and not isinstance(opts.sweeps, bool) and opts.sweeps >= 1):
         raise GraphError(f"option sweeps is {opts.sweeps!r}; it must be a whole number, one or more")
     if opts.edge_labels and len(opts.edge_labels) != len(edges):
@@ -1015,20 +1076,38 @@ def layered_layout(
     twins = Counter((c[0], c[-1]) for c in chains)
     twin_seen: Counter[tuple[_Key, _Key]] = Counter()
     twin_rank: list[int] = []
+    # every edge that leaves a node's far side (self-loops first, they nest outermost last) or arrives at its near side
+    # gets a border point of its own, ordered by where its other end lies so the edges do not cross at the node
+    side_edges: dict[tuple[_Key, bool], list[tuple[int, float, int]]] = {}
+    for n, chain in enumerate(chains):
+        if chain[0] == chain[-1]:
+            side_edges.setdefault((chain[0], True), []).append((0, 0.0, n))
+            continue
+        side_edges.setdefault((chain[0], True), []).append((1, slots[chain[1]].v, n))
+        side_edges.setdefault((chain[-1], False), []).append((1, slots[chain[-2]].v, n))
+    end_offset: dict[tuple[int, bool], float] = {}
+    for (key, leaving), items in side_edges.items():
+        extent = slots[key].v_extent
+        if own_points and round(extent / GRID) // len(
+            items
+        ):  # a node too small for them all keeps the offsets its parallel edges had
+            for rank, (_kind, _v, n) in enumerate(sorted(items)):
+                end_offset[(n, leaving)] = _spread(len(items), extent, key)[rank]
     rows_of: list[list[float]] = []
     for chain, (source, target) in zip(chains, edges, strict=True):
         ends = (chain[0], chain[-1])
         twin_rank.append(twin_seen[ends])
         twin_seen[ends] += 1
+        n = len(rows_of)
         # a pass-through row is nudged within its dummy slot, so it rarely lies on the row of a box another edge uses
-        nudge = _NUDGES[len(rows_of) % len(_NUDGES)]
+        nudge = _NUDGES[n % len(_NUDGES)]
         vs = [slots[k].v if slots[k].real else slots[k].v + nudge for k in chain]
         if source != target:
             # parallel edges leave and arrive at different points along the border so they never overlay
             narrow = min((source, target), key=lambda k: slots[k].v_extent)
             off = _spread(twins[ends], slots[narrow].v_extent, narrow)[twin_rank[-1]]
-            vs[0] += off
-            vs[-1] += off
+            vs[0] += end_offset.get((n, True), off)
+            vs[-1] += end_offset.get((n, False), off)
         rows_of.append(vs)
 
     gap_edges: dict[int, list[tuple[float, float, int, int]]] = {}
@@ -1099,7 +1178,11 @@ def layered_layout(
     base_xs = {-shift_u, u_total - shift_u} if not lanes else {u_total - shift_u}
     for layer in range(n_layers - 1):
         base_xs.add(col_left[layer] + col_width[layer] + gaps[layer] / 2)
-    end_xs = {x for ulo, uhi, _vlo, _vhi in group_rect.values() for x in (ulo - 2 * GRID, uhi + 2 * GRID)}
+    end_xs = {
+        x
+        for ulo, uhi, _vlo, _vhi in group_rect.values()
+        for x in (ulo - max(clear, GRID) - GRID, uhi + max(clear, GRID) + GRID)
+    }
     flat_ys = (
         {y for lane in range(n_lanes) for y in (lane_top[lane] + GRID, lane_bottom[lane] - GRID)}
         if lanes
@@ -1108,7 +1191,11 @@ def layered_layout(
     for a, b in pairwise(track_keys):
         if a[0] == b[0]:
             flat_ys.add((track_top[a] + track_height[a] + track_top[b]) / 2)
-    end_ys = {y for _ulo, _uhi, vlo, vhi in group_rect.values() for y in (vlo - 2 * GRID, vhi + 2 * GRID)}
+    end_ys = {
+        y
+        for _ulo, _uhi, vlo, vhi in group_rect.values()
+        for y in (vlo - max(clear, GRID) - GRID, vhi + max(clear, GRID) + GRID)
+    }
     base_xs = {x for x in base_xs | end_xs if -shift_u <= x <= u_total - shift_u} - end_xs
     flat_ys = {y for y in flat_ys | end_ys if -shift_v <= y <= v_total - shift_v} - end_ys
     end_xs = {x for x in end_xs if -shift_u <= x <= u_total - shift_u}
@@ -1131,7 +1218,7 @@ def layered_layout(
         if source == target:
             r = first_slot.v_extent / 2 + 0.2 + 0.1 * i
             c = centre_u(first_slot) - _spread(twins[ends], first_slot.u_extent, source)[i]
-            dv = _spread(twins[ends], first_slot.v_extent, source)[i]
+            dv = end_offset.get((n, True), _spread(twins[ends], first_slot.v_extent, source)[i])
             bends = [
                 (right_u(first_slot), first_slot.v + dv),
                 (right_u(first_slot) + 0.3 + 0.1 * i, first_slot.v + dv),
@@ -1182,7 +1269,12 @@ def layered_layout(
     foreign_of = [
         [
             *(
-                (r[0] - GRID, r[1] + GRID, r[2] - GRID, r[3] + GRID)
+                (
+                    r[0] - max(clear - GRID, GRID),
+                    r[1] + max(clear - GRID, GRID),
+                    r[2] - max(clear - GRID, GRID),
+                    r[3] + max(clear - GRID, GRID),
+                )
                 for g, r in group_rect.items()
                 if g not in groups_of[source] | groups_of[target]
             ),
@@ -1192,26 +1284,52 @@ def layered_layout(
     ]
     # a route that would arrive through a heading is moved to arrive at the side of its box instead
     rerouted: set[int] = set()
-    for n, (bends, source, target, chain, _parallel) in enumerate(built):
-        pts = [bends[0], *(b for a, b in pairwise(bends) if a != b)]
-        if source == target or len(pts) < 2:
-            continue
-        for end in (0, -1):
-            a, b = (pts[0], pts[1]) if end == 0 else (pts[-2], pts[-1])
-            if any(_enters(a, b, band) for band in bands):
-                slot = slots[source if end == 0 else target]
-                far = pts[-1] if end == 0 else pts[0]
-                off = _spread(twins[(chain[0], chain[-1])], slot.u_extent, source if end == 0 else target)[twin_rank[n]]
-                # self-loops leave and arrive on the low side, so a node that has one is entered on the other
-                low = far[1] < slot.v and (source if end == 0 else target) not in loop_count
-                side = slot.v - slot.v_extent / 2 if low else slot.v + slot.v_extent / 2
-                pts[end] = (snap(centre_u(slot) - off), snap(side))
-                # one step outward gives the search the heading to leave or arrive with
-                out = (pts[end][0], side - 1 if low else side + 1)
-                pts = [pts[0], out, *pts[1:]] if end == 0 else [*pts[:-1], out, pts[-1]]
-                rerouted.add(n)
-        if n in rerouted:
-            built[n] = (pts, source, target, chain, _parallel)
+    arrivals: dict[tuple[str, bool], list[tuple[int, int]]] = {}
+    own_offset: dict[tuple[int, int], float] = {}
+
+    def reattach(final: bool) -> None:
+        """Move every end that would run through a heading to its box's side; the first pass only counts the ends per side."""
+        for n, (bends, source, target, chain, _parallel) in enumerate(built):
+            pts = [bends[0], *(b for a, b in pairwise(bends) if a != b)]
+            if source == target or len(pts) < 2:
+                continue
+            for end in (0, -1):
+                a, b = (pts[0], pts[1]) if end == 0 else (pts[-2], pts[-1])
+                if any(_enters(a, b, band) for band in bands):
+                    node_id = source if end == 0 else target
+                    slot = slots[node_id]
+                    far = pts[-1] if end == 0 else pts[0]
+                    off = own_offset.get((n, end))
+                    if off is None:
+                        off = _spread(twins[(chain[0], chain[-1])], slot.u_extent, node_id)[twin_rank[n]]
+                    # self-loops leave and arrive on the low side, so a node that has one is entered on the other
+                    low = far[1] < slot.v and node_id not in loop_count
+                    arrivals.setdefault((node_id, low), []).append((n, end))
+                    side = slot.v - slot.v_extent / 2 if low else slot.v + slot.v_extent / 2
+                    pts[end] = (snap(centre_u(slot) - off), snap(side))
+                    # one step outward gives the search the heading to leave or arrive with
+                    out = (pts[end][0], side - 1 if low else side + 1)
+                    pts = [pts[0], out, *pts[1:]] if end == 0 else [*pts[:-1], out, pts[-1]]
+                    rerouted.add(n)
+            if final and n in rerouted:
+                built[n] = (pts, source, target, chain, _parallel)
+
+    reattach(False)
+    for (node_id, _low), ends_here in arrivals.items():
+        extent = slots[node_id].u_extent
+        if own_points and round(extent / GRID) // len(ends_here):  # as for the ends on a box's far and near sides
+            for rank, end_key in enumerate(ends_here):
+                own_offset[end_key] = _spread(len(ends_here), extent, node_id)[rank]
+    arrivals.clear()
+    rerouted.clear()
+    reattach(True)
+    # a group's border is no place for a route to run, whichever group it belongs to
+    borders = [
+        line
+        for r in group_rect.values()
+        for line in ((1, r[0], r[2], r[3]), (1, r[1], r[2], r[3]), (0, r[2], r[0], r[1]), (0, r[3], r[0], r[1]))
+    ]
+
     pending = []
     for n, (bends, source, target, _chain, _parallel) in enumerate(built):
         foreign = foreign_of[n]
@@ -1223,7 +1341,6 @@ def layered_layout(
     # the lines round the whole drawing carry the routes that go the long way round, so they come in many copies
     outer_xs = {*(f(end_xs) for f in (min, max) if end_xs)}
     outer_ys = {*(f(end_ys) for f in (min, max) if end_ys)}
-    spent = [0]
 
     def search(
         n: int, path: list[tuple[float, float]], others: dict[tuple[int, float], list[tuple[float, float]]], k: int
@@ -1260,7 +1377,7 @@ def layered_layout(
                 )
                 if -shift_u <= x <= u_total - shift_u
             }
-            around = _detour(path, xs, ys, [*solids, *foreign_of[n]], others, spent)
+            around = _detour(path, xs, ys, [*solids, *foreign_of[n]], others, spent, borders, clear)
             if around is not None:
                 break
         return around
@@ -1273,7 +1390,7 @@ def layered_layout(
         others = {key: [(lo, hi) for lo, hi, m in runs if not ends_of[m] & mine] for key, runs in occupied.items()}
         around = search(n, path, others, k)
         if around is None:
-            raise GraphError(f"edge {source!r} -> {target!r} cannot be routed round the groups it does not belong to")
+            raise _Crowded(f"edge {source!r} -> {target!r} cannot be routed round the groups it does not belong to")
         built[n] = (around, source, target, chain, parallel)
         occupy(around, n)
 
@@ -1281,7 +1398,7 @@ def layered_layout(
     paths = [_simplify(b[0]) for b in built]
     border_ends = [{p[0], p[-1]} for p in paths]
 
-    def fits(n: int, pts: list[tuple[float, float]]) -> bool:
+    def legal(n: int, pts: list[tuple[float, float]]) -> bool:
         """Whether `pts` stays on the page, in the lanes of edge `n`'s ends, off every box and off foreign groups."""
         low, high = lane_span(built[n][3])
         if any(
@@ -1293,6 +1410,10 @@ def layered_layout(
             _enters(a, b, r) for a, b in pairwise(pts) for r in foreign_of[n]
         )
 
+    def fits(n: int, pts: list[tuple[float, float]]) -> bool:
+        """Whether `pts` is legal and clear of every group's border."""
+        return legal(n, pts) and not _beside(pts, borders, clear)
+
     def reroute(n: int) -> list[tuple[float, float]] | None:
         """Edge `n` searched again, knowing every other route as it now stands."""
         mine = {paths[n][0], paths[n][-1]}
@@ -1303,6 +1424,23 @@ def layered_layout(
         found = search(n, paths[n], others, n)
         return None if found is None else _simplify(found)
 
+    for n, pts in enumerate(paths):
+        # a segment beside a border moves aside a grid step at a time, as far as it takes, and stays if none is clear
+        while built[n][1] != built[n][2] and (beside := [i for i in _beside(pts, borders, clear) if 1 <= i <= len(pts) - 3]):
+            moved = next(
+                (
+                    m
+                    for k in range(1, 3 * round(clear / GRID))
+                    for sign in (1, -1)
+                    if (m := _shifted(pts, beside[0], sign * k * GRID)) is not None
+                    and legal(n, m)
+                    and len(_beside(m, borders, clear)) < len(_beside(pts, borders, clear))
+                ),
+                None,
+            )
+            if moved is None:
+                break
+            pts = paths[n] = moved
     _apart(paths, border_ends, fits, lambda n: (built[n][1], built[n][2]), reroute, spent)
 
     for pts, (_bends, source, target, _chain, parallel) in zip(paths, built, strict=True):

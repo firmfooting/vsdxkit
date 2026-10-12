@@ -483,9 +483,9 @@
               "result": 3.36
             },
             {
-              "formula": "40.894 mm",
+              "formula": "41.402 mm",
               "name": "PinY",
-              "result": 1.61
+              "result": 1.63
             },
             {
               "formula": "43.688 mm",
@@ -493,9 +493,9 @@
               "result": 1.72
             },
             {
-              "formula": "8.128 mm",
+              "formula": "6.604 mm",
               "name": "Height",
-              "result": 0.32
+              "result": 0.26
             },
             {
               "formula": "0 deg",
@@ -510,7 +510,7 @@
             {
               "formula": "Height*0.5",
               "name": "LocPinY",
-              "result": 0.16
+              "result": 0.13
             },
             {
               "formula": "FALSE",
@@ -649,9 +649,9 @@
               "result": 1.72
             },
             {
-              "formula": "8.128 mm",
+              "formula": "5.588 mm",
               "name": "Height",
-              "result": 0.32
+              "result": 0.22
             },
             {
               "formula": "0 deg",
@@ -666,7 +666,7 @@
             {
               "formula": "Height*0.5",
               "name": "LocPinY",
-              "result": 0.16
+              "result": 0.11
             },
             {
               "formula": "FALSE",
@@ -899,9 +899,9 @@
               "result": 9.44
             },
             {
-              "formula": "25.146 mm",
+              "formula": "24.638 mm",
               "name": "PinY",
-              "result": 0.99
+              "result": 0.97
             },
             {
               "formula": "352.552 mm",
@@ -909,9 +909,9 @@
               "result": 13.88
             },
             {
-              "formula": "23.368 mm",
+              "formula": "22.352 mm",
               "name": "Height",
-              "result": 0.92
+              "result": 0.88
             },
             {
               "formula": "0 deg",
@@ -926,7 +926,7 @@
             {
               "formula": "Height*0.5",
               "name": "LocPinY",
-              "result": 0.46
+              "result": 0.44
             },
             {
               "formula": "FALSE",
@@ -1003,9 +1003,9 @@
               "result": 14.26
             },
             {
-              "formula": "53.086 mm",
+              "formula": "53.594 mm",
               "name": "PinY",
-              "result": 2.09
+              "result": 2.11
             },
             {
               "formula": "35.56 mm",
@@ -1013,9 +1013,9 @@
               "result": 1.4
             },
             {
-              "formula": "16.764 mm",
+              "formula": "15.24 mm",
               "name": "Height",
-              "result": 0.66
+              "result": 0.6
             },
             {
               "formula": "0 deg",
@@ -1030,7 +1030,7 @@
             {
               "formula": "Height*0.5",
               "name": "LocPinY",
-              "result": 0.33
+              "result": 0.3
             },
             {
               "formula": "FALSE",
