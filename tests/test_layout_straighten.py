@@ -1,5 +1,7 @@
 """Crossing-aware ordering and straightening of the layered layout."""
 
+from dataclasses import replace
+
 import layout_corpus as corpus
 import pytest
 from helpers import route_metrics as rm
@@ -133,3 +135,15 @@ def test_an_align_group_that_cannot_share_a_row_is_refused_naming_its_members():
     nodes = (LayoutNode("a", 2, 1, "L0"), LayoutNode("b", 2, 1, "L1"))
     with pytest.raises(lo.GraphError, match=r"align group.*'a'.*'b'"):
         layered_layout(nodes, (("a", "b"),), lanes=("L0", "L1"), options=LayoutOptions(aligned=(("a", "b"),)))
+
+
+def test_even_columns_give_every_layer_one_pitch():
+    nodes = (LayoutNode("a", 1, 1), LayoutNode("b", 3, 1), LayoutNode("c", 2, 1))
+    lay = layered_layout(nodes, (("a", "b"), ("b", "c")), options=LayoutOptions(page=None, columns="even"))
+    xs = [lay.nodes[k].x for k in "abc"]
+    assert round(xs[1] - xs[0], 2) == round(xs[2] - xs[1], 2)
+
+
+def test_a_columns_value_that_is_not_known_is_refused_by_name():
+    with pytest.raises(lo.GraphError, match="columns"):
+        layered_layout((LayoutNode("a", 1, 1),), (), options=replace(LayoutOptions(), **{"columns": "wide"}))

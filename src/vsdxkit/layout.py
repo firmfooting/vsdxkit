@@ -191,6 +191,8 @@ class LayoutOptions:
     """Pairs of (node id, layer): the node sits in that layer, which must come after every layer that feeds it, and its successors move after it. Layers left empty keep a column of width zero."""
     aligned: tuple[tuple[str, ...], ...] = ()
     """Groups of node ids drawn on one row (one column when flowing top down). The members of a group are in different layers, one lane and one track, and a node is in at most one group."""
+    columns: Literal["natural", "even"] = "natural"
+    """'natural' sizes each layer's column to its widest box and its gap to what its routes need; 'even' gives every column the widest width and every gap the largest, so boxes in a row line up."""
 
 
 @dataclass(frozen=True)
@@ -1477,6 +1479,8 @@ def _lay_out(
         and opts.straighten_sweeps >= 0
     ):
         raise GraphError(f"option straighten_sweeps is {opts.straighten_sweeps!r}; it must be a whole number, zero or more")
+    if opts.columns not in ("natural", "even"):
+        raise GraphError(f"option columns is {opts.columns!r}; it must be 'natural' or 'even'")
     for name, least in (("port_pitch", 0.1), ("channel_pitch", GRID)):
         value = getattr(opts, name)
         if not (
@@ -1616,6 +1620,9 @@ def _lay_out(
         gaps[layer] = max(gaps[layer], math.fsum(extents) + 0.1)
 
     col_width = [max((slots[k].u_extent for k in row), default=0.0) for row in rows]
+    if opts.columns == "even":
+        col_width = [max(col_width, default=0.0)] * n_layers
+        gaps = [max(gaps, default=0.0)] * n_layers
     # a long flow is cut into rows, each a band; lanes, top-down flows and short flows are never cut
     row_starts: tuple[int, ...] = (0,)
     if opts.page is not None and not lanes and not top_down and n_layers > 1:
