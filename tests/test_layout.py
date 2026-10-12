@@ -16,7 +16,7 @@ from helpers.graphs import random_graph
 from vsdxkit import builder as builder_module
 from vsdxkit import layout as layout_module
 from vsdxkit.errors import GraphError
-from vsdxkit.layout import Box, Layout, LayoutNode, LayoutOptions, layered_layout, snap
+from vsdxkit.layout import GRID, Box, Layout, LayoutNode, LayoutOptions, layered_layout, snap
 
 SHRINK = 1e-6
 
@@ -912,3 +912,104 @@ def test_routes_into_one_node_arrive_at_different_points_and_none_rides_a_group_
 def test_a_route_keeps_clear_of_the_heading_of_a_group_it_enters(monkeypatch):
     layout = _layout_of_case(monkeypatch, "groups_and_lanes")
     _check_heading_bands(layout, [("g2", *builder_module._heading_size("Second look"))])
+
+
+def _check_clearance(layout: Layout, nodes, parents, options: LayoutOptions) -> None:
+    """Every box keeps the padding and the margin asked of it, however the options fall on the grid."""
+    pad, margin = options.group_padding, options.margin
+    tol = 1e-9
+
+    def edges_of(b: Box):
+        return b.x - b.width / 2, b.x + b.width / 2, b.y - b.height / 2, b.y + b.height / 2
+
+    def holds(outer: Box, inner: Box, by: float) -> bool:
+        (ol, orr, ob, ot), (il, ir, ib, it) = edges_of(outer), edges_of(inner)
+        return ol <= il - by + tol and orr >= ir + by - tol and ob <= ib - by + tol and ot >= it + by - tol
+
+    parent = dict(parents)
+    members: dict[str, list[str]] = {}
+    for node in nodes:
+        g = node.group
+        while g is not None:
+            members.setdefault(g, []).append(node.id)
+            g = parent.get(g)
+    for g, box in layout.groups.items():
+        for m in members[g]:
+            assert holds(box, layout.nodes[m], pad), f"group {g} keeps less than its padding round {m}"
+        for node_id, other in layout.nodes.items():
+            if node_id not in members[g]:
+                apart = max(
+                    abs(box.x - other.x) - (box.width + other.width) / 2,
+                    abs(box.y - other.y) - (box.height + other.height) / 2,
+                )
+                assert apart >= GRID - tol, f"group {g} is less than a grid step from {node_id}"
+    for child, outer in parents:
+        if child in layout.groups:
+            assert holds(layout.groups[outer], layout.groups[child], pad), (
+                f"group {outer} keeps less than its padding round {child}"
+            )
+    for what, box in [*layout.nodes.items(), *layout.groups.items()]:
+        left, right, bottom, top = edges_of(box)
+        assert min(left, bottom, layout.width - right, layout.height - top) >= margin - tol, (
+            f"{what} is nearer the page edge than the margin"
+        )
+
+
+_DEGENERATE = [(0.0, 0.0, 0.0), (0.0, 0.0, 0.004), (0.004, 0.0, 0.013), (0.05, 0.0, 0.5), (0.25, 0.004, 0.013)]
+
+
+@pytest.mark.parametrize("seed", range(40))
+@pytest.mark.parametrize("direction", ["left_to_right", "top_down"])
+@pytest.mark.parametrize(("padding", "gap", "margin"), _DEGENERATE)
+def test_zero_padding_zero_gap_and_off_grid_margins_keep_their_clearance(seed, direction, padding, gap, margin):
+    rng = random.Random(seed)
+    count = rng.randint(2, 6)
+    rows = [
+        (
+            f"n{i}",
+            rng.choice([0.02, 0.1, 0.5, 1.0, 1.01]),
+            rng.choice([0.02, 0.1, 0.5, 1.0, 1.01]),
+            None,
+            rng.choice([None, "C", "P"]),
+        )
+        for i in range(count)
+    ]
+    nodes = tuple(LayoutNode(*row) for row in rows)
+    edges = tuple((f"n{rng.randrange(count)}", f"n{rng.randrange(count)}") for _ in range(rng.randint(0, 5)))
+    edges += tuple((f"n{k}", f"n{k}") for k in rng.sample(range(count), rng.randint(1, 2)))
+    parents = (("C", "P"),)
+    options = LayoutOptions(direction=direction, parents=parents, group_padding=padding, node_gap=gap, margin=margin)
+    try:
+        layout = layered_layout(nodes, edges, (), ("C", "P"), options)
+    except GraphError:
+        return  # a node too small for its parallel edges is refused, as at the defaults
+    _check(layout, nodes, parents)
+    _check_routes(layout, own_points=False, clear_of_borders=False)
+    _check_clearance(layout, nodes, parents, options)
+
+
+def _clearance_of(nodes, edges, groups, **options):
+    options = LayoutOptions(**options)
+    layout = layered_layout(tuple(nodes), tuple(edges), (), groups, options)
+    parents = options.parents
+    _check(layout, tuple(nodes), parents)
+    _check_clearance(layout, tuple(nodes), parents, options)
+
+
+def test_a_group_box_holds_the_outer_loop_of_a_grid_sized_node_at_zero_padding():
+    _clearance_of([LayoutNode("a", 0.02, 0.02, None, "G")], [("a", "a"), ("a", "a")], ("G",), group_padding=0.0)
+
+
+@pytest.mark.parametrize("direction", ["left_to_right", "top_down"])
+def test_an_ungrouped_node_does_not_touch_the_group_of_a_node_with_a_loop_at_zero_padding_and_gap(direction):
+    nodes = [LayoutNode("a", 1.01, 1.0, None, "G"), LayoutNode("b", 1.0, 0.5, None, None)]
+    _clearance_of(nodes, [("a", "a")], ("G",), group_padding=0.0, node_gap=0.0, direction=direction)
+
+
+def test_a_parent_group_clears_its_child_by_the_padding_when_a_loop_reaches_past_it():
+    nodes = [LayoutNode("a", 1.0, 1.0, None, "C")]
+    _clearance_of(nodes, [("a", "a")], ("C", "P"), group_padding=0.05, parents=(("C", "P"),))
+
+
+def test_an_off_grid_margin_is_rounded_out_to_the_grid():
+    _clearance_of([LayoutNode("a", 1.0, 1.0)], [], (), margin=0.004)
