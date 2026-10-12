@@ -14,7 +14,7 @@ from collections import Counter
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from itertools import pairwise
-from typing import Any, Literal, cast
+from typing import Literal, cast
 
 from vsdxkit.errors import GraphError
 
@@ -676,13 +676,17 @@ def _table[T](size: int, default: T) -> list[T]:
 class _Filtered(Mapping[tuple[int, float], list[tuple[float, float]]]):
     """The runs of `lines` as (low, high), keeping a run only when `keep` accepts the route index it belongs to; a line's list is built when it is asked for, because a search reads a few lines of many."""
 
-    def __init__(self, lines: Mapping[tuple[int, float], list[Any]], keep: Callable[[int], bool]) -> None:
+    def __init__(
+        self,
+        lines: Mapping[tuple[int, float], Sequence[tuple[float, float, int] | tuple[float, float, int, int]]],
+        keep: Callable[[int], bool],
+    ) -> None:
         """Wrap `lines`, whose runs are (low, high, route, ...) tuples."""
         self._lines, self._keep = lines, keep
 
     def __getitem__(self, key: tuple[int, float]) -> list[tuple[float, float]]:
         """The kept runs of line `key`, or KeyError when it has none."""
-        return [(run[0], run[1]) for run in self._lines[key] if self._keep(cast(int, run[2]))]
+        return [(run[0], run[1]) for run in self._lines[key] if self._keep(run[2])]
 
     def __iter__(self) -> Iterator[tuple[int, float]]:
         """The keys of every line."""

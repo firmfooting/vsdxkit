@@ -10,7 +10,7 @@ import hashlib
 import json
 from collections.abc import Collection, Mapping
 from itertools import combinations, pairwise
-from typing import Any
+from typing import Any, Protocol
 
 EPS = 1e-6
 Point = tuple[float, float]
@@ -157,7 +157,26 @@ def route_key(key: Key) -> str:
     return json.dumps(list(key), separators=(",", ":"))
 
 
-def layout_digest(layouts: Mapping[str, Any], drawn: Mapping[str, Mapping[Key, Any]] | None = None) -> str:
+class _Box(Protocol):
+    """A box with a position and a size."""
+
+    x: float
+    y: float
+    width: float
+    height: float
+
+
+class _Layout(Protocol):
+    """The parts of a layout that the digest reads."""
+
+    width: float
+    height: float
+    nodes: Mapping[str, _Box]
+    routes: Mapping[Key, tuple[Point, ...]]
+    labels: Mapping[Key, _Box]
+
+
+def layout_digest(layouts: Mapping[str, _Layout], drawn: Mapping[str, Mapping[Key, tuple[Point, ...]]] | None = None) -> str:
     """A sha256 over the boxes, routes, labels and size of each named layout, every float to two decimals.
 
     `drawn` is each name's connector points as the builder draws them (the corpus gets them from the builder's own
@@ -167,7 +186,7 @@ def layout_digest(layouts: Mapping[str, Any], drawn: Mapping[str, Mapping[Key, A
     def f(v: float) -> str:
         return f"{v + 0.0:.2f}".replace("-0.00", "0.00")
 
-    def b(box: Any) -> list[str]:
+    def b(box: _Box) -> list[str]:
         return [f(box.x), f(box.y), f(box.width), f(box.height)]
 
     record = {
