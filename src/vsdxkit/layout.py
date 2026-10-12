@@ -279,10 +279,9 @@ def _choose_starts(
     target: PageTarget,
     forbidden: frozenset[int],
 ) -> tuple[int, ...]:
-    """The row starts of the fewest rows whose estimated aspect lies in the target's band, else of the rows nearest the aspect in log terms (the first of equal distances wins, so fewer rows)."""
+    """The row starts whose estimated aspect, snapped to the grid, is nearest the target's in log terms; the first of equal distances wins, so fewer rows."""
     if target.wrap == "none" or len(widths) < 2:
         return (0,)
-    low, high = target.aspect / (1 + target.tolerance), target.aspect * (1 + target.tolerance)
     chosen: tuple[int, ...] = (0,)
     nearest = math.inf
     seen: set[tuple[int, ...]] = set()
@@ -292,9 +291,7 @@ def _choose_starts(
             continue
         seen.add(starts)
         w, h = _estimate(widths, heights, starts, row_gap)
-        if low - _EPS <= w / h <= high + _EPS:
-            return starts
-        distance = snap(abs(math.log(w / h / target.aspect)))
+        distance = abs(math.log(snap(w / h) / target.aspect))
         if distance < nearest - _EPS:
             chosen, nearest = starts, distance
     return chosen

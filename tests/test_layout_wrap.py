@@ -1,3 +1,5 @@
+import math
+
 import pytest
 
 from vsdxkit import layout as lo
@@ -61,3 +63,17 @@ def test_a_page_already_in_the_band_is_not_wrapped():
 
 def test_wrap_none_never_wraps():
     assert lo._choose_starts([3.2] * 25, [1.0] * 25, 0.5, lo.PageTarget(wrap="none"), frozenset()) == (0,)
+
+
+def test_the_chosen_row_count_is_the_minimiser_over_every_row_count():
+    widths = [2.0, 3.5, 1.0, 4.0, 2.5, 3.0, 1.5, 2.0, 3.2, 2.8]
+    heights = [1.0, 2.0, 1.0, 1.5, 1.0, 1.0, 2.5, 1.0, 1.0, 1.2]
+    target = lo.PageTarget()
+
+    def distance(starts):
+        w, h = lo._estimate(widths, heights, starts, 0.5)
+        return abs(math.log(lo.snap(w / h) / target.aspect))
+
+    chosen = lo._choose_starts(widths, heights, 0.5, target, frozenset())
+    every = [lo._partition(widths, r) for r in range(1, len(widths) + 1)]
+    assert distance(chosen) == min(distance(s) for s in every)
