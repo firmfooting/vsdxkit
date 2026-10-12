@@ -33,7 +33,9 @@ CELLS = [
 ]
 
 
-def measure(seed: int, n: int, m: int, lanes: int, groups: int, direction: str, labels: bool = False) -> tuple[float, int, int, str]:
+def measure(
+    seed: int, n: int, m: int, lanes: int, groups: int, direction: str, labels: bool = False
+) -> tuple[float, int, int, str]:
     """(seconds, search steps, routes that needed the search, outcome) of one layout; the outcome is 'laid out' or the GraphError text."""
     rows, edges, lane_ids, group_ids, parents = random_graph(seed, n, m, lanes, groups)
     nodes = tuple(LayoutNode(*row) for row in rows)
