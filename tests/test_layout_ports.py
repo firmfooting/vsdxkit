@@ -196,3 +196,31 @@ def test_an_explicit_gap_keeps_its_width_and_only_a_gap_below_a_step_per_channel
     assert 0.5 <= lay.nodes["t0"].x - 0.5 - (lay.nodes["hub"].x + 1.0) < 0.55
     with pytest.raises(GraphError, match="layer_gap"):
         layered_layout(nodes, edges, options=LayoutOptions(layer_gap=0.01, page=None))
+
+
+def _crossing_pairs(lay):
+    keys = list(lay.routes)
+    segs = {k: list(pairwise(rm.simplified(lay.routes[k]))) for k in keys}
+    return [
+        (a, b) for i, a in enumerate(keys) for b in keys[i + 1 :] if any(rm._crosses(x, y) for x in segs[a] for y in segs[b])
+    ]
+
+
+def test_a_cycle_in_the_channel_order_does_not_make_siblings_cross():
+    from helpers.graphs import random_tree
+
+    ids, edges = random_tree(5, 30)
+    lay = layered_layout(tuple(LayoutNode(i, 2.0, 1.0) for i in ids), edges, options=LayoutOptions(page=None))
+    assert not [p for p in _crossing_pairs(lay) if p[0][0] == p[1][0]], _crossing_pairs(lay)
+
+
+@pytest.mark.parametrize("children", [12, 20, 40])
+def test_a_gap_busier_than_the_pitched_channels_still_lays_out_with_clear_channels(children):
+    nodes = (LayoutNode("hub", 2, 4), *(LayoutNode(f"t{i}", 1, 1) for i in range(children)))
+    edges = tuple(("hub", f"t{i}") for i in range(children))
+    lay = layered_layout(nodes, edges, options=LayoutOptions(page=None))
+    assert rm.crossings(lay) == 0 and rm.shared_runs(lay) == []
+    for route in lay.routes.values():
+        assert all(a != b for a, b in pairwise(route))
+    columns = sorted({round(r[2][0], 2) for r in lay.routes.values() if len(rm.simplified(r)) == 4})
+    assert all(b - a >= 0.01 - 1e-9 for a, b in pairwise(columns))

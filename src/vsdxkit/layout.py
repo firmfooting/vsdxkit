@@ -67,6 +67,27 @@ def _spread(count: int, extent: float, node: object, pitch: float = 0.2) -> list
     return [snap((start + i * step) * GRID) for i in range(count)]
 
 
+def _break_cycle(left_over: set[int], before: Sequence[Sequence[int]], after: Sequence[Sequence[int]]) -> int:
+    """The hop to place when every hop left waits on another: one on a cycle, the one most others wait on, else the lowest index.
+
+    A hop that is only blocked by a cycle, because it waits on a member, must not go before that member.
+    """
+    seen: dict[int, int] = {}
+    walk: list[int] = []
+    at = min(left_over)
+    while at not in seen:
+        seen[at] = len(walk)
+        walk.append(at)
+        at = min(f for f in before[at] if f in left_over)
+    cycle = walk[seen[at] :]
+
+    def waiting(f: int) -> tuple[int, int]:
+        """Sort key: the most hops waiting on `f` first, then the lowest index."""
+        return (-sum(1 for g in after[f] if g in left_over), f)
+
+    return min(cycle, key=waiting)
+
+
 def _nests_left(
     items: Sequence[tuple[float, float, int, int]], rows_of: Sequence[Sequence[float]], chains: Sequence[Sequence[_Key]]
 ) -> list[list[int]]:
@@ -163,7 +184,7 @@ class LayoutOptions:
     port_pitch: float = 0.2
     """Inches between the points where parallel routes meet one side of a box, at least 0.1; a short side shrinks it."""
     channel_pitch: float = 0.2
-    """Inches between parallel routes in a channel between layers, at least one grid step."""
+    """Inches between parallel routes in a channel between layers, at least one grid step. A default layer gap holds up to eight channels at this spacing; a busier gap keeps that width and its channels are spaced evenly in it, closer than this."""
 
 
 @dataclass(frozen=True)
@@ -1641,7 +1662,7 @@ def _lay_out(
             order: list[int] = []
             left_over = set(range(len(items)))
             while left_over:
-                idx = heapq.heappop(ready) if ready else min(left_over, key=lambda f: (len(before[f]), f))
+                idx = heapq.heappop(ready) if ready else _break_cycle(left_over, before, after)
                 if idx not in left_over:
                     continue
                 left_over.discard(idx)
