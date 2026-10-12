@@ -89,6 +89,10 @@ LINES: tuple[tuple[str, str], ...] = (
         "swimlanes",
         "swimlanes: a three-lane cross-functional flowchart from create_swimlanes, a process in each lane; every shape where it was written",
     ),
+    (
+        "lanes_kinds",
+        "lanes_kinds: sized Start/End, Decision and Process steps in two lanes; every shape where it was written",
+    ),
     ("lanes_one", "lanes_one: a cross-functional flowchart of one lane; every shape where it was written"),
     ("lanes_two", "lanes_two: two lanes, a process in each; every shape where it was written"),
     ("lanes_four", "lanes_four: four lanes, one labelled with the widest letters; every shape where it was written"),
@@ -120,6 +124,10 @@ LINES: tuple[tuple[str, str], ...] = (
         "lanes_wide_60_5: five lanes, a diagram 60 inches wide on a page widened to 61; every shape where it was written",
     ),
     ("every_kind", "every_kind: nine node kinds, six edge kinds, a long edge, a self-loop; every shape where it was written"),
+    (
+        "node_outlines",
+        "node_outlines: a decision, a rounded node and two data stores (one tall) each with three edges at offset points; every line and arrowhead must touch the drawn outline",
+    ),
     ("groups_and_lanes", "groups_and_lanes: three lanes, a group holding a group; every shape where it was written"),
     (
         "group_heading_top_down",

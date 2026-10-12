@@ -4,8 +4,8 @@ Every module, class, function, method and property needs a docstring that is
 not blank. Every assignment or annotation in a module body or a class body
 needs a string literal as the statement straight after it: that covers module
 constants, class attributes, dataclass fields, Protocol members and enum
-members. The string after is the form the generated reference renders:
-sphinx-autoapi reads it, and reads no comment, ``#:`` included.
+members. The string after is the form the generated reference renders; a
+``#:`` comment is not the convention here.
 
 Private names, dunder methods, nested functions and ``@override`` methods are
 not exempt: a docstring is for the next reader of the code as much as for the

@@ -54,7 +54,7 @@ from vsdxkit.package import PackageLimits
 from vsdxkit.pages import Page, PageCollection, _DocumentSeam, _PagePosition
 from vsdxkit.shape_kind import ShapeKind
 from vsdxkit.shapes import Connector, Shape
-from vsdxkit.swimlanes import _Donors
+from vsdxkit.swimlanes import _Donors, _write_flowchart_hooks
 from vsdxkit.templating import render_document
 
 _STYLE_ATTRIBUTES = ("LineStyle", "FillStyle", "TextStyle")
@@ -647,9 +647,13 @@ class Document:
         """The `StyleSheet` with this ID in document.xml's style sheets, or None; a bundled donor answers the same question for `_style_copy`."""
         return self._style_sheets().find(f"{namespace}StyleSheet[@ID = '{ID}']")
 
-    def _kind_source(self, kind: ShapeKind) -> Shape:
-        """The bundled shape `kind` is copied from, one of the donors `vsdxkit._media` loads."""
-        return _kind_shape(kind, Document.open)
+    def _kind_source(self, kind: ShapeKind, *, in_diagram: bool = False) -> Shape:
+        """The bundled shape `kind` is copied from, one of the donors `vsdxkit._media` loads; `in_diagram` for a page that holds a swimlane diagram."""
+        return _kind_shape(kind, Document.open, in_diagram=in_diagram)
+
+    def _declare_flowchart(self) -> None:
+        """Write the document-level rows and events Visio's cross-functional flowchart has, once."""
+        _write_flowchart_hooks(self._part_root(self._document_xml, "document.xml"))
 
     def _cff_sources(self) -> _Donors:
         """The bundled cross-functional flowchart that :meth:`vsdxkit.pages.Page.create_swimlanes` copies."""

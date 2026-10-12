@@ -84,6 +84,21 @@ Put a shape in a lane
    assert diagram.lane_for(check) == review_lane
    document.save("with-review-lane.vsdx")
 
+On a page that holds a diagram, ``ShapeKind.PROCESS``, ``START_END`` and
+``DECISION`` are made as instances of the Process, Start/End and Decision
+masters Visio's own flowchart uses, not as plain shapes. A step then has the
+master's Shape Data rows, among them ``Function``, which Visio fills with the
+heading of the lane the step is in, and the master's default size (0.98 by 0.59
+inches for Process and Decision, 0.98 by 0.39 for Start/End) unless ``width`` or
+``height`` is given. Outside a diagram these kinds are the plain shapes they always were.
+
+Creating a diagram also writes the document-level rows and events (``visV14CFF``,
+``visFlowchartType``, ``msvNoAutoConnect`` and the two ``CFF14`` events) that a
+document made from Visio's template has. Whether they make Visio show its
+Cross-Functional Flowchart ribbon tab is unverified: a program cannot see the
+tab, and it does not appear for Visio's own template in the Visio it was tried
+in.
+
 Membership is geometric
 -----------------------
 

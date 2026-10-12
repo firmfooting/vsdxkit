@@ -24,13 +24,14 @@ import math
 import re
 import uuid
 import xml.etree.ElementTree as ET
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import NamedTuple, Protocol
 
 from vsdxkit import namespace
 from vsdxkit._shape_tree import SHEET_REFERENCE, remap_sheet_references
 from vsdxkit._xmlio import xml_value
 from vsdxkit.errors import InvalidOperationError
+from vsdxkit.shape_kind import ShapeKind
 from vsdxkit.shapes import PageView, Shape, _is_connector, _is_name_or_copy
 
 
@@ -197,6 +198,93 @@ def _diagram_on(page: _DiagramPage) -> SwimlaneDiagram | None:
     return SwimlaneDiagram(containers[0]) if containers else None
 
 
+STEP_KINDS = frozenset({ShapeKind.PROCESS, ShapeKind.START_END, ShapeKind.DECISION})
+"""The kinds a page that holds a diagram makes as instances of Visio's flowchart masters."""
+
+
+def _in_diagram(page: _DiagramPage) -> bool:
+    """Whether the page holds a CFF container, as :func:`_diagram_on` finds one but without refusing a page that holds several."""
+    return any(_named(shape, _CONTAINER_NAME) for shape in page.children)
+
+
+_FLOWCHART_ROWS = (("msvNoAutoConnect", "0", None), ("visV14CFF", "1", None), ("visFlowchartType", "CrossFunctional", "STR"))
+"""The document-level User rows (name, value, unit) that Visio's cross-functional flowchart template writes."""
+_FLOWCHART_EVENTS = (("0", "1", ""), ("19", "2", "/cmd=2"))
+"""The EventList items (ID, EventCode, TargetArgs) that run Visio's CFF14 add-on on creating and on opening the document."""
+
+
+def _write_flowchart_hooks(root: ET.Element) -> None:
+    """Add to a document.xml root the User rows and EventList items of Visio's cross-functional flowchart that it lacks.
+
+    These are the only add-on hooks the Visio capture has. Whether they make Visio's ribbon tab appear is unverified: it
+    cannot be observed over COM, and the tab does not show for Visio's own template in the author's Visio (#518).
+    """
+    sheet = root.find(f"{namespace}DocumentSheet")
+    if sheet is None:
+        return
+    section = sheet.find(f'{namespace}Section[@N="User"]')
+    if section is None:
+        section = ET.SubElement(sheet, f"{namespace}Section", {"N": "User"})
+    for name, value, unit in _FLOWCHART_ROWS:
+        row = next((r for r in section.findall(f"{namespace}Row") if r.attrib.get("N") == name), None)
+        if row is None:
+            row = ET.SubElement(section, f"{namespace}Row", {"N": name})
+            ET.SubElement(row, f"{namespace}Cell", {"N": "Prompt", "V": ""})
+        cell = row.find(f'{namespace}Cell[@N="Value"]')
+        if cell is None:
+            cell = ET.Element(f"{namespace}Cell", {"N": "Value"})
+            row.insert(0, cell)
+        # a value another producer wrote is replaced: the hook is the value, not the row's name
+        cell.attrib.pop("F", None)
+        cell.attrib.pop("U", None)
+        cell.attrib["V"] = value
+        if unit:
+            cell.attrib["U"] = unit
+    events = root.find(f"{namespace}EventList")
+    if events is None:
+        events = ET.SubElement(root, f"{namespace}EventList")
+    items = events.findall(f"{namespace}EventItem")
+    for item_id, code, args in _FLOWCHART_EVENTS:
+        match = next(
+            (
+                i
+                for i in items
+                if (i.attrib.get("Target"), i.attrib.get("EventCode"), i.attrib.get("TargetArgs", "")) == ("CFF14", code, args)
+            ),
+            None,
+        )
+        if match is not None:
+            match.attrib["Action"] = "1"  # a matching event that is switched off cannot run the add-on
+            match.attrib["Enabled"] = "1"
+            continue
+        taken = {i.attrib.get("ID") for i in events.findall(f"{namespace}EventItem")}
+        free = item_id if item_id not in taken else str(next(n for n in range(1, len(taken) + 2) if str(n) not in taken))
+        attributes = {"ID": free, "EventCode": code, "Action": "1", "Enabled": "1", "Target": "CFF14", "TargetArgs": args}
+        ET.SubElement(events, f"{namespace}EventItem", attributes)
+
+
+def _relate_step(step: Shape, page: _DiagramPage) -> None:
+    """Point a step copied from the bundled diagram's ``Relationships`` at the Swimlane List, its lane and the Separator on `page`.
+
+    The copy names the donor's shapes, which `page` does not hold; Visio's own step names these three.
+    """
+    cell = step._cell("Relationships")
+    diagram = _diagram_on(page)
+    if cell is None or diagram is None or not (cell.formula or "").startswith("SUM(DEPENDSON(4"):
+        return
+    lane = diagram.lane_for(step)
+    separators = diagram._phase_shapes()[1:]
+    related = [diagram._swimlane_list(), lane, separators[0] if separators else None]
+    refs = ",".join(f"Sheet.{shape.ID}!SheetRef()" for shape in related if shape is not None)
+    cell.xml.attrib["F"] = f"SUM(DEPENDSON(4,{refs}))"
+    # the cached Function is what a reader that does not evaluate CONTAINERSHEETREF sees; Visio recomputes the same text
+    heading = None if lane is None else _user_row(lane, ROW_HEADING_TEXT)
+    function = step.xml.find(f'{namespace}Section[@N="Property"]/{namespace}Row[@N="Function"]/{namespace}Cell[@N="Value"]')
+    if function is not None:
+        value = None if heading is None else _value_cell(heading)
+        function.attrib["V"] = "" if value is None else value.attrib.get("V", "")
+
+
 _NUM_LANES = "numLanes"
 """The User-section row of the container that counts the lanes, which Visio's own diagram has."""
 _SETTINGS = "visCFFSettings"
@@ -341,11 +429,17 @@ def _renew(value: float, sizes: Sequence[tuple[_Size, _Size]], axis: int | None 
     return None
 
 
-def _renew_inherited_vertices(member: Shape, sizes: Sequence[tuple[_Size, _Size]]) -> None:
+def _renew_inherited_vertices(
+    member: Shape,
+    sizes: Sequence[tuple[_Size, _Size]],
+    evaluate: Callable[[ET.Element, ET.Element, ET.Element], float | None] | None = None,
+) -> None:
     """Give `member` an ``Inh`` vertex cell, holding the renewed number, for each master vertex it has no cell of its own for.
 
     A vertex the shape only inherits is drawn from the master's cached number until something recalculates it,
-    and Visio's own file writes such a cell as ``F="Inh"`` beside the value it computed.
+    and Visio's own file writes such a cell as ``F="Inh"`` beside the value it computed. `evaluate`, given the master's
+    section, row and cell, returns the number the cell's formula gives at the member's size, where it can be worked out;
+    the cells it answers for are not limited to X and Y, and the rest are renewed by their size alone.
     """
     master = member.master_shape
     if master is None:
@@ -355,11 +449,13 @@ def _renew_inherited_vertices(member: Shape, sizes: Sequence[tuple[_Size, _Size]
         for master_row in master_section.iterfind(f"{namespace}Row"):
             for master_cell in master_row.iterfind(f"{namespace}Cell"):
                 raw = master_cell.attrib.get("V")
-                renewed = (
-                    None
-                    if master_cell.attrib.get("N") not in ("X", "Y") or raw in (None, "")
-                    else _renew(float(raw), sizes, _vertex_axis(member, master_cell.attrib["N"]))
-                )
+                renewed = None if evaluate is None else evaluate(master_section, master_row, master_cell)
+                if renewed is None:
+                    renewed = (
+                        None
+                        if master_cell.attrib.get("N") not in ("X", "Y") or raw in (None, "")
+                        else _renew(float(raw), sizes, _vertex_axis(member, master_cell.attrib["N"]))
+                    )
                 if renewed is None:
                     continue
                 if section is None:
@@ -394,26 +490,154 @@ def _resync(shape: Shape, sizes: Sequence[tuple[_Size, _Size]]) -> None:
     of `shape` itself and of its sub-shapes are cached numbers of the same kind.
     """
     for member in shape.descendants:
-        for name in _SIZED_CELLS:
-            inherited = member._cell(name) is None
-            raw = member.cell_value(name)
-            renewed = None if raw in (None, "") else _renew(float(raw), sizes, _axis_of(member, name))
-            if renewed is not None:
-                cell = member._write_cell(name, v=xml_value(renewed), keep_formula=True)
-                if inherited:
-                    cell.formula = "Inh"  # the master's formula names its own shapes by Sheet.N; with Inh the oracle showed the right numbers
+        _renew_cells(member, _SIZED_CELLS, sizes)
     for member in (shape, *shape.descendants):
-        for section in member.xml.iterfind(f'{namespace}Section[@N="Geometry"]'):
-            for vertex in section.iter(f"{namespace}Cell"):
-                raw = vertex.attrib.get("V")
-                renewed = (
-                    None
-                    if vertex.attrib.get("N") not in ("X", "Y") or raw in (None, "")
-                    else _renew(float(raw), sizes, _vertex_axis(member, vertex.attrib["N"]))
+        _renew_vertices(member, sizes)
+
+
+def _renew_cells(member: Shape, names: Sequence[str], sizes: Sequence[tuple[_Size, _Size]]) -> None:
+    """Rewrite each cached number among the cells `names` of `member` that is a dimension of the resized shapes, as `_resync` does."""
+    for name in names:
+        inherited = member._cell(name) is None
+        raw = member.cell_value(name)
+        renewed = None if raw in (None, "") else _renew(float(raw), sizes, _axis_of(member, name))
+        if renewed is not None:
+            cell = member._write_cell(name, v=xml_value(renewed), keep_formula=True)
+            if inherited:
+                cell.formula = (
+                    "Inh"  # the master's formula names its own shapes by Sheet.N; with Inh the oracle showed the right numbers
                 )
-                if renewed is not None:
-                    vertex.attrib["V"] = xml_value(renewed)
-        _renew_inherited_vertices(member, sizes)
+
+
+def _renew_vertices(
+    member: Shape,
+    sizes: Sequence[tuple[_Size, _Size]],
+    evaluate: Callable[[ET.Element, ET.Element, ET.Element], float | None] | None = None,
+) -> None:
+    """Rewrite the outline vertices of `member`, its own and those it inherits, to the dimensions of the resized shapes."""
+    for section in member.xml.iterfind(f'{namespace}Section[@N="Geometry"]'):
+        for vertex in section.iter(f"{namespace}Cell"):
+            raw = vertex.attrib.get("V")
+            renewed = (
+                None
+                if vertex.attrib.get("N") not in ("X", "Y") or raw in (None, "")
+                else _renew(float(raw), sizes, _vertex_axis(member, vertex.attrib["N"]))
+            )
+            if renewed is not None:
+                vertex.attrib["V"] = xml_value(renewed)
+    _renew_inherited_vertices(member, sizes, evaluate)
+
+
+_FORMULA_NAME = re.compile(r"[A-Za-z_][A-Za-z_0-9.]*")
+"""A cell reference or function name in a master's formula."""
+_FORMULA_SAFE = re.compile(r"[\d\s.+\-*/(),]*")
+"""What is left of a formula once its names are replaced by numbers: arithmetic and the commas of MIN and MAX."""
+_GEOMETRY_REF = re.compile(r"Geometry(\d+)\.([A-Z])(\d+)")
+"""A reference to a cell of a geometry row of the same shape: ``Geometry1.X2``."""
+
+
+def _master_number(master: Shape, name: str, width: float, height: float, depth: int = 0) -> float | None:
+    """The number the master's cell or geometry cell `name` gives when the shape is `width` by `height`, or None where this cannot say.
+
+    Only arithmetic, MIN and MAX over Width, Height and the master's own cells are worked out; a formula using
+    anything else (a conditional, a function of another shape) gives None and the caller keeps its heuristic.
+    """
+    if depth > 8:
+        return None
+    if name == "Width":
+        return width
+    if name == "Height":
+        return height
+    cell = None
+    reference = _GEOMETRY_REF.fullmatch(name)
+    if reference:
+        section = master.xml.find(f'{namespace}Section[@N="Geometry"][@IX="{int(reference[1]) - 1}"]')
+        row = None if section is None else section.find(f'{namespace}Row[@IX="{reference[3]}"]')
+        cell = None if row is None else row.find(f'{namespace}Cell[@N="{reference[2]}"]')
+    elif name.startswith(("User.", "Prop.")):
+        kind, row_name = name.split(".", 1)
+        cell = master.xml.find(
+            f'{namespace}Section[@N="{"User" if kind == "User" else "Property"}"]/{namespace}Row[@N="{row_name}"]/{namespace}Cell[@N="Value"]'
+        )
+        return None if cell is None or cell.attrib.get("V") is None else _float(cell.attrib["V"])
+    else:
+        cell = master.xml.find(f'{namespace}Cell[@N="{name}"]')
+    if cell is None:
+        return None
+    return _evaluate_cell(master, cell, width, height, depth + 1)
+
+
+def _float(text: str) -> float | None:
+    """`text` as a number, or None."""
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def _evaluate_cell(master: Shape, cell: ET.Element, width: float, height: float, depth: int = 0) -> float | None:
+    """The number `cell`, a cell of `master`, gives at this size: its formula worked out, or its value where it has none."""
+    formula = cell.attrib.get("F")
+    if formula in (None, "", "Inh"):
+        raw = cell.attrib.get("V")
+        return None if raw is None else _float(raw)
+    unresolved = False
+
+    def number(match: re.Match[str]) -> str:
+        """The text a name in the formula is replaced by: its number, or MIN and MAX as Python's."""
+        nonlocal unresolved
+        word = match.group(0)
+        if word in ("MIN", "MAX"):
+            return word.lower()
+        value = _master_number(master, word, width, height, depth)
+        if value is None:
+            unresolved = True
+            return "0"
+        return repr(value)
+
+    expression = _FORMULA_NAME.sub(number, formula)
+    if unresolved or not _FORMULA_SAFE.fullmatch(re.sub(r"\b(min|max)\b", "", expression)):
+        return None
+    try:
+        return float(eval(expression, {"__builtins__": {}}, {"min": min, "max": max}))
+    except ArithmeticError, SyntaxError, TypeError, ValueError:
+        return None
+
+
+def _resize_instance(step: Shape, was: _Size) -> None:
+    """Bring the numbers a step inherits from its master, which Visio draws from on open, to the size it was given from `was`.
+
+    Its own Width, Height and pin are written by the caller; what follows from them by the master's formulas
+    (the local pin, the text block and the outline) is cached at the master's size until something recalculates.
+    Each is worked out from the master's formula where `_master_number` can, and renewed by its size alone where not.
+    """
+    width, height = step.width or 0.0, step.height or 0.0
+    master = step.master_shape
+    sizes = [(was, (width, height))]
+    for name in _SIZED_CELLS[4:]:
+        master_cell = None if master is None else master.xml.find(f'{namespace}Cell[@N="{name}"]')
+        value = None if master is None or master_cell is None else _evaluate_cell(master, master_cell, width, height)
+        if value is None:
+            _renew_cells(step, (name,), sizes)
+        else:
+            inherited = step._cell(name) is None
+            written = step._write_cell(name, v=xml_value(value), keep_formula=True)
+            if inherited:
+                written.formula = "Inh"
+    _renew_vertices(
+        step,
+        sizes,
+        None if master is None else lambda section, row, cell: _evaluate_vertex(master, section, row, cell, width, height),
+    )
+
+
+def _evaluate_vertex(
+    master: Shape, section: ET.Element, row: ET.Element, cell: ET.Element, width: float, height: float
+) -> float | None:
+    """The number a geometry cell of `master` gives at this size, where it has a formula this can work out."""
+    if not cell.attrib.get("F"):
+        return None
+    return _evaluate_cell(master, cell, width, height)
 
 
 def _user_value(shape: Shape, row: str) -> ET.Element:
@@ -626,15 +850,23 @@ class SwimlaneDiagram:
         band = _bands(self.lanes)[lane]
         return tuple(shape for shape in self._page.children if _is_member(shape) and _holds(band, shape))
 
+    def _lanes_at(self, y: float) -> list[Shape]:
+        """The one lane (or none) whose band holds `y`.
+
+        :raises InvalidOperationError: lanes overlap at `y`
+        """
+        holding = [lane for lane, (bottom, top) in _bands(self.lanes).items() if bottom <= y < top]
+        if len(holding) > 1:
+            ids = ", ".join(str(lane.ID) for lane in holding)
+            raise InvalidOperationError(f"a shape at y={y} is in {len(holding)} overlapping lanes (shapes {ids})")
+        return holding
+
     def lane_for(self, shape: Shape) -> Shape | None:
         """The lane whose band holds the shape's centre, or None.
 
         :raises InvalidOperationError: lanes overlap where the shape is, so it is in more than one
         """
-        holding = [lane for lane, band in _bands(self.lanes).items() if _holds(band, shape)]
-        if len(holding) > 1:
-            ids = ", ".join(str(lane.ID) for lane in holding)
-            raise InvalidOperationError(f"shape {shape.ID} is in {len(holding)} overlapping lanes (shapes {ids})")
+        holding = self._lanes_at(shape.y or 0.0)
         return holding[0] if holding else None
 
     def add_lane(self, label: str | None = None) -> Shape:
@@ -719,6 +951,8 @@ class SwimlaneDiagram:
         """
         self._require_lane(lane)
         self._write_label(lane, label, subject=f"shape {lane.ID}")
+        for member in self.shapes_in(lane):
+            _relate_step(member, self._page)  # a step's cached Function is its lane's heading
 
     def move_to_lane(self, shape: Shape, lane: Shape) -> None:
         """Put a shape in a lane by centring it on the lane's band, keeping its PinX.
@@ -737,6 +971,7 @@ class SwimlaneDiagram:
         if _holds(_bands(self.lanes)[lane], shape):
             return
         shape._write_cell("PinY", v=str(lane.y or 0.0), keep_formula=True)
+        _relate_step(shape, self._page)
 
     def _phase_shapes(self) -> list[Shape]:
         """The Phase List and its Separator, which span the lanes' height and so grow with them.

@@ -2,8 +2,8 @@
 
     python tools/make_cff_donor.py tests/fixtures/com_reference/s05_swimlanes_cfflow.vsdx src/vsdxkit/_bundled/cff.vsdx
 
-Keeps the CFF container, the Swimlane List, the three lanes, the Phase List and the Separator, and removes the
-sample flowchart and the tips Visio's template puts on the page. Every shape ID then moves up by ID_OFFSET, so
+Keeps the CFF container, the Swimlane List, the three lanes, the Phase List, the Separator and one Start/End, Decision and
+Process step, and removes the rest of the sample flowchart and the tips Visio's template puts on the page. Every shape ID then moves up by ID_OFFSET, so
 the IDs a copy takes on a page never equal an ID that a donor formula still names, and the formulas follow. The file is then cleaned and written in the fixed member form, as ``tools/make_blank_template.py``
 does, so deriving twice gives one file with nothing of the saving machine in it.
 """
@@ -26,6 +26,8 @@ ID_OFFSET = 1000
 """How far every kept shape's ID is moved up."""
 KEPT = ("CFF Container", "Swimlane List", "Swimlane", "Swimlane.9", "Swimlane.15", "Phase List", "Separator")
 """The NameU of each top-level shape the donor keeps."""
+STEPS = ("Start/End", "Decision", "Process")
+"""The NameU of the flowchart steps Visio dropped on its page, which are kept as the master instances a step in a diagram is copied from."""
 
 
 _GONE = re.compile(r",\s*Sheet\.(\d+)!SheetRef\(\)")
@@ -33,7 +35,7 @@ _GONE = re.compile(r",\s*Sheet\.(\d+)!SheetRef\(\)")
 
 
 def _forget_removed(root: ET.Element, present: set[str]) -> None:
-    """Take every shape that is no longer on the page out of the ``Relationships`` formulas, which list related shapes by ID."""
+    """Take every shape that is not in `present` out of the ``Relationships`` formulas under `root`, which list related shapes by ID."""
     for cell in root.iter():
         formula = cell.attrib.get("F")
         if cell.tag.endswith("}Cell") and formula and "SheetRef()" in formula:
@@ -45,11 +47,18 @@ def derive(source: Path, target: Path) -> int:
     document = Document.open(source)
     page = document.pages[0]
     for shape in list(page.children):
-        if shape.is_attached and shape.xml.attrib.get("NameU") not in KEPT:
+        if shape.is_attached and shape.xml.attrib.get("NameU") not in (*KEPT, *STEPS):
             shape.delete()
     root = page.xml.getroot()
     elements = [e for e in root.iter() if e.tag.endswith("}Shape")]
     _forget_removed(root, {e.attrib["ID"] for e in elements})
+    # the machinery must not name the steps: a copy of it on a page holds none, and each step is related when it is copied
+    step_ids = {
+        e.attrib["ID"] for e in page.xml.getroot().iter() if e.tag.endswith("}Shape") and e.attrib.get("NameU") in STEPS
+    }
+    for e in elements:
+        if e.attrib["ID"] not in step_ids:
+            _forget_removed(e, {i.attrib["ID"] for i in elements} - step_ids)
     id_map = {e.attrib["ID"]: int(e.attrib["ID"]) + ID_OFFSET for e in elements}
     remap_sheet_references(root, id_map)
     for e in elements:

@@ -1216,14 +1216,14 @@
               "result": 9.75
             },
             {
-              "formula": "50.8 mm",
+              "formula": "User.DefaultWidth",
               "name": "Width",
-              "result": 2.0
+              "result": 0.984251968503937
             },
             {
-              "formula": "25.4 mm",
+              "formula": "User.ResizeTxtHeight",
               "name": "Height",
-              "result": 1.0
+              "result": 0.5905511811023622
             },
             {
               "formula": "0 deg",
@@ -1233,12 +1233,12 @@
             {
               "formula": "Width*0.5",
               "name": "LocPinX",
-              "result": 1.0
+              "result": 0.4921259842519685
             },
             {
               "formula": "Height*0.5",
               "name": "LocPinY",
-              "result": 0.5
+              "result": 0.2952755905511811
             },
             {
               "formula": "FALSE",
@@ -1268,14 +1268,14 @@
               "result": 8.25
             },
             {
-              "formula": "50.8 mm",
+              "formula": "User.DefaultWidth",
               "name": "Width",
-              "result": 2.0
+              "result": 0.984251968503937
             },
             {
-              "formula": "25.4 mm",
+              "formula": "User.ResizeTxtHeight",
               "name": "Height",
-              "result": 1.0
+              "result": 0.5905511811023622
             },
             {
               "formula": "0 deg",
@@ -1285,12 +1285,12 @@
             {
               "formula": "Width*0.5",
               "name": "LocPinX",
-              "result": 1.0
+              "result": 0.4921259842519685
             },
             {
               "formula": "Height*0.5",
               "name": "LocPinY",
-              "result": 0.5
+              "result": 0.2952755905511811
             },
             {
               "formula": "FALSE",
@@ -1320,14 +1320,14 @@
               "result": 6.75
             },
             {
-              "formula": "50.8 mm",
+              "formula": "User.DefaultWidth",
               "name": "Width",
-              "result": 2.0
+              "result": 0.984251968503937
             },
             {
-              "formula": "25.4 mm",
+              "formula": "User.ResizeTxtHeight",
               "name": "Height",
-              "result": 1.0
+              "result": 0.5905511811023622
             },
             {
               "formula": "0 deg",
@@ -1337,12 +1337,12 @@
             {
               "formula": "Width*0.5",
               "name": "LocPinX",
-              "result": 1.0
+              "result": 0.4921259842519685
             },
             {
               "formula": "Height*0.5",
               "name": "LocPinY",
-              "result": 0.5
+              "result": 0.2952755905511811
             },
             {
               "formula": "FALSE",
@@ -1372,14 +1372,14 @@
               "result": 5.25
             },
             {
-              "formula": "50.8 mm",
+              "formula": "User.DefaultWidth",
               "name": "Width",
-              "result": 2.0
+              "result": 0.984251968503937
             },
             {
-              "formula": "25.4 mm",
+              "formula": "User.ResizeTxtHeight",
               "name": "Height",
-              "result": 1.0
+              "result": 0.5905511811023622
             },
             {
               "formula": "0 deg",
@@ -1389,12 +1389,12 @@
             {
               "formula": "Width*0.5",
               "name": "LocPinX",
-              "result": 1.0
+              "result": 0.4921259842519685
             },
             {
               "formula": "Height*0.5",
               "name": "LocPinY",
-              "result": 0.5
+              "result": 0.2952755905511811
             },
             {
               "formula": "FALSE",
@@ -1424,14 +1424,14 @@
               "result": 3.75
             },
             {
-              "formula": "50.8 mm",
+              "formula": "User.DefaultWidth",
               "name": "Width",
-              "result": 2.0
+              "result": 0.984251968503937
             },
             {
-              "formula": "25.4 mm",
+              "formula": "User.ResizeTxtHeight",
               "name": "Height",
-              "result": 1.0
+              "result": 0.5905511811023622
             },
             {
               "formula": "0 deg",
@@ -1441,12 +1441,12 @@
             {
               "formula": "Width*0.5",
               "name": "LocPinX",
-              "result": 1.0
+              "result": 0.4921259842519685
             },
             {
               "formula": "Height*0.5",
               "name": "LocPinY",
-              "result": 0.5
+              "result": 0.2952755905511811
             },
             {
               "formula": "FALSE",
