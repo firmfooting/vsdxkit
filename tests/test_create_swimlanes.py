@@ -953,3 +953,13 @@ def test_a_page_of_two_diagrams_still_takes_the_kinds_that_do_not_depend_on_one(
     page = _page(document)
     diagram.container.copy(page)
     assert page.create_shape(ShapeKind.RECTANGLE, x=3.0, y=4.0)
+
+
+def test_a_step_whose_lane_is_ambiguous_leaves_the_document_unchanged():
+    document, diagram = _diagram()
+    diagram.lanes[0].y = diagram.lanes[1].y  # two lanes now hold the same band
+    page = document.pages[0]
+    before = (len(page.children), len(document.master_pages))
+    with pytest.raises(InvalidOperationError):
+        page.create_shape(ShapeKind.PROCESS, x=3.0, y=diagram.lanes[1].y, text="Step")
+    assert (len(page.children), len(document.master_pages)) == before

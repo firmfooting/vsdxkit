@@ -720,3 +720,10 @@ def test_a_group_with_an_empty_label_reserves_no_heading_strip(tmp_path):
     node = _box(_by_source(document)["b"])
     end = _absolute_points(_kinds(document, "flow")[0])[-1]
     assert abs(end[1] - (node.y + node.height / 2)) < 1e-6, "the edge enters the top of the node, with no heading to avoid"
+
+
+def test_a_built_lane_step_keeps_the_synchronized_function_value_after_save_and_reopen(tmp_path):
+    page = Page("P", [Node("a", "process", "A")], lanes=[Lane("l", "Reviewer", ["a"])])
+    document = Document.open(Diagram("T", [page]).save(tmp_path / "f.vsdx"))
+    step = _by_source(document)["a"]
+    assert step.data_properties["Function"].value == "Reviewer"

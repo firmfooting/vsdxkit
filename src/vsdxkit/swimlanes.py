@@ -850,15 +850,23 @@ class SwimlaneDiagram:
         band = _bands(self.lanes)[lane]
         return tuple(shape for shape in self._page.children if _is_member(shape) and _holds(band, shape))
 
+    def _lanes_at(self, y: float) -> list[Shape]:
+        """The one lane (or none) whose band holds `y`.
+
+        :raises InvalidOperationError: lanes overlap at `y`
+        """
+        holding = [lane for lane, (bottom, top) in _bands(self.lanes).items() if bottom <= y < top]
+        if len(holding) > 1:
+            ids = ", ".join(str(lane.ID) for lane in holding)
+            raise InvalidOperationError(f"a shape at y={y} is in {len(holding)} overlapping lanes (shapes {ids})")
+        return holding
+
     def lane_for(self, shape: Shape) -> Shape | None:
         """The lane whose band holds the shape's centre, or None.
 
         :raises InvalidOperationError: lanes overlap where the shape is, so it is in more than one
         """
-        holding = [lane for lane, band in _bands(self.lanes).items() if _holds(band, shape)]
-        if len(holding) > 1:
-            ids = ", ".join(str(lane.ID) for lane in holding)
-            raise InvalidOperationError(f"shape {shape.ID} is in {len(holding)} overlapping lanes (shapes {ids})")
+        holding = self._lanes_at(shape.y or 0.0)
         return holding[0] if holding else None
 
     def add_lane(self, label: str | None = None) -> Shape:

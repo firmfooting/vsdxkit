@@ -37,7 +37,8 @@ def _cell(name: str, value: str) -> Element:
 def add_data_rows(shape: Shape, rows: Mapping[str, str], *, clear: bool = False) -> None:
     """Write each entry of `rows` as a string Shape Data row on `shape`, in the order given, replacing a row of the same name.
 
-    With `clear`, the rows the shape already has (the demonstration rows of a bundled donor) are removed first.
+    With `clear`, the rows the shape already has (the demonstration rows of a bundled donor) are removed first,
+    except those whose Value is a formula, which Visio keeps synchronized (a flowchart step's Function).
 
     The cells follow the order the bundled donors use. Type 0 is a string (Learn: Type Cell, Shape Data Section).
     """
@@ -48,7 +49,9 @@ def add_data_rows(shape: Shape, rows: Mapping[str, str], *, clear: bool = False)
         shape.xml.insert(leading, section)
     if clear:
         for old in section.findall(f"{namespace}Row"):
-            section.remove(old)
+            value = old.find(f'{namespace}Cell[@N="Value"]')
+            if value is None or "F" not in value.attrib:
+                section.remove(old)
     for name, value in rows.items():
         for old in [r for r in section.findall(f"{namespace}Row") if r.attrib.get("N") == name]:
             section.remove(old)

@@ -89,8 +89,8 @@ On a page that holds a diagram, ``ShapeKind.PROCESS``, ``START_END`` and
 masters Visio's own flowchart uses, not as plain shapes. A step then has the
 master's Shape Data rows, among them ``Function``, which Visio fills with the
 heading of the lane the step is in, and the master's default size (0.98 by 0.59
-inches) unless ``width`` or ``height`` is given. Outside a diagram these kinds
-are the plain shapes they always were.
+inches for Process and Decision, 0.98 by 0.39 for Start/End) unless ``width`` or
+``height`` is given. Outside a diagram these kinds are the plain shapes they always were.
 
 Creating a diagram also writes the document-level rows and events (``visV14CFF``,
 ``visFlowchartType``, ``msvNoAutoConnect`` and the two ``CFF14`` events) that a

@@ -921,7 +921,9 @@ class Page:
         if isinstance(kind_or_prototype, ShapeKind):
             in_diagram = _in_diagram(self)
             if in_diagram and kind_or_prototype in STEP_KINDS:
-                _diagram_on(self)  # refuses a page of several diagrams before anything is copied
+                diagram = _diagram_on(self)  # refuses a page of several diagrams before anything is copied
+                if diagram is not None:
+                    diagram._lanes_at(y)  # refuses overlapping lanes here too, so a failure leaves the document unchanged
             source = self._document._kind_source(kind_or_prototype, in_diagram=in_diagram)
         elif isinstance(kind_or_prototype, Shape):
             kind_or_prototype._require_attached("Page.create_shape()")
