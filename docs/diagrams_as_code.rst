@@ -82,6 +82,32 @@ Pass :class:`~vsdxkit.layout.LayoutOptions` as ``layout=`` to flow top down
 instead of left to right, or to change the spacing. Lanes need the left-to-right
 flow.
 
+Page shape
+----------
+
+A long linear flow would draw as a strip, so the layout aims for a page shape
+and wraps the flow into rows. The default is
+``LayoutOptions(page=PageTarget(aspect=16 / 9))``: the layers are cut into rows,
+each row runs against the one above it so a row ends over the start of the next,
+and the number of rows is the one whose width over height lands nearest the
+aspect. When ``LayoutOptions.direction`` is not given and ``PageTarget.direction`` is ``auto``,
+the page is also laid out top down when its left-to-right shape misses the band, and the nearer result is kept. There is no
+maximum size; the page grows as large as the content needs.
+
+.. code-block:: python
+
+   from vsdxkit.layout import LayoutOptions, PageTarget
+
+   wide = LayoutOptions(page=PageTarget(aspect=16 / 9))
+   one_row = LayoutOptions(page=None)
+
+Pass ``page=None`` to keep one row. Top-down flows are not wrapped. A
+``LayoutOptions(direction=...)`` you give is always kept; the target chooses the
+direction only when you give none, and ``PageTarget(direction=...)`` pins it. A page with lanes is never wrapped,
+because a lane runs the whole width, so its width is the number of layers; one
+that grows past the lane limit (see "Lanes and groups" below) is refused with
+the number of columns it needed, and the flow has to be split across pages.
+
 Lanes and groups
 ----------------
 

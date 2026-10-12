@@ -74,3 +74,16 @@ def test_ports_in_the_same_order_as_their_far_ends_pass():
 def test_a_vertical_collinear_overlap_is_a_shared_run():
     routes = {("a", "b", 0): ((1, 0), (1, 4)), ("c", "d", 0): ((1, 2), (1, 6))}
     assert rm.shared_runs(layout({}, routes)) == [(("a", "b", 0), ("c", "d", 0))]
+
+
+def test_route_keys_with_the_old_delimiter_in_an_id_do_not_collide():
+    pts = ((0.0, 0.0), (1.0, 0.0))
+    a = layout({}, {("a|b", "c", 0): pts})
+    b = layout({}, {("a", "b|c", 0): pts})
+    assert rm.layout_digest({"x": a}) != rm.layout_digest({"x": b})
+
+
+def test_the_drawn_paths_are_part_of_the_digest():
+    lay = layout({}, {})
+    one, two = {"x": {("a", "b", 0): ((0.0, 0.0), (1.0, 0.0))}}, {"x": {("a", "b", 0): ((0.0, 0.0), (2.0, 0.0))}}
+    assert rm.layout_digest({"x": lay}, one) != rm.layout_digest({"x": lay}, two)

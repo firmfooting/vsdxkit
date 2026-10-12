@@ -531,6 +531,15 @@ def test_a_laned_page_is_drawn_up_to_60_inches_of_diagram_and_refused_beyond(tmp
     assert 60.5 - width < 4.0, "one more layer is what crosses the limit"
 
 
+def test_a_laned_page_past_the_limit_names_its_columns_and_recommends_a_split():
+    with pytest.raises(GraphError, match=r"\d+ columns.*split the flow"):
+        _chain(40).build()
+
+
+def test_a_laned_page_is_not_refused_for_its_aspect(tmp_path):
+    _laned().save(tmp_path / "l.vsdx")
+
+
 def test_an_edge_label_has_an_opaque_white_text_background_so_its_line_does_not_strike_it(tmp_path):
     """TextBkgnd and TextBkgndTrans are the cells Visio writes for a text background (tests/test5_master.vsdx)."""
     diagram = Diagram("L", [Page("P", [_node("a"), _node("b")], [Edge("a", "b", "yes")])])

@@ -817,8 +817,8 @@ def test_labels_and_headings_get_room_in_random_graphs(seed, lanes, groups, dire
 
 def test_a_label_wider_than_the_default_gap_widens_it_and_clears_both_nodes():
     nodes = (LayoutNode("a", 1.5, 0.8), LayoutNode("b", 1.5, 0.8))
-    plain = layered_layout(nodes, (("a", "b"),))
-    wide = layered_layout(nodes, (("a", "b"),), options=LayoutOptions(edge_labels=((2.7, 0.3),)))
+    plain = layered_layout(nodes, (("a", "b"),), options=LayoutOptions(page=None))
+    wide = layered_layout(nodes, (("a", "b"),), options=LayoutOptions(edge_labels=((2.7, 0.3),), page=None))
     assert wide.width - plain.width >= 1.7 - 0.02
     _check_labels(wide, (("a", "b"),), ((2.7, 0.3),))
 
@@ -920,7 +920,7 @@ def test_25_parallel_labelled_edges_are_all_placed():
 
 def test_the_page_ends_a_margin_after_the_last_column_when_labels_widen_the_gaps():
     nodes = (LayoutNode("a", 1.5, 0.8), LayoutNode("b", 1.5, 0.8))
-    layout = layered_layout(nodes, (("b", "a"),), options=LayoutOptions(edge_labels=((2.0, 0.3),)))
+    layout = layered_layout(nodes, (("b", "a"),), options=LayoutOptions(edge_labels=((2.0, 0.3),), page=None))
     right = max(box.x + box.width / 2 for box in layout.nodes.values())
     assert layout.width == pytest.approx(right + 0.5, abs=0.02)
 

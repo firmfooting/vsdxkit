@@ -32,7 +32,7 @@ def _rewrite(name: str, digest: str) -> None:
 
 def main() -> int:
     """Regenerate both digests; always 0, because reading the diff is the caller's job."""
-    _rewrite("routes.sha256", layout_digest(layout_corpus.all_layouts()))
+    _rewrite("routes.sha256", layout_digest(layout_corpus.all_layouts(), layout_corpus.all_drawn()))
     with tempfile.TemporaryDirectory() as tmp:
         _rewrite("builder_bytes.sha256", hashlib.sha256(_fixed_bytes(Path(tmp), "d")).hexdigest())
     return 0

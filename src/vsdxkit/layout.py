@@ -11,7 +11,7 @@ import heapq
 import math
 from bisect import bisect_left, bisect_right
 from collections import Counter
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from itertools import pairwise
 from typing import Literal, cast
@@ -79,11 +79,25 @@ class LayoutNode:
 
 
 @dataclass(frozen=True)
+class PageTarget:
+    """The page shape a layout aims for. There is no maximum size: the target steers the row count and the flow direction, and the page grows as large as the content needs."""
+
+    aspect: float = 16 / 9
+    """Width over height to aim for."""
+    tolerance: float = 0.25
+    """The band is ``aspect / (1 + tolerance)`` to ``aspect * (1 + tolerance)``."""
+    wrap: Literal["snake", "rows", "none"] = "snake"
+    """How a long flow is cut into rows: ``snake`` runs odd rows against the flow so a row ends above the next one's start, ``rows`` runs every row with the flow and accepts a long edge back to the start, ``none`` does not wrap."""
+    direction: Literal["auto", "left_to_right", "top_down"] = "auto"
+    """``auto`` lets the page target choose when ``LayoutOptions.direction`` is not given: the page is laid out both ways and the one nearer the aspect is kept, left to right on a tie. A ``LayoutOptions.direction`` you give is kept. ``left_to_right`` or ``top_down`` pins the direction and overrides ``LayoutOptions.direction``."""
+
+
+@dataclass(frozen=True)
 class LayoutOptions:
     """How a layout is spaced and which way it flows."""
 
-    direction: Literal["left_to_right", "top_down"] = "left_to_right"
-    """The way the flow runs. Lanes need ``left_to_right``."""
+    direction: Literal["left_to_right", "top_down"] | None = None
+    """The way the flow runs, or None for not given, which flows left to right unless ``PageTarget.direction`` is ``auto`` and the other way fits the page target better. A direction you give is kept. Lanes need ``left_to_right``."""
     layer_gap: float = 1.0
     """Inches between one layer's column and the next, where edges run. The default widens for a gap crossed by many edges; a smaller value of your own that cannot hold them is refused."""
     node_gap: float = 0.4
@@ -98,6 +112,8 @@ class LayoutOptions:
     """Inches left of the first layer for lane labels, when there are lanes."""
     sweeps: int = 8
     """How many up-and-down passes order the boxes within their layers."""
+    page: PageTarget | None = field(default_factory=PageTarget)
+    """The page shape to aim for, or None for none."""
     parents: tuple[tuple[str, str], ...] = ()
     """Pairs of (child group id, parent group id): groups nest one level."""
     headings: tuple[tuple[str, float, float], ...] = ()
@@ -138,6 +154,8 @@ class Layout:
     """Page height in inches."""
     labels: dict[tuple[str, str, int], Box] = field(default_factory=dict)
     """Each labelled edge's label box, by the same key as its route: near the route, clear of nodes, headings and other labels. The page holds them, a margin from its edge."""
+    rows: tuple[tuple[str, ...], ...] = ()
+    """Node ids by wrapped row; empty when the layout is not wrapped."""
 
 
 _Rect = tuple[float, float, float, float]
@@ -155,7 +173,7 @@ class _Slot:
     v_extent: float
     """Size across the flow."""
     lane: int
-    """Index of the lane band."""
+    """Index of the lane band, or of the row band when a page without lanes is wrapped."""
     track: tuple[int, int]
     """The group track inside the lane: (0, 0) is outside every group."""
     real: bool
@@ -215,6 +233,146 @@ def _layers(ids: list[str], edges: list[tuple[str, str]], flipped: list[bool]) -
                 layer[node] = 1 + max((layer[p] for p in preds[node]), default=-1)
                 stack.pop()
     return layer
+
+
+def _partition_table(
+    widths: Sequence[float], rows: int, forbidden: frozenset[int]
+) -> tuple[list[list[float]], list[list[int]]]:
+    """The dynamic-programming layers `best[k][i]` (least widest sum of the first `i` widths in `k` groups) and the cuts `cut[k][i]` that gave them, for every group count up to `rows`; where a cut can fall in more than one place, the earliest is kept."""
+    n = len(widths)
+    # snapped sums of every run, computed once: the same values the cost would otherwise recompute for each group count
+    run = [[0.0] * (n + 1) for _ in range(n + 1)]
+    for j in range(n):
+        for i in range(j + 1, n + 1):
+            run[j][i] = snap(math.fsum(widths[j:i]))
+    best = [[math.inf] * (n + 1) for _ in range(rows + 1)]
+    cut = [[0] * (n + 1) for _ in range(rows + 1)]
+    best[0][0] = 0.0
+    for k in range(1, rows + 1):
+        prev, here, here_cut = best[k - 1], best[k], cut[k]
+        for i in range(k, n + 1):
+            for j in range(k - 1, i):
+                if k > 1 and j in forbidden:
+                    continue
+                cost = max(prev[j], run[j][i])
+                if cost < here[i] - _EPS:
+                    here[i], here_cut[i] = cost, j
+    return best, cut
+
+
+def _starts_for(best: list[list[float]], cut: list[list[int]], n: int, rows: int) -> tuple[int, ...]:
+    """The start indices of the partition into at most `rows` groups, from a table made by `_partition_table`: the most groups the forbidden cuts allow."""
+    for k in range(min(rows, n), 0, -1):
+        if best[k][n] < math.inf:
+            starts: list[int] = []
+            i = n
+            for kk in range(k, 0, -1):
+                i = cut[kk][i]
+                starts.append(i)
+            return tuple(sorted(starts))
+    return (0,)
+
+
+def _partition(widths: Sequence[float], rows: int, forbidden: frozenset[int] = frozenset()) -> tuple[int, ...]:
+    """Start indices that cut `widths` into at most `rows` contiguous groups with the least widest sum (linear partition by dynamic programming, O(L squared times rows)); where the last cut can fall in more than one place, the earliest is kept."""
+    n = len(widths)
+    rows = max(1, min(rows, n))
+    best, cut = _partition_table(widths, rows, forbidden)
+    return _starts_for(best, cut, n, rows)
+
+
+def _estimate(
+    widths: Sequence[float],
+    heights: Sequence[float],
+    starts: Sequence[int],
+    row_gap: float,
+    frame: tuple[float, float, float] = (0.0, 0.0, 0.0),
+) -> tuple[float, float]:
+    """The page width and height if the layers are cut into rows at `starts`: the widest row, and the rows' tallest layers plus the gaps between rows.
+
+    `frame` adds what surrounds them: to the width, to the height, and to the height only when there is more than one row.
+    """
+    ends = [*starts[1:], len(widths)]
+    width = max(math.fsum(widths[a:b]) for a, b in zip(starts, ends, strict=True)) + frame[0]
+    height = sum(max(heights[a:b]) for a, b in zip(starts, ends, strict=True)) + row_gap * (len(starts) - 1) + frame[1]
+    return snap(width), snap(height + (frame[2] if len(starts) > 1 else 0.0))
+
+
+def _choose_starts(
+    widths: Sequence[float],
+    heights: Sequence[float],
+    row_gap: float,
+    target: PageTarget,
+    forbidden: frozenset[int],
+    frame: tuple[float, float, float] = (0.0, 0.0, 0.0),
+) -> tuple[int, ...]:
+    """The row starts whose estimated aspect, snapped to the grid, is nearest the target's in log terms; the first of equal distances wins, so fewer rows."""
+    if target.wrap == "none" or len(widths) < 2:
+        return (0,)
+    chosen: tuple[int, ...] = (0,)
+    nearest = math.inf
+    seen: set[tuple[int, ...]] = set()
+    # one table serves every row count, since the layer for k groups does not depend on how many are asked for
+    best, cut = _partition_table(widths, len(widths), forbidden)
+    for rows in range(1, len(widths) + 1):
+        starts = _starts_for(best, cut, len(widths), rows)
+        if starts in seen:
+            continue
+        seen.add(starts)
+        w, h = _estimate(widths, heights, starts, row_gap, frame)
+        distance = abs(math.log(max(GRID, snap(w / h)) / target.aspect))
+        if distance < nearest - _EPS:
+            chosen, nearest = starts, distance
+    return chosen
+
+
+def _columns(
+    widths: Sequence[float], gaps: Sequence[float], starts: Sequence[int], snake: bool, first: float
+) -> tuple[list[float], list[bool]]:
+    """Left edge of each layer's column, and whether its row runs against the flow (a snake's odd rows).
+
+    A snake row starts centred under the last column of the row above. Everything is shifted so the leftmost column starts at `first`.
+    """
+    left = [0.0] * len(widths)
+    mirrored = [False] * len(widths)
+    ends = [*starts[1:], len(widths)]
+    previous_centre = 0.0
+    for r, (lo, hi) in enumerate(zip(starts, ends, strict=True)):
+        back = snake and r % 2 == 1
+        for i in range(lo, hi):
+            mirrored[i] = back
+            if i == lo:
+                left[i] = previous_centre - widths[i] / 2 if (snake and r > 0) else 0.0
+            elif back:
+                left[i] = left[i - 1] - gaps[i - 1] - widths[i]
+            else:
+                left[i] = left[i - 1] + widths[i - 1] + gaps[i - 1]
+        previous_centre = left[hi - 1] + widths[hi - 1] / 2
+    shift = first - min(left, default=first)
+    return [snap(x + shift) for x in left], mirrored
+
+
+def _check_page(page: object) -> None:
+    """Refuse a page target that is not a PageTarget or None, or whose fields are out of range, naming the option."""
+    if page is None:
+        return
+    if not isinstance(page, PageTarget):
+        raise GraphError(f"option page is {page!r}; it must be a PageTarget or None")
+    for name, low in (("aspect", False), ("tolerance", True)):
+        value = getattr(page, name)
+        if not (
+            isinstance(value, int | float)
+            and not isinstance(value, bool)
+            and math.isfinite(value)
+            and (value >= 0 if low else value > 0)
+        ):
+            raise GraphError(
+                f"option page.{name} is {value!r}; it must be a finite number {'zero or more' if low else 'above zero'}"
+            )
+    if page.wrap not in ("snake", "rows", "none"):
+        raise GraphError(f"option page.wrap is {page.wrap!r}; it must be 'snake', 'rows' or 'none'")
+    if page.direction not in ("auto", "left_to_right", "top_down"):
+        raise GraphError(f"option page.direction is {page.direction!r}; it must be 'auto', 'left_to_right' or 'top_down'")
 
 
 def _order(rows: list[list[_Key]], slots: dict[_Key, _Slot], chains: list[list[_Key]], sweeps: int) -> None:
@@ -443,11 +601,20 @@ def _enters(a: tuple[float, float], b: tuple[float, float], rect: _Rect) -> bool
     return bottom < a[1] < top and max(min(a[0], b[0]), left) < min(max(a[0], b[0]), right)
 
 
+_AUTO_DIRECTION_NODES = 80
+"""The most nodes for which an ``auto`` direction also lays the page out the other way; trying both doubles a layout, so a larger page keeps the configured direction."""
+
+_AUTO_DIRECTION_EDGES_PER_NODE = 2
+"""The most edges per node for which an ``auto`` direction also tries the other way; a dense page spends seconds in routing, and a second layout would double them."""
+
 _NUDGES = (0.03, -0.03, 0.07, -0.07, 0.09, -0.09)
 """Inches a dummy's row may move off its centre; none is zero, and the largest stays inside the dummy's 0.2 in slot."""
 
 _CORRIDOR = 0.5
 """Inches of clear space kept round a group box, so a route has somewhere to go round it."""
+
+_CHANNEL = 0.2
+"""Inches between the levels that fold routes use in the corridor between two rows."""
 
 _LANE_STEP = 0.02
 """Inches between the neighbouring lines a detour may use along one gap or corridor, so detours can run side by side."""
@@ -506,12 +673,36 @@ def _table[T](size: int, default: T) -> list[T]:
     return [default] * size if size <= _DENSE_STATES else cast("list[T]", _Sparse(default))
 
 
+class _Filtered(Mapping[tuple[int, float], list[tuple[float, float]]]):
+    """The runs of `lines` as (low, high), keeping a run only when `keep` accepts the route index it belongs to; a line's list is built when it is asked for, because a search reads a few lines of many."""
+
+    def __init__(
+        self,
+        lines: Mapping[tuple[int, float], Sequence[tuple[float, float, int] | tuple[float, float, int, int]]],
+        keep: Callable[[int], bool],
+    ) -> None:
+        """Wrap `lines`, whose runs are (low, high, route, ...) tuples."""
+        self._lines, self._keep = lines, keep
+
+    def __getitem__(self, key: tuple[int, float]) -> list[tuple[float, float]]:
+        """The kept runs of line `key`, or KeyError when it has none."""
+        return [(run[0], run[1]) for run in self._lines[key] if self._keep(run[2])]
+
+    def __iter__(self) -> Iterator[tuple[int, float]]:
+        """The keys of every line."""
+        return iter(self._lines)
+
+    def __len__(self) -> int:
+        """The number of lines."""
+        return len(self._lines)
+
+
 def _detour(
     path: list[tuple[float, float]],
     xs: set[float],
     ys: set[float],
     solid: list[_Rect],
-    occupied: dict[tuple[int, float], list[tuple[float, float]]],
+    occupied: Mapping[tuple[int, float], list[tuple[float, float]]],
     work: list[int],
     borders: list[tuple[int, float, float, float]],
     clear: float,
@@ -791,17 +982,65 @@ def layered_layout(
     4 groups (about 17 s); 200 nodes, 400 edges, no groups or lanes. 200 nodes and 400 edges in 20 groups is refused
     (after about 40 s). The ceiling falls with the number of groups and lanes more than with nodes.
 
+    ``LayoutOptions.page`` is the page shape to aim for (a ``PageTarget``, 16:9 by default; ``None`` keeps one row).
+    A page without lanes whose flow is left to right is cut into rows of layers, chosen so that the page's aspect,
+    snapped to the grid, is nearest the target's in log terms (the fewer rows on a tie). With ``wrap="snake"`` odd rows
+    run against the flow, with ``"rows"`` every row runs with it, and ``"none"`` does not wrap. A group is never split
+    across rows. Lanes and top-down flows are not wrapped, and the page has no maximum size.
+
+    The page target steers the direction only when ``LayoutOptions.direction`` is not given. With it unset and
+    ``PageTarget.direction`` at ``auto``, a page without lanes of at most 80 nodes and two edges per node whose aspect
+    lies outside the target's band is also laid out top down, and the result nearer the target is kept. A tie, an error
+    from the other layout, a laned page or a larger page flows left to right. A ``LayoutOptions.direction`` you give is
+    always kept; ``PageTarget(direction=...)`` pins one too, and ``page=None`` turns the target off.
+
     :param edges: pairs of (source id, target id); a repeat is a parallel edge, a pair of one id a self-loop
     :param lanes: lane ids, top to bottom
     :param groups: every group id; a node names its innermost group
     :raises GraphError: lanes with a top-down direction, an edge naming a missing node, a node in an unknown lane or
         group or without a lane when lanes are declared, a node size that is not finite and positive, a repeated node,
-        lane or group id, an option that is not a finite non-negative number, a layer_gap too small for the edges that
+        lane or group id, a ``page`` that is not a PageTarget or None, a ``page.aspect`` that is not a finite number above
+        zero, a ``page.tolerance`` that is not a finite number of zero or more, a ``page.wrap`` or ``page.direction``
+        outside its choices, an option that is not a finite non-negative number, a layer_gap too small for the edges that
         cross it, a node too small to give each of its parallel edges a grid step of its border, an edge that cannot
         be routed round the groups it does not belong to, two edges that cannot be kept on lines of their own, a
         layout past the search limit, a group whose members sit in different lanes, or a parent that is undeclared,
         repeated for one child or nests more than one level
     """
+    first = _laid_out(nodes, edges, lanes, groups, options)
+    opts = options if options is not None else LayoutOptions()
+    target = opts.page
+    if (
+        not isinstance(target, PageTarget)
+        or opts.direction is not None
+        or target.direction != "auto"
+        or lanes
+        or len(nodes) > _AUTO_DIRECTION_NODES
+        or len(edges) > _AUTO_DIRECTION_EDGES_PER_NODE * len(nodes)
+        or _aspect_miss(first, target) <= snap(math.log1p(target.tolerance))
+    ):
+        return first
+    other = "top_down"
+    try:
+        second = _laid_out(nodes, edges, lanes, groups, replace(opts, direction=other))
+    except GraphError:
+        return first
+    return second if _aspect_miss(second, target) < _aspect_miss(first, target) else first
+
+
+def _aspect_miss(layout: Layout, target: PageTarget) -> float:
+    """How far a layout's aspect lies from the target, as a log distance on the grid, or 0.0 for a layout of no size; the band edge is ``log1p(tolerance)``."""
+    return snap(abs(math.log(layout.width / layout.height / target.aspect))) if layout.height > 0 and layout.width > 0 else 0.0
+
+
+def _laid_out(
+    nodes: tuple[LayoutNode, ...],
+    edges: tuple[tuple[str, str], ...],
+    lanes: tuple[str, ...],
+    groups: tuple[str, ...],
+    options: LayoutOptions | None,
+) -> Layout:
+    """One layout in the configured direction: border points of their own first, shared ones when the graph is too dense for that."""
     try:
         return _lay_out(nodes, edges, lanes, groups, options, True, [0])
     except _Crowded:
@@ -881,7 +1120,9 @@ def _lay_out(
 ) -> Layout:
     """`layered_layout`, with `own_points` saying whether each edge at a node gets a border point of its own, and its search steps charged to `spent`. `slack` grid steps are added to the lane padding and the clearance between tracks, which a layout whose rounded group boxes came out too close asks for."""
     opts = options if options is not None else LayoutOptions()
-    top_down = opts.direction == "top_down"
+    page_direction = opts.page.direction if isinstance(opts.page, PageTarget) else "auto"
+    direction = opts.direction or "left_to_right"
+    top_down = (direction if lanes or page_direction == "auto" else page_direction) == "top_down"
     for name in ("layer_gap", "node_gap", "margin", "group_padding", "lane_padding", "lane_heading"):
         value = getattr(opts, name)
         if not (isinstance(value, int | float) and math.isfinite(value) and value >= 0):
@@ -891,6 +1132,7 @@ def _lay_out(
     clear = snap(math.floor(min(_BORDER_CLEAR, opts.group_padding, opts.node_gap, opts.layer_gap) / GRID + 1e-9) * GRID)
     if not (isinstance(opts.sweeps, int) and not isinstance(opts.sweeps, bool) and opts.sweeps >= 1):
         raise GraphError(f"option sweeps is {opts.sweeps!r}; it must be a whole number, one or more")
+    _check_page(opts.page)
     if opts.edge_labels and len(opts.edge_labels) != len(edges):
         raise GraphError(f"option edge_labels has {len(opts.edge_labels)} entries for {len(edges)} edges; give one per edge")
     for entry in (*opts.edge_labels, *(h[1:] if isinstance(h, tuple) and h else h for h in opts.headings)):
@@ -900,9 +1142,9 @@ def _lay_out(
             and all(isinstance(v, int | float) and math.isfinite(v) and v > 0 for v in entry)
         ):
             raise GraphError(f"a label or heading size is {entry!r}; give (width, height), both finite and positive")
-    if opts.direction not in ("left_to_right", "top_down"):
-        raise GraphError(f"option direction is {opts.direction!r}; it must be 'left_to_right' or 'top_down'")
-    if lanes and top_down:
+    if opts.direction not in (None, "left_to_right", "top_down"):
+        raise GraphError(f"option direction is {opts.direction!r}; it must be 'left_to_right', 'top_down' or None")
+    if lanes and direction == "top_down":
         raise GraphError("lanes need direction='left_to_right'; a top-down layout has no bands to put them in")
     by_id = {n.id: n for n in nodes}
     for source, target in edges:
@@ -1021,14 +1263,41 @@ def _lay_out(
         gaps[layer] = max(gaps[layer], math.fsum(extents) + 0.1)
 
     col_width = [max((slots[k].u_extent for k in row), default=0.0) for row in rows]
+    # a long flow is cut into rows, each a band; lanes, top-down flows and short flows are never cut
+    row_starts: tuple[int, ...] = (0,)
+    if opts.page is not None and not lanes and not top_down and n_layers > 1:
+        stack = [math.fsum(slots[k].v_extent for k in row) + v_gap * (len(row) - 1) for row in rows]
+        forbidden: set[int] = set()
+        for member_ids in members_of.values():
+            held = [slots[m].layer for m in member_ids]
+            forbidden.update(range(min(held, default=0) + 1, max(held, default=0) + 1))
+        row_starts = _choose_starts(
+            [w + g for w, g in zip(col_width, gaps, strict=True)],
+            stack,
+            2 * opts.lane_padding,
+            opts.page,
+            frozenset(forbidden),
+            # the margins on both sides, less the gap each row's last column carries in its width, and a band's padding above and below
+            (2 * margin - u_gap, 2 * margin, 2 * opts.lane_padding),
+        )
+    n_bands = len(row_starts)
+    band_of_layer = [sum(1 for s in row_starts if s <= layer) - 1 for layer in range(n_layers)]
+    mirrored = [False] * n_layers
     col_left: list[float] = []
-    cursor = margin + (opts.lane_heading if lanes else 0.0)
-    for w, gap in zip(col_width, gaps, strict=True):
-        col_left.append(cursor)
-        cursor += w + gap
-    u_total = cursor - gaps[-1] + margin if rows else 2 * margin
+    if n_bands > 1:
+        assert opts.page is not None
+        for slot in slots.values():
+            slot.lane = band_of_layer[slot.layer]
+        col_left, mirrored = _columns(col_width, gaps, row_starts, opts.page.wrap == "snake", margin)
+        u_total = max(x + w for x, w in zip(col_left, col_width, strict=True)) + margin
+    else:
+        cursor = margin + (opts.lane_heading if lanes else 0.0)
+        for w, gap in zip(col_width, gaps, strict=True):
+            col_left.append(cursor)
+            cursor += w + gap
+        u_total = cursor - gaps[-1] + margin if rows else 2 * margin
 
-    n_lanes = max(len(lanes), 1)
+    n_lanes = n_bands if n_bands > 1 else max(len(lanes), 1)
     # a lane band must contain the padding of the group boxes that touch its edges, and the snapping of their coordinates
     loop_reach = 0.2 + 0.1 * (most_loops - 1) + 2 * GRID if most_loops else 0.0
     # a heading taller than a group's padding grows the box at its top, so the lane and the gap between tracks leave room
@@ -1050,7 +1319,7 @@ def _lay_out(
     lift = _ceil(max([0.0, *lifts]))
     lane_pad = (
         max(opts.lane_padding, opts.group_padding * (2 if parent_of else 1) + (3 + slack) * GRID + lift, loop_reach)
-        if lanes
+        if lanes or n_bands > 1
         else 0.0
     )
     # between tracks, a group's loops and padding reach the track below, which keeps a grid step clear of them and two more for snapping
@@ -1104,17 +1373,20 @@ def _lay_out(
         return snap(col_left[slot.layer] + col_width[slot.layer] / 2)
 
     def right_u(slot: _Slot) -> float:
-        """Where an edge leaves a slot: its far border, or the column's for a dummy."""
-        return centre_u(slot) + (slot.u_extent if slot.real else col_width[slot.layer]) / 2
+        """Where an edge leaves a slot: its far border along the flow, or the column's for a dummy; the physical left border in a mirrored row."""
+        half = (slot.u_extent if slot.real else col_width[slot.layer]) / 2
+        return centre_u(slot) + (-half if mirrored[slot.layer] else half)
 
     def left_u(slot: _Slot) -> float:
-        """Where an edge arrives at a slot: its near border, or the column's for a dummy."""
-        return centre_u(slot) - (slot.u_extent if slot.real else col_width[slot.layer]) / 2
+        """Where an edge arrives at a slot: its near border along the flow, or the column's for a dummy; the physical right border in a mirrored row."""
+        half = (slot.u_extent if slot.real else col_width[slot.layer]) / 2
+        return centre_u(slot) + (half if mirrored[slot.layer] else -half)
 
     def rect_of(node_id: str) -> _Rect:
         """A node's rectangle as (u low, u high, v low, v high)."""
         s = slots[node_id]
-        return (left_u(s), right_u(s), s.v - s.v_extent / 2, s.v + s.v_extent / 2)
+        a, b = sorted((left_u(s), right_u(s)))
+        return (a, b, s.v - s.v_extent / 2, s.v + s.v_extent / 2)
 
     def pad_of(g: str) -> float:
         """The padding of a group's box: a parent clears its children's boxes too."""
@@ -1130,7 +1402,12 @@ def _lay_out(
             rects.append((lo_a - pad, hi_a + pad, lo_b - pad, hi_b + pad))
             if m in loop_count:
                 extra = 0.1 * (loop_count[m] - 1)
-                rects.append((lo_a, hi_a + 0.3 + extra + GRID, lo_b - 0.2 - extra - GRID, hi_b))
+                reach_u = 0.3 + extra + GRID
+                rects.append(
+                    (lo_a - reach_u, hi_a, lo_b - 0.2 - extra - GRID, hi_b)
+                    if mirrored[slots[m].layer]
+                    else (lo_a, hi_a + reach_u, lo_b - 0.2 - extra - GRID, hi_b)
+                )
         if rects:
             group_rect[g] = (
                 min(r[0] for r in rects),
@@ -1196,13 +1473,20 @@ def _lay_out(
     lo_u = lo_v = 0.0
     hi_u, hi_v = u_total, v_total
     room = max(margin, _CORRIDOR) + GRID  # clear space round a group, where a route can pass it
+    if n_bands > 1:  # a fold route runs round the end of a row, so the columns keep the same clear space
+        lo_u = min(lo_u, min(col_left) - room)
+        hi_u = max(hi_u, max(x + w for x, w in zip(col_left, col_width, strict=True)) + room)
     for r in group_rect.values():
         lo_u, hi_u = min(lo_u, r[0] - room), max(hi_u, r[1] + room)
         lo_v, hi_v = min(lo_v, r[2] - room), max(hi_v, r[3] + room)
     for node_id, count in loop_count.items():
         lo_a, hi_a, lo_b, _hi_b = rect_of(node_id)
         extra = 0.1 * (count - 1)
-        lo_v, hi_u = min(lo_v, lo_b - 0.2 - extra - GRID), max(hi_u, hi_a + 0.3 + extra + GRID)
+        lo_v = min(lo_v, lo_b - 0.2 - extra - GRID)
+        if mirrored[slots[node_id].layer]:
+            lo_u = min(lo_u, lo_a - 0.3 - extra - GRID)
+        else:
+            hi_u = max(hi_u, hi_a + 0.3 + extra + GRID)
     shift_u, shift_v = _ceil(-lo_u), _ceil(-lo_v)
     u_total, v_total = _ceil(hi_u + shift_u), _ceil(hi_v + shift_v)
 
@@ -1261,6 +1545,8 @@ def _lay_out(
         if chain[0] == chain[-1]:
             continue  # a loop has no channel
         for hop, (a, b) in enumerate(pairwise(chain)):
+            if band_of_layer[slots[a].layer] != band_of_layer[slots[b].layer]:
+                continue  # a fold hop has no channel of its own in a gap
             gap_edges.setdefault(slots[a].layer, []).append((min(slots[a].v, slots[b].v), max(slots[a].v, slots[b].v), n, hop))
     channel: dict[tuple[int, int], float] = {}
 
@@ -1316,9 +1602,11 @@ def _lay_out(
                     if position[f] > position[idx]:
                         stuck.append((items[idx][2], items[idx][3], items[f][2], items[f][3]))
             zone = loop_zone.get(layer, 0.0)
-            left = col_left[layer] + col_width[layer] + zone
+            # the gap of a mirrored layer lies on its physical left, and its channels fill it away from the column
+            sign = -1 if mirrored[layer] else 1
+            left = col_left[layer] - zone if mirrored[layer] else col_left[layer] + col_width[layer] + zone
             for k, idx in enumerate(order):
-                channel[(items[idx][2], items[idx][3])] = left + (gaps[layer] - zone) * (k + 1) / (len(items) + 1)
+                channel[(items[idx][2], items[idx][3])] = left + sign * (gaps[layer] - zone) * (k + 1) / (len(items) + 1)
         if not stuck:
             break
         # two edges swapping rows cannot both be satisfied, so one of the two rows moves a little
@@ -1339,7 +1627,10 @@ def _lay_out(
     # lines a detour may turn on: the middle of each gap between columns, round each group, and between the tracks
     base_xs = {-shift_u, u_total - shift_u} if not lanes else {u_total - shift_u}
     for layer in range(n_layers - 1):
-        base_xs.add(col_left[layer] + col_width[layer] + gaps[layer] / 2)
+        if band_of_layer[layer] == band_of_layer[layer + 1]:
+            base_xs.add(
+                col_left[layer] - gaps[layer] / 2 if mirrored[layer] else col_left[layer] + col_width[layer] + gaps[layer] / 2
+            )
     end_xs = {
         x
         for ulo, uhi, _vlo, _vhi in group_rect.values()
@@ -1348,7 +1639,7 @@ def _lay_out(
     flat_ys = (
         {y for lane in range(n_lanes) for y in (lane_top[lane] + GRID, lane_bottom[lane] - GRID)}
         if lanes
-        else {-shift_v, v_total - shift_v}
+        else {-shift_v, v_total - shift_v, *(lane_bottom[i] for i in range(n_bands - 1))}
     )
     for a, b in pairwise(track_keys):
         if a[0] == b[0]:
@@ -1368,9 +1659,69 @@ def _lay_out(
     solids = [rect_of(n.id) for n in nodes]
     groups_of = {n.id: {g for g, ms in members_of.items() if n.id in ms} for n in nodes}
 
+    # the hops that cross a row boundary leave the near-boundary side of one column and enter the other, by a level of their own
+    fold_hops: dict[int, list[tuple[float, int, int]]] = {}
+    for n, chain in enumerate(chains):
+        if chain[0] != chain[-1]:
+            for hop, (a, b) in enumerate(pairwise(chain)):
+                if band_of_layer[slots[a].layer] != band_of_layer[slots[b].layer]:
+                    fold_hops.setdefault(band_of_layer[slots[a].layer], []).append((slots[a].v, n, hop))
+    loop_extra: dict[_Key, int] = {}  # fold arrivals that share a self-looped node's top with its loops
+    fold_plan: dict[tuple[int, int], tuple[float, float, float, float, float]] = {}  # (n, hop) -> (ua, ub, ya, yb, level)
+    for band, found in fold_hops.items():
+        found.sort()
+        count = len(found)
+        width = min(
+            min(
+                (slots[chains[n][h]].u_extent if slots[chains[n][h]].real else col_width[slots[chains[n][h]].layer])
+                for _v, n, h in found
+            ),
+            min(
+                (
+                    slots[chains[n][h + 1]].u_extent
+                    if slots[chains[n][h + 1]].real
+                    else col_width[slots[chains[n][h + 1]].layer]
+                )
+                for _v, n, h in found
+            ),
+        )
+        # a boundary too narrow for a port each keeps the column centre, and the search or the spacing pass separates the routes
+        offsets = _spread(count, width, band) if round(width / GRID) // count else [0.0] * count
+        ports = [
+            (centre_u(slots[chains[n][h]]) + off, centre_u(slots[chains[n][h + 1]]) + off, n, h)
+            for off, (_v, n, h) in zip(offsets, found, strict=True)
+        ]
+        # a self-loop uses border points on the top of its node, so the folds that arrive there share that node's spread with it
+        arriving: dict[_Key, list[int]] = {}
+        for idx, (_ua, _ub, n, h) in enumerate(ports):
+            key = chains[n][h + 1]
+            if slots[key].real and key in loop_count:
+                arriving.setdefault(key, []).append(idx)
+        for key, idxs in arriving.items():
+            loops = twins[(key, key)]
+            if round(slots[key].u_extent / GRID) // (loops + len(idxs)):
+                loop_extra[key] = loop_extra.get(key, 0) + len(idxs)
+                spread = _spread(loops + loop_extra[key], slots[key].u_extent, key)
+                for rank, idx in enumerate(idxs):
+                    ua, _ub, n, h = ports[idx]
+                    ports[idx] = (ua, centre_u(slots[key]) - spread[loops + loop_extra[key] - len(idxs) + rank], n, h)
+        # a corridor of 2 * lane_pad lies on the boundary; levels are a channel apart, or closer when it is crowded
+        top_level = lane_bottom[band] - lane_pad
+        step = min(_CHANNEL, 2 * lane_pad / (count + 1))
+        right = ports[0][1] > ports[0][0]
+        # the edge with the larger start column takes the higher level for a jog to the right, the smaller for a jog to the left
+        by_level = sorted(ports, key=lambda port: -port[0] if right else port[0])
+        for level_rank, (ua, ub, n, h) in enumerate(by_level):
+            sa, sb = slots[chains[n][h]], slots[chains[n][h + 1]]
+            ya = sa.v + sa.v_extent / 2 if sa.real else rows_of[n][h]
+            yb = sb.v - sb.v_extent / 2 if sb.real else rows_of[n][h + 1]
+            fold_plan[(n, h)] = (ua, ub, ya, yb, top_level + (level_rank + 1) * step)
+
     routes: dict[tuple[str, str, int], tuple[tuple[float, float], ...]] = {}
     seen_pairs: dict[tuple[str, str], int] = {}
     built: list[tuple[list[tuple[float, float]], str, str, list[_Key], int]] = []
+    # per fold edge, the path the search starts from if its fold route is blocked
+    stubs: dict[int, list[tuple[float, float]]] = {}
     for n, ((source, target), flip, chain) in enumerate(zip(edges, flipped, chains, strict=True)):
         parallel = seen_pairs.get((source, target), 0)
         seen_pairs[(source, target)] = parallel + 1
@@ -1379,23 +1730,45 @@ def _lay_out(
         i = twin_rank[n]
         if source == target:
             r = first_slot.v_extent / 2 + 0.2 + 0.1 * i
-            c = centre_u(first_slot) - _spread(twins[ends], first_slot.u_extent, source)[i]
+            c = centre_u(first_slot) - _spread(twins[ends] + loop_extra.get(chain[0], 0), first_slot.u_extent, source)[i]
             dv = end_offset.get((n, True), _spread(twins[ends], first_slot.v_extent, source)[i])
+            out_u = right_u(first_slot) + (-1 if mirrored[first_slot.layer] else 1) * (0.3 + 0.1 * i)
             bends = [
                 (right_u(first_slot), first_slot.v + dv),
-                (right_u(first_slot) + 0.3 + 0.1 * i, first_slot.v + dv),
-                (right_u(first_slot) + 0.3 + 0.1 * i, first_slot.v - r),
+                (out_u, first_slot.v + dv),
+                (out_u, first_slot.v - r),
                 (c, first_slot.v - r),
                 (c, first_slot.v - first_slot.v_extent / 2),
             ]
         else:
             vs = rows_of[n]
-            bends = [(right_u(first_slot), vs[0])]
+            bends: list[tuple[float, float]] = [] if (n, 0) in fold_plan else [(right_u(first_slot), vs[0])]
+            stub = [(right_u(first_slot), vs[0])]
             for hop, sb in enumerate(slots[k] for k in chain[1:]):
-                cu = channel[(n, hop)]
-                bends += [(cu, vs[hop]), (cu, vs[hop + 1]), (left_u(sb), vs[hop + 1])]
+                sa = slots[chain[hop]]
+                if (n, hop) in channel:
+                    cu = channel[(n, hop)]
+                    bends += [(cu, vs[hop]), (cu, vs[hop + 1]), (left_u(sb), vs[hop + 1])]
+                    stub += bends[-3:]
+                else:
+                    # a fold hop drops from its column to a level in the corridor, runs across, and drops into the next row
+                    ua, ub, ya, yb, level = fold_plan[(n, hop)]
+                    if hop:
+                        bends.pop()  # the pass-through of the dummy before it, which now ends at the port column
+                        bends.append((ua, vs[hop]))
+                    bends += [(ua, ya), (ua, level), (ub, level), (ub, yb)]
+                    # the stub leaves and arrives the way a route must, for the search to route when the fold route is blocked
+                    out_x = right_u(sa) + (-1 if mirrored[sa.layer] else 1) * gaps[sa.layer] / 2
+                    in_x = left_u(sb) - (-1 if mirrored[sb.layer] else 1) * gaps[sb.layer - 1] / 2
+                    mid = (vs[hop] + vs[hop + 1]) / 2
+                    stub += [(out_x, vs[hop]), (out_x, mid), (in_x, mid), (in_x, vs[hop + 1]), (left_u(sb), vs[hop + 1])]
                 if hop + 1 < len(chain) - 1:
                     bends.append((right_u(sb), vs[hop + 1]))
+                    stub.append((right_u(sb), vs[hop + 1]))
+            if flip:
+                stub.reverse()
+            if any((n, k) in fold_plan for k in range(len(chain) - 1)):
+                stubs[n] = [(snap(u), snap(v)) for u, v in stub]
             if flip:
                 bends.reverse()
         # on the grid before any comparison, so two lines that print the same are the same line
@@ -1492,11 +1865,34 @@ def _lay_out(
         for line in ((1, r[0], r[2], r[3]), (1, r[1], r[2], r[3]), (0, r[2], r[0], r[1]), (0, r[3], r[0], r[1]))
     ]
 
+    # the boxes by left edge and by bottom edge: a segment can enter only a box whose edge lies within one box-extent of it
+    by_left = sorted(solids)
+    solid_lefts = [r[0] for r in by_left]
+    widest = max((r[1] - r[0] for r in by_left), default=0.0)
+    by_bottom = sorted(solids, key=lambda r: r[2])
+    solid_bottoms = [r[2] for r in by_bottom]
+    tallest = max((r[3] - r[2] for r in by_bottom), default=0.0)
+
+    def _solids_at(a: tuple[float, float], b: tuple[float, float]) -> list[_Rect]:
+        """The boxes that a vertical segment a-b might enter: those whose left edge lies within a box width left of it."""
+        return by_left[bisect_left(solid_lefts, a[0] - widest - _EPS) : bisect_right(solid_lefts, a[0] + _EPS)]
+
+    def _solids_across(a: tuple[float, float], b: tuple[float, float]) -> list[_Rect]:
+        """The boxes that a horizontal segment a-b might enter: those whose bottom edge lies within a box height below it."""
+        return by_bottom[bisect_left(solid_bottoms, a[1] - tallest - _EPS) : bisect_right(solid_bottoms, a[1] + _EPS)]
+
     pending = []
-    for n, (bends, source, target, _chain, _parallel) in enumerate(built):
+    for n, (bends, source, target, chain, _parallel) in enumerate(built):
         foreign = foreign_of[n]
         lines = [(a, b) for a, b in pairwise(bends) if a != b]
-        if source != target and (n in rerouted or any(_enters(a, b, r) for a, b in lines for r in foreign)):
+        hits = any(
+            _enters(a, b, r)
+            for a, b in lines
+            for r in (*foreign, *(_solids_at(a, b) if a[0] == b[0] else _solids_across(a, b)))
+        )
+        if hits and n in stubs:
+            built[n] = (stubs[n], source, target, chain, _parallel)
+        if source != target and (n in rerouted or hits):
             pending.append((n, foreign))
         else:
             occupy(bends, n)
@@ -1505,7 +1901,7 @@ def _lay_out(
     outer_ys = {*(f(end_ys) for f in (min, max) if end_ys)}
 
     def search(
-        n: int, path: list[tuple[float, float]], others: dict[tuple[int, float], list[tuple[float, float]]], k: int
+        n: int, path: list[tuple[float, float]], others: Mapping[tuple[int, float], list[tuple[float, float]]], k: int
     ) -> list[tuple[float, float]] | None:
         """A way for edge `n` from the first point of `path` to its last that avoids boxes and foreign groups."""
         low, high = lane_span(built[n][3])
@@ -1549,7 +1945,7 @@ def _lay_out(
         path = [bends[0], *(b for a, b in pairwise(bends) if a != b)]
         # routes that leave or arrive at the same border point may run along this one, so they do not count
         mine = {path[0], path[-1]}
-        others = {key: [(lo, hi) for lo, hi, m in runs if not ends_of[m] & mine] for key, runs in occupied.items()}
+        others = _Filtered(occupied, lambda m, mine=mine: not ends_of[m] & mine)
         around = search(n, path, others, k)
         if around is None:
             raise _Crowded(f"edge {source!r} -> {target!r} cannot be routed round the groups it does not belong to")
@@ -1581,9 +1977,7 @@ def _lay_out(
     ) -> list[tuple[float, float]] | None:
         """Edge `n` searched again, knowing every other route as it now stands in `lines`."""
         mine = {paths[n][0], paths[n][-1]}
-        others = {
-            key: [(lo, hi) for lo, hi, m, _j in found if m != n and not border_ends[m] & mine] for key, found in lines.items()
-        }
+        others = _Filtered(lines, lambda m, n=n, mine=mine: m != n and not border_ends[m] & mine)
         found = search(n, paths[n], others, n)
         return None if found is None else _simplify(found)
 
@@ -1655,4 +2049,12 @@ def _lay_out(
     page_width = max([width, *(_ceil(b.x + b.width / 2 + margin) for b in labels.values())])
     page_height = max([height, *(_ceil(b.y + b.height / 2 + margin) for b in labels.values())])
     lane_boxes = {name: replace(b, x=snap(page_width / 2), width=page_width) for name, b in lane_boxes.items()}
-    return Layout(boxes, group_boxes, lane_boxes, routes, page_width, page_height, labels)
+    wrapped_rows = (
+        tuple(
+            tuple(k for layer in range(lo, hi) for k in rows[layer] if isinstance(k, str))
+            for lo, hi in zip(row_starts, [*row_starts[1:], n_layers], strict=True)
+        )
+        if n_bands > 1
+        else ()
+    )
+    return Layout(boxes, group_boxes, lane_boxes, routes, page_width, page_height, labels, wrapped_rows)
