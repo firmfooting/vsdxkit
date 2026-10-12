@@ -148,23 +148,24 @@ def _depth(
 ) -> float | None:
     """How far in direction `d` (axis-aligned, into the node) the outline lies from `end`, a route's end on the box border.
 
-    None leaves the end where it is: the kind fills its box, or its outline cannot be computed exactly.
+    None leaves the end where it is: the kind fills its box, or the end is not on the node.
     """
     cx, cy, w, h = box
     k = 0 if d[0] else 1
     size, centre = (w, h), (cx, cy)
     if kind in _ROUNDED:
-        r = _ROUNDED[kind]
-        if (
-            r > min(w, h) / 2 + _TOL
-        ):  # how Visio caps a radius larger than half a side is not documented, so it stays at the box
-            return None
-        if abs(end[k] - (centre[k] - d[k] * size[k] / 2)) > 0.005:  # not on the border the route enters through
+        r = min(
+            _ROUNDED[kind], w / 2, h / 2
+        )  # Visio draws a larger Rounding as half the shorter side (recorded: 2.2 x 0.9 in -> 0.45 in)
+        reach = (centre[k] - d[k] * size[k] / 2 - end[k]) * d[
+            k
+        ]  # the run from the end to the drawn border, which the layout may have grown past
+        if abs(reach) > 0.01:
             return None
         gap = abs(end[1 - k] - centre[1 - k]) - (size[1 - k] / 2 - r)  # how far into the corner arc the end lies
         if gap <= 0:
-            return 0.0
-        return r - math.sqrt(r * r - gap * gap) if gap <= r else None
+            return reach
+        return reach + r - math.sqrt(r * r - gap * gap) if gap <= r else None
     polygon = _polygon(kind, w, h)
     if polygon is None:
         return None
@@ -190,8 +191,7 @@ def clip_route(
     """`points` with its first and last point moved along their own segment onto the outline of the node they touch.
 
     Each node is its kind and its box `(x, y, width, height)`. The layout ends a route on the box, so a kind whose outline
-    lies inside it would leave the line short of the shape. A kind that fills its box, or whose outline is not computed
-    exactly here, keeps its endpoint.
+    lies inside it would leave the line short of the shape. A kind that fills its box keeps its endpoint.
     """
     out = list(points)
     if len(out) < 2:

@@ -343,7 +343,7 @@ def _check_routes(layout: Layout, *, drawn: bool = False) -> None:
             (points[0], points[1], layout.nodes[source], "starts"),
             (points[-1], points[-2], layout.nodes[target], "ends"),
         ):
-            run_on = drawn and _on_border(end, box) is False and _inside(end, box) and not _inside(other, box)
+            run_on = drawn and not _on_border(end, box) and _inside(end, box) and not _inside(other, box)
             assert _on_border(end, box) or run_on, f"{key} {word} off the border of its box"
         for x, y in points:
             assert -SHRINK <= x <= layout.width + SHRINK and -SHRINK <= y <= layout.height + SHRINK, f"{key} leaves the page"

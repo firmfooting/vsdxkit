@@ -122,7 +122,7 @@ LINES: tuple[tuple[str, str], ...] = (
     ("every_kind", "every_kind: nine node kinds, six edge kinds, a long edge, a self-loop; every shape where it was written"),
     (
         "node_outlines",
-        "node_outlines: a decision and a rounded node each with three edges at offset points; every line and arrowhead must touch the drawn outline",
+        "node_outlines: a decision, a rounded node and two data stores (one tall) each with three edges at offset points; every line and arrowhead must touch the drawn outline",
     ),
     ("groups_and_lanes", "groups_and_lanes: three lanes, a group holding a group; every shape where it was written"),
     (
