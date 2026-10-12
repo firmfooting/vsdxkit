@@ -90,8 +90,8 @@ and wraps the flow into rows. The default is
 ``LayoutOptions(page=PageTarget(aspect=16 / 9))``: the layers are cut into rows,
 each row runs against the one above it so a row ends over the start of the next,
 and the number of rows is the one whose width over height lands nearest the
-aspect. With ``direction="auto"`` the page is also laid out the other way when
-its first shape misses the band, and the nearer result is kept. There is no
+aspect. When ``LayoutOptions.direction`` is not given and ``PageTarget.direction`` is ``auto``,
+the page is also laid out top down when its left-to-right shape misses the band, and the nearer result is kept. There is no
 maximum size; the page grows as large as the content needs.
 
 .. code-block:: python
@@ -101,10 +101,9 @@ maximum size; the page grows as large as the content needs.
    wide = LayoutOptions(page=PageTarget(aspect=16 / 9))
    one_row = LayoutOptions(page=None)
 
-Pass ``page=None`` to keep one row. Top-down flows are not wrapped, and with
-``direction="auto"`` a top-down request can come back as a left-to-right page
-when that is nearer the aspect; pin the direction with
-``PageTarget(direction="top_down")``. A page with lanes is never wrapped,
+Pass ``page=None`` to keep one row. Top-down flows are not wrapped. A
+``LayoutOptions(direction=...)`` you give is always kept; the target chooses the
+direction only when you give none, and ``PageTarget(direction=...)`` pins it. A page with lanes is never wrapped,
 because a lane runs the whole width, so its width is the number of layers; one
 that grows past the lane limit (see "Lanes and groups" below) is refused with
 the number of columns it needed, and the flow has to be split across pages.
