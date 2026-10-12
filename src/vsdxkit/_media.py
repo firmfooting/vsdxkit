@@ -113,8 +113,25 @@ def _sentinel(filename: str, text: str, open_document: Callable[[str], _Donor]) 
     return shape
 
 
-def _kind_shape(kind: ShapeKind, open_document: Callable[[str], _Donor]) -> Shape:
-    """The bundled shape a kind is copied from. Not for handing out: see the module docstring."""
+_STEPS: dict[ShapeKind, str] = {
+    ShapeKind.PROCESS: "Process",
+    ShapeKind.START_END: "Start/End",
+    ShapeKind.DECISION: "Decision",
+}
+"""The kinds that have a counterpart among the steps Visio dropped on its cross-functional flowchart, to that step's name in `CFF`."""
+
+
+def _kind_shape(kind: ShapeKind, open_document: Callable[[str], _Donor], *, in_diagram: bool = False) -> Shape:
+    """The bundled shape a kind is copied from. Not for handing out: see the module docstring.
+
+    In a cross-functional flowchart the shapes of `_STEPS` come from `CFF`, as instances of Visio's own masters
+    with their Shape Data, rather than from the palette's plain shapes.
+    """
+    if in_diagram and kind in _STEPS:
+        for shape in _donor(CFF, open_document).pages[0].children:
+            if shape.xml.attrib.get("NameU") == _STEPS[kind]:
+                return shape
+        raise NotFoundError(f"{CFF} has no step named {_STEPS[kind]!r}")
     filename, text = _KINDS[kind]
     return _sentinel(filename, text, open_document)
 

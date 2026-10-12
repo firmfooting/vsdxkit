@@ -3,6 +3,7 @@
 import dataclasses
 import hashlib
 import importlib.util
+import math
 import os
 import random
 import subprocess
@@ -562,7 +563,7 @@ def test_the_routes_written_to_the_file_meet_the_layouts_own_guarantees(stem):
     case = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(case)
     layout = _written_layout(case.build())
-    check_routes(layout)
+    check_routes(layout, drawn=True)
 
     def inside(b: Box, g: Box) -> bool:
         return abs(b.x - g.x) + b.width / 2 <= g.width / 2 + 1e-6 and abs(b.y - g.y) + b.height / 2 <= g.height / 2 + 1e-6
@@ -679,6 +680,64 @@ def test_a_long_label_on_an_empty_child_group_does_not_grow_the_page():
     assert build("\n".join(["x"] * 30)) == build("c")
 
 
+def _drawn_ends(kind: str, count: int, tmp_path, label: str = "t") -> tuple[Box, list[tuple[float, float]]]:
+    """The node of `kind` and the last point of each of `count` parallel edges into it, read back from the saved file."""
+    page = Page("P", [_node("s"), Node("t", kind, label)], [Edge("s", "t") for _ in range(count)])
+    document = Document.open(Diagram("T", [page]).save(tmp_path / "o.vsdx"))
+    ends = [_absolute_points(s)[-1] for s in _kinds(document, "flow")]
+    return _box(_by_source(document)["t"]), ends
+
+
+def _off_diamond(box: Box, p: tuple[float, float]) -> float:
+    return abs(abs(p[0] - box.x) / (box.width / 2) + abs(p[1] - box.y) / (box.height / 2) - 1) * box.width / 2
+
+
+def test_routes_into_a_decision_end_on_the_diamond_not_on_its_box(tmp_path):
+    box, ends = _drawn_ends("decision", 3, tmp_path)
+    assert len(ends) == 3
+    assert all(_off_diamond(box, p) < 0.01 for p in ends), ends
+    assert len({round(p[0], 2) for p in ends}) > 1  # the outer routes run on past the box's left border
+
+
+@pytest.mark.parametrize(
+    ("kind", "label", "radius"),
+    [
+        ("end", "t", 0.25),
+        ("end", "x" * 19, 0.25),  # 2.21 in wide, which the layout grows to an even number of grid steps
+        ("data_store", "t", 0.45),  # the donor's 0.5 in Rounding drawn as half the 0.9 in height, as Visio records it
+        ("data_store", "a\nb\nc", 0.5),
+    ],
+)
+def test_a_route_into_a_rounded_corner_ends_on_the_arc_and_one_into_a_flat_side_runs_to_the_border(
+    tmp_path, kind, label, radius
+):
+    box, ends = _drawn_ends(kind, 9, tmp_path, label)
+    r = min(radius, box.width / 2, box.height / 2)
+    left = box.x - box.width / 2
+    for x, y in ends:
+        gap = abs(y - box.y) - (box.height / 2 - r)
+        want = left + (r - math.sqrt(r * r - gap * gap) if gap > 0 else 0.0)
+        assert x == pytest.approx(want, abs=0.006), (x, y)  # the saved coordinates sit on a 0.01 grid
+    assert any(x > left + 0.01 for x, _y in ends) and any(x == pytest.approx(left, abs=0.006) for x, _y in ends)
+
+
+def test_a_route_ending_half_a_grid_step_outside_the_drawn_box_is_run_on_through_that_gap_and_the_arc():
+    from vsdxkit._drawing import clip_route
+
+    box = (5.0, 5.0, 2.21, 0.8)  # drawn 2.21 wide while the layout box was 2.22, so the end is 0.005 outside
+    left = 5.0 - 2.21 / 2
+    flat = clip_route([(1.0, 5.0), (left - 0.005, 5.0)], ("process", box), ("end", box))[-1]
+    corner = clip_route([(1.0, 5.35), (left - 0.005, 5.35)], ("process", box), ("end", box))[-1]
+    gap = 0.35 - (0.4 - 0.25)
+    assert flat == (pytest.approx(left), 5.0)
+    assert corner[0] == pytest.approx(left + 0.25 - math.sqrt(0.25**2 - gap**2))
+
+
+def test_routes_into_a_rectangle_stay_on_the_box(tmp_path):
+    box, ends = _drawn_ends("process", 7, tmp_path)
+    assert all(x == pytest.approx(box.x - box.width / 2, abs=1e-6) for x, _y in ends)
+
+
 def test_shapes_in_returns_only_the_nodes_not_the_builders_paths_labels_or_backdrops():
     nodes = [Node("a", "process", "A"), Node("b", "process", "B")]
     page = Page("Main", nodes, [Edge("a", "b", "go")], [Group("g", "Stage", ["a", "b"])], [Lane("l", "Role", ["a", "b"])])
@@ -720,3 +779,10 @@ def test_a_group_with_an_empty_label_reserves_no_heading_strip(tmp_path):
     node = _box(_by_source(document)["b"])
     end = _absolute_points(_kinds(document, "flow")[0])[-1]
     assert abs(end[1] - (node.y + node.height / 2)) < 1e-6, "the edge enters the top of the node, with no heading to avoid"
+
+
+def test_a_built_lane_step_keeps_the_synchronized_function_value_after_save_and_reopen(tmp_path):
+    page = Page("P", [Node("a", "process", "A")], lanes=[Lane("l", "Reviewer", ["a"])])
+    document = Document.open(Diagram("T", [page]).save(tmp_path / "f.vsdx"))
+    step = _by_source(document)["a"]
+    assert step.data_properties["Function"].value == "Reviewer"

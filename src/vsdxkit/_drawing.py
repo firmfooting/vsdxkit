@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
+from itertools import pairwise
 from xml.etree.ElementTree import Element
 
 from vsdxkit import namespace
@@ -37,7 +38,8 @@ def _cell(name: str, value: str) -> Element:
 def add_data_rows(shape: Shape, rows: Mapping[str, str], *, clear: bool = False) -> None:
     """Write each entry of `rows` as a string Shape Data row on `shape`, in the order given, replacing a row of the same name.
 
-    With `clear`, the rows the shape already has (the demonstration rows of a bundled donor) are removed first.
+    With `clear`, the rows the shape already has (the demonstration rows of a bundled donor) are removed first,
+    except those whose Value is a formula, which Visio keeps synchronized (a flowchart step's Function).
 
     The cells follow the order the bundled donors use. Type 0 is a string (Learn: Type Cell, Shape Data Section).
     """
@@ -48,7 +50,9 @@ def add_data_rows(shape: Shape, rows: Mapping[str, str], *, clear: bool = False)
         shape.xml.insert(leading, section)
     if clear:
         for old in section.findall(f"{namespace}Row"):
-            section.remove(old)
+            value = old.find(f'{namespace}Cell[@N="Value"]')
+            if value is None or "F" not in value.attrib:
+                section.remove(old)
     for name, value in rows.items():
         for old in [r for r in section.findall(f"{namespace}Row") if r.attrib.get("N") == name]:
             section.remove(old)
@@ -125,6 +129,86 @@ def _outline(kind: str, w: float, h: float) -> list[tuple[list[tuple[float, floa
     if kind == "off_page":
         return [([(0, h), (w, h), (w, 0.3 * h), (0.5 * w, 0), (0, 0.3 * h)], True)]
     return None
+
+
+_ROUNDED = {"start": 0.25, "end": 0.25, "data_store": 0.5}
+"""The Rounding cell each rounded-rectangle kind's donor carries, in inches: the corner radius."""
+
+_TOL = 1e-9
+"""Tolerance for a parallel edge and for a point that is on a line."""
+
+
+def _polygon(kind: str, w: float, h: float) -> list[tuple[float, float]] | None:
+    """The closed straight-sided outline of `kind` in its own coordinates, or None when it is not one."""
+    if kind == "decision":  # the donor's POLYLINE(0, 0, 1,0.5, 0.5,0, 0,0.5) from (0.5, 1), in fractions of width and height
+        return [(0.5 * w, h), (w, 0.5 * h), (0.5 * w, 0), (0, 0.5 * h)]
+    outline = _outline(kind, w, h)
+    return outline[0][0] if outline is not None and kind != "subprocess" else None
+
+
+def _depth(
+    kind: str, box: tuple[float, float, float, float], end: tuple[float, float], d: tuple[float, float]
+) -> float | None:
+    """How far in direction `d` (axis-aligned, into the node) the outline lies from `end`, a route's end on the box border.
+
+    None leaves the end where it is: the kind fills its box, or the end is not on the node.
+    """
+    cx, cy, w, h = box
+    k = 0 if d[0] else 1
+    size, centre = (w, h), (cx, cy)
+    if kind in _ROUNDED:
+        r = min(
+            _ROUNDED[kind], w / 2, h / 2
+        )  # Visio draws a larger Rounding as half the shorter side (recorded: 2.2 x 0.9 in -> 0.45 in)
+        reach = (centre[k] - d[k] * size[k] / 2 - end[k]) * d[
+            k
+        ]  # the run from the end to the drawn border, which the layout may have grown past
+        if abs(reach) > 0.01:
+            return None
+        gap = abs(end[1 - k] - centre[1 - k]) - (size[1 - k] / 2 - r)  # how far into the corner arc the end lies
+        if gap <= 0:
+            return reach
+        return reach + r - math.sqrt(r * r - gap * gap) if gap <= r else None
+    polygon = _polygon(kind, w, h)
+    if polygon is None:
+        return None
+    local = (end[0] - (cx - w / 2), end[1] - (cy - h / 2))
+    best = None
+    for a, b in pairwise([*polygon, polygon[0]]):
+        e = (b[0] - a[0], b[1] - a[1])
+        denom = d[0] * e[1] - d[1] * e[0]
+        if abs(denom) < _TOL:
+            continue  # the ray runs along this edge
+        t = ((a[0] - local[0]) * e[1] - (a[1] - local[1]) * e[0]) / denom
+        u = ((a[0] - local[0]) * d[1] - (a[1] - local[1]) * d[0]) / denom
+        if -0.005 <= t <= size[k] + _TOL and -_TOL <= u <= 1 + _TOL and (best is None or t < best):
+            best = max(t, 0.0)
+    return best
+
+
+def clip_route(
+    points: Sequence[tuple[float, float]],
+    source: tuple[str, tuple[float, float, float, float]],
+    target: tuple[str, tuple[float, float, float, float]],
+) -> list[tuple[float, float]]:
+    """`points` with its first and last point moved along their own segment onto the outline of the node they touch.
+
+    Each node is its kind and its box `(x, y, width, height)`. The layout ends a route on the box, so a kind whose outline
+    lies inside it would leave the line short of the shape. A kind that fills its box keeps its endpoint.
+    """
+    out = list(points)
+    if len(out) < 2:
+        return out
+    for index, neighbour, (kind, box) in ((0, 1, source), (-1, -2, target)):
+        end, other = points[index], points[neighbour]
+        dx, dy = end[0] - other[0], end[1] - other[1]
+        if (dx != 0) == (dy != 0):  # not axis-aligned, or a zero-length segment
+            continue
+        d = (math.copysign(1.0, dx) if dx else 0.0, math.copysign(1.0, dy) if dy else 0.0)  # into the node
+        depth = _depth(kind, box, end, d)
+        if depth:
+            out[index] = (round(end[0] + d[0] * depth, 6), round(end[1] + d[1] * depth, 6))
+    return out
 
 
 def draw_node(page: Page, kind: str, x: float, y: float, width: float, height: float, text: str) -> Shape:
