@@ -47,3 +47,18 @@ def test_wrapping_preserves_the_graph(seed):
     lay = layered_layout(nodes, edges)
     assert set(lay.nodes) == {n.id for n in nodes}
     assert len(lay.routes) == len(edges)
+
+
+def test_the_row_choice_for_a_long_flow_does_the_work_of_one_table(monkeypatch):
+    """A14: choosing among every row count shares one partition table, so the grid snaps stay near L squared."""
+    calls = [0]
+    real = lo.snap
+
+    def counting(value):
+        calls[0] += 1
+        return real(value)
+
+    monkeypatch.setattr(lo, "snap", counting)
+    widths = [2.4 + 0.1 * (i % 3) for i in range(100)]
+    lo._choose_starts(widths, [1.0] * 100, 0.6, lo.PageTarget(), frozenset())
+    assert calls[0] < 50_000

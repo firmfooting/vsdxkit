@@ -11,10 +11,10 @@ import heapq
 import math
 from bisect import bisect_left, bisect_right
 from collections import Counter
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from itertools import pairwise
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 from vsdxkit.errors import GraphError
 
@@ -235,22 +235,34 @@ def _layers(ids: list[str], edges: list[tuple[str, str]], flipped: list[bool]) -
     return layer
 
 
-def _partition(widths: Sequence[float], rows: int, forbidden: frozenset[int] = frozenset()) -> tuple[int, ...]:
-    """Start indices that cut `widths` into at most `rows` contiguous groups with the least widest sum (linear partition by dynamic programming, O(L squared times rows)); where the last cut can fall in more than one place, the earliest is kept."""
+def _partition_table(
+    widths: Sequence[float], rows: int, forbidden: frozenset[int]
+) -> tuple[list[list[float]], list[list[int]]]:
+    """The dynamic-programming layers `best[k][i]` (least widest sum of the first `i` widths in `k` groups) and the cuts `cut[k][i]` that gave them, for every group count up to `rows`; where a cut can fall in more than one place, the earliest is kept."""
     n = len(widths)
-    rows = max(1, min(rows, n))
+    # snapped sums of every run, computed once: the same values the cost would otherwise recompute for each group count
+    run = [[0.0] * (n + 1) for _ in range(n + 1)]
+    for j in range(n):
+        for i in range(j + 1, n + 1):
+            run[j][i] = snap(math.fsum(widths[j:i]))
     best = [[math.inf] * (n + 1) for _ in range(rows + 1)]
     cut = [[0] * (n + 1) for _ in range(rows + 1)]
     best[0][0] = 0.0
     for k in range(1, rows + 1):
+        prev, here, here_cut = best[k - 1], best[k], cut[k]
         for i in range(k, n + 1):
             for j in range(k - 1, i):
                 if k > 1 and j in forbidden:
                     continue
-                cost = max(best[k - 1][j], snap(math.fsum(widths[j:i])))
-                if cost < best[k][i] - _EPS:
-                    best[k][i], cut[k][i] = cost, j
-    for k in range(rows, 0, -1):  # the most rows that the forbidden cuts allow
+                cost = max(prev[j], run[j][i])
+                if cost < here[i] - _EPS:
+                    here[i], here_cut[i] = cost, j
+    return best, cut
+
+
+def _starts_for(best: list[list[float]], cut: list[list[int]], n: int, rows: int) -> tuple[int, ...]:
+    """The start indices of the partition into at most `rows` groups, from a table made by `_partition_table`: the most groups the forbidden cuts allow."""
+    for k in range(min(rows, n), 0, -1):
         if best[k][n] < math.inf:
             starts: list[int] = []
             i = n
@@ -259,6 +271,14 @@ def _partition(widths: Sequence[float], rows: int, forbidden: frozenset[int] = f
                 starts.append(i)
             return tuple(sorted(starts))
     return (0,)
+
+
+def _partition(widths: Sequence[float], rows: int, forbidden: frozenset[int] = frozenset()) -> tuple[int, ...]:
+    """Start indices that cut `widths` into at most `rows` contiguous groups with the least widest sum (linear partition by dynamic programming, O(L squared times rows)); where the last cut can fall in more than one place, the earliest is kept."""
+    n = len(widths)
+    rows = max(1, min(rows, n))
+    best, cut = _partition_table(widths, rows, forbidden)
+    return _starts_for(best, cut, n, rows)
 
 
 def _estimate(
@@ -292,9 +312,10 @@ def _choose_starts(
     chosen: tuple[int, ...] = (0,)
     nearest = math.inf
     seen: set[tuple[int, ...]] = set()
-    # ponytail: tries every row count, O(L^4) in layers; cap the count or stop early if flows reach hundreds of layers
+    # one table serves every row count, since the layer for k groups does not depend on how many are asked for
+    best, cut = _partition_table(widths, len(widths), forbidden)
     for rows in range(1, len(widths) + 1):
-        starts = _partition(widths, rows, forbidden)
+        starts = _starts_for(best, cut, len(widths), rows)
         if starts in seen:
             continue
         seen.add(starts)
@@ -652,12 +673,32 @@ def _table[T](size: int, default: T) -> list[T]:
     return [default] * size if size <= _DENSE_STATES else cast("list[T]", _Sparse(default))
 
 
+class _Filtered(Mapping[tuple[int, float], list[tuple[float, float]]]):
+    """The runs of `lines` as (low, high), keeping a run only when `keep` accepts the route index it belongs to; a line's list is built when it is asked for, because a search reads a few lines of many."""
+
+    def __init__(self, lines: Mapping[tuple[int, float], list[Any]], keep: Callable[[int], bool]) -> None:
+        """Wrap `lines`, whose runs are (low, high, route, ...) tuples."""
+        self._lines, self._keep = lines, keep
+
+    def __getitem__(self, key: tuple[int, float]) -> list[tuple[float, float]]:
+        """The kept runs of line `key`, or KeyError when it has none."""
+        return [(run[0], run[1]) for run in self._lines[key] if self._keep(cast(int, run[2]))]
+
+    def __iter__(self) -> Iterator[tuple[int, float]]:
+        """The keys of every line."""
+        return iter(self._lines)
+
+    def __len__(self) -> int:
+        """The number of lines."""
+        return len(self._lines)
+
+
 def _detour(
     path: list[tuple[float, float]],
     xs: set[float],
     ys: set[float],
     solid: list[_Rect],
-    occupied: dict[tuple[int, float], list[tuple[float, float]]],
+    occupied: Mapping[tuple[int, float], list[tuple[float, float]]],
     work: list[int],
     borders: list[tuple[int, float, float, float]],
     clear: float,
@@ -1819,11 +1860,31 @@ def _lay_out(
         for line in ((1, r[0], r[2], r[3]), (1, r[1], r[2], r[3]), (0, r[2], r[0], r[1]), (0, r[3], r[0], r[1]))
     ]
 
+    # the boxes by left edge and by bottom edge: a segment can enter only a box whose edge lies within one box-extent of it
+    by_left = sorted(solids)
+    solid_lefts = [r[0] for r in by_left]
+    widest = max((r[1] - r[0] for r in by_left), default=0.0)
+    by_bottom = sorted(solids, key=lambda r: r[2])
+    solid_bottoms = [r[2] for r in by_bottom]
+    tallest = max((r[3] - r[2] for r in by_bottom), default=0.0)
+
+    def _solids_at(a: tuple[float, float], b: tuple[float, float]) -> list[_Rect]:
+        """The boxes that a vertical segment a-b might enter: those whose left edge lies within a box width left of it."""
+        return by_left[bisect_left(solid_lefts, a[0] - widest - _EPS) : bisect_right(solid_lefts, a[0] + _EPS)]
+
+    def _solids_across(a: tuple[float, float], b: tuple[float, float]) -> list[_Rect]:
+        """The boxes that a horizontal segment a-b might enter: those whose bottom edge lies within a box height below it."""
+        return by_bottom[bisect_left(solid_bottoms, a[1] - tallest - _EPS) : bisect_right(solid_bottoms, a[1] + _EPS)]
+
     pending = []
     for n, (bends, source, target, chain, _parallel) in enumerate(built):
         foreign = foreign_of[n]
         lines = [(a, b) for a, b in pairwise(bends) if a != b]
-        hits = any(_enters(a, b, r) for a, b in lines for r in (*foreign, *solids))
+        hits = any(
+            _enters(a, b, r)
+            for a, b in lines
+            for r in (*foreign, *(_solids_at(a, b) if a[0] == b[0] else _solids_across(a, b)))
+        )
         if hits and n in stubs:
             built[n] = (stubs[n], source, target, chain, _parallel)
         if source != target and (n in rerouted or hits):
@@ -1835,7 +1896,7 @@ def _lay_out(
     outer_ys = {*(f(end_ys) for f in (min, max) if end_ys)}
 
     def search(
-        n: int, path: list[tuple[float, float]], others: dict[tuple[int, float], list[tuple[float, float]]], k: int
+        n: int, path: list[tuple[float, float]], others: Mapping[tuple[int, float], list[tuple[float, float]]], k: int
     ) -> list[tuple[float, float]] | None:
         """A way for edge `n` from the first point of `path` to its last that avoids boxes and foreign groups."""
         low, high = lane_span(built[n][3])
@@ -1879,7 +1940,7 @@ def _lay_out(
         path = [bends[0], *(b for a, b in pairwise(bends) if a != b)]
         # routes that leave or arrive at the same border point may run along this one, so they do not count
         mine = {path[0], path[-1]}
-        others = {key: [(lo, hi) for lo, hi, m in runs if not ends_of[m] & mine] for key, runs in occupied.items()}
+        others = _Filtered(occupied, lambda m, mine=mine: not ends_of[m] & mine)
         around = search(n, path, others, k)
         if around is None:
             raise _Crowded(f"edge {source!r} -> {target!r} cannot be routed round the groups it does not belong to")
@@ -1911,9 +1972,7 @@ def _lay_out(
     ) -> list[tuple[float, float]] | None:
         """Edge `n` searched again, knowing every other route as it now stands in `lines`."""
         mine = {paths[n][0], paths[n][-1]}
-        others = {
-            key: [(lo, hi) for lo, hi, m, _j in found if m != n and not border_ends[m] & mine] for key, found in lines.items()
-        }
+        others = _Filtered(lines, lambda m, n=n, mine=mine: m != n and not border_ends[m] & mine)
         found = search(n, paths[n], others, n)
         return None if found is None else _simplify(found)
 
