@@ -1,15 +1,19 @@
 """The layered layout: boxes never overlap, routes are orthogonal and meet no node, and the result depends on nothing but the arguments."""
 
+import importlib.util
 import os
 import random
 import subprocess
 import sys
 import time
+from collections import Counter
 from itertools import pairwise
+from pathlib import Path
 
 import pytest
 from helpers.graphs import random_graph
 
+from vsdxkit import builder as builder_module
 from vsdxkit import layout as layout_module
 from vsdxkit.errors import GraphError
 from vsdxkit.layout import Box, Layout, LayoutNode, LayoutOptions, layered_layout, snap
@@ -114,7 +118,7 @@ def test_a_200_node_graph_with_lanes_and_groups_is_refused_not_drawn_with_shared
 
 
 def test_a_150_node_graph_with_lanes_and_groups_lays_out_with_no_shared_run():
-    """The exit criterion: a graph of this size lays out with no violation, with a 60 s hang guard (about 2.3 s locally)."""
+    """The exit criterion: a graph of this size lays out with no violation, with a 60 s hang guard (about 14 s locally, most of it a first attempt that gives every edge a border point of its own)."""
     rows, edges, lane_ids, group_ids, parents = random_graph(1, 150, 240, 4, 4)
     nodes = tuple(LayoutNode(*row) for row in rows)
     start = time.perf_counter()
@@ -122,7 +126,7 @@ def test_a_150_node_graph_with_lanes_and_groups_lays_out_with_no_shared_run():
     assert time.perf_counter() - start < 60
     assert len(layout.routes) == 240
     _check(layout, nodes, parents)
-    _check_routes(layout)
+    _check_routes(layout, own_points=False)
 
 
 def test_lanes_stack_top_to_bottom_in_the_order_given():
@@ -327,8 +331,50 @@ def _check_no_shared_run(layout: Layout) -> None:
                     assert _overlap_length(sa, sb) < SHRINK, f"{key_a} and {key_b} share a run {sa} / {sb}"
 
 
-def _check_routes(layout: Layout) -> None:
-    """Every route stays on the page, starts and ends on its boxes' borders, and differs from every other route."""
+def _check_distinct_ends(layout: Layout) -> None:
+    """No two ends of different edges, and not both ends of a self-loop, meet at one point of a node's border.
+
+    A node with more route ends than its shorter side has grid steps is left out: it cannot give each a point of its own.
+    """
+    count = Counter(node_id for key in layout.routes for node_id in key[:2])
+    at: dict[tuple[str, tuple[float, float]], tuple[str, str, int, int]] = {}
+    for key, points in layout.routes.items():
+        for end, node_id, point in ((0, key[0], points[0]), (-1, key[1], points[-1])):
+            box = layout.nodes[node_id]
+            if count[node_id] > round(min(box.width, box.height) / 0.01):
+                continue
+            other = at.setdefault((node_id, point), (*key, end))
+            assert other == (*key, end), f"{key} and {other[:3]} meet at {point} on {node_id}"
+
+
+BORDER_CLEAR = 0.04
+"""Inches a route must keep from the border of a group along its length: the layout keeps 0.05, less the half step a Box's centre and width each lose in snapping."""
+
+
+def _check_off_group_borders(layout: Layout) -> None:
+    """No route segment runs parallel to a group's border closer than BORDER_CLEAR for 0.02 inch or more (a box snaps to the grid)."""
+    for g, box in layout.groups.items():
+        left, right = box.x - box.width / 2, box.x + box.width / 2
+        bottom, top = box.y - box.height / 2, box.y + box.height / 2
+        for key, points in layout.routes.items():
+            if key[0] == key[1]:
+                continue  # a group's box is drawn a grid step round its members' self-loops, which stay inside it
+            for p, q in pairwise(points):
+                if p[0] == q[0] and any(abs(p[0] - e) < BORDER_CLEAR - SHRINK for e in (left, right)):
+                    along = min(max(p[1], q[1]), top) - max(min(p[1], q[1]), bottom)
+                elif p[1] == q[1] and any(abs(p[1] - e) < BORDER_CLEAR - SHRINK for e in (bottom, top)):
+                    along = min(max(p[0], q[0]), right) - max(min(p[0], q[0]), left)
+                else:
+                    continue
+                assert along < 0.02, f"{key} runs along the border of group {g}"
+
+
+def _check_routes(layout: Layout, *, own_points: bool = True, clear_of_borders: bool = True) -> None:
+    """Every route stays on the page, starts and ends on its boxes' borders, and differs from every other route.
+
+    A graph too dense for every edge to have a border point of its own shares them (`own_points=False`), and spacing
+    tighter than the clearance leaves routes no room to keep off group borders (`clear_of_borders=False`).
+    """
     seen: dict[tuple[tuple[float, float], ...], tuple[str, str, int]] = {}
     for key, points in layout.routes.items():
         source, target, _n = key
@@ -340,6 +386,10 @@ def _check_routes(layout: Layout) -> None:
         assert points[::-1] not in seen, f"{key} repeats {seen[points[::-1]]} reversed"
         seen[points] = key
     _check_no_shared_run(layout)
+    if own_points:
+        _check_distinct_ends(layout)
+    if clear_of_borders:
+        _check_off_group_borders(layout)
 
 
 @pytest.mark.parametrize("axis", ["width", "height"])
@@ -485,7 +535,7 @@ def test_random_grouped_graphs_with_loops_avoid_foreign_groups_and_stay_in_lanes
     options = LayoutOptions(direction=direction, parents=parents, **small)
     layout = layered_layout(nodes, edges, lane_ids, group_ids, options)
     _check(layout, nodes, parents)
-    _check_routes(layout)
+    _check_routes(layout, clear_of_borders=gaps != "tight")
 
 
 def test_parallel_edges_that_go_round_a_group_run_side_by_side():
@@ -831,3 +881,34 @@ def test_labels_keep_the_margin_from_the_page_edge(count):
         assert box.y - box.height / 2 >= 0.5 - SHRINK, key
         assert box.x + box.width / 2 <= layout.width - 0.5 + SHRINK, key
         assert box.y + box.height / 2 <= layout.height - 0.5 + SHRINK, key
+
+
+def _layout_of_case(monkeypatch, name):
+    """The layout the builder draws a case file with (tests/fixtures/diagrams), as the Visio harness is shown it."""
+    spec = importlib.util.spec_from_file_location(
+        f"case_{name}", Path(__file__).parent / "fixtures" / "diagrams" / f"{name}.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    seen: list[Layout] = []
+    real = builder_module.layered_layout
+    monkeypatch.setattr(builder_module, "layered_layout", lambda *a, **k: seen.append(real(*a, **k)) or seen[-1])
+    module.build()
+    return seen[0]
+
+
+def test_a_self_loop_leaves_a_node_from_its_own_point_not_the_next_edges(monkeypatch):
+    layout = _layout_of_case(monkeypatch, "every_kind")
+    assert layout.routes[("n3", "n3", 0)][0] != layout.routes[("n3", "n4", 0)][0]
+    _check_routes(layout)
+
+
+def test_routes_into_one_node_arrive_at_different_points_and_none_rides_a_group_border(monkeypatch):
+    layout = _layout_of_case(monkeypatch, "groups_and_lanes")
+    assert layout.routes[("s1", "s4", 0)][-1] != layout.routes[("s3", "s4", 0)][-1]
+    _check_routes(layout)
+
+
+def test_a_route_keeps_clear_of_the_heading_of_a_group_it_enters(monkeypatch):
+    layout = _layout_of_case(monkeypatch, "groups_and_lanes")
+    _check_heading_bands(layout, [("g2", *builder_module._heading_size("Second look"))])
