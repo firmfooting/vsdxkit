@@ -1315,6 +1315,16 @@ def layered_layout(
     evenly in a gap too busy to hold them at that pitch). A run of edges that leave one box for boxes in line with it
     stays straight. The pitch between border points on one side of a box is ``LayoutOptions.port_pitch``.
 
+    Within its track a box moves toward the centres of its neighbours in the layers on either side, so that an edge
+    between boxes that overlap across the flow can run straight; ``LayoutOptions.straighten_sweeps`` sets how many
+    down-and-up passes do this (zero keeps each run centred). Ordering within a layer counts crossings and keeps the
+    order with the fewest. ``LayoutOptions.pinned`` puts a node in a layer of your choosing (``Node.layer`` in the
+    builder), which must come after every layer that feeds it, and ``LayoutOptions.aligned`` draws groups of nodes on
+    one row (``Page.align``); a group whose members cannot share a row, for instance because the page is wrapped into
+    rows that put them in different bands, is refused by name. ``LayoutOptions.columns='even'`` gives every column one
+    pitch. With no lanes, a feedback edge that jumps layers runs in a corridor outside the drawing (between
+    neighbouring rows on a wrapped page) instead of through a slot in each layer it jumps.
+
     A dense graph may be refused: when routes cannot all be given lines of their own within a fixed number of search
     steps, the layout raises instead of returning routes that overlap. The limit holds for each of the two passes
     (border points of their own, then shared points). Measured with random graphs and the default options, these
