@@ -24,21 +24,7 @@ def test_a_bipartite_graph_with_a_crossing_free_order_is_laid_out_without_crossi
     assert rm.crossings(lay) == 0
 
 
-@pytest.mark.parametrize(
-    "name",
-    [
-        pytest.param(
-            n,
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="chain25's feedback edge leaves p20 across the forward edge into it; Task 28 routes feedback in an outer corridor",
-            )
-            if n == "chain25"
-            else (),
-        )
-        for n in ("chain25", "lanes3")
-    ],
-)
+@pytest.mark.parametrize("name", ["chain25", "lanes3"])
 def test_the_long_fixtures_have_no_crossings(name):
     assert rm.crossings(corpus.fixture_layout(name)) == 0
 
@@ -147,3 +133,34 @@ def test_even_columns_give_every_layer_one_pitch():
 def test_a_columns_value_that_is_not_known_is_refused_by_name():
     with pytest.raises(lo.GraphError, match="columns"):
         layered_layout((LayoutNode("a", 1, 1),), (), options=replace(LayoutOptions(), **{"columns": "wide"}))
+
+
+def test_a_feedback_edge_leaves_no_dummy_and_runs_outside_the_drawing():
+    lay = corpus.fixture_layout("chain25")
+    route = lay.routes[("p20", "p14", 0)]
+    assert rm.bends(route) <= 4
+    assert lay.fallbacks == 0
+
+
+def test_a_feedback_edge_does_not_widen_the_layers_it_jumps():
+    nodes = tuple(LayoutNode(f"s{i}", 2, 1) for i in range(6))
+    chain = tuple((f"s{i}", f"s{i + 1}") for i in range(5))
+    plain = layered_layout(nodes, chain, options=LayoutOptions(page=None))
+    back = layered_layout(nodes, (*chain, ("s5", "s1")), options=LayoutOptions(page=None))
+    assert back.width == plain.width and back.height <= plain.height + 1.0
+
+
+def test_a_feedback_edge_in_a_lane_stays_in_its_lane():
+    nodes = tuple(LayoutNode(f"s{i}", 2, 1, "L0") for i in range(4))
+    edges = (("s0", "s1"), ("s1", "s2"), ("s2", "s3"), ("s3", "s1"))
+    lay = layered_layout(nodes, edges, lanes=("L0",))
+    lane = lay.lanes["L0"]
+    for _x, y in lay.routes[("s3", "s1", 0)]:
+        assert lane.y - lane.height / 2 - 1e-6 <= y <= lane.y + lane.height / 2 + 1e-6
+
+
+def test_several_feedback_edges_nest_and_do_not_share_a_run():
+    nodes = tuple(LayoutNode(f"s{i}", 2, 1) for i in range(8))
+    chain = tuple((f"s{i}", f"s{i + 1}") for i in range(7))
+    lay = layered_layout(nodes, (*chain, ("s6", "s2"), ("s7", "s4")), options=LayoutOptions(page=None))
+    assert rm.shared_runs(lay) == [] and rm.crossings(lay) <= 1

@@ -89,21 +89,7 @@ def test_fan_in_has_no_crossing_either():
     assert rm.crossings(lay) == 0 and rm.port_order_violations(lay) == []
 
 
-@pytest.mark.parametrize(
-    "name",
-    [
-        pytest.param(
-            n,
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="chain25's feedback edge shares the forward edge's side of p20; Task 28 routes feedback in an outer corridor",
-            )
-            if n == "chain25"
-            else (),
-        )
-        for n in corpus.FIXTURES
-    ],
-)
+@pytest.mark.parametrize("name", corpus.FIXTURES)
 def test_ports_are_ordered_against_their_far_ends_on_every_fixture(name):
     assert rm.port_order_violations(corpus.fixture_layout(name)) == []
 
@@ -393,12 +379,7 @@ def test_a_port_pitch_reaches_the_ports_of_the_top_and_bottom_sides(pitch):
 
 
 def test_a_graph_of_simple_edges_never_reaches_the_search():
-    for name in (
-        "hub5",
-        "hub5_top_down",
-        "fanin",
-        "lanes3",
-    ):  # chain25 is left out: its feedback edge is searched until Task 28
+    for name in ("hub5", "hub5_top_down", "chain25", "fanin", "lanes3"):
         assert corpus.fixture_layout(name).fallbacks == 0, name
 
 
