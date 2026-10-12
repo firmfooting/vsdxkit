@@ -2,7 +2,7 @@
 
 Run it before and after a change to the router; the pull request that changes it records both tables.
 
-    uv run python tools/dense_matrix.py [--seed N] [--quick]
+    uv run python tools/dense_matrix.py [--seed N] [--quick] [--labels]
 
 Steps are the search steps charged against the work cap, summed over every layout pass of the call.
 """
@@ -33,17 +33,20 @@ CELLS = [
 ]
 
 
-def measure(seed: int, n: int, m: int, lanes: int, groups: int, direction: str) -> tuple[float, int, int, str]:
+def measure(
+    seed: int, n: int, m: int, lanes: int, groups: int, direction: str, labels: bool = False
+) -> tuple[float, int, int, str]:
     """(seconds, search steps, routes that needed the search, outcome) of one layout; the outcome is 'laid out' or the GraphError text."""
     rows, edges, lane_ids, group_ids, parents = random_graph(seed, n, m, lanes, groups)
     nodes = tuple(LayoutNode(*row) for row in rows)
-    options = LayoutOptions(direction=direction, parents=parents)
+    edge_labels = tuple((1.0, 0.3) if labels and i % 3 == 0 else None for i in range(len(edges)))
+    options = LayoutOptions(direction=direction, parents=parents, edge_labels=edge_labels if labels else ())
     meters: list[list[int]] = []
     searched: list[int] = []
     real = layout_module._lay_out
 
-    def spy(*args):  # the last argument is the step counter of that pass
-        meters.append(args[-1])
+    def spy(*args):  # argument 6 is the step counter of that pass
+        meters.append(args[6])
         result = real(*args)
         searched.append(result.fallbacks)
         return result
@@ -64,12 +67,13 @@ def measure(seed: int, n: int, m: int, lanes: int, groups: int, direction: str) 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument("--labels", action="store_true", help="label every third edge, as the labelled test corpus does")
     parser.add_argument("--quick", action="store_true", help="only the cells that finish in a few seconds")
     args = parser.parse_args()
     print("| nodes | edges | lanes | groups | direction | seconds | steps | fallbacks | outcome |")
     print("| --- | --- | --- | --- | --- | --- | --- | --- | --- |")
     for n, m, lanes, groups, direction in CELLS[: 3 if args.quick else None]:
-        seconds, steps, fallbacks, outcome = measure(args.seed, n, m, lanes, groups, direction)
+        seconds, steps, fallbacks, outcome = measure(args.seed, n, m, lanes, groups, direction, args.labels)
         print(
             f"| {n} | {m} | {lanes} | {groups} | {direction} | {seconds:.1f} | {steps:,} | {fallbacks} | {outcome} |",
             flush=True,

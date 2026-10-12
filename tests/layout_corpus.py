@@ -8,7 +8,7 @@ from types import ModuleType
 from helpers.graphs import random_graph, random_tree  # noqa: F401  (random_tree is re-exported)
 
 from vsdxkit import builder
-from vsdxkit.builder import Edge, Node, Page
+from vsdxkit.builder import Edge, Lane, Node, Page
 from vsdxkit.layout import Layout, LayoutOptions
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "diagrams"
@@ -71,3 +71,23 @@ def all_drawn() -> dict[str, dict[tuple[str, str, int], tuple[tuple[float, float
     out = {stem: _drawn(*_fixture_page(stem)) for stem in FIXTURES}
     out.update({f"rand-{seed}": _drawn(_random_page(seed, 40, 60), LayoutOptions()) for seed in range(5)})
     return out
+
+
+def _labelled_edges(edges: tuple[tuple[str, str], ...]) -> list[Edge]:
+    """`edges` with every third one labelled `Label {i}`."""
+    return [Edge(s, t, f"Label {i}" if i % 3 == 0 else None) for i, (s, t) in enumerate(edges)]
+
+
+def labelled_random_layout(seed: int, n: int, m: int) -> Layout:
+    """A seeded random page of `n` nodes and `m` edges, every third edge labelled, no lanes."""
+    rows, edges, *_ = random_graph(seed, n, m, 0, 0)
+    nodes = [Node(row[0], KINDS[i % len(KINDS)], f"Step {i}") for i, row in enumerate(rows)]
+    return builder._layout_page(Page("rand", nodes, _labelled_edges(edges)), LayoutOptions())[0]
+
+
+def labelled_lane_layout(seed: int) -> Layout:
+    """A seeded random page of 12 nodes and 16 edges in three lanes, every third edge labelled."""
+    rows, edges, lane_ids, *_ = random_graph(seed, 12, 16, 3, 0)
+    nodes = [Node(row[0], KINDS[i % len(KINDS)], f"Step {i}") for i, row in enumerate(rows)]
+    lanes = [Lane(lid, f"Lane {lid}", [row[0] for row in rows if row[3] == lid]) for lid in lane_ids]
+    return builder._layout_page(Page("lanes", nodes, _labelled_edges(edges), lanes=lanes), LayoutOptions())[0]

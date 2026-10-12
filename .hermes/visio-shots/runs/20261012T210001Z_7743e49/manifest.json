@@ -1,0 +1,1211 @@
+{
+  "run": "20261012T210001Z_7743e49",
+  "created": "2026-10-12T21:00:01+00:00",
+  "commit": "7743e490da899cc662befbc55db9fd57dd152805",
+  "branch": "feat/layout-phase-4",
+  "dirty": false,
+  "builder": {
+    "path": "tools/diagram_cases.py",
+    "sha256": "9103dee4a5b4ba793fdcee8972989bb84fed0404b26bf7159a59c25a93411bcf"
+  },
+  "against": {
+    "ref": "9274fff",
+    "commit": "9274ffff1aa99fda29c33c0cebff51471b876b31"
+  },
+  "visio": {
+    "version": "16.0",
+    "build": "20430"
+  },
+  "dpi": 150,
+  "build_errors": {
+    "candidate": {},
+    "ref": {}
+  },
+  "cases": {
+    "copy_style_clash": {
+      "line": "copy_style_clash: a shape copied from a document whose style 7 is another style; its sub-shapes show the source's line pattern and margins",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "cdf9da6499c98d596891f6430e494dbfe3c9a22ebc9ebb77d96d78c4b049821a",
+            "png": "fb824489a121bd7a1308debec317101138cab71506cf3638abf1916e82e265ac"
+          },
+          "recalc": {
+            "svg": "cdf9da6499c98d596891f6430e494dbfe3c9a22ebc9ebb77d96d78c4b049821a",
+            "png": "fb824489a121bd7a1308debec317101138cab71506cf3638abf1916e82e265ac"
+          },
+          "triggered": 34,
+          "asked": 34
+        },
+        "candidate": {
+          "open": {
+            "svg": "cdf9da6499c98d596891f6430e494dbfe3c9a22ebc9ebb77d96d78c4b049821a",
+            "png": "fb824489a121bd7a1308debec317101138cab71506cf3638abf1916e82e265ac"
+          },
+          "recalc": {
+            "svg": "cdf9da6499c98d596891f6430e494dbfe3c9a22ebc9ebb77d96d78c4b049821a",
+            "png": "fb824489a121bd7a1308debec317101138cab71506cf3638abf1916e82e265ac"
+          },
+          "triggered": 34,
+          "asked": 34
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "copy_style_absent": {
+      "line": "copy_style_absent: a shape copied into a document with no style 7; its sub-shapes show the source's line pattern and margins",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "cdf9da6499c98d596891f6430e494dbfe3c9a22ebc9ebb77d96d78c4b049821a",
+            "png": "fb824489a121bd7a1308debec317101138cab71506cf3638abf1916e82e265ac"
+          },
+          "recalc": {
+            "svg": "cdf9da6499c98d596891f6430e494dbfe3c9a22ebc9ebb77d96d78c4b049821a",
+            "png": "fb824489a121bd7a1308debec317101138cab71506cf3638abf1916e82e265ac"
+          },
+          "triggered": 34,
+          "asked": 34
+        },
+        "candidate": {
+          "open": {
+            "svg": "cdf9da6499c98d596891f6430e494dbfe3c9a22ebc9ebb77d96d78c4b049821a",
+            "png": "fb824489a121bd7a1308debec317101138cab71506cf3638abf1916e82e265ac"
+          },
+          "recalc": {
+            "svg": "cdf9da6499c98d596891f6430e494dbfe3c9a22ebc9ebb77d96d78c4b049821a",
+            "png": "fb824489a121bd7a1308debec317101138cab71506cf3638abf1916e82e265ac"
+          },
+          "triggered": 34,
+          "asked": 34
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "swimlanes": {
+      "line": "swimlanes: a three-lane cross-functional flowchart from create_swimlanes, a process in each lane; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "d6d662308daef01516dde2c9c2e35ab910f6ba7df9ff3570e26e199e6f364673",
+            "png": "236859e34a4a1f441eb6b3d7b76cd80c49144b643b88a42391d2021b0a99c003"
+          },
+          "recalc": {
+            "svg": "d6d662308daef01516dde2c9c2e35ab910f6ba7df9ff3570e26e199e6f364673",
+            "png": "236859e34a4a1f441eb6b3d7b76cd80c49144b643b88a42391d2021b0a99c003"
+          },
+          "triggered": 125,
+          "asked": 125
+        },
+        "candidate": {
+          "open": {
+            "svg": "d6d662308daef01516dde2c9c2e35ab910f6ba7df9ff3570e26e199e6f364673",
+            "png": "236859e34a4a1f441eb6b3d7b76cd80c49144b643b88a42391d2021b0a99c003"
+          },
+          "recalc": {
+            "svg": "d6d662308daef01516dde2c9c2e35ab910f6ba7df9ff3570e26e199e6f364673",
+            "png": "236859e34a4a1f441eb6b3d7b76cd80c49144b643b88a42391d2021b0a99c003"
+          },
+          "triggered": 125,
+          "asked": 125
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_kinds": {
+      "line": "lanes_kinds: sized Start/End, Decision and Process steps in two lanes; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "4ca132c05ea3a4ab92ca3613a0822706b9744d7feb72be4f6fb6009848297e36",
+            "png": "d3ce651c541d6ac7ddd2ebddf4261e6dbf7fe8da300a201a2ecd51f8e1242762"
+          },
+          "recalc": {
+            "svg": "4ca132c05ea3a4ab92ca3613a0822706b9744d7feb72be4f6fb6009848297e36",
+            "png": "d3ce651c541d6ac7ddd2ebddf4261e6dbf7fe8da300a201a2ecd51f8e1242762"
+          },
+          "triggered": 136,
+          "asked": 136
+        },
+        "candidate": {
+          "open": {
+            "svg": "4ca132c05ea3a4ab92ca3613a0822706b9744d7feb72be4f6fb6009848297e36",
+            "png": "d3ce651c541d6ac7ddd2ebddf4261e6dbf7fe8da300a201a2ecd51f8e1242762"
+          },
+          "recalc": {
+            "svg": "4ca132c05ea3a4ab92ca3613a0822706b9744d7feb72be4f6fb6009848297e36",
+            "png": "d3ce651c541d6ac7ddd2ebddf4261e6dbf7fe8da300a201a2ecd51f8e1242762"
+          },
+          "triggered": 136,
+          "asked": 136
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_one": {
+      "line": "lanes_one: a cross-functional flowchart of one lane; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "d43d34a767b08f38aafd41768bbb8553c1374be93fe76710b186f8af81a744b9",
+            "png": "d486037898e09eb30598a98ca132f0435d0cef29fee63e461d4697f1f4ea5fe7"
+          },
+          "recalc": {
+            "svg": "d43d34a767b08f38aafd41768bbb8553c1374be93fe76710b186f8af81a744b9",
+            "png": "d486037898e09eb30598a98ca132f0435d0cef29fee63e461d4697f1f4ea5fe7"
+          },
+          "triggered": 78,
+          "asked": 78
+        },
+        "candidate": {
+          "open": {
+            "svg": "d43d34a767b08f38aafd41768bbb8553c1374be93fe76710b186f8af81a744b9",
+            "png": "d486037898e09eb30598a98ca132f0435d0cef29fee63e461d4697f1f4ea5fe7"
+          },
+          "recalc": {
+            "svg": "d43d34a767b08f38aafd41768bbb8553c1374be93fe76710b186f8af81a744b9",
+            "png": "d486037898e09eb30598a98ca132f0435d0cef29fee63e461d4697f1f4ea5fe7"
+          },
+          "triggered": 78,
+          "asked": 78
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_two": {
+      "line": "lanes_two: two lanes, a process in each; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "f0b6e71e9fe0691c1cdeea2739328f151b6c8fabea0a25fb0d02d3c78abc3b0e",
+            "png": "a2986158834a6d5487ebb2c88b4a5f6061190bc3076f0e5a24a5952ca1b03ea1"
+          },
+          "recalc": {
+            "svg": "f0b6e71e9fe0691c1cdeea2739328f151b6c8fabea0a25fb0d02d3c78abc3b0e",
+            "png": "a2986158834a6d5487ebb2c88b4a5f6061190bc3076f0e5a24a5952ca1b03ea1"
+          },
+          "triggered": 100,
+          "asked": 100
+        },
+        "candidate": {
+          "open": {
+            "svg": "f0b6e71e9fe0691c1cdeea2739328f151b6c8fabea0a25fb0d02d3c78abc3b0e",
+            "png": "a2986158834a6d5487ebb2c88b4a5f6061190bc3076f0e5a24a5952ca1b03ea1"
+          },
+          "recalc": {
+            "svg": "f0b6e71e9fe0691c1cdeea2739328f151b6c8fabea0a25fb0d02d3c78abc3b0e",
+            "png": "a2986158834a6d5487ebb2c88b4a5f6061190bc3076f0e5a24a5952ca1b03ea1"
+          },
+          "triggered": 100,
+          "asked": 100
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_four": {
+      "line": "lanes_four: four lanes, one labelled with the widest letters; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "2d97164ef8e5c4c7e9675f8a458c88605bf6a1167d82209072678f64dbf87f59",
+            "png": "fefada2ba0081680a95e2dc4f7dbee7a3ac6195cf4bcad1fd9abbafd87a34f62"
+          },
+          "recalc": {
+            "svg": "2d97164ef8e5c4c7e9675f8a458c88605bf6a1167d82209072678f64dbf87f59",
+            "png": "fefada2ba0081680a95e2dc4f7dbee7a3ac6195cf4bcad1fd9abbafd87a34f62"
+          },
+          "triggered": 144,
+          "asked": 144
+        },
+        "candidate": {
+          "open": {
+            "svg": "2d97164ef8e5c4c7e9675f8a458c88605bf6a1167d82209072678f64dbf87f59",
+            "png": "fefada2ba0081680a95e2dc4f7dbee7a3ac6195cf4bcad1fd9abbafd87a34f62"
+          },
+          "recalc": {
+            "svg": "2d97164ef8e5c4c7e9675f8a458c88605bf6a1167d82209072678f64dbf87f59",
+            "png": "fefada2ba0081680a95e2dc4f7dbee7a3ac6195cf4bcad1fd9abbafd87a34f62"
+          },
+          "triggered": 144,
+          "asked": 144
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_extremes": {
+      "line": "lanes_extremes: a 0.5 inch lane, a 6 inch lane and a 5 inch wide diagram; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "17191e1eeb4f69494537fb4cb916aee255d1a56a427df0d1d647a50d7798f2a2",
+            "png": "521643ffcdb2d2c343ad19b5d921c6bcf34333046040af31f0d7b84c48794720"
+          },
+          "recalc": {
+            "svg": "17191e1eeb4f69494537fb4cb916aee255d1a56a427df0d1d647a50d7798f2a2",
+            "png": "521643ffcdb2d2c343ad19b5d921c6bcf34333046040af31f0d7b84c48794720"
+          },
+          "triggered": 96,
+          "asked": 96
+        },
+        "candidate": {
+          "open": {
+            "svg": "17191e1eeb4f69494537fb4cb916aee255d1a56a427df0d1d647a50d7798f2a2",
+            "png": "521643ffcdb2d2c343ad19b5d921c6bcf34333046040af31f0d7b84c48794720"
+          },
+          "recalc": {
+            "svg": "17191e1eeb4f69494537fb4cb916aee255d1a56a427df0d1d647a50d7798f2a2",
+            "png": "521643ffcdb2d2c343ad19b5d921c6bcf34333046040af31f0d7b84c48794720"
+          },
+          "triggered": 96,
+          "asked": 96
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_five": {
+      "line": "lanes_five: five lanes, a process in each; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "6e5a094d819944190c3dc31ed0fb0ce70e9539c6376169d2661e8ae319f5ab38",
+            "png": "fe668925fd96a5dcd5176b52bd5b09a892507449b367aab6dc69b17c998cb62d"
+          },
+          "recalc": {
+            "svg": "6e5a094d819944190c3dc31ed0fb0ce70e9539c6376169d2661e8ae319f5ab38",
+            "png": "fe668925fd96a5dcd5176b52bd5b09a892507449b367aab6dc69b17c998cb62d"
+          },
+          "triggered": 166,
+          "asked": 166
+        },
+        "candidate": {
+          "open": {
+            "svg": "6e5a094d819944190c3dc31ed0fb0ce70e9539c6376169d2661e8ae319f5ab38",
+            "png": "fe668925fd96a5dcd5176b52bd5b09a892507449b367aab6dc69b17c998cb62d"
+          },
+          "recalc": {
+            "svg": "6e5a094d819944190c3dc31ed0fb0ce70e9539c6376169d2661e8ae319f5ab38",
+            "png": "fe668925fd96a5dcd5176b52bd5b09a892507449b367aab6dc69b17c998cb62d"
+          },
+          "triggered": 166,
+          "asked": 166
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_uneven": {
+      "line": "lanes_uneven: lanes of different heights, three processes in one and none in another; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "1385aee2fd727a6ccdb654d64be47a16e8b616304c1df41272eaa88d057e2908",
+            "png": "674967fdcc3ee8804084e98ffa4025a50fc1cf0db852d4c8e26f1870aa4279dc"
+          },
+          "recalc": {
+            "svg": "1385aee2fd727a6ccdb654d64be47a16e8b616304c1df41272eaa88d057e2908",
+            "png": "674967fdcc3ee8804084e98ffa4025a50fc1cf0db852d4c8e26f1870aa4279dc"
+          },
+          "triggered": 126,
+          "asked": 126
+        },
+        "candidate": {
+          "open": {
+            "svg": "1385aee2fd727a6ccdb654d64be47a16e8b616304c1df41272eaa88d057e2908",
+            "png": "674967fdcc3ee8804084e98ffa4025a50fc1cf0db852d4c8e26f1870aa4279dc"
+          },
+          "recalc": {
+            "svg": "1385aee2fd727a6ccdb654d64be47a16e8b616304c1df41272eaa88d057e2908",
+            "png": "674967fdcc3ee8804084e98ffa4025a50fc1cf0db852d4c8e26f1870aa4279dc"
+          },
+          "triggered": 126,
+          "asked": 126
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_style_clash": {
+      "line": "lanes_style_clash: a diagram in a document whose style 7 is another style; the Separator shows Flow Normal's margins",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "d5ab8b1cf7d2a8d902a20c57ff178719250af82493ca9a6e6b339aecd9b28a15",
+            "png": "f08cde51861fca50db89812ea83b71da849b06da645f76b9b68effd76af0a014"
+          },
+          "recalc": {
+            "svg": "d5ab8b1cf7d2a8d902a20c57ff178719250af82493ca9a6e6b339aecd9b28a15",
+            "png": "f08cde51861fca50db89812ea83b71da849b06da645f76b9b68effd76af0a014"
+          },
+          "triggered": 102,
+          "asked": 102
+        },
+        "candidate": {
+          "open": {
+            "svg": "d5ab8b1cf7d2a8d902a20c57ff178719250af82493ca9a6e6b339aecd9b28a15",
+            "png": "f08cde51861fca50db89812ea83b71da849b06da645f76b9b68effd76af0a014"
+          },
+          "recalc": {
+            "svg": "d5ab8b1cf7d2a8d902a20c57ff178719250af82493ca9a6e6b339aecd9b28a15",
+            "png": "f08cde51861fca50db89812ea83b71da849b06da645f76b9b68effd76af0a014"
+          },
+          "triggered": 102,
+          "asked": 102
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_style_absent": {
+      "line": "lanes_style_absent: a diagram in a document with no style 7; the Separator shows Flow Normal's margins",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "d5ab8b1cf7d2a8d902a20c57ff178719250af82493ca9a6e6b339aecd9b28a15",
+            "png": "f08cde51861fca50db89812ea83b71da849b06da645f76b9b68effd76af0a014"
+          },
+          "recalc": {
+            "svg": "d5ab8b1cf7d2a8d902a20c57ff178719250af82493ca9a6e6b339aecd9b28a15",
+            "png": "f08cde51861fca50db89812ea83b71da849b06da645f76b9b68effd76af0a014"
+          },
+          "triggered": 102,
+          "asked": 102
+        },
+        "candidate": {
+          "open": {
+            "svg": "d5ab8b1cf7d2a8d902a20c57ff178719250af82493ca9a6e6b339aecd9b28a15",
+            "png": "f08cde51861fca50db89812ea83b71da849b06da645f76b9b68effd76af0a014"
+          },
+          "recalc": {
+            "svg": "d5ab8b1cf7d2a8d902a20c57ff178719250af82493ca9a6e6b339aecd9b28a15",
+            "png": "f08cde51861fca50db89812ea83b71da849b06da645f76b9b68effd76af0a014"
+          },
+          "triggered": 102,
+          "asked": 102
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_add": {
+      "line": "lanes_add: a created two-lane diagram with a lane added by add_lane; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "efe60d353665f06a6116ee7ae910c4b10a6d550cfb4a279e86325d52bfcf727d",
+            "png": "005d1d55df5343302de03c84acd6e6da13bd25370c6c77c734eee0fbf0b58d23"
+          },
+          "recalc": {
+            "svg": "efe60d353665f06a6116ee7ae910c4b10a6d550cfb4a279e86325d52bfcf727d",
+            "png": "005d1d55df5343302de03c84acd6e6da13bd25370c6c77c734eee0fbf0b58d23"
+          },
+          "triggered": 122,
+          "asked": 122
+        },
+        "candidate": {
+          "open": {
+            "svg": "efe60d353665f06a6116ee7ae910c4b10a6d550cfb4a279e86325d52bfcf727d",
+            "png": "005d1d55df5343302de03c84acd6e6da13bd25370c6c77c734eee0fbf0b58d23"
+          },
+          "recalc": {
+            "svg": "efe60d353665f06a6116ee7ae910c4b10a6d550cfb4a279e86325d52bfcf727d",
+            "png": "005d1d55df5343302de03c84acd6e6da13bd25370c6c77c734eee0fbf0b58d23"
+          },
+          "triggered": 122,
+          "asked": 122
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_wide": {
+      "line": "lanes_wide: a diagram 22 inches wide on a page widened to 24; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "98f7a37961303e91536ba56807f489bd9529a4d04a2a1cbdf69b09a26acb019a",
+            "png": "b6ca4eb7269231c0990ef8a1a1e54b97b17e91ad40a0ff074789e1920690be8e"
+          },
+          "recalc": {
+            "svg": "98f7a37961303e91536ba56807f489bd9529a4d04a2a1cbdf69b09a26acb019a",
+            "png": "b6ca4eb7269231c0990ef8a1a1e54b97b17e91ad40a0ff074789e1920690be8e"
+          },
+          "triggered": 100,
+          "asked": 100
+        },
+        "candidate": {
+          "open": {
+            "svg": "98f7a37961303e91536ba56807f489bd9529a4d04a2a1cbdf69b09a26acb019a",
+            "png": "b6ca4eb7269231c0990ef8a1a1e54b97b17e91ad40a0ff074789e1920690be8e"
+          },
+          "recalc": {
+            "svg": "98f7a37961303e91536ba56807f489bd9529a4d04a2a1cbdf69b09a26acb019a",
+            "png": "b6ca4eb7269231c0990ef8a1a1e54b97b17e91ad40a0ff074789e1920690be8e"
+          },
+          "triggered": 100,
+          "asked": 100
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_wide_60_3": {
+      "line": "lanes_wide_60_3: three lanes, a diagram 60 inches wide on a page widened to 61; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "3a2cb2ee1a2d1d2e2900a12b53937c052aa3fe1ed1ea67d70059d7dde684d706",
+            "png": "1435a1816b67d67566b0b1fdbec2c8b1fe9ba2b4ac32fb22a1e88a4dde7ecfe7"
+          },
+          "recalc": {
+            "svg": "3a2cb2ee1a2d1d2e2900a12b53937c052aa3fe1ed1ea67d70059d7dde684d706",
+            "png": "1435a1816b67d67566b0b1fdbec2c8b1fe9ba2b4ac32fb22a1e88a4dde7ecfe7"
+          },
+          "triggered": 122,
+          "asked": 122
+        },
+        "candidate": {
+          "open": {
+            "svg": "3a2cb2ee1a2d1d2e2900a12b53937c052aa3fe1ed1ea67d70059d7dde684d706",
+            "png": "1435a1816b67d67566b0b1fdbec2c8b1fe9ba2b4ac32fb22a1e88a4dde7ecfe7"
+          },
+          "recalc": {
+            "svg": "3a2cb2ee1a2d1d2e2900a12b53937c052aa3fe1ed1ea67d70059d7dde684d706",
+            "png": "1435a1816b67d67566b0b1fdbec2c8b1fe9ba2b4ac32fb22a1e88a4dde7ecfe7"
+          },
+          "triggered": 122,
+          "asked": 122
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_wide_60_5": {
+      "line": "lanes_wide_60_5: five lanes, a diagram 60 inches wide on a page widened to 61; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "886e73b7ce63567c2745718230dd2e1df2c5b3e83a9e2f10b666621de63d7737",
+            "png": "8f574a5042527a21256c6b1f596516cefd0cf12c614baf21e47e34202d06d594"
+          },
+          "recalc": {
+            "svg": "886e73b7ce63567c2745718230dd2e1df2c5b3e83a9e2f10b666621de63d7737",
+            "png": "8f574a5042527a21256c6b1f596516cefd0cf12c614baf21e47e34202d06d594"
+          },
+          "triggered": 166,
+          "asked": 166
+        },
+        "candidate": {
+          "open": {
+            "svg": "886e73b7ce63567c2745718230dd2e1df2c5b3e83a9e2f10b666621de63d7737",
+            "png": "8f574a5042527a21256c6b1f596516cefd0cf12c614baf21e47e34202d06d594"
+          },
+          "recalc": {
+            "svg": "886e73b7ce63567c2745718230dd2e1df2c5b3e83a9e2f10b666621de63d7737",
+            "png": "8f574a5042527a21256c6b1f596516cefd0cf12c614baf21e47e34202d06d594"
+          },
+          "triggered": 166,
+          "asked": 166
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "every_kind": {
+      "line": "every_kind: nine node kinds, six edge kinds, a long edge, a self-loop; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "1b9f6bd0e8b72e96747cdb435696da3029b1cc8e41521bd42586eb5234905054",
+            "png": "e946b9e091dd0e6da44bad88439e8a3e33b31ec8b01d089a9e57151c90710a2b"
+          },
+          "recalc": {
+            "svg": "1b9f6bd0e8b72e96747cdb435696da3029b1cc8e41521bd42586eb5234905054",
+            "png": "e946b9e091dd0e6da44bad88439e8a3e33b31ec8b01d089a9e57151c90710a2b"
+          },
+          "triggered": 262,
+          "asked": 262
+        },
+        "candidate": {
+          "open": {
+            "svg": "ba8be9a308b5536ff3bc03be46497f2ce39a25aad4aab1bf1c8766907b7151dc",
+            "png": "8c72e2881aad1af3909bcfe751c1644bc45fbae65d01239652352d7db8e26665"
+          },
+          "recalc": {
+            "svg": "6489bb85c2bba632401f6f1fd1868cd91aa69706998d9bff90fbfc7f5f28b4c5",
+            "png": "8c72e2881aad1af3909bcfe751c1644bc45fbae65d01239652352d7db8e26665"
+          },
+          "triggered": 266,
+          "asked": 266
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [
+          "the page: width=11.26in height=7.22in viewBox=0 0 810.72 519.84 -> width=11.15in height=7.22in viewBox=0 0 802.8 519.84",
+          "shape 2 moved (+0.600 in, +0.000 in): translate(304.56,-383.04) -> translate(347.76,-383.04)",
+          "shape 3 moved (-0.110 in, +0.000 in): translate(586.8,-368.64) -> translate(578.88,-368.64)",
+          "shape 4 moved (-0.110 in, +0.000 in): translate(601.2,-216.72) -> translate(593.28,-216.72)",
+          "shape 5 moved (+0.600 in, +0.000 in): translate(318.96,-176.4) -> translate(362.16,-176.4)",
+          "shape 6 moved (+0.600 in, +0.000 in): translate(87.84,-172.8) -> translate(131.04,-172.8)",
+          "shape 7 moved (+0.600 in, +0.000 in): translate(87.84,-61.2) -> translate(131.04,-61.2)",
+          "shape 8 moved (+0.600 in, +0.000 in): translate(318.96,-57.6) -> translate(362.16,-57.6)",
+          "shape 9 moved (+0.600 in, +0.000 in): translate(506.88,-64.8) -> translate(550.08,-64.8)",
+          "shape 10 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 11 moved (+0.600 in, +0.000 in): translate(462.96,-415.44) -> translate(506.16,-415.44)",
+          "shape 11 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 12 moved (-0.410 in, +0.000 in): translate(673.2,-281.52) -> translate(643.68,-281.52)",
+          "shape 12 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-0 use transform=scale(-4.36,-4.36)  xlink:hre...",
+          "shape 13 moved (+0.600 in, +0.000 in): translate(477.36,-228.96) -> translate(520.56,-228.96)",
+          "shape 13 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 14 moved (+0.600 in, +0.000 in): translate(246.24,-208.8) -> translate(289.44,-208.8)",
+          "shape 15 moved (+0.600 in, +0.000 in): translate(167.04,-126) -> translate(210.24,-126)",
+          "shape 16 moved (+0.600 in, +0.000 in): translate(246.24,-93.6) -> translate(289.44,-93.6)",
+          "shape 17 moved (+0.600 in, +0.000 in): translate(434.16,-93.6) -> translate(477.36,-93.6)",
+          "shape 18 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-0 use transform=scale(-4.36,-4.36)  xlink:hre... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-0 use transform=scale(-4.36,-4.36)  xlink:hre...",
+          "shape 19 moved (-0.110 in, +0.000 in): translate(275.04,-290.88) -> translate(267.12,-290.88)",
+          "shape 20 moved (-0.110 in, +0.000 in): translate(579.6,-256.32) -> translate(571.68,-256.32)",
+          "shape 21 moved (-0.340 in, +0.000 in): translate(601.2,-285.12) -> translate(576.72,-285.12)"
+        ],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "node_outlines": {
+      "line": "node_outlines: a decision, a rounded node and two data stores (one tall) each with three edges at offset points; every line and arrowhead must touch the drawn outline",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "f4aec1384573adb17402725aea83e1afaa1c5a4aeb7ffe095eeb5dd88e4cce08",
+            "png": "54825048f2f69c70159a6489ca08f98612b236afb68b1ad7231ad61ab3a95d69"
+          },
+          "recalc": {
+            "svg": "f4aec1384573adb17402725aea83e1afaa1c5a4aeb7ffe095eeb5dd88e4cce08",
+            "png": "54825048f2f69c70159a6489ca08f98612b236afb68b1ad7231ad61ab3a95d69"
+          },
+          "triggered": 206,
+          "asked": 206
+        },
+        "candidate": {
+          "open": {
+            "svg": "f4aec1384573adb17402725aea83e1afaa1c5a4aeb7ffe095eeb5dd88e4cce08",
+            "png": "54825048f2f69c70159a6489ca08f98612b236afb68b1ad7231ad61ab3a95d69"
+          },
+          "recalc": {
+            "svg": "f4aec1384573adb17402725aea83e1afaa1c5a4aeb7ffe095eeb5dd88e4cce08",
+            "png": "54825048f2f69c70159a6489ca08f98612b236afb68b1ad7231ad61ab3a95d69"
+          },
+          "triggered": 206,
+          "asked": 206
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "groups_and_lanes": {
+      "line": "groups_and_lanes: three lanes, a group holding a group; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "27e19c0c52ca3708984f758e5d58d44947e3f73e9a26fa43599107779d651982",
+            "png": "bf5b218b430f936168d68259a19fa1acbc60b226b9a4acd004a0b95faa3ff4ea"
+          },
+          "recalc": {
+            "svg": "ce91a1bae244c43b9117ddfd37a79441c36fab9fbcc2c8955cff43aa3506df1e",
+            "png": "bf5b218b430f936168d68259a19fa1acbc60b226b9a4acd004a0b95faa3ff4ea"
+          },
+          "triggered": 292,
+          "asked": 292
+        },
+        "candidate": {
+          "open": {
+            "svg": "eaa82f134b46196b130d0fbcebcc54226ab09411c5b32b0bdeee8e77b34ca9a8",
+            "png": "0b174d7b2f557e0a39828fc48e712ef6e05b95e1c8b49720a7081bddc936b6c1"
+          },
+          "recalc": {
+            "svg": "eaa82f134b46196b130d0fbcebcc54226ab09411c5b32b0bdeee8e77b34ca9a8",
+            "png": "0b174d7b2f557e0a39828fc48e712ef6e05b95e1c8b49720a7081bddc936b6c1"
+          },
+          "triggered": 292,
+          "asked": 292
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [
+          "the page: width=20.25in height=9.59in viewBox=0 0 1458 690.48 -> width=20.72in height=9.59in viewBox=0 0 1491.84 690.48",
+          "shape 2 drawn differently: rect style={fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.25} height=632.2 width=1422 x=0 y=58.2803 -> rect style={fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.25} height=632.2 width=1455.84 x=0 y=58.2803",
+          "shape 3 drawn differently: path style={fill:#fff9f1;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.25} d=M0 690.48 L1422 690.48 L1422 662.13 L0 662.13 L0 690.48 Z -> path style={fill:#fff9f1;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.25} d=M0 690.48 L1455.84 690.48 L1455.84 662.13 L0 662.13 L0 690.48 Z",
+          "shape 4 drawn differently: rect style={fill:none} height=589.68 width=1422 x=0 y=100.8 -> rect style={fill:none} height=589.68 width=1455.84 x=0 y=100.8",
+          "shape 8 drawn differently: rect style={fill:#fff9f1;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.24} height=14.1732 width=1422 x=0 y=676.307 -> rect style={fill:#fff9f1;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.24} height=14.1732 width=1455.84 x=0 y=676.307",
+          "shape 10 drawn differently: rect style={fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=141.12 width=1422 x=0 y=549.36 -> rect style={fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=141.12 width=1455.84 x=0 y=549.36",
+          "shape 13 drawn differently: rect style={fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=307.44 width=1422 x=0 y=383.04 -> rect style={fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=307.44 width=1455.84 x=0 y=383.04",
+          "shape 16 drawn differently: rect style={fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=141.12 width=1422 x=0 y=549.36 -> rect style={fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=141.12 width=1455.84 x=0 y=549.36",
+          "shape 18 moved (+0.470 in, +0.000 in): translate(519.84,-192.96) -> translate(553.68,-192.96)",
+          "shape 19 moved (+0.470 in, +0.000 in): translate(768.96,-211.68) -> translate(802.8,-211.68)",
+          "shape 22 moved (+0.470 in, +0.000 in): translate(555.84,-396) -> translate(589.68,-396)",
+          "shape 23 moved (+0.470 in, +0.000 in): translate(786.96,-229.68) -> translate(820.8,-229.68)",
+          "shape 24 moved (+0.470 in, +0.000 in): translate(1018.08,-229.68) -> translate(1051.92,-229.68)",
+          "shape 25 moved (+0.470 in, +0.000 in): translate(1249.2,-88.56) -> translate(1283.04,-88.56)",
+          "shape 27 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 28 moved (+0.470 in, +0.000 in): translate(635.04,-262.08) -> translate(668.88,-262.08)",
+          "shape 29 moved (+0.470 in, +0.000 in): translate(945.36,-262.08) -> translate(979.2,-262.08)",
+          "shape 30 moved (+0.470 in, +0.000 in): translate(1097.28,-120.96) -> translate(1131.12,-120.96)",
+          "shape 31 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 32 moved (+0.040 in, +0.000 in): translate(762.48,-558.72) -> translate(765.36,-558.72)"
+        ],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "group_heading_top_down": {
+      "line": "group_heading_top_down: a top-down edge into a grouped node, whose one-line heading must stay clear of the connector; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "f67e4a886e8775999345dc3dabe2158887d671a78da9061fef8dce1e651fea6e",
+            "png": "711146c91206020d67267d236aa4b5c9da44dceb7fc9d8358d81cfceba4fc5a0"
+          },
+          "recalc": {
+            "svg": "f67e4a886e8775999345dc3dabe2158887d671a78da9061fef8dce1e651fea6e",
+            "png": "711146c91206020d67267d236aa4b5c9da44dceb7fc9d8358d81cfceba4fc5a0"
+          },
+          "triggered": 56,
+          "asked": 56
+        },
+        "candidate": {
+          "open": {
+            "svg": "f67e4a886e8775999345dc3dabe2158887d671a78da9061fef8dce1e651fea6e",
+            "png": "711146c91206020d67267d236aa4b5c9da44dceb7fc9d8358d81cfceba4fc5a0"
+          },
+          "recalc": {
+            "svg": "f67e4a886e8775999345dc3dabe2158887d671a78da9061fef8dce1e651fea6e",
+            "png": "711146c91206020d67267d236aa4b5c9da44dceb7fc9d8358d81cfceba4fc5a0"
+          },
+          "triggered": 56,
+          "asked": 56
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "labels_groups_lanes": {
+      "line": "labels_groups_lanes: labels inside lanes, parallel labelled edges, a label into a headed group, a label wider than its gap; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "bb81378f5b9c0c1b67a30a865cafe9f7e75598fdad4a9712127cdab6fa2dfd1f",
+            "png": "f6b2c1dc3b0ed31da45129b9b1a7a84db56be69cf9996742ee4dcd68b392df77"
+          },
+          "recalc": {
+            "svg": "a5f0ea60b06f2f075a1583e5df14e4791fa6df9ec844a9bd45785ca0f55c8663",
+            "png": "f6b2c1dc3b0ed31da45129b9b1a7a84db56be69cf9996742ee4dcd68b392df77"
+          },
+          "triggered": 320,
+          "asked": 320
+        },
+        "candidate": {
+          "open": {
+            "svg": "e354e2d35bc7bb9f05e1e94863957bfb816c5fb37a7235c1e4d1e23c4c934ec6",
+            "png": "3bf83fa2c04517542bf773d754af37ade87b90318b539ea9adfd583ceb19fef5"
+          },
+          "recalc": {
+            "svg": "4af401adf8f505c3e1867b670811e9fad56d31a56155930f73f85097be4cfd36",
+            "png": "3bf83fa2c04517542bf773d754af37ade87b90318b539ea9adfd583ceb19fef5"
+          },
+          "triggered": 320,
+          "asked": 320
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [
+          "the page: width=21.81in height=9.17in viewBox=0 0 1570.32 660.24 -> width=23.41in height=9.17in viewBox=0 0 1685.52 660.24",
+          "shape 2 drawn differently: rect style={fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.25} height=601.96 width=1534.32 x=0 y=58.2803 -> rect style={fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.25} height=601.96 width=1649.52 x=0 y=58.2803",
+          "shape 3 drawn differently: path style={fill:#fff9f1;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.25} d=M0 660.24 L1534.32 660.24 L1534.32 631.89 L0 631.89 L0 660.24 Z -> path style={fill:#fff9f1;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.25} d=M0 660.24 L1649.52 660.24 L1649.52 631.89 L0 631.89 L0 660.24 Z",
+          "shape 4 drawn differently: rect style={fill:none} height=559.44 width=1534.32 x=0 y=100.8 -> rect style={fill:none} height=559.44 width=1649.52 x=0 y=100.8",
+          "shape 8 drawn differently: rect style={fill:#fff9f1;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.24} height=14.1732 width=1534.32 x=0 y=646.067 -> rect style={fill:#fff9f1;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.24} height=14.1732 width=1649.52 x=0 y=646.067",
+          "shape 10 drawn differently: rect style={fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=177.12 width=1534.32 x=0 y=483.12 -> rect style={fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=177.12 width=1649.52 x=0 y=483.12",
+          "shape 13 drawn differently: rect style={fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=274.32 width=1534.32 x=0 y=385.92 -> rect style={fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=274.32 width=1649.52 x=0 y=385.92",
+          "shape 16 drawn differently: rect style={fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=108 width=1534.32 x=0 y=552.24 -> rect style={fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=108 width=1649.52 x=0 y=552.24",
+          "shape 18 moved (+1.200 in, +0.000 in): translate(743.76,-162) -> translate(830.16,-162)",
+          "shape 20 moved (+0.800 in, +0.000 in): translate(410.4,-523.44) -> translate(468,-523.44)",
+          "shape 21 moved (+1.200 in, +0.000 in): translate(761.76,-180) -> translate(848.16,-180)",
+          "shape 22 moved (+1.200 in, +0.000 in): translate(992.88,-346.32) -> translate(1079.28,-346.32)",
+          "shape 23 moved (+1.600 in, +0.000 in): translate(1361.52,-72) -> translate(1476.72,-72)",
+          "shape 24 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 25 moved (-0.480 in, +0.000 in): translate(307.44,-559.44) -> translate(272.88,-559.44)",
+          "shape 26 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 27 moved (+0.740 in, +0.000 in): translate(268.56,-545.04) -> translate(321.84,-545.04)",
+          "shape 28 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 29 moved (+0.540 in, +0.000 in): translate(331.92,-530.64) -> translate(370.8,-530.64)",
+          "shape 30 moved (+0.800 in, +0.000 in): translate(489.6,-212.4) -> translate(547.2,-212.4)",
+          "shape 30 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 31 moved (+0.800 in, +1.610 in): translate(396.72,-357.12) -> translate(454.32,-473.04)",
+          "shape 32 moved (+1.200 in, +0.000 in): translate(920.16,-212.4) -> translate(1006.56,-212.4)",
+          "shape 32 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 33 moved (+1.200 in, +0.000 in): translate(1072.08,-104.4) -> translate(1158.48,-104.4)",
+          "shape 33 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 34 moved (+0.690 in, +0.000 in): translate(1115.28,-93.6) -> translate(1164.96,-93.6)"
+        ],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "two_pages/page 1": {
+      "line": "two_pages: two pages and a page link; every shape on both pages where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "4f485569a805129d2fdc2da9fd6ce82cde7577df5139fc3768f7d09dcfb30c6e",
+            "png": "12ad928e6b8a51a430d2956c1240cf7adbc366a9c418fe0fee7cda5465373439"
+          },
+          "recalc": {
+            "svg": "4f485569a805129d2fdc2da9fd6ce82cde7577df5139fc3768f7d09dcfb30c6e",
+            "png": "12ad928e6b8a51a430d2956c1240cf7adbc366a9c418fe0fee7cda5465373439"
+          },
+          "triggered": 120,
+          "asked": 120
+        },
+        "candidate": {
+          "open": {
+            "svg": "4f485569a805129d2fdc2da9fd6ce82cde7577df5139fc3768f7d09dcfb30c6e",
+            "png": "12ad928e6b8a51a430d2956c1240cf7adbc366a9c418fe0fee7cda5465373439"
+          },
+          "recalc": {
+            "svg": "4f485569a805129d2fdc2da9fd6ce82cde7577df5139fc3768f7d09dcfb30c6e",
+            "png": "12ad928e6b8a51a430d2956c1240cf7adbc366a9c418fe0fee7cda5465373439"
+          },
+          "triggered": 120,
+          "asked": 120
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "two_pages/page 2": {
+      "line": "two_pages: two pages and a page link; every shape on both pages where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "80491bfb32c0db2476b9f0dfda120fdfe601e7b32e7532a5d0bf999fd012631d",
+            "png": "2c621f1ae7549566cac4b84bafb820ad761135f7e7fd4c547cb32fe54ea75d34"
+          },
+          "recalc": {
+            "svg": "80491bfb32c0db2476b9f0dfda120fdfe601e7b32e7532a5d0bf999fd012631d",
+            "png": "2c621f1ae7549566cac4b84bafb820ad761135f7e7fd4c547cb32fe54ea75d34"
+          },
+          "triggered": 120,
+          "asked": 120
+        },
+        "candidate": {
+          "open": {
+            "svg": "80491bfb32c0db2476b9f0dfda120fdfe601e7b32e7532a5d0bf999fd012631d",
+            "png": "2c621f1ae7549566cac4b84bafb820ad761135f7e7fd4c547cb32fe54ea75d34"
+          },
+          "recalc": {
+            "svg": "80491bfb32c0db2476b9f0dfda120fdfe601e7b32e7532a5d0bf999fd012631d",
+            "png": "2c621f1ae7549566cac4b84bafb820ad761135f7e7fd4c547cb32fe54ea75d34"
+          },
+          "triggered": 120,
+          "asked": 120
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "hub5": {
+      "line": "hub5: a hub with five children, two feeding one target; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "ed8905f3d2eab25a293474ce83c967f3b1c51c5a30ddd20596f43d3d9f4292b6",
+            "png": "c3fe7aa5abea4b3d945622ef49cf4cd5306d8bef9f19c3561f8d20c77e5c2391"
+          },
+          "recalc": {
+            "svg": "ed8905f3d2eab25a293474ce83c967f3b1c51c5a30ddd20596f43d3d9f4292b6",
+            "png": "c3fe7aa5abea4b3d945622ef49cf4cd5306d8bef9f19c3561f8d20c77e5c2391"
+          },
+          "triggered": 164,
+          "asked": 164
+        },
+        "candidate": {
+          "open": {
+            "svg": "ed8905f3d2eab25a293474ce83c967f3b1c51c5a30ddd20596f43d3d9f4292b6",
+            "png": "c3fe7aa5abea4b3d945622ef49cf4cd5306d8bef9f19c3561f8d20c77e5c2391"
+          },
+          "recalc": {
+            "svg": "ed8905f3d2eab25a293474ce83c967f3b1c51c5a30ddd20596f43d3d9f4292b6",
+            "png": "c3fe7aa5abea4b3d945622ef49cf4cd5306d8bef9f19c3561f8d20c77e5c2391"
+          },
+          "triggered": 164,
+          "asked": 164
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "hub5_top_down": {
+      "line": "hub5_top_down: the same hub laid out top down; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "8c7b212555392ddbb93540a3ee028efffc5ed6f2edd494d9f0a33194294175ab",
+            "png": "c3fe7aa5abea4b3d945622ef49cf4cd5306d8bef9f19c3561f8d20c77e5c2391"
+          },
+          "recalc": {
+            "svg": "8c7b212555392ddbb93540a3ee028efffc5ed6f2edd494d9f0a33194294175ab",
+            "png": "c3fe7aa5abea4b3d945622ef49cf4cd5306d8bef9f19c3561f8d20c77e5c2391"
+          },
+          "triggered": 164,
+          "asked": 164
+        },
+        "candidate": {
+          "open": {
+            "svg": "8c7b212555392ddbb93540a3ee028efffc5ed6f2edd494d9f0a33194294175ab",
+            "png": "c3fe7aa5abea4b3d945622ef49cf4cd5306d8bef9f19c3561f8d20c77e5c2391"
+          },
+          "recalc": {
+            "svg": "8c7b212555392ddbb93540a3ee028efffc5ed6f2edd494d9f0a33194294175ab",
+            "png": "c3fe7aa5abea4b3d945622ef49cf4cd5306d8bef9f19c3561f8d20c77e5c2391"
+          },
+          "triggered": 164,
+          "asked": 164
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "chain25": {
+      "line": "chain25: a 25 step chain, two decisions that skip a step, one feedback edge; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "76b48dfdec0824759ac0c3ab38982cafd250c9791db588c83d3547345fa691fa",
+            "png": "d4c5a19c0d25ad6cd390325ac4672a7e9cbde3938ec61a50c2e908408fc5a61b"
+          },
+          "recalc": {
+            "svg": "aa7091c8fdc5aea398f5bb10da340d25a430a184bb706014184f22efa946daed",
+            "png": "d4c5a19c0d25ad6cd390325ac4672a7e9cbde3938ec61a50c2e908408fc5a61b"
+          },
+          "triggered": 674,
+          "asked": 674
+        },
+        "candidate": {
+          "open": {
+            "svg": "5db092011210d84b998d493d12399f894a5e989c6f7909433d5d99b3aa78e1a6",
+            "png": "9904131d290f63420a3f84b094df7d68efe3f0e2fb2956ead63781c0f40f9d91"
+          },
+          "recalc": {
+            "svg": "5db092011210d84b998d493d12399f894a5e989c6f7909433d5d99b3aa78e1a6",
+            "png": "9904131d290f63420a3f84b094df7d68efe3f0e2fb2956ead63781c0f40f9d91"
+          },
+          "triggered": 674,
+          "asked": 674
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [
+          "the page: width=16.86in height=11.12in viewBox=0 0 1213.92 800.64 -> width=17.56in height=11.12in viewBox=0 0 1264.32 800.64",
+          "shape 1 moved (+0.700 in, +0.000 in): translate(94.32,-678.24) -> translate(144.72,-678.24)",
+          "shape 2 moved (+0.700 in, +0.000 in): translate(325.44,-678.24) -> translate(375.84,-678.24)",
+          "shape 3 moved (+0.700 in, +0.000 in): translate(556.56,-678.24) -> translate(606.96,-678.24)",
+          "shape 4 moved (+0.700 in, +0.000 in): translate(787.68,-678.24) -> translate(838.08,-678.24)",
+          "shape 5 moved (+0.700 in, +0.000 in): translate(1018.8,-678.24) -> translate(1069.2,-678.24)",
+          "shape 6 moved (+0.700 in, +0.000 in): translate(1018.8,-555.84) -> translate(1069.2,-555.84)",
+          "shape 7 moved (+0.700 in, +0.000 in): translate(787.68,-555.84) -> translate(838.08,-555.84)",
+          "shape 8 moved (+0.700 in, +0.000 in): translate(527.76,-541.44) -> translate(578.16,-541.44)",
+          "shape 9 moved (+0.350 in, +0.000 in): translate(296.64,-570.24) -> translate(321.84,-570.24)",
+          "shape 10 moved (+0.350 in, +0.000 in): translate(65.52,-475.92) -> translate(90.72,-475.92)",
+          "shape 11 moved (+0.350 in, +0.000 in): translate(65.52,-367.92) -> translate(90.72,-367.92)",
+          "shape 12 moved (+0.350 in, +0.000 in): translate(296.64,-367.92) -> translate(321.84,-367.92)",
+          "shape 13 moved (+0.350 in, +0.000 in): translate(527.76,-367.92) -> translate(552.96,-367.92)",
+          "shape 14 moved (+0.350 in, +0.000 in): translate(758.88,-367.92) -> translate(784.08,-367.92)",
+          "shape 15 moved (+0.350 in, +0.000 in): translate(990,-367.92) -> translate(1015.2,-367.92)",
+          "shape 16 moved (+0.350 in, +0.000 in): translate(990,-245.52) -> translate(1015.2,-245.52)",
+          "shape 17 moved (+0.350 in, +0.000 in): translate(730.08,-231.12) -> translate(755.28,-231.12)",
+          "shape 26 moved (+0.350 in, +0.000 in): translate(296.64,-475.92) -> translate(321.84,-475.92)",
+          "shape 28 moved (+0.700 in, +0.000 in): translate(252.72,-710.64) -> translate(303.12,-710.64)",
+          "shape 29 moved (+0.700 in, +0.000 in): translate(483.84,-710.64) -> translate(534.24,-710.64)",
+          "shape 30 moved (+0.700 in, +0.000 in): translate(714.96,-710.64) -> translate(765.36,-710.64)",
+          "shape 31 moved (+0.700 in, +0.000 in): translate(946.08,-710.64) -> translate(996.48,-710.64)",
+          "shape 32 moved (+0.700 in, +0.000 in): translate(1098,-620.64) -> translate(1148.4,-620.64)",
+          "shape 33 moved (+0.700 in, +0.000 in): translate(946.08,-588.24) -> translate(996.48,-588.24)",
+          "shape 34 moved (+0.700 in, +0.000 in): translate(714.96,-588.24) -> translate(765.36,-588.24)",
+          "shape 35 moved (+0.350 in, +0.000 in): translate(455.04,-602.64) -> translate(480.24,-602.64)",
+          "shape 35 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 36 moved (+0.880 in, +0.000 in): translate(467.28,-591.84) -> translate(530.64,-591.84)",
+          "shape 37 moved (+0.350 in, +0.000 in): translate(455.04,-508.32) -> translate(480.24,-508.32)",
+          "shape 37 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 38 moved (+0.930 in, +0.510 in): translate(472.32,-533.52) -> translate(539.28,-570.24)",
+          "shape 39 moved (+0.350 in, +0.000 in): translate(223.92,-501.12) -> translate(249.12,-501.12)",
+          "shape 40 moved (+0.350 in, +0.000 in): translate(223.92,-515.52) -> translate(249.12,-515.52)",
+          "shape 41 moved (+0.350 in, +0.000 in): translate(144.72,-432.72) -> translate(169.92,-432.72)",
+          "shape 42 moved (+0.350 in, +0.000 in): translate(223.92,-400.32) -> translate(249.12,-400.32)",
+          "shape 43 moved (+0.350 in, +0.000 in): translate(455.04,-400.32) -> translate(480.24,-400.32)",
+          "shape 44 moved (+0.350 in, +0.000 in): translate(686.16,-400.32) -> translate(711.36,-400.32)",
+          "shape 45 moved (+0.350 in, +0.000 in): translate(917.28,-400.32) -> translate(942.48,-400.32)",
+          "shape 46 moved (+0.350 in, +0.000 in): translate(1062,-310.32) -> translate(1087.2,-310.32)",
+          "shape 47 moved (+0.350 in, +0.000 in): translate(917.28,-277.92) -> translate(942.48,-277.92)",
+          "shape 48 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 49 moved (+0.520 in, +0.000 in): translate(670.32,-281.52) -> translate(707.76,-281.52)",
+          "shape 50 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 51 moved (+0.590 in, +0.500 in): translate(673.92,-223.92) -> translate(716.4,-259.92)",
+          "shape 60 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink..."
+        ],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes3": {
+      "line": "lanes3: three lanes, a decision that splits into two lanes and rejoins; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "5ed6bef89c84bd5bfa538cd06981e570e93fe52537f2dfb3a696fb85a063388e",
+            "png": "073b55f53a759523bd371ac17412f716171b490bb615db05c1a8c050e46695aa"
+          },
+          "recalc": {
+            "svg": "5ed6bef89c84bd5bfa538cd06981e570e93fe52537f2dfb3a696fb85a063388e",
+            "png": "073b55f53a759523bd371ac17412f716171b490bb615db05c1a8c050e46695aa"
+          },
+          "triggered": 316,
+          "asked": 316
+        },
+        "candidate": {
+          "open": {
+            "svg": "1823ccc5a199e392e7a88b751819e3b5d7aba09aa88f68c9202d95a6eaea4bec",
+            "png": "5e00a0f511a9f1435c70f3dc97ad30e2a89241498d6d0c4ad1ee8b42a297f59e"
+          },
+          "recalc": {
+            "svg": "84f3ba39a2bf61d72fb91ee6a7d997f5e67581fe554393482e6bac090229a6ff",
+            "png": "5e00a0f511a9f1435c70f3dc97ad30e2a89241498d6d0c4ad1ee8b42a297f59e"
+          },
+          "triggered": 316,
+          "asked": 316
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [
+          "the page: width=23.81in height=6.62in viewBox=0 0 1714.32 476.64 -> width=24.41in height=6.62in viewBox=0 0 1757.52 476.64",
+          "shape 2 drawn differently: rect style={fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.25} height=418.36 width=1678.32 x=0 y=58.2803 -> rect style={fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.25} height=418.36 width=1721.52 x=0 y=58.2803",
+          "shape 3 drawn differently: path style={fill:#fff9f1;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.25} d=M0 476.64 L1678.32 476.64 L1678.32 448.29 L0 448.29 L0 476.64 Z -> path style={fill:#fff9f1;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.25} d=M0 476.64 L1721.52 476.64 L1721.52 448.29 L0 448.29 L0 476.64 Z",
+          "shape 4 drawn differently: rect style={fill:none} height=375.84 width=1678.32 x=0 y=100.8 -> rect style={fill:none} height=375.84 width=1721.52 x=0 y=100.8",
+          "shape 8 drawn differently: rect style={fill:#fff9f1;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.24} height=14.1732 width=1678.32 x=0 y=462.467 -> rect style={fill:#fff9f1;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.24} height=14.1732 width=1721.52 x=0 y=462.467",
+          "shape 10 drawn differently: rect style={fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=108 width=1678.32 x=0 y=368.64 -> rect style={fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=108 width=1721.52 x=0 y=368.64",
+          "shape 13 drawn differently: rect style={fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=159.84 width=1678.32 x=0 y=316.8 -> rect style={fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=159.84 width=1721.52 x=0 y=316.8",
+          "shape 16 drawn differently: rect style={fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=108 width=1678.32 x=0 y=368.64 -> rect style={fill:none;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=108 width=1721.52 x=0 y=368.64",
+          "shape 22 moved (+0.600 in, +0.000 in): translate(1057.68,-72) -> translate(1100.88,-72)",
+          "shape 23 moved (+0.600 in, +0.000 in): translate(1057.68,-203.04) -> translate(1100.88,-203.04)",
+          "shape 24 moved (+0.600 in, +0.000 in): translate(1288.8,-72) -> translate(1332,-72)",
+          "shape 25 moved (+0.600 in, +0.000 in): translate(1519.92,-75.6) -> translate(1563.12,-75.6)",
+          "shape 29 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 30 moved (-1.330 in, +1.220 in): translate(916.56,-93.6) -> translate(820.8,-181.44)",
+          "shape 31 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 32 moved (-0.050 in, +0.000 in): translate(963.36,-224.64) -> translate(959.76,-224.64)",
+          "shape 33 moved (+0.600 in, +0.000 in): translate(1216.08,-136.8) -> translate(1259.28,-136.8)",
+          "shape 34 moved (+0.600 in, +0.000 in): translate(1216.08,-104.4) -> translate(1259.28,-104.4)",
+          "shape 35 moved (+0.600 in, +0.000 in): translate(1447.2,-104.4) -> translate(1490.4,-104.4)"
+        ],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "fanin": {
+      "line": "fanin: four sources into one target; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "668e287b0fff8c79421099f46c85666e4eda66d0dd328ee97ea38262e20e161c",
+            "png": "e6585da76ae437aff92aef1465cdb06ab97d9c636ed77975e3981e05bcf516e4"
+          },
+          "recalc": {
+            "svg": "668e287b0fff8c79421099f46c85666e4eda66d0dd328ee97ea38262e20e161c",
+            "png": "e6585da76ae437aff92aef1465cdb06ab97d9c636ed77975e3981e05bcf516e4"
+          },
+          "triggered": 130,
+          "asked": 130
+        },
+        "candidate": {
+          "open": {
+            "svg": "668e287b0fff8c79421099f46c85666e4eda66d0dd328ee97ea38262e20e161c",
+            "png": "e6585da76ae437aff92aef1465cdb06ab97d9c636ed77975e3981e05bcf516e4"
+          },
+          "recalc": {
+            "svg": "668e287b0fff8c79421099f46c85666e4eda66d0dd328ee97ea38262e20e161c",
+            "png": "e6585da76ae437aff92aef1465cdb06ab97d9c636ed77975e3981e05bcf516e4"
+          },
+          "triggered": 130,
+          "asked": 130
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "pins": {
+      "line": "pins: a diamond whose first and last boxes share a row and whose last is pinned to layer 3; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "b66818aa00bf13669e1cf1a8ac41ad1da8d07250f80c63f36087fbb778e7ee4a",
+            "png": "7156a96919fbade36ce1e6927a325d831bd49127ec4c9333dc6630fd1ea4f6a7"
+          },
+          "recalc": {
+            "svg": "b66818aa00bf13669e1cf1a8ac41ad1da8d07250f80c63f36087fbb778e7ee4a",
+            "png": "7156a96919fbade36ce1e6927a325d831bd49127ec4c9333dc6630fd1ea4f6a7"
+          },
+          "triggered": 92,
+          "asked": 92
+        },
+        "candidate": {
+          "open": {
+            "svg": "b66818aa00bf13669e1cf1a8ac41ad1da8d07250f80c63f36087fbb778e7ee4a",
+            "png": "7156a96919fbade36ce1e6927a325d831bd49127ec4c9333dc6630fd1ea4f6a7"
+          },
+          "recalc": {
+            "svg": "b66818aa00bf13669e1cf1a8ac41ad1da8d07250f80c63f36087fbb778e7ee4a",
+            "png": "7156a96919fbade36ce1e6927a325d831bd49127ec4c9333dc6630fd1ea4f6a7"
+          },
+          "triggered": 92,
+          "asked": 92
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    }
+  }
+}

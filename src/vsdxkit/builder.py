@@ -420,6 +420,7 @@ def _layout_page(page: Page, options: LayoutOptions) -> tuple[Layout, dict[str, 
         group_of.update(dict(_group_members(group)))
         parents.extend((child.id, group.id) for child in group.groups)
     sizes = {n.id: _size(n) for n in page.nodes}
+    kinds = {n.id: n.kind for n in page.nodes}
     if page.lanes:
         options = replace(options, margin=max(options.margin, _LANE_MARGIN))
     layout = layered_layout(
@@ -432,6 +433,9 @@ def _layout_page(page: Page, options: LayoutOptions) -> tuple[Layout, dict[str, 
             parents=tuple(parents),
             headings=tuple((g.id, *_heading_size(g.label)) for g in _all_groups(page) if g.label.strip()),
             edge_labels=tuple(label_size(e.label) if e.label else None for e in page.edges if e.kind != "page-link"),
+            edge_first=tuple(
+                e.kind in ("yes-path", "no-path") or kinds[e.source] == "decision" for e in page.edges if e.kind != "page-link"
+            ),
             pinned=tuple((n.id, n.layer) for n in page.nodes if n.layer is not None),
             aligned=tuple(tuple(g) for g in page.align if len(g) > 1),
         ),

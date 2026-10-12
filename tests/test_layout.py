@@ -4,6 +4,7 @@ import importlib.util
 import math
 import os
 import random
+import re
 import subprocess
 import sys
 import time
@@ -801,18 +802,54 @@ def test_headings_get_room_in_random_graphs(seed, lanes, groups, direction):
     assert layout == layered_layout(nodes, edges, lane_ids, group_ids, options)
 
 
-@pytest.mark.parametrize("seed", range(40))
-@pytest.mark.parametrize(
-    ("lanes", "groups", "direction"),
-    [(0, 0, "left_to_right"), (0, 0, "top_down"), (3, 0, "left_to_right"), (3, 3, "left_to_right"), (0, 3, "top_down")],
-)
-def test_labels_and_headings_get_room_in_random_graphs(seed, lanes, groups, direction):
+_LABELLED_GRAPHS = [
+    (0, 0, "left_to_right"),
+    (0, 0, "top_down"),
+    (3, 0, "left_to_right"),
+    (3, 3, "left_to_right"),
+    (0, 3, "top_down"),
+]
+# Labelled graphs the whole fallback ladder still refuses by name; a change in either direction shows.
+_REFUSED_LABELLED_GRAPHS = 8
+
+
+def _labelled_graph(seed, lanes, groups, direction):
+    """The arguments of `layered_layout` for one labelled random graph, and its label and heading sizes."""
     rows, edges, lane_ids, group_ids, parents = random_graph(seed, 7, 10, lanes, groups)
     edges = (*edges, edges[0], edges[0], (edges[1][0], edges[1][0]), edges[2][::-1])
     nodes = tuple(LayoutNode(*row) for row in rows)
     labels, headings = _label_sizes(seed, edges), _heading_sizes(seed, group_ids)
     options = LayoutOptions(direction=direction, parents=parents, edge_labels=labels, headings=headings)
-    layout = layered_layout(nodes, edges, lane_ids, group_ids, options)
+    return (nodes, edges, lane_ids, group_ids, options), nodes, edges, parents, labels, headings
+
+
+def _refusal(error):
+    """Whether `error` is a refusal that names an edge, as A7 requires."""
+    return re.search(r"the label of edge '\w+' -> '\w+'", str(error)) is not None
+
+
+def test_the_number_of_random_labelled_graphs_that_are_refused_is_pinned():
+    refused = 0
+    for lanes, groups, direction in _LABELLED_GRAPHS:
+        for seed in range(40):
+            try:
+                layered_layout(*_labelled_graph(seed, lanes, groups, direction)[0])
+            except GraphError as error:
+                assert _refusal(error)
+                refused += 1
+    assert refused == _REFUSED_LABELLED_GRAPHS
+
+
+@pytest.mark.parametrize("seed", range(40))
+@pytest.mark.parametrize(("lanes", "groups", "direction"), _LABELLED_GRAPHS)
+def test_labels_and_headings_get_room_in_random_graphs(seed, lanes, groups, direction):
+    args, nodes, edges, parents, labels, headings = _labelled_graph(seed, lanes, groups, direction)
+    lane_ids, group_ids, options = args[2], args[3], args[4]
+    try:
+        layout = layered_layout(*args)
+    except GraphError as error:  # the refusal is counted by the pin above; there is no label to check
+        assert _refusal(error)
+        return
     _check(layout, nodes, parents)
     _check_routes(layout)
     _check_labels(layout, edges, labels)
@@ -932,12 +969,13 @@ def test_the_page_ends_a_margin_after_the_last_column_when_labels_widen_the_gaps
     assert layout.width == pytest.approx(right + 0.5, abs=0.02)
 
 
+@pytest.mark.parametrize("direction", ["left_to_right", "top_down"])
 @pytest.mark.parametrize("count", [4, 5])
-def test_labels_keep_the_margin_from_the_page_edge(count):
+def test_labels_keep_the_margin_from_the_page_edge(count, direction):
     nodes = (LayoutNode("a", 1.5, 0.8), LayoutNode("b", 1.5, 0.8))
     edges = (("a", "b"),) * count
     labels = ((0.66, 0.3),) * count
-    layout = layered_layout(nodes, edges, options=LayoutOptions(edge_labels=labels))
+    layout = layered_layout(nodes, edges, options=LayoutOptions(direction=direction, edge_labels=labels))
     for key, box in layout.labels.items():
         assert box.x - box.width / 2 >= 0.5 - SHRINK, key
         assert box.y - box.height / 2 >= 0.5 - SHRINK, key
