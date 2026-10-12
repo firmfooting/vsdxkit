@@ -1290,9 +1290,12 @@ def _place_labels(
             length = abs(x2 - x1) + abs(y2 - y1)
             along = (width if flat else height) / 2 + 0.01
             slides = [*(j * along / length for j in _steps(int(length / along / 2) + 1)), 0.5, -0.5]
-            for slide in slides:
-                t = min(max(0.5 + slide, 0.0), 1.0)
-                for k in _steps(count + 3):
+            # a finer slide along the route, tried only on it, packs the labels of parallel runs that the coarse steps miss
+            fine = sorted((j * 0.05 / length for j in range(-int(length / 0.1), int(length / 0.1) + 1)), key=abs)
+            # on the route first, at every slide, and only then a step to its side, so a crowd of parallel runs shares them
+            for k in _steps(count + 3):
+                for slide in (*slides, *fine) if k == 0 else slides:
+                    t = min(max(0.5 + slide, 0.0), 1.0)
                     unit = k * ((height if flat else width) + 0.02)
                     # a label that would hang off the page's left or bottom is moved onto it; the page grows the other ways
                     x = snap(max(x1 + t * (x2 - x1) + (0.0 if flat else unit), margin + width / 2))
@@ -2615,6 +2618,13 @@ def _lay_out(
         for line in ((1, r[0], r[2], r[3]), (1, r[1], r[2], r[3]), (0, r[2], r[0], r[1]), (0, r[3], r[0], r[1]))
     ]
 
+    # a detour keeps clear of a box's sides as well, so no stub is too short to tell from a run along the side
+    box_borders = [
+        line
+        for r in solids
+        for line in ((1, r[0], r[2], r[3]), (1, r[1], r[2], r[3]), (0, r[2], r[0], r[1]), (0, r[3], r[0], r[1]))
+    ]
+
     # the boxes by left edge and by bottom edge: a segment can enter only a box whose edge lies within one box-extent of it
     by_left = sorted(solids)
     solid_lefts = [r[0] for r in by_left]
@@ -2701,7 +2711,7 @@ def _lay_out(
                 )
                 if -shift_u <= x <= u_total - shift_u
             }
-            around = _detour(path, xs, ys, [*solids, *foreign_of[n]], others, spent, borders, clear)
+            around = _detour(path, xs, ys, [*solids, *foreign_of[n]], others, spent, [*borders, *box_borders], clear)
             if around is not None:
                 break
         return around

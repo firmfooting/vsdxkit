@@ -1,6 +1,7 @@
 """The layered layout: boxes never overlap, routes are orthogonal and meet no node, and the result depends on nothing but the arguments."""
 
 import importlib.util
+import math
 import os
 import random
 import subprocess
@@ -962,6 +963,34 @@ def test_a_self_loop_leaves_a_node_from_its_own_point_not_the_next_edges(monkeyp
     layout = _layout_of_case(monkeypatch, "every_kind")
     assert layout.routes[("n3", "n3", 0)][0] != layout.routes[("n3", "n4", 0)][0]
     _check_routes(layout)
+
+
+@pytest.mark.parametrize("name", ["every_kind", "groups_and_lanes", "labels_groups_lanes"])
+def test_no_route_runs_along_a_box_border_within_a_stub_of_it(monkeypatch, name):
+    layout = _layout_of_case(monkeypatch, name)
+    for key, route in layout.routes.items():
+        for a, b in pairwise(route):
+            axis = 0 if a[1] == b[1] else 1  # the axis the segment runs along
+            lo_, hi_ = sorted((a[axis], b[axis]))
+            for box in layout.nodes.values():
+                half = (box.width / 2, box.height / 2)
+                centre = (box.x, box.y)
+                across = 1 - axis
+                for side in (-1, 1):
+                    line = centre[across] + side * half[across]
+                    near = abs(a[across] - line) < 0.05 - 1e-9
+                    overlap = min(hi_, centre[axis] + half[axis]) - max(lo_, centre[axis] - half[axis])
+                    assert not (near and overlap > 1e-6), f"{key} runs along a border of a box ({a}, {b})"
+
+
+def test_the_labels_of_three_parallel_edges_each_sit_on_their_own_run(monkeypatch):
+    layout = _layout_of_case(monkeypatch, "labels_groups_lanes")
+    for key, label in layout.labels.items():
+        near = min(
+            abs(label.y - a[1]) if a[1] == b[1] and min(a[0], b[0]) <= label.x <= max(a[0], b[0]) else math.inf
+            for a, b in pairwise(layout.routes[key])
+        )
+        assert near < 0.01 or key[:2] != ("r1", "r2"), f"the label of {key} floats {near} off its run"
 
 
 def test_routes_into_one_node_arrive_at_different_points_and_none_rides_a_group_border(monkeypatch):
