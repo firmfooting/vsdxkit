@@ -536,9 +536,10 @@ def _draw_layout(
             raise GraphError(f"page {page.name!r} cannot draw its lanes: {error}") from error
         add_data_rows(diagram.container, {"Source": page.name, "Kind": "lane_container"})
         # The bar is the container sub-shape of master shape 7; its default text is not empty, so "blank" writes "" explicitly.
-        for part in diagram.container.children:
-            if part.master_shape_ID == "7":
-                part.text = page.name if page.title_bar == "name" else ""
+        bars = [part for part in diagram.container.children if part.master_shape_ID == "7"]
+        if len(bars) != 1:
+            raise GraphError(f"page {page.name!r}: expected one title bar in the lane container, found {len(bars)}")
+        bars[0].text = page.name if page.title_bar == "name" else ""
         for lane, shape in zip(page.lanes, diagram.lanes, strict=True):
             add_data_rows(shape, {"Source": lane.id, "Kind": "lane"})
         for shape in target.children:

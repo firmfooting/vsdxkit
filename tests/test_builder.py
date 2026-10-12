@@ -914,7 +914,10 @@ def test_none_is_refused_because_the_probe_found_no_clean_removal():
 
 
 def test_title_bar_on_a_page_without_lanes_is_ignored(tmp_path):
-    Diagram("D", [Page("P", [Node("a", "process", "A")], title_bar="none")]).save(tmp_path / "t.vsdx")
+    document = Document.open(
+        Diagram("D", [Page("P", [Node("a", "process", "A")], title_bar="none")]).save(tmp_path / "t.vsdx")
+    )
+    assert document.pages[0].swimlanes is None
 
 
 @pytest.mark.parametrize("name", ["A & B <C>", "x" * 80, "Na\u00efve \u2013 flow"])
