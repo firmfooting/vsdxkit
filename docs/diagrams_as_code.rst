@@ -101,10 +101,13 @@ maximum size; the page grows as large as the content needs.
    wide = LayoutOptions(page=PageTarget(aspect=16 / 9))
    one_row = LayoutOptions(page=None)
 
-Pass ``page=None`` to keep one row. A page with lanes is never wrapped, because
-a lane runs the whole width, so its width is the number of layers; one that
-grows past the limit above is refused with the number of columns it needed, and
-the flow has to be split across pages.
+Pass ``page=None`` to keep one row. Top-down flows are not wrapped, and with
+``direction="auto"`` a top-down request can come back as a left-to-right page
+when that is nearer the aspect; pin the direction with
+``PageTarget(direction="top_down")``. A page with lanes is never wrapped,
+because a lane runs the whole width, so its width is the number of layers; one
+that grows past the lane limit (see "Lanes and groups" below) is refused with
+the number of columns it needed, and the flow has to be split across pages.
 
 Lanes and groups
 ----------------

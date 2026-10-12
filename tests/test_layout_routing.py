@@ -62,3 +62,16 @@ def test_the_row_choice_for_a_long_flow_does_the_work_of_one_table(monkeypatch):
     widths = [2.4 + 0.1 * (i % 3) for i in range(100)]
     lo._choose_starts(widths, [1.0] * 100, 0.6, lo.PageTarget(), frozenset())
     assert calls[0] < 50_000
+
+
+def test_equal_distances_from_the_target_keep_the_fewer_rows(monkeypatch):
+    """A8 tie: with one row and two rows equally far from the target, the first (fewer rows) wins."""
+    monkeypatch.setattr(
+        lo,
+        "_estimate",
+        lambda w, h, starts, gap, frame=None: (
+            (2.0, 1.0) if len(starts) == 1 else (1.0, 2.0) if len(starts) == 2 else (100.0, 1.0)
+        ),
+    )
+    starts = lo._choose_starts([1.0] * 4, [1.0] * 4, 0.5, lo.PageTarget(aspect=1.0), frozenset())
+    assert starts == (0,)
