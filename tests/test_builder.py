@@ -917,7 +917,7 @@ def test_title_bar_on_a_page_without_lanes_is_ignored(tmp_path):
     Diagram("D", [Page("P", [Node("a", "process", "A")], title_bar="none")]).save(tmp_path / "t.vsdx")
 
 
-@pytest.mark.parametrize("name", ["A & B <C>", "x" * 80, "Naïve – flow"])
+@pytest.mark.parametrize("name", ["A & B <C>", "x" * 80, "Na\u00efve \u2013 flow"])
 def test_a_long_or_awkward_page_name_is_written_whole_and_escaped(tmp_path, name):
     assert _bar_text(Diagram("D", [_titled(name)]).save(tmp_path / "t.vsdx")) == name
 
