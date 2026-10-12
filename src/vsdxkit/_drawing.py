@@ -41,7 +41,8 @@ def add_data_rows(shape: Shape, rows: Mapping[str, str], *, clear: bool = False)
     With `clear`, the rows the shape already has (the demonstration rows of a bundled donor) are removed first,
     except those whose Value is a formula, which Visio keeps synchronized (a flowchart step's Function).
 
-    The cells follow the order the bundled donors use. Type 0 is a string (Learn: Type Cell, Shape Data Section).
+    The cells follow the order the bundled donors use. Type 0 is a string (Learn: Type Cell, Shape Data Section), so the Value cell is
+    declared ``U="STR"`` as in a Visio-saved copy, or Visio reads the text as 0.
     """
     section = shape.xml.find(f'{namespace}Section[@N="Property"]')
     if section is None:
@@ -68,6 +69,8 @@ def add_data_rows(shape: Shape, rows: Mapping[str, str], *, clear: bool = False)
             ("Verify", "0"),
         ):
             row.append(_cell(cell_name, cell_value))
+        # without U="STR" Visio reads the text of a Type 0 row as 0 (#533), and writes it so itself
+        row[0].attrib["U"] = "STR"
         section.append(row)
 
 

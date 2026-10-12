@@ -786,3 +786,29 @@ def test_a_built_lane_step_keeps_the_synchronized_function_value_after_save_and_
     document = Document.open(Diagram("T", [page]).save(tmp_path / "f.vsdx"))
     step = _by_source(document)["a"]
     assert step.data_properties["Function"].value == "Reviewer"
+
+
+def _string_value_cells(root: Element) -> list[Element]:
+    """The ``Value`` cell of every Type 0 (string) Shape Data row under `root`."""
+    cells = []
+    for row in root.iter(f"{namespace}Row"):
+        kind = row.find(f'{namespace}Cell[@N="Type"]')
+        value = row.find(f'{namespace}Cell[@N="Value"]')
+        if kind is not None and kind.get("V") == "0" and value is not None and "F" not in value.attrib:
+            cells.append(value)
+    return cells
+
+
+def test_text_shape_data_values_carry_u_str_as_visio_writes_them():
+    """Without U="STR" Visio reads the text as 0 (#533). Visio's own saves carry it on every Type 0 row, pinned here from a fixture."""
+    visio_saved = Document.open(HERE / "test6_shape_properties.vsdx")
+    reference = [c for page in visio_saved.pages for shape in page.shapes for c in _string_value_cells(shape.xml)]
+    assert reference, "the fixture no longer has a string Shape Data row"
+    assert {c.get("U") for c in reference} == {"STR"}
+
+    node = Node("a", "process", "Check", data={"Alpha": "x"})
+    edge = Edge("a", "a", "yes")
+    document = Diagram("T", [Page("Main", [node], [edge])]).build()
+    cells = [c for page in document.pages for shape in page.shapes for c in _string_value_cells(shape.xml)]
+    assert len(cells) >= 4
+    assert {c.get("U") for c in cells} == {"STR"}
