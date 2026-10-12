@@ -138,6 +138,23 @@ LINES: tuple[tuple[str, str], ...] = (
         "labels_groups_lanes: labels inside lanes, parallel labelled edges, a label into a headed group, a label wider than its gap; every shape where it was written",
     ),
     ("two_pages", "two_pages: two pages and a page link; every shape on both pages where it was written"),
+    (
+        "hub5",
+        "hub5: a hub with five children, two feeding one target; every shape where it was written",
+    ),
+    (
+        "hub5_top_down",
+        "hub5_top_down: the same hub laid out top down; every shape where it was written",
+    ),
+    (
+        "chain25",
+        "chain25: a 25 step chain, two decisions that skip a step, one feedback edge; every shape where it was written",
+    ),
+    (
+        "lanes3",
+        "lanes3: three lanes, a decision that splits into two lanes and rejoins; every shape where it was written",
+    ),
+    ("fanin", "fanin: four sources into one target; every shape where it was written"),
 )
 """Every case file's name and what Visio must show for it."""
 

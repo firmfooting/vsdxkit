@@ -25,3 +25,10 @@ def random_graph(seed: int, n: int, m: int, lanes: int, groups: int):
     edges = tuple((f"n{rng.randrange(n)}", f"n{rng.randrange(n)}") for _ in range(m))
     parents = (("G1", "G0"),) if groups >= 2 else ()
     return tuple(nodes), edges, lane_ids, group_ids, parents
+
+
+def random_tree(seed: int, n: int):
+    """A random out-tree as (node ids, edges): node i's parent is a random earlier node."""
+    rng = random.Random(seed)
+    ids = [f"n{i}" for i in range(n)]
+    return ids, tuple((ids[rng.randrange(i)], ids[i]) for i in range(1, n))

@@ -449,7 +449,9 @@ GOLDEN = HERE / "fixtures" / "builder_bytes.sha256"
 def test_the_bytes_equal_the_digest_every_platform_is_held_to(tmp_path):
     """Linux, Windows and macOS each build the same diagram and compare with the one committed digest."""
     digest = hashlib.sha256(_fixed_bytes(tmp_path, "d")).hexdigest()
-    assert digest == GOLDEN.read_text(encoding="utf-8").strip()
+    assert digest == GOLDEN.read_text(encoding="utf-8").strip(), (
+        "if tests/test_routes_digest.py passes, only the file's bytes moved, not a route"
+    )
 
 
 def test_an_edge_label_wider_than_the_layout_grows_the_page_and_stays_on_it(tmp_path):
