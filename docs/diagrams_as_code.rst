@@ -124,6 +124,11 @@ out is known only after layout, so :meth:`~vsdxkit.builder.Diagram.build` refuse
 a laid-out page that does not fit, with a :class:`~vsdxkit.errors.GraphError`
 that says so. Fewer layers or nodes in a row bring it back within the limits.
 
+Each edge meets a box at a point of its own, ordered by where its other end lies,
+and routes between layers run in channels, one line for each route. The spacing
+is set by ``LayoutOptions.port_pitch`` (between points on one side of a box) and
+``LayoutOptions.channel_pitch`` (between parallel routes in a gap between layers).
+
 The layout keeps every route on a line of its own, and refuses a page it cannot
 do that for, within a fixed number of search steps for each of its two passes
 (border points of their own, then shared ones). Measured on random graphs, the

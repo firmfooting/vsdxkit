@@ -4,7 +4,10 @@ import json
 from pathlib import Path
 
 import layout_corpus as corpus
+import pytest
 from helpers import route_metrics as rm
+
+from vsdxkit.layout import LayoutNode, layered_layout
 
 BASELINE = json.loads((Path(__file__).parent / "fixtures" / "layout_baseline.json").read_text(encoding="utf-8"))
 
@@ -28,6 +31,22 @@ def _ratchet_failures(layouts, baseline):
 def test_crossings_do_not_exceed_the_0_10_baseline():
     """A4 ratchet. Lower a baseline entry by regenerating the file; raising one needs a reason in the pull request."""
     assert _ratchet_failures(corpus.all_layouts(), BASELINE["metrics"]) == []
+
+
+@pytest.mark.parametrize("name", ["hub5", "hub5_top_down", "fanin"])
+def test_the_fan_fixtures_have_no_crossing(name):
+    assert rm.crossings(corpus.fixture_layout(name)) == 0
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="the layer order of a tree can still cross two sibling subtrees; Task 23 adds crossing-aware ordering and removes this mark",
+)
+@pytest.mark.parametrize("seed", range(10))
+def test_a_random_tree_has_no_crossing(seed):
+    ids, edges = corpus.random_tree(seed, 30)
+    lay = layered_layout(tuple(LayoutNode(i, 2.0, 1.0) for i in ids), edges)
+    assert rm.crossings(lay) == 0
 
 
 def test_the_ratchet_notices_a_deleted_case():

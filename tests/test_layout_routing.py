@@ -2,7 +2,9 @@
 
 import math
 
+import layout_corpus as corpus
 import pytest
+from helpers import route_metrics as rm
 from helpers.graphs import random_graph
 
 from vsdxkit import layout as lo
@@ -75,3 +77,24 @@ def test_equal_distances_from_the_target_keep_the_fewer_rows(monkeypatch):
     )
     starts = lo._choose_starts([1.0] * 4, [1.0] * 4, 0.5, lo.PageTarget(aspect=1.0), frozenset())
     assert starts == (0,)
+
+
+@pytest.mark.parametrize("name", ["hub5", "hub5_top_down", "fanin"])
+def test_the_fan_fixtures_meet_a1_to_a5(name):
+    lay = corpus.fixture_layout(name)
+    assert rm.port_gap_violations(lay) == []  # A1
+    assert rm.port_order_violations(lay) == []  # A2
+    assert rm.shared_runs(lay) == []  # A3
+    assert rm.crossings(lay) == 0  # A4
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_a_random_dag_passes_the_existing_guarantees(seed):
+    from test_layout import _check, _check_routes
+
+    rows, edges, *_ = random_graph(seed, 40, 60, 0, 0)
+    dag = tuple((s, t) for s, t in edges if int(s[1:]) < int(t[1:]))
+    nodes = tuple(LayoutNode(*row) for row in rows)
+    lay = layered_layout(nodes, dag)
+    _check(lay, nodes, ())
+    _check_routes(lay)

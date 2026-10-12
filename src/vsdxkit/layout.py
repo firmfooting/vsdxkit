@@ -1063,6 +1063,10 @@ def layered_layout(
     too dense for routes with points of their own to keep apart. Routes keep 0.05 inch off the length of a group's
     border (a self-loop stays inside its group's box, a grid step from it), except where spacing is tighter than that.
 
+    Routes between layers run in channels, one line for each route, spaced ``LayoutOptions.channel_pitch`` apart (spread
+    evenly in a gap too busy to hold them at that pitch). A run of edges that leave one box for boxes in line with it
+    stays straight. The pitch between border points on one side of a box is ``LayoutOptions.port_pitch``.
+
     A dense graph may be refused: when routes cannot all be given lines of their own within a fixed number of search
     steps, the layout raises instead of returning routes that overlap. The limit holds for each of the two passes
     (border points of their own, then shared points). Measured with random graphs and the default options, these
