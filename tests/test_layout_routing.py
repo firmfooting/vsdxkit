@@ -1,0 +1,49 @@
+"""Property tests for the page shape: wrapping keeps the graph and picks the row count nearest the target."""
+
+import math
+
+import pytest
+from helpers.graphs import random_graph
+
+from vsdxkit import layout as lo
+from vsdxkit.errors import GraphError
+from vsdxkit.layout import LayoutNode, layered_layout
+
+
+def chain(n):
+    """A linear flow of `n` equal boxes."""
+    nodes = tuple(LayoutNode(f"s{i}", 2.4, 1.0) for i in range(n))
+    return nodes, tuple((f"s{i}", f"s{i + 1}") for i in range(n - 1))
+
+
+@pytest.mark.parametrize("n", range(8, 61, 4))
+def test_a_chain_of_8_to_60_steps_is_in_the_band_or_refused_never_a_strip(n):
+    nodes, edges = chain(n)
+    try:
+        lay = layered_layout(nodes, edges)
+    except GraphError:
+        return
+    assert 1.33 <= lay.width / lay.height <= 2.22
+
+
+def test_the_row_count_is_the_one_that_minimises_the_distance_from_the_target(monkeypatch):
+    nodes, edges = chain(25)
+    lay = layered_layout(nodes, edges)
+    chosen = round(abs(math.log(lay.width / lay.height / (16 / 9))), 2)
+    for rows in range(1, 26):
+        monkeypatch.setattr(
+            lo,
+            "_choose_starts",
+            lambda w, h, g, t, f, frame=(0.0, 0.0, 0.0), rows=rows: lo._partition(w, rows, f),
+        )
+        forced = layered_layout(nodes, edges)
+        assert chosen <= round(abs(math.log(forced.width / forced.height / (16 / 9))), 2) + 0.01
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_wrapping_preserves_the_graph(seed):
+    rows, edges, *_ = random_graph(seed, 40, 60, 0, 0)
+    nodes = tuple(LayoutNode(*row) for row in rows)
+    lay = layered_layout(nodes, edges)
+    assert set(lay.nodes) == {n.id for n in nodes}
+    assert len(lay.routes) == len(edges)

@@ -27,3 +27,8 @@ def test_the_ratchet_notices_a_deleted_case():
     del layouts["hub5"]
     (message,) = _ratchet_failures(layouts, BASELINE["metrics"])
     assert "missing ['hub5']" in message
+
+
+def test_chain25_aspect_is_in_the_band():
+    """A8: a long linear flow is wrapped to the page target, not laid out as a strip."""
+    assert 1.33 <= rm.aspect(corpus.all_layouts()["chain25"]) <= 2.22
