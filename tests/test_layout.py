@@ -16,7 +16,7 @@ from helpers.graphs import random_graph
 from vsdxkit import builder as builder_module
 from vsdxkit import layout as layout_module
 from vsdxkit.errors import GraphError
-from vsdxkit.layout import GRID, Box, Layout, LayoutNode, LayoutOptions, layered_layout, snap
+from vsdxkit.layout import GRID, Box, Layout, LayoutNode, LayoutOptions, PageTarget, layered_layout, snap
 
 SHRINK = 1e-6
 
@@ -144,7 +144,9 @@ def test_a_flow_runs_left_to_right_and_top_down():
     nodes = (LayoutNode("a", 1, 1), LayoutNode("b", 1, 1))
     across = layered_layout(nodes, (("a", "b"),))
     assert across.nodes["a"].x < across.nodes["b"].x
-    down = layered_layout(nodes, (("a", "b"),), options=LayoutOptions(direction="top_down"))
+    down = layered_layout(
+        nodes, (("a", "b"),), options=LayoutOptions(direction="top_down", page=PageTarget(direction="top_down"))
+    )
     assert down.nodes["a"].y > down.nodes["b"].y
 
 

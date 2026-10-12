@@ -908,6 +908,10 @@ def _boxes_meet(a: Box, b: Box) -> bool:
     return abs(a.x - b.x) < (a.width + b.width) / 2 - _EPS and abs(a.y - b.y) < (a.height + b.height) / 2 - _EPS
 
 
+_AUTO_DIRECTION_NODES = 80
+"""The most nodes for which an ``auto`` direction also lays the page out the other way; trying both doubles a layout, so a larger page keeps the configured direction."""
+
+
 def layered_layout(
     nodes: tuple[LayoutNode, ...],
     edges: tuple[tuple[str, str], ...],
@@ -942,6 +946,39 @@ def layered_layout(
         layout past the search limit, a group whose members sit in different lanes, or a parent that is undeclared,
         repeated for one child or nests more than one level
     """
+    first = _laid_out(nodes, edges, lanes, groups, options)
+    opts = options if options is not None else LayoutOptions()
+    target = opts.page
+    if (
+        not isinstance(target, PageTarget)
+        or target.direction != "auto"
+        or lanes
+        or len(nodes) > _AUTO_DIRECTION_NODES
+        or opts.direction not in ("left_to_right", "top_down")
+        or _aspect_miss(first, target) <= snap(math.log1p(target.tolerance))
+    ):
+        return first
+    other = "left_to_right" if opts.direction == "top_down" else "top_down"
+    try:
+        second = _laid_out(nodes, edges, lanes, groups, replace(opts, direction=other))
+    except GraphError:
+        return first
+    return second if _aspect_miss(second, target) < _aspect_miss(first, target) else first
+
+
+def _aspect_miss(layout: Layout, target: PageTarget) -> float:
+    """How far a layout's aspect lies from the target, as a log distance on the grid; the band edge is ``log1p(tolerance)``."""
+    return snap(abs(math.log(layout.width / layout.height / target.aspect))) if layout.height > 0 and layout.width > 0 else 0.0
+
+
+def _laid_out(
+    nodes: tuple[LayoutNode, ...],
+    edges: tuple[tuple[str, str], ...],
+    lanes: tuple[str, ...],
+    groups: tuple[str, ...],
+    options: LayoutOptions | None,
+) -> Layout:
+    """One layout in the configured direction: border points of their own first, shared ones when the graph is too dense for that."""
     try:
         return _lay_out(nodes, edges, lanes, groups, options, True, [0])
     except _Crowded:
@@ -1021,7 +1058,8 @@ def _lay_out(
 ) -> Layout:
     """`layered_layout`, with `own_points` saying whether each edge at a node gets a border point of its own, and its search steps charged to `spent`. `slack` grid steps are added to the lane padding and the clearance between tracks, which a layout whose rounded group boxes came out too close asks for."""
     opts = options if options is not None else LayoutOptions()
-    top_down = opts.direction == "top_down"
+    page_direction = opts.page.direction if isinstance(opts.page, PageTarget) else "auto"
+    top_down = (opts.direction if lanes or page_direction == "auto" else page_direction) == "top_down"
     for name in ("layer_gap", "node_gap", "margin", "group_padding", "lane_padding", "lane_heading"):
         value = getattr(opts, name)
         if not (isinstance(value, int | float) and math.isfinite(value) and value >= 0):
@@ -1043,7 +1081,7 @@ def _lay_out(
             raise GraphError(f"a label or heading size is {entry!r}; give (width, height), both finite and positive")
     if opts.direction not in ("left_to_right", "top_down"):
         raise GraphError(f"option direction is {opts.direction!r}; it must be 'left_to_right' or 'top_down'")
-    if lanes and top_down:
+    if lanes and opts.direction == "top_down":
         raise GraphError("lanes need direction='left_to_right'; a top-down layout has no bands to put them in")
     by_id = {n.id: n for n in nodes}
     for source, target in edges:
