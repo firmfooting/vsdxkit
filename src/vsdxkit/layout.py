@@ -310,7 +310,9 @@ def _check_pins(pinned: Sequence[tuple[str, int]], ids: list[str], edges: list[t
                 reached.add(node)
                 stack.extend(out.get(node, ()))
         if name in reached:
-            raise GraphError(f"node {name!r} is pinned to a layer, but it lies on a cycle, so its layer depends on which edge is reversed")
+            raise GraphError(
+                f"node {name!r} is pinned to a layer, but it lies on a cycle, so its layer depends on which edge is reversed"
+            )
 
 
 def _layers(
