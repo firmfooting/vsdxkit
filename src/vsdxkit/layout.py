@@ -221,6 +221,8 @@ class Layout:
     """Each labelled edge's label box, by the same key as its route: near the route, clear of nodes, headings and other labels. The page holds them, a margin from its edge."""
     rows: tuple[tuple[str, ...], ...] = ()
     """Node ids by wrapped row; empty when the layout is not wrapped."""
+    fallbacks: int = 0
+    """How many routes no straight, one-bend or channel route could serve, so they were searched for."""
 
 
 _Rect = tuple[float, float, float, float]
@@ -721,6 +723,28 @@ _STEPS = ((1, 0), (-1, 0), (0, 1), (0, -1))
 def _heading(a: tuple[float, float], b: tuple[float, float]) -> int:
     """The index into _STEPS of the direction from a to b."""
     return 0 if b[0] > a[0] else 1 if b[0] < a[0] else 2 if b[1] > a[1] else 3
+
+
+def _candidates(path: list[tuple[float, float]]) -> list[list[tuple[float, float]]]:
+    """The routes with fewer bends than `path` between its ends that leave and arrive as it does: straight, then one bend.
+
+    The straight run and the two corners are in that order, so the first free one has the fewest bends; a
+    corner that makes the route leave or arrive another way is not offered, because the ports are fixed.
+    """
+    start, end = path[0], path[-1]
+    first, last = _heading(path[0], path[1]), _heading(path[-2], path[-1])
+    tries = [[start, end]] if start[0] == end[0] or start[1] == end[1] else []
+    tries += [[start, (end[0], start[1]), end], [start, (start[0], end[1]), end]]
+    found = []
+    for route in tries:
+        if (
+            start != end
+            and _heading(route[0], route[1]) == first
+            and _heading(route[-2], route[-1]) == last
+            and len(_simplify(route)) < len(_simplify(path))
+        ):
+            found.append(route)
+    return found
 
 
 class _Sparse[T](dict[int, T]):
@@ -2063,6 +2087,16 @@ def _lay_out(
             elif a[0] == b[0] and a[1] != b[1]:
                 occupied.setdefault((1, round(a[0], 4)), []).append((min(a[1], b[1]), max(a[1], b[1]), n))
 
+    def shares_a_run(n: int, pts: list[tuple[float, float]]) -> bool:
+        """Whether `pts` runs along a route already placed, other than one that shares an end point with edge `n`."""
+        mine = {pts[0], pts[-1]}
+        for a, b in pairwise(pts):
+            key = (0, round(a[1], 4)) if a[1] == b[1] else (1, round(a[0], 4))
+            low, high = (min(a[0], b[0]), max(a[0], b[0])) if key[0] == 0 else (min(a[1], b[1]), max(a[1], b[1]))
+            if any(min(high, hi) - max(low, lo) > _EPS and not ends_of[m] & mine for lo, hi, m in occupied.get(key, ())):
+                return True
+        return False
+
     def lane_span(chain: list[_Key]) -> tuple[float, float]:
         """The range across the flow that an edge between the ends of `chain` may use."""
         if not lanes:
@@ -2183,6 +2217,14 @@ def _lay_out(
     for n, (bends, source, target, chain, _parallel) in enumerate(built):
         foreign = foreign_of[n]
         hits = runs_into_something(n, bends)
+        if source != target and n not in rerouted and n not in stubs and n not in l_off and len(_simplify(bends)) > 2:
+            mine = {bends[0], bends[-1]}
+            for cand in _candidates(_simplify(bends)):
+                _spend(spent, len(cand))
+                if not runs_into_something(n, cand) and not shares_a_run(n, cand):
+                    bends, hits = cand, False
+                    built[n] = (cand, source, target, chain, _parallel)
+                    break
         if hits and n in stubs:
             built[n] = (stubs[n], source, target, chain, _parallel)
         if source != target and (n in rerouted or hits):
@@ -2350,4 +2392,4 @@ def _lay_out(
         if n_bands > 1
         else ()
     )
-    return Layout(boxes, group_boxes, lane_boxes, routes, page_width, page_height, labels, wrapped_rows)
+    return Layout(boxes, group_boxes, lane_boxes, routes, page_width, page_height, labels, wrapped_rows, len(pending))

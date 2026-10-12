@@ -33,17 +33,20 @@ CELLS = [
 ]
 
 
-def measure(seed: int, n: int, m: int, lanes: int, groups: int, direction: str) -> tuple[float, int, str]:
-    """(seconds, search steps, outcome) of one layout; the outcome is 'laid out' or the GraphError text."""
+def measure(seed: int, n: int, m: int, lanes: int, groups: int, direction: str) -> tuple[float, int, int, str]:
+    """(seconds, search steps, routes that needed the search, outcome) of one layout; the outcome is 'laid out' or the GraphError text."""
     rows, edges, lane_ids, group_ids, parents = random_graph(seed, n, m, lanes, groups)
     nodes = tuple(LayoutNode(*row) for row in rows)
     options = LayoutOptions(direction=direction, parents=parents)
     meters: list[list[int]] = []
+    searched: list[int] = []
     real = layout_module._lay_out
 
     def spy(*args):  # the last argument is the step counter of that pass
         meters.append(args[-1])
-        return real(*args)
+        result = real(*args)
+        searched.append(result.fallbacks)
+        return result
 
     layout_module._lay_out = spy
     start = time.perf_counter()
@@ -55,7 +58,7 @@ def measure(seed: int, n: int, m: int, lanes: int, groups: int, direction: str) 
     finally:
         layout_module._lay_out = real
     seconds = time.perf_counter() - start
-    return seconds, sum({id(w): w[0] for w in meters}.values()), outcome
+    return seconds, sum({id(w): w[0] for w in meters}.values()), searched[-1] if searched else 0, outcome
 
 
 def main() -> None:
@@ -63,11 +66,14 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--quick", action="store_true", help="only the cells that finish in a few seconds")
     args = parser.parse_args()
-    print("| nodes | edges | lanes | groups | direction | seconds | steps | outcome |")
-    print("| --- | --- | --- | --- | --- | --- | --- | --- |")
+    print("| nodes | edges | lanes | groups | direction | seconds | steps | fallbacks | outcome |")
+    print("| --- | --- | --- | --- | --- | --- | --- | --- | --- |")
     for n, m, lanes, groups, direction in CELLS[: 3 if args.quick else None]:
-        seconds, steps, outcome = measure(args.seed, n, m, lanes, groups, direction)
-        print(f"| {n} | {m} | {lanes} | {groups} | {direction} | {seconds:.1f} | {steps:,} | {outcome} |", flush=True)
+        seconds, steps, fallbacks, outcome = measure(args.seed, n, m, lanes, groups, direction)
+        print(
+            f"| {n} | {m} | {lanes} | {groups} | {direction} | {seconds:.1f} | {steps:,} | {fallbacks} | {outcome} |",
+            flush=True,
+        )
 
 
 if __name__ == "__main__":

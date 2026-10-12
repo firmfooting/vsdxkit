@@ -385,3 +385,48 @@ def test_a_port_pitch_reaches_the_ports_of_the_top_and_bottom_sides(pitch):
     assert len(sides) == 2 and all(len(xs) == 2 for xs in sides.values())
     for xs in sides.values():
         assert round(max(xs) - min(xs), 2) == pitch
+
+
+def test_a_graph_of_simple_edges_never_reaches_the_search():
+    for name in (
+        "hub5",
+        "hub5_top_down",
+        "fanin",
+        "lanes3",
+    ):  # chain25 is left out: its feedback edge is searched until Task 28
+        assert corpus.fixture_layout(name).fallbacks == 0, name
+
+
+def test_a_route_round_a_foreign_group_is_searched_and_counted():
+    from test_layout import _group_detour_case
+
+    assert _group_detour_case().fallbacks == 1
+
+
+def test_a_jog_between_ends_on_one_line_is_offered_the_straight_run_first():
+    jog = [(0.0, 1.0), (0.5, 1.0), (0.5, 1.2), (1.0, 1.2), (1.0, 1.0), (2.0, 1.0)]
+    assert lo._candidates(jog) == [[(0.0, 1.0), (2.0, 1.0)]]
+
+
+def test_a_corner_is_offered_only_when_it_keeps_the_way_the_ends_leave_and_arrive():
+    assert lo._candidates([(0.0, 0.0), (0.4, 0.0), (0.4, 1.0), (1.0, 1.0)]) == []  # both ends head along the flow
+    stepped = [(0.0, 0.0), (0.4, 0.0), (0.4, 1.0), (1.0, 1.0), (1.0, 2.0)]  # leaves along the flow, arrives across it
+    assert lo._candidates(stepped) == [[(0.0, 0.0), (1.0, 0.0), (1.0, 2.0)]]
+
+
+def test_the_candidates_cut_the_bends_of_random_pages_and_the_searches_they_save_are_counted(monkeypatch):
+    from helpers.graphs import random_graph
+
+    def laid(seed, n, m, lanes, groups):
+        rows, edges, lane_ids, group_ids, parents = random_graph(seed, n, m, lanes, groups)
+        nodes = tuple(LayoutNode(*row) for row in rows)
+        return layered_layout(nodes, edges, lane_ids, group_ids, LayoutOptions(parents=parents))
+
+    def bends(layout):
+        return sum(rm.bends(route) for route in layout.routes.values())
+
+    with_candidates = [laid(8, 30, 45, 0, 0), laid(36, 20, 30, 0, 3)]
+    monkeypatch.setattr(lo, "_candidates", lambda path: [])
+    without = [laid(8, 30, 45, 0, 0), laid(36, 20, 30, 0, 3)]
+    assert bends(with_candidates[0]) < bends(without[0])
+    assert with_candidates[1].fallbacks < without[1].fallbacks
