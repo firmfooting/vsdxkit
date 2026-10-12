@@ -89,6 +89,10 @@ LINES: tuple[tuple[str, str], ...] = (
         "swimlanes",
         "swimlanes: a three-lane cross-functional flowchart from create_swimlanes, a process in each lane; every shape where it was written",
     ),
+    (
+        "lanes_kinds",
+        "lanes_kinds: sized Start/End, Decision and Process steps in two lanes; every shape where it was written",
+    ),
     ("lanes_one", "lanes_one: a cross-functional flowchart of one lane; every shape where it was written"),
     ("lanes_two", "lanes_two: two lanes, a process in each; every shape where it was written"),
     ("lanes_four", "lanes_four: four lanes, one labelled with the widest letters; every shape where it was written"),

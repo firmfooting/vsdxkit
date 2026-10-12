@@ -105,7 +105,10 @@ Every node, lane, group and edge the builder draws carries a Shape Data row
 ``Source``, which holds ``Node.data["Source"]`` when given and the id
 otherwise, and a row ``Kind``. The rest of ``Node.data`` follows, sorted by
 name. Reading a shape back by ``Source`` is how a test, or a reviewer, maps a
-shape in Visio to the node it came from.
+shape in Visio to the node it came from. On a page with lanes, nodes of kind
+``start``, ``end``, ``process`` and ``decision`` are instances of Visio's flowchart
+masters and so also carry that master's Shape Data rows (``Function`` is the
+heading of the lane).
 
 Pages
 -----
