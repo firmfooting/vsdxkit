@@ -50,8 +50,8 @@ def test_the_new_options_are_appended_after_the_existing_fields():
 
 
 def test_a_port_pitch_reaches_the_ports_of_a_layout():
-    nodes = (LayoutNode("hub", 2, 2), *(LayoutNode(f"t{i}", 1, 1) for i in range(3)))
-    edges = tuple(("hub", f"t{i}") for i in range(3))
+    nodes = (LayoutNode("a", 2, 2), LayoutNode("b", 2, 2))
+    edges = (("a", "b"),) * 3  # boxes that overlap fully keep their ports on one side, where an L would leave it
 
     def gap(pitch):
         layout = layered_layout(nodes, edges, options=LayoutOptions(port_pitch=pitch, page=None))
@@ -248,3 +248,29 @@ def test_the_two_drops_into_the_sink_of_the_top_down_hub_have_no_jog():
     lay = corpus.fixture_layout("hub5_top_down")
     assert rm.bends(lay.routes[("c4", "archive", 0)]) == 0
     assert rm.bends(lay.routes[("c2", "archive", 0)]) <= 2
+
+
+def test_a_cross_lane_edge_between_adjacent_columns_has_one_bend():
+    lay = corpus.fixture_layout("lanes3")
+    for key in (("s2", "s3", 0), ("s4", "s5", 0), ("s6", "s7", 0)):
+        assert rm.bends(lay.routes[key]) <= 1, key
+
+
+def test_an_l_route_is_not_taken_through_a_box_in_the_source_column():
+    nodes = (
+        LayoutNode("a", 2, 1, "L0"),
+        LayoutNode("blocker", 2, 1, "L1"),
+        LayoutNode("b", 2, 1, "L2"),
+        LayoutNode("c", 2, 1, "L0"),
+    )
+    lay = layered_layout(nodes, (("a", "b"), ("c", "b")), lanes=("L0", "L1", "L2"))
+    from test_layout import _check_routes
+
+    _check_routes(lay)
+
+
+def test_forward_edges_between_adjacent_layers_have_at_most_two_bends():
+    for name in ("hub5", "fanin"):  # every edge joins adjacent layers
+        lay = corpus.fixture_layout(name)
+        assert max(rm.bends(r) for r in lay.routes.values()) <= 2, name
+    assert max(rm.bends(r) for r in corpus.fixture_layout("lanes3").routes.values()) <= 4
