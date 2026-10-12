@@ -14,7 +14,7 @@ from collections import Counter
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from itertools import pairwise
-from typing import Any, Literal, cast
+from typing import Literal, cast
 
 from vsdxkit.errors import GraphError
 
@@ -768,13 +768,17 @@ def _table[T](size: int, default: T) -> list[T]:
 class _Filtered(Mapping[tuple[int, float], list[tuple[float, float]]]):
     """The runs of `lines` as (low, high), keeping a run only when `keep` accepts the route index it belongs to; a line's list is built when it is asked for, because a search reads a few lines of many."""
 
-    def __init__(self, lines: Mapping[tuple[int, float], list[Any]], keep: Callable[[int], bool]) -> None:
+    def __init__(
+        self,
+        lines: Mapping[tuple[int, float], Sequence[tuple[float, float, int] | tuple[float, float, int, int]]],
+        keep: Callable[[int], bool],
+    ) -> None:
         """Wrap `lines`, whose runs are (low, high, route, ...) tuples."""
         self._lines, self._keep = lines, keep
 
     def __getitem__(self, key: tuple[int, float]) -> list[tuple[float, float]]:
         """The kept runs of line `key`, or KeyError when it has none."""
-        return [(run[0], run[1]) for run in self._lines[key] if self._keep(cast(int, run[2]))]
+        return [(run[0], run[1]) for run in self._lines[key] if self._keep(run[2])]
 
     def __iter__(self) -> Iterator[tuple[int, float]]:
         """The keys of every line."""
@@ -1993,6 +1997,64 @@ def _lay_out(
             if round(slots[key].u_extent / GRID) // (loops + len(idxs)):
                 loop_extra[key] = loop_extra.get(key, 0) + len(idxs)
                 spread = _spread(loops + loop_extra[key], slots[key].u_extent, key, opts.port_pitch)
+                for rank, idx in enumerate(idxs):
+                    ua, _ub, n, h = ports[idx]
+                    ports[idx] = (ua, centre_u(slots[key]) - spread[loops + loop_extra[key] - len(idxs) + rank], n, h)
+        # a corridor of 2 * lane_pad lies on the boundary; levels are a channel apart, or closer when it is crowded
+        top_level = lane_bottom[band] - lane_pad
+        step = min(_CHANNEL, 2 * lane_pad / (count + 1))
+        right = ports[0][1] > ports[0][0]
+        # the edge with the larger start column takes the higher level for a jog to the right, the smaller for a jog to the left
+        by_level = sorted(ports, key=lambda port: -port[0] if right else port[0])
+        for level_rank, (ua, ub, n, h) in enumerate(by_level):
+            sa, sb = slots[chains[n][h]], slots[chains[n][h + 1]]
+            ya = sa.v + sa.v_extent / 2 if sa.real else rows_of[n][h]
+            yb = sb.v - sb.v_extent / 2 if sb.real else rows_of[n][h + 1]
+            fold_plan[(n, h)] = (ua, ub, ya, yb, top_level + (level_rank + 1) * step)
+
+    # the hops that cross a row boundary leave the near-boundary side of one column and enter the other, by a level of their own
+    fold_hops: dict[int, list[tuple[float, int, int]]] = {}
+    for n, chain in enumerate(chains):
+        if chain[0] != chain[-1]:
+            for hop, (a, b) in enumerate(pairwise(chain)):
+                if band_of_layer[slots[a].layer] != band_of_layer[slots[b].layer]:
+                    fold_hops.setdefault(band_of_layer[slots[a].layer], []).append((slots[a].v, n, hop))
+    loop_extra: dict[_Key, int] = {}  # fold arrivals that share a self-looped node's top with its loops
+    fold_plan: dict[tuple[int, int], tuple[float, float, float, float, float]] = {}  # (n, hop) -> (ua, ub, ya, yb, level)
+    for band, found in fold_hops.items():
+        found.sort()
+        count = len(found)
+        width = min(
+            min(
+                (slots[chains[n][h]].u_extent if slots[chains[n][h]].real else col_width[slots[chains[n][h]].layer])
+                for _v, n, h in found
+            ),
+            min(
+                (
+                    slots[chains[n][h + 1]].u_extent
+                    if slots[chains[n][h + 1]].real
+                    else col_width[slots[chains[n][h + 1]].layer]
+                )
+                for _v, n, h in found
+            ),
+        )
+        # a boundary too narrow for a port each keeps the column centre, and the search or the spacing pass separates the routes
+        offsets = _spread(count, width, band) if round(width / GRID) // count else [0.0] * count
+        ports = [
+            (centre_u(slots[chains[n][h]]) + off, centre_u(slots[chains[n][h + 1]]) + off, n, h)
+            for off, (_v, n, h) in zip(offsets, found, strict=True)
+        ]
+        # a self-loop uses border points on the top of its node, so the folds that arrive there share that node's spread with it
+        arriving: dict[_Key, list[int]] = {}
+        for idx, (_ua, _ub, n, h) in enumerate(ports):
+            key = chains[n][h + 1]
+            if slots[key].real and key in loop_count:
+                arriving.setdefault(key, []).append(idx)
+        for key, idxs in arriving.items():
+            loops = twins[(key, key)]
+            if round(slots[key].u_extent / GRID) // (loops + len(idxs)):
+                loop_extra[key] = loop_extra.get(key, 0) + len(idxs)
+                spread = _spread(loops + loop_extra[key], slots[key].u_extent, key)
                 for rank, idx in enumerate(idxs):
                     ua, _ub, n, h = ports[idx]
                     ports[idx] = (ua, centre_u(slots[key]) - spread[loops + loop_extra[key] - len(idxs) + rank], n, h)
