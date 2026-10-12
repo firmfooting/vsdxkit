@@ -22,7 +22,7 @@ from vsdxkit import builder, namespace
 from vsdxkit.builder import Diagram, Edge, Group, Lane, Node, Page
 from vsdxkit.document import Document
 from vsdxkit.errors import GraphError
-from vsdxkit.layout import Box, Layout
+from vsdxkit.layout import Box, Layout, LayoutOptions
 from vsdxkit.shapes import Shape
 from vsdxkit.swimlanes import ROW_HEADING_TEXT
 
@@ -37,8 +37,8 @@ def _fields(cls: type) -> list[str]:
 def test_the_graph_contract_is_the_one_the_spec_states():
     """Fails if a field the docs generator builds against is renamed, reordered or dropped."""
     assert _fields(Diagram) == ["title", "pages"]
-    assert _fields(Page) == ["name", "nodes", "edges", "groups", "lanes"]
-    assert _fields(Node) == ["id", "kind", "label", "sublabel", "data"]
+    assert _fields(Page) == ["name", "nodes", "edges", "groups", "lanes", "align"]
+    assert _fields(Node) == ["id", "kind", "label", "sublabel", "data", "layer"]
     assert _fields(Edge) == ["source", "target", "label", "kind"]
     assert _fields(Group) == ["id", "label", "node_ids", "groups"]
     assert _fields(Lane) == ["id", "label", "node_ids"]
@@ -823,3 +823,67 @@ def test_text_shape_data_values_carry_u_str_as_visio_writes_them():
     cells = [c for page in document.pages for shape in page.shapes for c in _string_value_cells(shape.xml)]
     assert len(cells) >= 4
     assert {c.get("U") for c in cells} == {"STR"}
+
+
+@pytest.mark.parametrize("layer", [-1, True, 1.5])
+def test_a_layer_that_is_not_a_whole_number_of_zero_or_more_is_refused_by_name(layer):
+    page = Page("p", (Node("a", "process", "A", layer=layer),), ())
+    with pytest.raises(GraphError, match="'a'"):
+        Diagram("t", (page,)).validate()
+
+
+def test_node_still_takes_five_positional_arguments_and_layer_defaults_to_none():
+    node = Node("a", "process", "A", None, {})
+    assert node.layer is None
+
+
+def _three_nodes(**page_args):
+    nodes = tuple(Node(i, "process", i.upper()) for i in "abc")
+    return Page("p", nodes, (Edge("a", "b"), Edge("b", "c")), **page_args)
+
+
+def test_align_is_held_as_tuples_and_a_bare_string_is_refused():
+    assert _three_nodes(align=[["a", "c"]]).align == (("a", "c"),)
+    with pytest.raises(GraphError, match="align"):
+        _three_nodes(align="ac")
+
+
+def test_an_align_id_not_on_the_page_is_refused_by_name():
+    with pytest.raises(GraphError, match="'z'"):
+        Diagram("t", (_three_nodes(align=[["a", "z"]]),)).validate()
+
+
+def test_a_node_in_two_align_groups_is_refused_by_name():
+    with pytest.raises(GraphError, match="'b'"):
+        Diagram("t", (_three_nodes(align=[["a", "b"], ["b", "c"]]),)).validate()
+
+
+def test_align_members_in_different_lanes_are_refused():
+    page = _three_nodes(align=[["a", "b"]], lanes=(Lane("l1", "One", ["a", "c"]), Lane("l2", "Two", ["b"])))
+    with pytest.raises(GraphError, match="lane"):
+        Diagram("t", (page,)).validate()
+
+
+def test_aligned_nodes_are_drawn_on_one_row():
+    nodes = tuple(Node(i, "process", i.upper()) for i in "abcd")
+    edges = (Edge("a", "b"), Edge("a", "c"), Edge("c", "d"))
+    document = Diagram("t", (Page("p", nodes, edges, align=[["b", "d"]]),)).build()
+    by_source = _by_source(document)
+    assert by_source["b"].y == by_source["d"].y
+
+
+def test_layer_and_align_do_not_make_the_bytes_depend_on_the_insertion_order(tmp_path):
+    unwrapped = LayoutOptions(page=None)  # aligned boxes in two wrapped bands cannot share a row
+
+    def diagram(keys):
+        data = {k: k for k in keys}
+        nodes = [
+            Node("a", "start", "A", data=dict(data)),
+            Node("b", "process", "B", layer=2, data=dict(data)),
+            Node("c", "end", "C"),
+        ]
+        return Diagram("D", [Page("P", nodes, [Edge("a", "b"), Edge("b", "c")], align=(("a", "c"),))])
+
+    one = diagram(["x", "y", "z"]).save(tmp_path / "1.vsdx", layout=unwrapped)
+    two = diagram(["z", "y", "x"]).save(tmp_path / "2.vsdx", layout=unwrapped)
+    assert one.read_bytes() == two.read_bytes()

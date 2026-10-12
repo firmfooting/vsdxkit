@@ -155,6 +155,10 @@ LINES: tuple[tuple[str, str], ...] = (
         "lanes3: three lanes, a decision that splits into two lanes and rejoins; every shape where it was written",
     ),
     ("fanin", "fanin: four sources into one target; every shape where it was written"),
+    (
+        "pins",
+        "pins: a diamond whose first and last boxes share a row and whose last is pinned to layer 3; every shape where it was written",
+    ),
 )
 """Every case file's name and what Visio must show for it."""
 

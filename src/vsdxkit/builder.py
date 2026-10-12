@@ -66,6 +66,8 @@ class Node:
     """A second line of text, or None."""
     data: Mapping[str, str] = field(default_factory=dict)
     """Shape Data rows, written after the ``Source`` and ``Kind`` rows, sorted by name. Names and values must be strings. A ``Source`` entry replaces the default, the id; a ``Kind`` entry is refused, because the node's kind is always written. On an ``off_page`` node, ``Linked page`` and ``Linked node`` are reserved for page links and refused."""
+    layer: int | None = None
+    """The layer (column, or row when flowing top down) to pin the node to, counted from zero, or None to let the layout choose. It must come after every layer that feeds the node."""
 
 
 @dataclass(frozen=True)
@@ -135,11 +137,16 @@ class Page:
     """The group boxes."""
     lanes: Sequence[Lane] = ()
     """The lanes, top to bottom."""
+    align: Sequence[Sequence[str]] = ()
+    """Groups of node ids to draw on one row (one column when flowing top down). The members of a group sit in different layers and one lane, and a node is in at most one group. A group of one id changes nothing."""
 
     def __post_init__(self) -> None:
-        """Hold the members as tuples, so a page compares by value."""
+        """Hold the members as tuples, so a page compares by value, and refuse an align group given as a string."""
         for name in ("nodes", "edges", "groups", "lanes"):
             object.__setattr__(self, name, tuple(getattr(self, name)))
+        if any(isinstance(g, str) for g in self.align):
+            raise GraphError(f"page {self.name!r} has an align group that is a string; pass a list of ids for each group")
+        object.__setattr__(self, "align", tuple(tuple(g) for g in self.align))
 
 
 @dataclass(frozen=True)
@@ -233,6 +240,13 @@ def _check_data(node: Node) -> None:
         raise GraphError(f"node {node.id!r} sets Shape Data 'Kind', which is always written from its kind")
 
 
+def _check_layer(node: Node) -> None:
+    """Refuse a pinned layer that is not a whole number of zero or more; a bool is not a whole number here."""
+    layer = node.layer
+    if layer is not None and (not isinstance(layer, int) or isinstance(layer, bool) or layer < 0):
+        raise GraphError(f"node {node.id!r} has layer {layer!r}; it must be a whole number, zero or more, or None")
+
+
 def _register(page: Page, where: dict[str, tuple[str, str]]) -> None:
     """Record every id on `page` as (page name, kind), refusing a repeat or an unknown kind."""
     for node in page.nodes:
@@ -244,6 +258,7 @@ def _register(page: Page, where: dict[str, tuple[str, str]]) -> None:
             if not (field_name == "sublabel" and value is None):
                 _text(value, f"node {node.id!r} has a {field_name} that")
         _check_data(node)
+        _check_layer(node)
         if node.kind == "off_page" and any(key in node.data for key in _RESERVED_DATA):
             raise GraphError(f"off_page node {node.id!r} uses {sorted(_RESERVED_DATA)}, which are reserved for page links")
     for lane in page.lanes:
@@ -276,6 +291,16 @@ def _check_membership(page: Page, where: Mapping[str, tuple[str, str]]) -> None:
         for node in page.nodes:
             if node.id not in lane_of:
                 raise GraphError(f"page {page.name!r} has lanes, so node {node.id!r} must be in one")
+    in_align: dict[str, int] = {}
+    for n, members in enumerate(page.align):
+        for node_id in members:
+            _on_page(page, node_id, where, "an align group")
+            if node_id in in_align:
+                raise GraphError(f"node {node_id!r} is in two align groups")
+            in_align[node_id] = n
+        spanned = sorted({lane_of[i] for i in members if i in lane_of})
+        if len(spanned) > 1:
+            raise GraphError(f"align group {list(members)!r} holds nodes from lanes {spanned}; a group stays in one lane")
     group_of: dict[str, str] = {}
     for group in page.groups:
         for child in group.groups:
@@ -407,6 +432,8 @@ def _layout_page(page: Page, options: LayoutOptions) -> tuple[Layout, dict[str, 
             parents=tuple(parents),
             headings=tuple((g.id, *_heading_size(g.label)) for g in _all_groups(page) if g.label.strip()),
             edge_labels=tuple(label_size(e.label) if e.label else None for e in page.edges if e.kind != "page-link"),
+            pinned=tuple((n.id, n.layer) for n in page.nodes if n.layer is not None),
+            aligned=tuple(tuple(g) for g in page.align if len(g) > 1),
         ),
     )
     return layout, sizes

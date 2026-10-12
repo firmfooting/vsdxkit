@@ -108,6 +108,46 @@ because a lane runs the whole width, so its width is the number of layers; one
 that grows past the lane limit (see "Lanes and groups" below) is refused with
 the number of columns it needed, and the flow has to be split across pages.
 
+Straightening, pinned layers and aligned nodes
+----------------------------------------------
+
+Within its lane and track a box moves toward the boxes it connects to, so that an
+edge between boxes that overlap across the flow runs straight.
+``LayoutOptions.straighten_sweeps`` sets how many down-and-up passes do this, and
+zero keeps each run centred. Within a layer the order that crosses fewest edges is
+kept.
+
+``Node.layer`` pins a node to a layer, counted from zero (a column, or a row when
+flowing top down). It must come after every layer that feeds the node, and the
+nodes it feeds move after it. ``Page.align`` lists groups of node ids drawn on one
+row (one column when flowing top down); the members of a group are in different
+layers and one lane. A pin that precedes a feeder, a node in two groups and a
+group that cannot share a row are refused with a :class:`~vsdxkit.errors.GraphError`
+that names them. A page wrapped into rows can put group members in different
+bands, so give such a page ``LayoutOptions(page=None)`` to align them.
+
+.. code-block:: python
+
+   from vsdxkit.layout import LayoutOptions
+
+   nodes = [
+       Node("top", "start", "Intake"),
+       Node("left", "process", "Check"),
+       Node("right", "process", "Review"),
+       Node("bottom", "end", "Archive", layer=3),
+   ]
+   edges = [Edge("top", "left"), Edge("top", "right"), Edge("left", "bottom"), Edge("right", "bottom")]
+   page = Page("pins", nodes, edges, align=[["top", "bottom"]])
+   Diagram("pins", [page]).save("pins.vsdx", layout=LayoutOptions(page=None))
+
+``LayoutOptions(columns="even")`` gives every column the widest column's width and
+every gap the largest gap, so boxes in a row line up; the default, ``"natural"``,
+sizes each to what it holds.
+
+On a page without lanes, a feedback edge that jumps layers runs in a corridor
+outside the drawing, and between neighbouring rows on a wrapped page, instead of
+through a slot in each layer it jumps.
+
 Lanes and groups
 ----------------
 

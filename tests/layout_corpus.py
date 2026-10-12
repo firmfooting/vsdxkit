@@ -12,7 +12,7 @@ from vsdxkit.builder import Edge, Node, Page
 from vsdxkit.layout import Layout, LayoutOptions
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "diagrams"
-FIXTURES = ("hub5", "hub5_top_down", "chain25", "lanes3", "fanin")
+FIXTURES = ("hub5", "hub5_top_down", "chain25", "lanes3", "fanin", "pins")
 KINDS = ("process", "decision", "document", "subprocess")
 
 

@@ -1,0 +1,440 @@
+{
+  "error": null,
+  "pages": [
+    {
+      "background": false,
+      "connects": [],
+      "index": 1,
+      "name": "pins",
+      "shapes": [
+        {
+          "cells": [
+            {
+              "formula": "38.1 mm",
+              "name": "PinX",
+              "result": 1.5
+            },
+            {
+              "formula": "57.404 mm",
+              "name": "PinY",
+              "result": 2.26
+            },
+            {
+              "formula": "50.8 mm",
+              "name": "Width",
+              "result": 2.0
+            },
+            {
+              "formula": "20.32 mm",
+              "name": "Height",
+              "result": 0.8
+            },
+            {
+              "formula": "0 deg",
+              "name": "Angle",
+              "result": 0.0
+            },
+            {
+              "formula": "Width*0.5",
+              "name": "LocPinX",
+              "result": 1.0
+            },
+            {
+              "formula": "Height*0.5",
+              "name": "LocPinY",
+              "result": 0.4
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipX",
+              "result": 0.0
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipY",
+              "result": 0.0
+            }
+          ],
+          "id": 1,
+          "name": "Sheet.1",
+          "parent_id": null
+        },
+        {
+          "cells": [
+            {
+              "formula": "117.094 mm",
+              "name": "PinX",
+              "result": 4.61
+            },
+            {
+              "formula": "57.404 mm",
+              "name": "PinY",
+              "result": 2.26
+            },
+            {
+              "formula": "55.88 mm",
+              "name": "Width",
+              "result": 2.2
+            },
+            {
+              "formula": "22.86 mm",
+              "name": "Height",
+              "result": 0.9
+            },
+            {
+              "formula": "0 deg",
+              "name": "Angle",
+              "result": 0.0
+            },
+            {
+              "formula": "Width*0.5",
+              "name": "LocPinX",
+              "result": 1.1
+            },
+            {
+              "formula": "Height*0.5",
+              "name": "LocPinY",
+              "result": 0.45
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipX",
+              "result": 0.0
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipY",
+              "result": 0.0
+            }
+          ],
+          "id": 2,
+          "name": "Sheet.2",
+          "parent_id": null
+        },
+        {
+          "cells": [
+            {
+              "formula": "117.094 mm",
+              "name": "PinX",
+              "result": 4.61
+            },
+            {
+              "formula": "24.13 mm",
+              "name": "PinY",
+              "result": 0.95
+            },
+            {
+              "formula": "55.88 mm",
+              "name": "Width",
+              "result": 2.2
+            },
+            {
+              "formula": "22.86 mm",
+              "name": "Height",
+              "result": 0.9
+            },
+            {
+              "formula": "0 deg",
+              "name": "Angle",
+              "result": 0.0
+            },
+            {
+              "formula": "Width*0.5",
+              "name": "LocPinX",
+              "result": 1.1
+            },
+            {
+              "formula": "Height*0.5",
+              "name": "LocPinY",
+              "result": 0.45
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipX",
+              "result": 0.0
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipY",
+              "result": 0.0
+            }
+          ],
+          "id": 3,
+          "name": "Sheet.3",
+          "parent_id": null
+        },
+        {
+          "cells": [
+            {
+              "formula": "221.742 mm",
+              "name": "PinX",
+              "result": 8.73
+            },
+            {
+              "formula": "57.404 mm",
+              "name": "PinY",
+              "result": 2.26
+            },
+            {
+              "formula": "50.8 mm",
+              "name": "Width",
+              "result": 2.0
+            },
+            {
+              "formula": "20.32 mm",
+              "name": "Height",
+              "result": 0.8
+            },
+            {
+              "formula": "0 deg",
+              "name": "Angle",
+              "result": 0.0
+            },
+            {
+              "formula": "Width*0.5",
+              "name": "LocPinX",
+              "result": 1.0
+            },
+            {
+              "formula": "Height*0.5",
+              "name": "LocPinY",
+              "result": 0.4
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipX",
+              "result": 0.0
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipY",
+              "result": 0.0
+            }
+          ],
+          "id": 4,
+          "name": "Sheet.4",
+          "parent_id": null
+        },
+        {
+          "cells": [
+            {
+              "formula": "76.454 mm",
+              "name": "PinX",
+              "result": 3.01
+            },
+            {
+              "formula": "57.658 mm",
+              "name": "PinY",
+              "result": 2.27
+            },
+            {
+              "formula": "25.908 mm",
+              "name": "Width",
+              "result": 1.02
+            },
+            {
+              "formula": "0.508 mm",
+              "name": "Height",
+              "result": 0.02
+            },
+            {
+              "formula": "0 deg",
+              "name": "Angle",
+              "result": 0.0
+            },
+            {
+              "formula": "Width*0.5",
+              "name": "LocPinX",
+              "result": 0.51
+            },
+            {
+              "formula": "Height*0.5",
+              "name": "LocPinY",
+              "result": 0.01
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipX",
+              "result": 0.0
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipY",
+              "result": 0.0
+            }
+          ],
+          "id": 5,
+          "name": "Sheet.5",
+          "parent_id": null
+        },
+        {
+          "cells": [
+            {
+              "formula": "63.754 mm",
+              "name": "PinX",
+              "result": 2.51
+            },
+            {
+              "formula": "35.814 mm",
+              "name": "PinY",
+              "result": 1.41
+            },
+            {
+              "formula": "51.308 mm",
+              "name": "Width",
+              "result": 2.02
+            },
+            {
+              "formula": "23.368 mm",
+              "name": "Height",
+              "result": 0.92
+            },
+            {
+              "formula": "0 deg",
+              "name": "Angle",
+              "result": 0.0
+            },
+            {
+              "formula": "Width*0.5",
+              "name": "LocPinX",
+              "result": 1.01
+            },
+            {
+              "formula": "Height*0.5",
+              "name": "LocPinY",
+              "result": 0.46
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipX",
+              "result": 0.0
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipY",
+              "result": 0.0
+            }
+          ],
+          "id": 6,
+          "name": "Sheet.6",
+          "parent_id": null
+        },
+        {
+          "cells": [
+            {
+              "formula": "170.688 mm",
+              "name": "PinX",
+              "result": 6.72
+            },
+            {
+              "formula": "57.658 mm",
+              "name": "PinY",
+              "result": 2.27
+            },
+            {
+              "formula": "51.308 mm",
+              "name": "Width",
+              "result": 2.02
+            },
+            {
+              "formula": "0.508 mm",
+              "name": "Height",
+              "result": 0.02
+            },
+            {
+              "formula": "0 deg",
+              "name": "Angle",
+              "result": 0.0
+            },
+            {
+              "formula": "Width*0.5",
+              "name": "LocPinX",
+              "result": 1.01
+            },
+            {
+              "formula": "Height*0.5",
+              "name": "LocPinY",
+              "result": 0.01
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipX",
+              "result": 0.0
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipY",
+              "result": 0.0
+            }
+          ],
+          "id": 7,
+          "name": "Sheet.7",
+          "parent_id": null
+        },
+        {
+          "cells": [
+            {
+              "formula": "183.388 mm",
+              "name": "PinX",
+              "result": 7.22
+            },
+            {
+              "formula": "35.814 mm",
+              "name": "PinY",
+              "result": 1.41
+            },
+            {
+              "formula": "76.708 mm",
+              "name": "Width",
+              "result": 3.02
+            },
+            {
+              "formula": "23.368 mm",
+              "name": "Height",
+              "result": 0.92
+            },
+            {
+              "formula": "0 deg",
+              "name": "Angle",
+              "result": 0.0
+            },
+            {
+              "formula": "Width*0.5",
+              "name": "LocPinX",
+              "result": 1.51
+            },
+            {
+              "formula": "Height*0.5",
+              "name": "LocPinY",
+              "result": 0.46
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipX",
+              "result": 0.0
+            },
+            {
+              "formula": "FALSE",
+              "name": "FlipY",
+              "result": 0.0
+            }
+          ],
+          "id": 8,
+          "name": "Sheet.8",
+          "parent_id": null
+        }
+      ]
+    }
+  ],
+  "schema": 2,
+  "source": {
+    "name": "fixtures/diagrams/pins.py",
+    "sha256": "f2e662e0513361ad8a340786a4d6f2e548096d017555729e2f4a68313c4a868f",
+    "transform": "build"
+  },
+  "status": "opened",
+  "viewer": {
+    "product": "Visio",
+    "version": "16.0"
+  }
+}
