@@ -8,6 +8,24 @@ From 0.7.1 onward this file is maintained by release-please, which writes a
 section per release from the conventional-commit subjects on `main`. Edit the
 release pull request rather than this file directly.
 
+## [0.11.0](https://github.com/firmfooting/vsdxkit/compare/v0.10.0...v0.11.0) (2026-10-12)
+
+
+### Features
+
+* **layout:** space, order and nest ports and channels ([#542](https://github.com/firmfooting/vsdxkit/issues/542)) ([88294c4](https://github.com/firmfooting/vsdxkit/commit/88294c4afc21ddfe61005d340464f891777ab5a6))
+* **layout:** wrap long flows to a page shape ([#540](https://github.com/firmfooting/vsdxkit/issues/540)) ([6186c5b](https://github.com/firmfooting/vsdxkit/commit/6186c5b5fd745f7e3ed61135349161d9ad82c22a))
+
+
+### Bug Fixes
+
+* write Shape Data text values with U="STR" so Visio shows them ([#536](https://github.com/firmfooting/vsdxkit/issues/536)) ([26b6bcf](https://github.com/firmfooting/vsdxkit/commit/26b6bcf1186c2eeedc0c9b70dc0f625da71fa240))
+
+
+### Performance Improvements
+
+* **layout:** speed up the grid search and set a documented ceiling for dense graphs ([#530](https://github.com/firmfooting/vsdxkit/issues/530)) ([7dec1ae](https://github.com/firmfooting/vsdxkit/commit/7dec1ae85ea229a31c217fb2dabfb02af5c384ed))
+
 ## [0.10.0](https://github.com/firmfooting/vsdxkit/compare/v0.9.0...v0.10.0) (2026-10-12)
 
 
