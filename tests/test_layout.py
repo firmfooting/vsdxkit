@@ -953,6 +953,15 @@ def _check_clearance(layout: Layout, nodes, parents, options: LayoutOptions) -> 
                     abs(box.y - other.y) - (box.height + other.height) / 2,
                 )
                 assert apart >= GRID - tol, f"group {g} is less than a grid step from {node_id}"
+    related = {frozenset(p) for p in parents}
+    for g, box in layout.groups.items():
+        for h, other in layout.groups.items():
+            if g < h and frozenset((g, h)) not in related:
+                apart = max(
+                    abs(box.x - other.x) - (box.width + other.width) / 2,
+                    abs(box.y - other.y) - (box.height + other.height) / 2,
+                )
+                assert apart >= -tol, f"group {g} overlaps group {h}"
     for child, outer in parents:
         if child in layout.groups:
             assert holds(layout.groups[outer], layout.groups[child], pad), (
@@ -965,7 +974,15 @@ def _check_clearance(layout: Layout, nodes, parents, options: LayoutOptions) -> 
         )
 
 
-_DEGENERATE = [(0.0, 0.0, 0.0), (0.0, 0.0, 0.004), (0.004, 0.0, 0.013), (0.05, 0.0, 0.5), (0.25, 0.004, 0.013)]
+_DEGENERATE = [
+    (0.0, 0.0, 0.0),
+    (0.0, 0.0, 0.004),
+    (0.004, 0.0, 0.013),
+    (0.05, 0.0, 0.5),
+    (0.25, 0.004, 0.013),
+    (0.013, 0.013, 0.0),
+    (0.004, 0.013, 0.0),
+]
 
 
 @pytest.mark.parametrize("seed", range(40))
@@ -973,29 +990,34 @@ _DEGENERATE = [(0.0, 0.0, 0.0), (0.0, 0.0, 0.004), (0.004, 0.0, 0.013), (0.05, 0
 @pytest.mark.parametrize(("padding", "gap", "margin"), _DEGENERATE)
 def test_zero_padding_zero_gap_and_off_grid_margins_keep_their_clearance(seed, direction, padding, gap, margin):
     rng = random.Random(seed)
-    count = rng.randint(2, 6)
+    count = rng.randint(2, 8)
+    laned = direction == "left_to_right" and seed % 2 == 0
     rows = [
         (
             f"n{i}",
             rng.choice([0.02, 0.1, 0.5, 1.0, 1.01]),
             rng.choice([0.02, 0.1, 0.5, 1.0, 1.01]),
-            None,
-            rng.choice([None, "C", "P"]),
+            "L" if laned else None,
+            rng.choice([None, "C", "P", "S"]),
         )
         for i in range(count)
     ]
     nodes = tuple(LayoutNode(*row) for row in rows)
     edges = tuple((f"n{rng.randrange(count)}", f"n{rng.randrange(count)}") for _ in range(rng.randint(0, 5)))
-    edges += tuple((f"n{k}", f"n{k}") for k in rng.sample(range(count), rng.randint(1, 2)))
+    edges += tuple((f"n{k}", f"n{k}") for k in rng.sample(range(count), rng.randint(0, 2)))
     parents = (("C", "P"),)
-    options = LayoutOptions(direction=direction, parents=parents, group_padding=padding, node_gap=gap, margin=margin)
+    options = LayoutOptions(
+        direction=direction, parents=parents, group_padding=padding, node_gap=gap, margin=margin, lane_padding=0.004
+    )
     try:
-        layout = layered_layout(nodes, edges, (), ("C", "P"), options)
+        layout = layered_layout(nodes, edges, ("L",) if laned else (), ("C", "P", "S"), options)
     except GraphError:
         return  # a node too small for its parallel edges is refused, as at the defaults
     _check(layout, nodes, parents)
     _check_routes(layout, own_points=False, clear_of_borders=False)
     _check_clearance(layout, nodes, parents, options)
+    if laned:
+        _check_lanes_hold_groups(layout)
 
 
 def _check_lanes_hold_groups(layout: Layout) -> None:
@@ -1006,6 +1028,30 @@ def _check_lanes_hold_groups(layout: Layout) -> None:
             and box.y + box.height / 2 <= lane.y + lane.height / 2 + 1e-9
             for lane in layout.lanes.values()
         ), f"group {g} leaves its lane"
+
+
+@pytest.mark.parametrize("seed", range(150))
+@pytest.mark.parametrize("direction", ["left_to_right", "top_down"])
+def test_nested_off_grid_groups_never_leave_their_lane_or_raise(seed, direction):
+    """Sizes and spacing off the grid, groups nested and side by side, no edges: the shapes that ran the rounding slack out."""
+    rng = random.Random(seed)
+    sizes = [0.02, 0.1, 0.5, 1.0, 1.01]
+    laned = direction == "left_to_right"
+    nodes = tuple(
+        LayoutNode(f"n{i}", rng.choice(sizes), rng.choice(sizes), "L" if laned else None, rng.choice([None, "C", "P", "S"]))
+        for i in range(rng.randint(3, 8))
+    )
+    options = LayoutOptions(
+        direction=direction,
+        parents=(("C", "P"),),
+        group_padding=rng.choice([0.004, 0.013]),
+        node_gap=0.013,
+        lane_padding=0.004,
+    )
+    layout = layered_layout(nodes, (), ("L",) if laned else (), ("C", "P", "S"), options)
+    _check_clearance(layout, nodes, options.parents, options)
+    if laned:
+        _check_lanes_hold_groups(layout)
 
 
 def test_nested_off_grid_groups_stay_inside_their_lane():
