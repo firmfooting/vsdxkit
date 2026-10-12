@@ -1,6 +1,7 @@
 """Label placement (A7): a label sits on its own route, in one lane band, clear of everything else."""
 
 import random
+from dataclasses import replace
 from types import SimpleNamespace as NS
 
 import layout_corpus as corpus
@@ -262,3 +263,37 @@ def test_a_hub_with_thirteen_routes_lays_out_with_its_labels_clear_of_every_node
     laid = layered_layout(nodes, edges, (), groups, options)
     assert len(laid.labels) == len(edges)
     assert not any(layout_module._boxes_meet(label, box) for label in laid.labels.values() for box in laid.nodes.values())
+
+
+def test_a_plain_refusal_on_one_rung_does_not_stop_the_climb(monkeypatch):
+    real = layout_module._laid_out_once
+    calls = []
+
+    def refuse_then_fail_then_serve(nodes, edges, lanes, groups, options):
+        calls.append(options)
+        if len(calls) == 1:
+            raise layout_module._LabelRefused("no room")
+        if len(calls) == 2:
+            raise GraphError("another refusal at wider spacing")
+        return real(nodes, edges, lanes, groups, options)
+
+    monkeypatch.setattr(layout_module, "_laid_out_once", refuse_then_fail_then_serve)
+    nodes = (LayoutNode("a", 2, 1), LayoutNode("b", 2, 1))
+    laid = layered_layout(nodes, (("a", "b"),), options=LayoutOptions(page=None, edge_labels=((1.0, 0.3),)))
+    assert laid.fallbacks == 2
+
+
+def _loose_clearance(nodes, edges, groups, options):
+    laid = layered_layout(nodes, edges, (), groups, replace(options, loose_labels=True))
+    heading = [
+        box(laid.groups[g].x, laid.groups[g].y + laid.groups[g].height / 2 - h / 2, w, h) for g, w, h in options.headings
+    ]
+    return [v for v in rm.label_violations(laid, heading) if "segment of route" not in v]
+
+
+def test_the_loose_rung_still_clears_nodes_headings_and_other_labels():
+    nodes, edges, groups, options = _hub_page()
+    assert _loose_clearance(nodes, edges, groups, options) == []
+    parallel = (LayoutNode("a", 1, 1), LayoutNode("b", 1, 1))
+    loose = LayoutOptions(page=None, direction="left_to_right", edge_labels=((2.0, 0.5),) * 6)
+    assert _loose_clearance(parallel, (("a", "b"),) * 6, (), loose) == []

@@ -1311,8 +1311,7 @@ def _place_labels(
     A label is tried on the first segment when `first` says so and otherwise on the longest, sliding along each
     stretch of a segment within one lane band in quarter-label steps. It must meet no box of `fixed` or of its own
     `foreign` boxes, no earlier label, no other route's segment and no lane border. An edge no segment serves takes the next route from `_candidates` that is clear and is tried once
-    more; when none serves, the layout is refused naming the edge. A `loose` placement ignores other routes, as the
-    layout did before labels were kept off them, so a hub too crowded for any clear stretch still lays out.
+    more; when none serves, the layout is refused naming the edge. A `loose` placement ignores other routes, so a crowded hub still lays out.
     """
     placed: dict[tuple[str, str, int], Box] = {}
     keys: list[tuple[str, str, int]] = []
@@ -1567,12 +1566,11 @@ def _laid_out(
     try:
         return _laid_out_once(nodes, edges, lanes, groups, opts)
     except _LabelRefused as refusal:
-        error = refusal
+        error: GraphError = refusal
     for used, rung in enumerate(rungs, 1):
         try:
             laid = _laid_out_once(nodes, edges, lanes, groups, rung)
-        except _LabelRefused as refusal:
-            error = refusal
+        except GraphError:  # a wider rung may refuse for another reason; the label's refusal is the one reported
             continue
         return replace(laid, fallbacks=laid.fallbacks + used)
     raise error

@@ -809,11 +809,7 @@ _LABELLED_GRAPHS = [
     (3, 3, "left_to_right"),
     (0, 3, "top_down"),
 ]
-# Graphs here label every edge of 7 nodes and 14 edges, loops, parallel and opposite edges included, with labels up to
-# 1.2 inches wide, so some leave no clear straight stretch (A7): a node with six or more routes on one side has them
-# closer than a label is tall, and routes crossing a loop's run cannot be moved by the label. They are refused by name;
-# this pins how many, so a change in either direction shows. It was 53 before a label that fits nowhere climbed the
-# fallback ladder (one row, wider spacing, no page target, then labels allowed on crossings) before being refused; 34 before that last step. Ordinary labelled graphs are not refused.
+# Labelled graphs the whole fallback ladder still refuses by name; a change in either direction shows.
 _REFUSED_LABELLED_GRAPHS = 8
 
 
