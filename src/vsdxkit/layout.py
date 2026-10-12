@@ -778,13 +778,13 @@ def layered_layout(
         layout past the search limit, a group whose members sit in different lanes, or a parent that is undeclared,
         repeated for one child or nests more than one level
     """
-    work = [0]
     try:
-        return _lay_out(nodes, edges, lanes, groups, options, True, work)
+        return _lay_out(nodes, edges, lanes, groups, options, True, [0])
     except _Crowded:
         # every edge at a node had a border point of its own; a graph too dense for that shares them, as it did before
+        # the second pass has a search budget of its own, so a first pass that spent most of its own does not starve it
         # ponytail: a whole second layout, so a dense graph pays twice (150 nodes took 2.3 s, now 14 s); share points per node instead if that bites
-        return _lay_out(nodes, edges, lanes, groups, options, False, work)
+        return _lay_out(nodes, edges, lanes, groups, options, False, [0])
 
 
 def _lay_out(
@@ -1181,6 +1181,15 @@ def _lay_out(
         slot = slots[chains[n][i]]
         return abs(new - slot.v) <= slot.v_extent / 2 - GRID
 
+    def shares_point(n: int, i: int, new: float) -> bool:
+        """Whether moving row `i` of edge `n` to `new` puts its end on the border point another edge has on that side."""
+        if not own_points or i not in (0, len(chains[n]) - 1):
+            return False
+        end = 0 if i == 0 else -1
+        return any(
+            m != n and chains[m][end] == chains[n][i] and abs(rows_of[m][end] - new) < GRID / 2 for m in range(len(chains))
+        )
+
     for _round in range(6):
         stuck: list[tuple[int, int, int, int]] = []
         channel.clear()
@@ -1227,7 +1236,14 @@ def _lay_out(
         # two edges swapping rows cannot both be satisfied, so one of the two rows moves a little
         for en, eh, fn, fh in stuck:
             for n, i in ((en, eh + 1), (fn, fh)):
-                moved = next((d for d in (0.03, -0.03, 0.07, -0.07) if room_for(n, i, rows_of[n][i] + d)), None)
+                moved = next(
+                    (
+                        d
+                        for d in (0.03, -0.03, 0.07, -0.07)
+                        if room_for(n, i, rows_of[n][i] + d) and not shares_point(n, i, rows_of[n][i] + d)
+                    ),
+                    None,
+                )
                 if moved is not None:
                     rows_of[n][i] += moved
                     break

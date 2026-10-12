@@ -338,17 +338,36 @@ def _check_no_shared_run(layout: Layout) -> None:
 def _check_distinct_ends(layout: Layout) -> None:
     """No two ends of different edges, and not both ends of a self-loop, meet at one point of a node's border.
 
-    A node with more route ends than its shorter side has grid steps is left out: it cannot give each a point of its own.
+    A side of a node is left out when the layout shares its points: `round(extent / GRID) // edges == 0`, where the
+    edges are those with an end on that side (a self-loop counts once) and the extent is the side's length. A route
+    against the flow ends on the side it would leave from, so the side is read off the end point, not the edge.
     """
-    count = Counter(node_id for key in layout.routes for node_id in key[:2])
-    at: dict[tuple[str, tuple[float, float]], tuple[str, str, int, int]] = {}
+    items: Counter[tuple[str, int, int]] = Counter()
+    at: dict[tuple[str, int, int], list[tuple[tuple[str, str, int], int, tuple[float, float]]]] = {}
+
+    def side(node_id: str, point: tuple[float, float]) -> tuple[str, int, int]:
+        box = layout.nodes[node_id]
+        dx, dy = point[0] - box.x, point[1] - box.y
+        if abs(abs(dx) - box.width / 2) < SHRINK:
+            return node_id, 0, 1 if dx > 0 else -1
+        return node_id, 1, 1 if dy > 0 else -1
+
     for key, points in layout.routes.items():
-        for end, node_id, point in ((0, key[0], points[0]), (-1, key[1], points[-1])):
-            box = layout.nodes[node_id]
-            if count[node_id] > round(min(box.width, box.height) / 0.01):
-                continue
-            other = at.setdefault((node_id, point), (*key, end))
-            assert other == (*key, end), f"{key} and {other[:3]} meet at {point} on {node_id}"
+        source, target, _n = key
+        first, last = side(source, points[0]), side(target, points[-1])
+        items[first] += 1
+        at.setdefault(first, []).append((key, 0, points[0]))
+        if source != target:
+            items[last] += 1
+        at.setdefault(last, []).append((key, -1, points[-1]))
+    for found_side, found in at.items():
+        box = layout.nodes[found_side[0]]
+        if round((box.height if found_side[1] == 0 else box.width) / GRID) // max(1, items[found_side]) == 0:
+            continue
+        seen: dict[tuple[float, float], tuple[tuple[str, str, int], int]] = {}
+        for key, end, point in found:
+            other = seen.setdefault(point, (key, end))
+            assert other == (key, end), f"{key} and {other} meet at {point} on {found_side[0]}"
 
 
 BORDER_CLEAR = 0.04
@@ -1033,3 +1052,29 @@ def test_groups_spaced_closer_than_the_border_clearance_still_lay_out():
     layout = layered_layout(nodes, edges, lane_ids, group_ids, options)
     _check(layout, nodes, parents)
     _check_routes(layout, clear_of_borders=False)
+
+
+def test_the_shared_point_fallback_has_a_search_budget_of_its_own(monkeypatch):
+    """The first attempt spends about 4.7M steps and the fallback about 2.1M, so a 5M cap holds each but not both."""
+    rows, edges, lane_ids, group_ids, parents = random_graph(793, 50, 200, 3, 6)
+    nodes = tuple(LayoutNode(*row) for row in rows)
+    monkeypatch.setattr(layout_module, "_WORK_CAP", 5_000_000)
+    layout = layered_layout(nodes, edges, lane_ids, group_ids, LayoutOptions(parents=parents))
+    _check(layout, nodes, parents)
+    _check_routes(layout, own_points=False)
+
+
+@pytest.mark.parametrize("direction", ["top_down"])
+def test_a_channel_nudge_does_not_bring_two_edges_to_one_border_point(direction):
+    """Both edges into node 3 once ended at one point: the nudge that parts two swapped rows undid their separate points."""
+    nodes = (
+        LayoutNode("0", 0.1, 0.1, None, "g"),
+        LayoutNode("1", 0.06, 0.02),
+        LayoutNode("2", 0.02, 0.02, None, "g"),
+        LayoutNode("3", 0.06, 0.1),
+    )
+    edges = (("2", "3"), ("1", "3"), ("1", "0"))
+    options = LayoutOptions(direction=direction, group_padding=0.05, headings=(("g", 0.5, 0.05),))
+    layout = layered_layout(nodes, edges, (), ("g",), options)
+    _check(layout, nodes, ())
+    _check_routes(layout)
