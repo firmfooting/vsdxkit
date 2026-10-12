@@ -22,7 +22,7 @@ from vsdxkit import builder, namespace
 from vsdxkit.builder import Diagram, Edge, Group, Lane, Node, Page
 from vsdxkit.document import Document
 from vsdxkit.errors import GraphError
-from vsdxkit.layout import Box, Layout
+from vsdxkit.layout import Box, Layout, LayoutOptions
 from vsdxkit.shapes import Shape
 from vsdxkit.swimlanes import ROW_HEADING_TEXT
 
@@ -870,3 +870,20 @@ def test_aligned_nodes_are_drawn_on_one_row():
     document = Diagram("t", (Page("p", nodes, edges, align=[["b", "d"]]),)).build()
     by_source = _by_source(document)
     assert by_source["b"].y == by_source["d"].y
+
+
+def test_layer_and_align_do_not_make_the_bytes_depend_on_the_insertion_order(tmp_path):
+    unwrapped = LayoutOptions(page=None)  # aligned boxes in two wrapped bands cannot share a row
+
+    def diagram(keys):
+        data = {k: k for k in keys}
+        nodes = [
+            Node("a", "start", "A", data=dict(data)),
+            Node("b", "process", "B", layer=2, data=dict(data)),
+            Node("c", "end", "C"),
+        ]
+        return Diagram("D", [Page("P", nodes, [Edge("a", "b"), Edge("b", "c")], align=(("a", "c"),))])
+
+    one = diagram(["x", "y", "z"]).save(tmp_path / "1.vsdx", layout=unwrapped)
+    two = diagram(["z", "y", "x"]).save(tmp_path / "2.vsdx", layout=unwrapped)
+    assert one.read_bytes() == two.read_bytes()

@@ -9,7 +9,7 @@ from helpers.graphs import random_graph
 
 from vsdxkit import layout as lo
 from vsdxkit.errors import GraphError
-from vsdxkit.layout import LayoutNode, layered_layout
+from vsdxkit.layout import LayoutNode, LayoutOptions, layered_layout
 
 
 def chain(n):
@@ -98,3 +98,27 @@ def test_a_random_dag_passes_the_existing_guarantees(seed):
     lay = layered_layout(nodes, dag)
     _check(lay, nodes, ())
     _check_routes(lay)
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_straightening_never_moves_a_node_out_of_its_group_or_lane(seed):
+    rows, edges, lane_ids, group_ids, parents = random_graph(seed, 40, 60, 3, 2)
+    nodes = tuple(LayoutNode(*row) for row in rows)
+    on_options = LayoutOptions(parents=parents, page=None)
+    off_options = LayoutOptions(parents=parents, page=None, straighten_sweeps=0)
+    try:
+        on = layered_layout(nodes, edges, lane_ids, group_ids, on_options)
+        off = layered_layout(nodes, edges, lane_ids, group_ids, off_options)
+    except GraphError:
+        pytest.skip("the layout refuses this graph, with or without straightening")
+    assert [on.lanes[k].height for k in on.lanes] == [off.lanes[k].height for k in off.lanes]
+    for n in nodes:
+        box, lane = on.nodes[n.id], on.lanes[n.lane]
+        assert lane.y - lane.height / 2 - 1e-6 <= box.y - box.height / 2
+        assert box.y + box.height / 2 <= lane.y + lane.height / 2 + 1e-6
+        if n.group is not None:
+            g = on.groups[n.group]
+            assert g.x - g.width / 2 - 1e-6 <= box.x - box.width / 2
+            assert box.x + box.width / 2 <= g.x + g.width / 2 + 1e-6
+            assert g.y - g.height / 2 - 1e-6 <= box.y - box.height / 2
+            assert box.y + box.height / 2 <= g.y + g.height / 2 + 1e-6
