@@ -15,9 +15,9 @@
               "result": 10.124999999999996
             },
             {
-              "formula": "128.531 mm",
+              "formula": "129.293 mm",
               "name": "PinY",
-              "result": 5.060275590551186
+              "result": 5.090275590551187
             },
             {
               "formula": "501.65 mm",
@@ -25,9 +25,9 @@
               "result": 19.75
             },
             {
-              "formula": "221.502 mm",
+              "formula": "223.026 mm",
               "name": "Height",
-              "result": 8.720551181102358
+              "result": 8.78055118110236
             },
             {
               "formula": "0 deg",
@@ -42,7 +42,7 @@
             {
               "formula": "Height*0.5",
               "name": "LocPinY",
-              "result": 4.360275590551179
+              "result": 4.39027559055118
             },
             {
               "formula": "FALSE",
@@ -69,7 +69,7 @@
             {
               "formula": "Sheet.1!Height*0.5",
               "name": "PinY",
-              "result": 4.360275590551179
+              "result": 4.39027559055118
             },
             {
               "formula": "Sheet.1!Width*1",
@@ -79,7 +79,7 @@
             {
               "formula": "Sheet.1!Height*1",
               "name": "Height",
-              "result": 8.720551181102358
+              "result": 8.78055118110236
             },
             {
               "formula": "0 deg",
@@ -94,7 +94,7 @@
             {
               "formula": "Height*0.5",
               "name": "LocPinY",
-              "result": 4.360275590551179
+              "result": 4.39027559055118
             },
             {
               "formula": "FALSE",
@@ -121,7 +121,7 @@
             {
               "formula": "GUARD(IF(User.HeadingPos=2,Sheet.1!Height-Height*0.5,IF(User.HeadingPos=4,Height*0.5,Sheet.1!Height*0.5)))",
               "name": "PinY",
-              "result": 8.523700787401571
+              "result": 8.583700787401574
             },
             {
               "formula": "GUARD(IF(OR(User.HSide=1,User.HSide=3),Sheet.1!Height,Sheet.1!Width))",
@@ -171,9 +171,9 @@
               "result": 0.25
             },
             {
-              "formula": "224.282 mm",
+              "formula": "225.806 mm",
               "name": "PinY",
-              "result": 8.83
+              "result": 8.89
             },
             {
               "formula": "501.65 mm",
@@ -181,9 +181,9 @@
               "result": 19.75
             },
             {
-              "formula": "206.502 mm",
+              "formula": "208.026 mm",
               "name": "Height",
-              "result": 8.129999999999999
+              "result": 8.19
             },
             {
               "formula": "0 deg",
@@ -198,7 +198,7 @@
             {
               "formula": "Height*1",
               "name": "LocPinY",
-              "result": 8.129999999999999
+              "result": 8.19
             },
             {
               "formula": "FALSE",
@@ -223,9 +223,9 @@
               "result": 0.6437007874015794
             },
             {
-              "formula": "229.282 mm",
+              "formula": "230.806 mm",
               "name": "PinY",
-              "result": 9.02685039370079
+              "result": 9.086850393700791
             },
             {
               "formula": "491.65 mm",
@@ -233,9 +233,9 @@
               "result": 19.356299212598422
             },
             {
-              "formula": "211.502 mm",
+              "formula": "213.026 mm",
               "name": "Height",
-              "result": 8.326850393700786
+              "result": 8.386850393700787
             },
             {
               "formula": "0 deg",
@@ -250,7 +250,7 @@
             {
               "formula": "Height*1",
               "name": "LocPinY",
-              "result": 8.326850393700786
+              "result": 8.386850393700787
             },
             {
               "formula": "FALSE",
@@ -275,9 +275,9 @@
               "result": 10.32185039369952
             },
             {
-              "formula": "123.531 mm",
+              "formula": "124.293 mm",
               "name": "PinY",
-              "result": 4.863425196850395
+              "result": 4.893425196850396
             },
             {
               "formula": "491.65 mm",
@@ -285,9 +285,9 @@
               "result": 19.35629921259842
             },
             {
-              "formula": "211.502 mm",
+              "formula": "213.026 mm",
               "name": "Height",
-              "result": 8.326850393700786
+              "result": 8.386850393700787
             },
             {
               "formula": "0 deg",
@@ -302,7 +302,7 @@
             {
               "formula": "Height*0.5",
               "name": "LocPinY",
-              "result": 4.163425196850393
+              "result": 4.193425196850393
             },
             {
               "formula": "FALSE",
@@ -329,7 +329,7 @@
             {
               "formula": "GUARD(IF(Sheet.6!User.ListDirection=2,Width*0.5,Height*0.5))",
               "name": "PinY",
-              "result": 4.163425196850393
+              "result": 4.193425196850393
             },
             {
               "formula": "GUARD(IF(Sheet.6!User.ListDirection=2,Sheet.6!Height*1,Sheet.6!Width*1))",
@@ -339,7 +339,7 @@
             {
               "formula": "GUARD(IF(Sheet.6!User.ListDirection=2,Sheet.6!Width*1,Sheet.6!Height*1))",
               "name": "Height",
-              "result": 8.326850393700786
+              "result": 8.386850393700787
             },
             {
               "formula": "GUARD(IF(Sheet.6!User.ListDirection=2,-90 deg,0 deg))",
@@ -354,7 +354,7 @@
             {
               "formula": "Height*0.5",
               "name": "LocPinY",
-              "result": 4.163425196850393
+              "result": 4.193425196850393
             },
             {
               "formula": "FALSE",
@@ -381,7 +381,7 @@
             {
               "formula": "GUARD(IF(User.HeadingPos=2,Sheet.6!Height-Height*0.5,IF(User.HeadingPos=4,Height*0.5,Sheet.6!Height*0.5)))",
               "name": "PinY",
-              "result": 8.228425196850392
+              "result": 8.288425196850392
             },
             {
               "formula": "IF(OR(User.HeadingPos=1,User.HeadingPos=3),Sheet.6!Height*1,Sheet.6!Width*1)+User.FirstHeadingExtend",
@@ -431,9 +431,9 @@
               "result": 10.124999999999996
             },
             {
-              "formula": "199.644 mm",
+              "formula": "200.914 mm",
               "name": "PinY",
-              "result": 7.86
+              "result": 7.91
             },
             {
               "formula": "501.65 mm",
@@ -441,9 +441,9 @@
               "result": 19.75
             },
             {
-              "formula": "49.276 mm",
+              "formula": "49.784 mm",
               "name": "Height",
-              "result": 1.9399999999999995
+              "result": 1.96
             },
             {
               "formula": "0 deg",
@@ -458,7 +458,7 @@
             {
               "formula": "Height*0.5",
               "name": "LocPinY",
-              "result": 0.9699999999999998
+              "result": 0.98
             },
             {
               "formula": "FALSE",
@@ -485,7 +485,7 @@
             {
               "formula": "Sheet.9!Height*0.5",
               "name": "PinY",
-              "result": 0.9699999999999998
+              "result": 0.98
             },
             {
               "formula": "Sheet.9!Width*1",
@@ -495,7 +495,7 @@
             {
               "formula": "Sheet.9!Height*1",
               "name": "Height",
-              "result": 1.9399999999999995
+              "result": 1.96
             },
             {
               "formula": "0 deg",
@@ -510,7 +510,7 @@
             {
               "formula": "Height*0.5",
               "name": "LocPinY",
-              "result": 0.9699999999999998
+              "result": 0.98
             },
             {
               "formula": "FALSE",
@@ -537,12 +537,12 @@
             {
               "formula": "GUARD(IF(User.HeadingPos=2,Sheet.9!Height-Height*0.5,IF(User.HeadingPos=4,Height*0.5,Sheet.9!Height*0.5)))",
               "name": "PinY",
-              "result": 0.9699999999999998
+              "result": 0.98
             },
             {
               "formula": "GUARD(IF(OR(User.HSide=1,User.HSide=3),Sheet.9!Height,Sheet.9!Width))",
               "name": "Width",
-              "result": 1.9399999999999995
+              "result": 1.96
             },
             {
               "formula": "Sheet.4!User.visHeadingHeight",
@@ -557,7 +557,7 @@
             {
               "formula": "GUARD(Width*0.5)",
               "name": "LocPinX",
-              "result": 0.9699999999999998
+              "result": 0.98
             },
             {
               "formula": "GUARD(Height*0.5)",
@@ -587,9 +587,9 @@
               "result": 10.124999999999996
             },
             {
-              "formula": "121.031 mm",
+              "formula": "121.793 mm",
               "name": "PinY",
-              "result": 4.765000000000001
+              "result": 4.795000000000001
             },
             {
               "formula": "501.65 mm",
@@ -597,9 +597,9 @@
               "result": 19.75
             },
             {
-              "formula": "107.95 mm",
+              "formula": "108.458 mm",
               "name": "Height",
-              "result": 4.25
+              "result": 4.27
             },
             {
               "formula": "0 deg",
@@ -614,7 +614,7 @@
             {
               "formula": "Height*0.5",
               "name": "LocPinY",
-              "result": 2.125
+              "result": 2.135
             },
             {
               "formula": "FALSE",
@@ -641,7 +641,7 @@
             {
               "formula": "Sheet.12!Height*0.5",
               "name": "PinY",
-              "result": 2.125
+              "result": 2.135
             },
             {
               "formula": "Sheet.12!Width*1",
@@ -651,7 +651,7 @@
             {
               "formula": "Sheet.12!Height*1",
               "name": "Height",
-              "result": 4.25
+              "result": 4.27
             },
             {
               "formula": "0 deg",
@@ -666,7 +666,7 @@
             {
               "formula": "Height*0.5",
               "name": "LocPinY",
-              "result": 2.125
+              "result": 2.135
             },
             {
               "formula": "FALSE",
@@ -693,12 +693,12 @@
             {
               "formula": "GUARD(IF(User.HeadingPos=2,Sheet.12!Height-Height*0.5,IF(User.HeadingPos=4,Height*0.5,Sheet.12!Height*0.5)))",
               "name": "PinY",
-              "result": 2.125
+              "result": 2.135
             },
             {
               "formula": "GUARD(IF(OR(User.HSide=1,User.HSide=3),Sheet.12!Height,Sheet.12!Width))",
               "name": "Width",
-              "result": 4.25
+              "result": 4.27
             },
             {
               "formula": "Sheet.4!User.visHeadingHeight",
@@ -713,7 +713,7 @@
             {
               "formula": "GUARD(Width*0.5)",
               "name": "LocPinX",
-              "result": 2.125
+              "result": 2.135
             },
             {
               "formula": "GUARD(Height*0.5)",
@@ -743,9 +743,9 @@
               "result": 10.124999999999996
             },
             {
-              "formula": "42.418 mm",
+              "formula": "42.672 mm",
               "name": "PinY",
-              "result": 1.6700000000000006
+              "result": 1.680000000000001
             },
             {
               "formula": "501.65 mm",
@@ -753,9 +753,9 @@
               "result": 19.75
             },
             {
-              "formula": "49.276 mm",
+              "formula": "49.784 mm",
               "name": "Height",
-              "result": 1.94
+              "result": 1.96
             },
             {
               "formula": "0 deg",
@@ -770,7 +770,7 @@
             {
               "formula": "Height*0.5",
               "name": "LocPinY",
-              "result": 0.97
+              "result": 0.98
             },
             {
               "formula": "FALSE",
@@ -797,7 +797,7 @@
             {
               "formula": "Sheet.15!Height*0.5",
               "name": "PinY",
-              "result": 0.97
+              "result": 0.98
             },
             {
               "formula": "Sheet.15!Width*1",
@@ -807,7 +807,7 @@
             {
               "formula": "Sheet.15!Height*1",
               "name": "Height",
-              "result": 1.94
+              "result": 1.96
             },
             {
               "formula": "0 deg",
@@ -822,7 +822,7 @@
             {
               "formula": "Height*0.5",
               "name": "LocPinY",
-              "result": 0.97
+              "result": 0.98
             },
             {
               "formula": "FALSE",
@@ -849,12 +849,12 @@
             {
               "formula": "GUARD(IF(User.HeadingPos=2,Sheet.15!Height-Height*0.5,IF(User.HeadingPos=4,Height*0.5,Sheet.15!Height*0.5)))",
               "name": "PinY",
-              "result": 0.97
+              "result": 0.98
             },
             {
               "formula": "GUARD(IF(OR(User.HSide=1,User.HSide=3),Sheet.15!Height,Sheet.15!Width))",
               "name": "Width",
-              "result": 1.94
+              "result": 1.96
             },
             {
               "formula": "Sheet.4!User.visHeadingHeight",
@@ -869,7 +869,7 @@
             {
               "formula": "GUARD(Width*0.5)",
               "name": "LocPinX",
-              "result": 0.97
+              "result": 0.98
             },
             {
               "formula": "GUARD(Height*0.5)",
@@ -894,24 +894,24 @@
         {
           "cells": [
             {
-              "formula": "305.562 mm",
+              "formula": "305.816 mm",
               "name": "PinX",
-              "result": 12.03
+              "result": 12.04
             },
             {
-              "formula": "121.158 mm",
+              "formula": "121.666 mm",
               "name": "PinY",
-              "result": 4.77
+              "result": 4.79
             },
             {
-              "formula": "244.348 mm",
+              "formula": "244.856 mm",
               "name": "Width",
-              "result": 9.62
+              "result": 9.64
             },
             {
-              "formula": "106.934 mm",
+              "formula": "107.188 mm",
               "name": "Height",
-              "result": 4.21
+              "result": 4.22
             },
             {
               "formula": "0 deg",
@@ -921,12 +921,12 @@
             {
               "formula": "Width*0.5",
               "name": "LocPinX",
-              "result": 4.81
+              "result": 4.82
             },
             {
               "formula": "Height*0.5",
               "name": "LocPinY",
-              "result": 2.105
+              "result": 2.11
             },
             {
               "formula": "FALSE",
@@ -951,14 +951,14 @@
               "result": 13.64
             },
             {
-              "formula": "91.694 mm",
+              "formula": "92.456 mm",
               "name": "PinY",
-              "result": 3.61
+              "result": 3.64
             },
             {
-              "formula": "150.114 mm",
+              "formula": "150.368 mm",
               "name": "Width",
-              "result": 5.91
+              "result": 5.92
             },
             {
               "formula": "35.56 mm",
@@ -973,7 +973,7 @@
             {
               "formula": "Width*0.5",
               "name": "LocPinX",
-              "result": 2.955
+              "result": 2.96
             },
             {
               "formula": "Height*0.5",
@@ -1003,9 +1003,9 @@
               "result": 2.4
             },
             {
-              "formula": "199.644 mm",
+              "formula": "200.914 mm",
               "name": "PinY",
-              "result": 7.86
+              "result": 7.91
             },
             {
               "formula": "55.88 mm",
@@ -1055,9 +1055,9 @@
               "result": 5.61
             },
             {
-              "formula": "199.644 mm",
+              "formula": "200.914 mm",
               "name": "PinY",
-              "result": 7.86
+              "result": 7.91
             },
             {
               "formula": "55.88 mm",
@@ -1107,9 +1107,9 @@
               "result": 8.82
             },
             {
-              "formula": "150.368 mm",
+              "formula": "151.13 mm",
               "name": "PinY",
-              "result": 5.92
+              "result": 5.95
             },
             {
               "formula": "55.88 mm",
@@ -1159,9 +1159,9 @@
               "result": 12.03
             },
             {
-              "formula": "91.694 mm",
+              "formula": "92.456 mm",
               "name": "PinY",
-              "result": 3.61
+              "result": 3.64
             },
             {
               "formula": "55.88 mm",
@@ -1211,9 +1211,9 @@
               "result": 15.24
             },
             {
-              "formula": "91.694 mm",
+              "formula": "92.456 mm",
               "name": "PinY",
-              "result": 3.61
+              "result": 3.64
             },
             {
               "formula": "55.88 mm",
@@ -1263,9 +1263,9 @@
               "result": 18.45
             },
             {
-              "formula": "42.418 mm",
+              "formula": "42.672 mm",
               "name": "PinY",
-              "result": 1.67
+              "result": 1.68
             },
             {
               "formula": "55.88 mm",
@@ -1315,9 +1315,9 @@
               "result": 4.01
             },
             {
-              "formula": "199.898 mm",
+              "formula": "201.168 mm",
               "name": "PinY",
-              "result": 7.87
+              "result": 7.92
             },
             {
               "formula": "25.908 mm",
@@ -1367,9 +1367,9 @@
               "result": 7.22
             },
             {
-              "formula": "174.498 mm",
+              "formula": "175.514 mm",
               "name": "PinY",
-              "result": 6.87
+              "result": 6.91
             },
             {
               "formula": "25.908 mm",
@@ -1377,9 +1377,9 @@
               "result": 1.02
             },
             {
-              "formula": "48.26 mm",
+              "formula": "48.768 mm",
               "name": "Height",
-              "result": 1.9
+              "result": 1.92
             },
             {
               "formula": "0 deg",
@@ -1394,7 +1394,7 @@
             {
               "formula": "Height*0.5",
               "name": "LocPinY",
-              "result": 0.95
+              "result": 0.96
             },
             {
               "formula": "FALSE",
@@ -1419,9 +1419,9 @@
               "result": 10.43
             },
             {
-              "formula": "121.158 mm",
+              "formula": "121.92 mm",
               "name": "PinY",
-              "result": 4.77
+              "result": 4.8
             },
             {
               "formula": "25.908 mm",
@@ -1471,9 +1471,9 @@
               "result": 13.64
             },
             {
-              "formula": "91.186 mm",
+              "formula": "91.948 mm",
               "name": "PinY",
-              "result": 3.59
+              "result": 3.62
             },
             {
               "formula": "25.908 mm",
@@ -1523,9 +1523,9 @@
               "result": 16.85
             },
             {
-              "formula": "67.056 mm",
+              "formula": "67.564 mm",
               "name": "PinY",
-              "result": 2.64
+              "result": 2.66
             },
             {
               "formula": "25.908 mm",
@@ -1533,9 +1533,9 @@
               "result": 1.02
             },
             {
-              "formula": "49.276 mm",
+              "formula": "49.784 mm",
               "name": "Height",
-              "result": 1.94
+              "result": 1.96
             },
             {
               "formula": "0 deg",
@@ -1550,7 +1550,7 @@
             {
               "formula": "Height*0.5",
               "name": "LocPinY",
-              "result": 0.97
+              "result": 0.98
             },
             {
               "formula": "FALSE",
@@ -1575,9 +1575,9 @@
               "result": 10.43
             },
             {
-              "formula": "138.684 mm",
+              "formula": "139.446 mm",
               "name": "PinY",
-              "result": 5.46
+              "result": 5.49
             },
             {
               "formula": "188.976 mm",
@@ -1585,9 +1585,9 @@
               "result": 7.44
             },
             {
-              "formula": "124.968 mm",
+              "formula": "125.476 mm",
               "name": "Height",
-              "result": 4.92
+              "result": 4.94
             },
             {
               "formula": "0 deg",
@@ -1602,7 +1602,7 @@
             {
               "formula": "Height*0.5",
               "name": "LocPinY",
-              "result": 2.46
+              "result": 2.47
             },
             {
               "formula": "FALSE",
@@ -1627,9 +1627,9 @@
               "result": 6.73
             },
             {
-              "formula": "146.812 mm",
+              "formula": "147.828 mm",
               "name": "PinY",
-              "result": 5.78
+              "result": 5.82
             },
             {
               "formula": "19.812 mm",
