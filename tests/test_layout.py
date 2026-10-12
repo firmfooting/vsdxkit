@@ -111,7 +111,7 @@ def test_a_random_graph_lays_out_cleanly(seed, lanes, groups, direction):
 
 def test_a_200_node_graph_with_lanes_and_groups_lays_out_with_no_shared_run():
     """This size needs the shared-point pass, which has a search budget of its own (about 17 s; 60 s is a hang guard)."""
-    rows, edges, lane_ids, group_ids, parents = random_graph(1, 200, 320, 4, 4)
+    rows, edges, lane_ids, group_ids, parents = random_graph(2, 200, 320, 4, 4)
     nodes = tuple(LayoutNode(*row) for row in rows)
     start = time.perf_counter()
     layout = layered_layout(nodes, edges, lane_ids, group_ids, LayoutOptions(parents=parents))

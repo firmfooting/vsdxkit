@@ -122,11 +122,16 @@ def test_a_random_tree_has_no_shared_run_and_ordered_ports(seed):
     assert rm.port_order_violations(lay) == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="the layer order of a tree can still put two sibling subtrees across each other; Task 23 adds crossing-aware ordering",
-)
-@pytest.mark.parametrize("seed", range(10))
+def _tree_seed_marks(seed):
+    """The strict xfail for the two seeds whose crossings survive ordering: seed 3 only crosses once the page wraps, seed 4 keeps one layer crossing."""
+    reasons = {
+        3: "the layers are crossing free but the snake wrap folds the tree so two routes cross; the wrap's fold is not an ordering matter",
+        4: "barycentre sweeps and transposition leave one crossing between two layers of this tree",
+    }
+    return pytest.mark.xfail(strict=True, reason=reasons[seed]) if seed in reasons else ()
+
+
+@pytest.mark.parametrize("seed", [pytest.param(n, marks=_tree_seed_marks(n)) for n in range(10)])
 def test_a_random_tree_has_no_crossing(seed):
     assert rm.crossings(_tree_layout(seed)) == 0
 

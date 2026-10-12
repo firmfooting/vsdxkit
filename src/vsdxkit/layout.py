@@ -11,7 +11,7 @@ import heapq
 import math
 from bisect import bisect_left, bisect_right
 from collections import Counter
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from itertools import pairwise
 from typing import Literal, cast
@@ -459,11 +459,73 @@ def _order(rows: list[list[_Key]], slots: dict[_Key, _Slot], chains: list[list[_
         row.sort(key=lambda k: (slots[k].lane, slots[k].track, mean.get(k, position[k])))
         position.update({k: float(i) for i, k in enumerate(row)})
 
+    layer_of = {k: i for i, row in enumerate(rows) for k in row}
+    between: list[list[tuple[_Key, _Key]]] = [[] for _ in rows]  # links from layer i to layer i + 1, either direction
+    for chain in chains:
+        for a, b in pairwise(chain):
+            if layer_of[b] - layer_of[a] == 1:
+                between[layer_of[a]].append((a, b))
+            elif layer_of[a] - layer_of[b] == 1:
+                between[layer_of[b]].append((b, a))
+
+    def total() -> int:
+        """Crossings over every pair of adjacent layers in the current order."""
+        return sum(_count_crossings(rows[i], rows[i + 1], between[i]) for i in range(len(rows) - 1))
+
+    best = [list(row) for row in rows]
+    fewest = -1
     for _ in range(sweeps):
         for layer in range(1, len(rows)):
             sweep(layer, up)
         for layer in range(len(rows) - 2, -1, -1):
             sweep(layer, down)
+        count = total()
+        if fewest < 0 or count < fewest:
+            fewest, best = count, [list(row) for row in rows]
+    for row, kept in zip(rows, best, strict=True):
+        row[:] = kept
+    position.update({k: float(i) for row in rows for i, k in enumerate(row)})
+    _transpose(rows, slots, between, position)
+
+
+def _count_crossings(upper: Sequence[_Key], lower: Sequence[_Key], links: Collection[tuple[_Key, _Key]]) -> int:
+    """Pairs of links between two adjacent layers whose ends are in opposite order; a shared end does not count."""
+    # ponytail: quadratic in links per layer pair, an accumulator tree is the upgrade if a corpus needs it
+    top = {k: i for i, k in enumerate(upper)}
+    low = {k: i for i, k in enumerate(lower)}
+    ends = sorted((top[a], low[b]) for a, b in links)
+    return sum(1 for i, (a, b) in enumerate(ends) for c, d in ends[i + 1 :] if a < c and b > d)
+
+
+def _transpose(
+    rows: list[list[_Key]], slots: dict[_Key, _Slot], between: list[list[tuple[_Key, _Key]]], position: dict[_Key, float]
+) -> None:
+    """Swap adjacent keys of one layer, in index order, while that lowers the crossings; lane and track order stay."""
+
+    def local(layer: int) -> int:
+        """Crossings of the links on both sides of `layer`."""
+        count = 0
+        if layer > 0:
+            count += _count_crossings(rows[layer - 1], rows[layer], between[layer - 1])
+        if layer < len(rows) - 1:
+            count += _count_crossings(rows[layer], rows[layer + 1], between[layer])
+        return count
+
+    improved = True
+    while improved:
+        improved = False
+        for layer, row in enumerate(rows):
+            for i in range(len(row) - 1):
+                a, b = row[i], row[i + 1]
+                if (slots[a].lane, slots[a].track) != (slots[b].lane, slots[b].track):
+                    continue
+                before = local(layer)
+                row[i], row[i + 1] = b, a
+                if local(layer) < before:
+                    improved = True
+                else:
+                    row[i], row[i + 1] = a, b
+    position.update({k: float(i) for row in rows for i, k in enumerate(row)})
 
 
 def _blocks(a: tuple[float, float], b: tuple[float, float], rect: _Rect) -> bool:
