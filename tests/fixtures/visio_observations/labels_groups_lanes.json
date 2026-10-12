@@ -1362,14 +1362,14 @@
         {
           "cells": [
             {
-              "formula": "116.84 mm",
+              "formula": "101.6 mm",
               "name": "PinX",
-              "result": 4.6
+              "result": 4.0
             },
             {
-              "formula": "187.96 mm",
+              "formula": "196.088 mm",
               "name": "PinY",
-              "result": 7.4
+              "result": 7.72
             },
             {
               "formula": "13.716 mm",
@@ -1466,14 +1466,14 @@
         {
           "cells": [
             {
-              "formula": "116.84 mm",
+              "formula": "128.524 mm",
               "name": "PinX",
-              "result": 4.6
+              "result": 5.06
             },
             {
-              "formula": "174.752 mm",
+              "formula": "191.008 mm",
               "name": "PinY",
-              "result": 6.88
+              "result": 7.52
             },
             {
               "formula": "22.86 mm",
