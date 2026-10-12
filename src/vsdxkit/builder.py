@@ -443,9 +443,10 @@ def _draw_page(page: Page, target: VisioPage, options: LayoutOptions, links: Map
     if page.lanes:
         low, high = DIAGRAM_WIDTHS
         if layout.width - 2 * _LANE_LEFT > high:
+            columns = len({box.x for box in layout.nodes.values()})  # a lane never wraps, so one x is one layer
             raise GraphError(
-                f"page {page.name!r} lays out {layout.width:.1f} inches wide, and a page with lanes is drawn at most "
-                f"{high + 2 * _LANE_LEFT:g}; use fewer layers or nodes"
+                f"page {page.name!r} lays out {layout.width:.1f} inches wide in {columns} columns, and a page with "
+                f"lanes is drawn at most {high + 2 * _LANE_LEFT:g}; split the flow across pages"
             )
         layout = replace(layout, width=max(layout.width, low + 2 * _LANE_LEFT))
     target.width = layout.width
