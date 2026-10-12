@@ -67,6 +67,41 @@ def _spread(count: int, extent: float, node: object, pitch: float = 0.2) -> list
     return [snap((start + i * step) * GRID) for i in range(count)]
 
 
+def _nests_left(
+    items: Sequence[tuple[float, float, int, int]], rows_of: Sequence[Sequence[float]], chains: Sequence[Sequence[_Key]]
+) -> list[list[int]]:
+    """For each hop of a gap (low, high, edge, hop), the hops whose channel must lie nearer the layer the gap follows.
+
+    Two hops that leave one node in the same direction nest the farthest target nearest the layer; two that arrive at one
+    node from the same direction nest the nearest origin nearest the layer. A hop whose end lies strictly inside the run
+    of another is ordered the same way, which covers hops of different nodes. In each case the vertical run of one is not
+    crossed by the horizontal run of the other.
+    """
+    ends: dict[tuple[_Key, bool, bool], list[tuple[float, int]]] = {}
+    for idx, (_lo, _hi, n, hop) in enumerate(items):
+        delta = rows_of[n][hop + 1] - rows_of[n][hop]
+        if delta:
+            ends.setdefault((chains[n][hop], True, delta > 0), []).append((abs(delta), idx))
+            ends.setdefault((chains[n][hop + 1], False, delta > 0), []).append((abs(delta), idx))
+    nest: list[set[int]] = [set() for _ in items]
+    for (_node, leaving, _up), group in ends.items():
+        for dist_i, i in group:
+            nest[i].update(j for dist_j, j in group if j != i and (dist_j > dist_i if leaving else dist_j < dist_i))
+    # an end of one hop inside the run of another is crossed by it unless the channels are ordered: a hop that leaves
+    # inside lies nearer the layer, and one that arrives inside lies farther
+    starts = sorted((rows_of[n][hop], idx) for idx, (_lo, _hi, n, hop) in enumerate(items))
+    stops = sorted((rows_of[n][hop + 1], idx) for idx, (_lo, _hi, n, hop) in enumerate(items))
+    for i, (_lo, _hi, n, hop) in enumerate(items):
+        low, high = sorted((rows_of[n][hop], rows_of[n][hop + 1]))
+        for _row, j in starts[bisect_right(starts, (low + _EPS, -1)) : bisect_left(starts, (high - _EPS, -1))]:
+            nest[i].add(j)
+        for _row, j in stops[bisect_right(stops, (low + _EPS, -1)) : bisect_left(stops, (high - _EPS, -1))]:
+            nest[j].add(i)
+    for i in range(len(items)):
+        nest[i].discard(i)
+    return [sorted(found) for found in nest]
+
+
 @dataclass(frozen=True)
 class LayoutNode:
     """One box to place."""
@@ -615,6 +650,9 @@ _AUTO_DIRECTION_NODES = 80
 
 _AUTO_DIRECTION_EDGES_PER_NODE = 2
 """The most edges per node for which an ``auto`` direction also tries the other way; a dense page spends seconds in routing, and a second layout would double them."""
+
+_PITCHED_CHANNELS = 8
+"""The most channels a default layer gap widens to hold at the channel pitch; hops that do not meet share a channel line, and a 200 node graph with lanes and groups stops laying out when its gaps are much wider."""
 
 _NUDGES = (0.03, -0.03, 0.07, -0.07, 0.09, -0.09)
 """Inches a dummy's row may move off its centre; none is zero, and the largest stays inside the dummy's 0.2 in slot."""
@@ -1246,13 +1284,14 @@ def _lay_out(
     busiest = max(
         Counter(slots[a].layer for chain in chains if chain[0] != chain[-1] for a, _b in pairwise(chain)).values(), default=0
     )
-    if u_gap < (busiest + 1) * GRID:
-        if opts.layer_gap != LayoutOptions.layer_gap:
-            raise GraphError(
-                f"option layer_gap is {opts.layer_gap}; {busiest} edges cross one gap and need at least "
-                f"{busiest * GRID:g} inches to keep their channels apart"
-            )
-        u_gap = (busiest + 1) * GRID
+    explicit_gap = opts.layer_gap != LayoutOptions.layer_gap
+    if u_gap < (busiest + 1) * GRID and explicit_gap:
+        raise GraphError(
+            f"option layer_gap is {opts.layer_gap}; {busiest} edges cross one gap and need at least "
+            f"{busiest * GRID:g} inches to keep their channels apart"
+        )
+    if not explicit_gap:
+        u_gap = max(u_gap, (min(busiest, _PITCHED_CHANNELS) + 1) * opts.channel_pitch)
     # channels start beyond the loops on the column, so no loop shares a line with a channel
     loop_count = Counter(source for source, target in edges if source == target)
     loop_zone: dict[int, float] = {}
@@ -1588,7 +1627,11 @@ def _lay_out(
                 [f for f in starts.get(round(rows_of[n][hop + 1], 6), []) if f != idx]
                 for idx, (_lo, _hi, n, hop) in enumerate(items)
             ]
-            before = [list(preds) for preds in need]
+            # nesting only orders channels; it never moves a row, so a cycle of it falls back to the heap's index order
+            before = [
+                sorted({*preds, *nested}) for preds, nested in zip(need, _nests_left(items, rows_of, chains), strict=True)
+            ]
+            preds_of = [list(preds) for preds in before]
             after: list[list[int]] = [[] for _ in items]
             for idx, preds in enumerate(before):
                 for f in preds:
@@ -1598,7 +1641,7 @@ def _lay_out(
             order: list[int] = []
             left_over = set(range(len(items)))
             while left_over:
-                idx = heapq.heappop(ready) if ready else min(left_over)
+                idx = heapq.heappop(ready) if ready else min(left_over, key=lambda f: (len(before[f]), f))
                 if idx not in left_over:
                     continue
                 left_over.discard(idx)
@@ -1607,17 +1650,28 @@ def _lay_out(
                     before[nxt] = [f for f in before[nxt] if f != idx]
                     if not before[nxt] and nxt in left_over:
                         heapq.heappush(ready, nxt)
-            position = {idx: k for k, idx in enumerate(order)}
+            # hops whose runs do not meet share a channel line, so siblings drop to one height unless a run is in the way
+            tier: dict[int, int] = {}
+            tier_runs: dict[int, list[tuple[float, float]]] = {}
+            for idx in order:
+                n, hop = items[idx][2], items[idx][3]
+                span = tuple(sorted((rows_of[n][hop], rows_of[n][hop + 1])))
+                slot_tier = max((tier[f] + 1 for f in preds_of[idx] if f in tier), default=0)
+                while any(span[0] <= b + GRID and a <= span[1] + GRID for a, b in tier_runs.get(slot_tier, ())):
+                    slot_tier += 1
+                tier[idx] = slot_tier
+                tier_runs.setdefault(slot_tier, []).append((span[0], span[1]))
             for idx, preds in enumerate(need):
                 for f in preds:
-                    if position[f] > position[idx]:
+                    if tier[f] >= tier[idx]:
                         stuck.append((items[idx][2], items[idx][3], items[f][2], items[f][3]))
             zone = loop_zone.get(layer, 0.0)
             # the gap of a mirrored layer lies on its physical left, and its channels fill it away from the column
             sign = -1 if mirrored[layer] else 1
             left = col_left[layer] - zone if mirrored[layer] else col_left[layer] + col_width[layer] + zone
-            for k, idx in enumerate(order):
-                channel[(items[idx][2], items[idx][3])] = left + sign * (gaps[layer] - zone) * (k + 1) / (len(items) + 1)
+            lines = max(tier.values(), default=-1) + 2
+            for idx in order:
+                channel[(items[idx][2], items[idx][3])] = left + sign * (gaps[layer] - zone) * (tier[idx] + 1) / lines
         if not stuck:
             break
         # two edges swapping rows cannot both be satisfied, so one of the two rows moves a little
@@ -1697,7 +1751,7 @@ def _lay_out(
             ),
         )
         # a boundary too narrow for a port each keeps the column centre, and the search or the spacing pass separates the routes
-        offsets = _spread(count, width, band) if round(width / GRID) // count else [0.0] * count
+        offsets = _spread(count, width, band, opts.channel_pitch) if round(width / GRID) // count else [0.0] * count
         ports = [
             (centre_u(slots[chains[n][h]]) + off, centre_u(slots[chains[n][h + 1]]) + off, n, h)
             for off, (_v, n, h) in zip(offsets, found, strict=True)

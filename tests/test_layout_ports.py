@@ -71,3 +71,128 @@ def test_no_two_ports_on_a_side_are_closer_than_the_pitch(name):
 def test_a_pitch_that_is_not_valid_is_refused_by_name(option, bad):
     with pytest.raises(GraphError, match=option):
         layered_layout((LayoutNode("a", 2, 1),), (), options=LayoutOptions(**{option: bad}))
+
+
+def test_a_hub_with_five_children_has_no_crossing_and_no_shared_run():
+    lay = corpus.fixture_layout("hub5")
+    assert rm.crossings(lay) == 0 and rm.shared_runs(lay) == []
+
+
+def test_a_top_down_hub_with_five_children_has_no_crossing_and_no_shared_run():
+    lay = corpus.fixture_layout("hub5_top_down")
+    assert rm.crossings(lay) == 0 and rm.shared_runs(lay) == []
+
+
+def test_fan_in_has_no_crossing_either():
+    lay = corpus.fixture_layout("fanin")
+    assert rm.crossings(lay) == 0 and rm.port_order_violations(lay) == []
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        pytest.param(
+            n,
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason="chain25's feedback edge shares the forward edge's side of p20; Task 28 routes feedback in an outer corridor",
+            )
+            if n == "chain25"
+            else (),
+        )
+        for n in corpus.FIXTURES
+    ],
+)
+def test_ports_are_ordered_against_their_far_ends_on_every_fixture(name):
+    assert rm.port_order_violations(corpus.fixture_layout(name)) == []
+
+
+def _tree_layout(seed):
+    from helpers.graphs import random_tree
+
+    ids, edges = random_tree(seed, 30)
+    return layered_layout(tuple(LayoutNode(i, 2.0, 1.0) for i in ids), edges)
+
+
+@pytest.mark.parametrize("seed", range(10))
+def test_a_random_tree_has_no_shared_run_and_ordered_ports(seed):
+    lay = _tree_layout(seed)
+    assert rm.shared_runs(lay) == []
+    assert rm.port_order_violations(lay) == []
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="the layer order of a tree can still put two sibling subtrees across each other; Task 23 adds crossing-aware ordering",
+)
+@pytest.mark.parametrize("seed", range(10))
+def test_a_random_tree_has_no_crossing(seed):
+    assert rm.crossings(_tree_layout(seed)) == 0
+
+
+def test_parallel_and_opposite_edges_keep_ports_and_channels_of_their_own():
+    nodes = (LayoutNode("a", 2, 1), LayoutNode("b", 2, 1))
+    lay = layered_layout(nodes, (("a", "b"), ("a", "b"), ("b", "a")))
+    assert rm.shared_runs(lay) == [] and rm.port_gap_violations(lay) == []
+
+
+def _items(*spans):
+    """Gap items (low, high, edge, hop) for edges 0.. with one hop each."""
+    return [(lo, hi, n, 0) for n, (lo, hi) in enumerate(spans)]
+
+
+def test_two_edges_leaving_a_node_the_same_way_nest_the_farthest_first():
+    chains = [["s", "x"], ["s", "y"]]
+    rows_of = [[1.0, 2.0], [1.2, 5.0]]  # both go up; the second goes farther
+    assert lo._nests_left(_items((1.0, 2.0), (1.2, 5.0)), rows_of, chains) == [[1], []]
+
+
+def test_two_edges_arriving_at_a_node_the_same_way_nest_the_nearest_origin_first():
+    chains = [["x", "t"], ["y", "t"]]
+    rows_of = [[1.0, 3.2], [0.0, 3.0]]  # both come from below; the first origin is nearer and its port is the higher
+    assert lo._nests_left(_items((1.0, 3.2), (0.0, 3.0)), rows_of, chains) == [[], [0]]
+
+
+def test_edges_that_share_no_node_or_leave_in_opposite_directions_do_not_nest():
+    chains = [["s", "x"], ["s", "y"], ["p", "q"]]
+    rows_of = [[2.0, 4.0], [1.8, 0.0], [10.0, 20.0]]
+    assert lo._nests_left(_items((2.0, 4.0), (0.0, 1.8), (10.0, 20.0)), rows_of, chains) == [[], [], []]
+
+
+def test_a_hop_that_leaves_inside_the_run_of_another_hop_lies_nearer_the_layer():
+    chains = [["a", "x"], ["b", "y"]]
+    rows_of = [[8.0, 4.5], [6.6, 3.1]]  # both go down and their spans overlap
+    assert lo._nests_left(_items((4.5, 8.0), (3.1, 6.6)), rows_of, chains) == [[1], []]
+
+
+def test_siblings_drop_to_as_few_heights_as_their_overlapping_runs_allow():
+    lay = corpus.fixture_layout("hub5_top_down")
+    runs: dict[str, list[tuple[float, float, float]]] = {}
+    for (source, _target, _i), route in lay.routes.items():
+        for (x1, y1), (x2, y2) in pairwise(rm.simplified(route)):
+            if y1 == y2 and x1 != x2:
+                runs.setdefault(source, []).append((y1, min(x1, x2), max(x1, x2)))
+    for source, found in runs.items():
+        # the most runs that overlap one another at a point is the fewest heights that keep them apart
+        deepest = max(sum(a - 0.1 < x < b + 0.1 for _y, a, b in found) for _y, x, _b in found)
+        assert len({y for y, _a, _b in found}) <= deepest, (source, found)
+
+
+def _gap_between(pitch):
+    nodes = (LayoutNode("hub", 2, 4), *(LayoutNode(f"t{i}", 1, 1) for i in range(5)))
+    edges = tuple(("hub", f"t{i}") for i in range(5))
+    lay = layered_layout(nodes, edges, options=LayoutOptions(channel_pitch=pitch, page=None))
+    return lay.nodes["t0"].x - lay.nodes["t0"].width / 2 - (lay.nodes["hub"].x + lay.nodes["hub"].width / 2)
+
+
+def test_the_default_gap_widens_to_hold_its_channels_at_the_channel_pitch():
+    assert _gap_between(0.4) >= 6 * 0.4 - 1e-9 > _gap_between(0.2)
+
+
+def test_an_explicit_gap_keeps_its_width_and_only_a_gap_below_a_step_per_channel_is_refused():
+    nodes = (LayoutNode("hub", 2, 4), *(LayoutNode(f"t{i}", 1, 1) for i in range(5)))
+    edges = tuple(("hub", f"t{i}") for i in range(5))
+    lay = layered_layout(nodes, edges, options=LayoutOptions(layer_gap=0.5, channel_pitch=0.4, page=None))
+    assert 0.5 <= lay.nodes["t0"].x - 0.5 - (lay.nodes["hub"].x + 1.0) < 0.55
+    with pytest.raises(GraphError, match="layer_gap"):
+        layered_layout(nodes, edges, options=LayoutOptions(layer_gap=0.01, page=None))
