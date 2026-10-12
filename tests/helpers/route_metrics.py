@@ -42,6 +42,7 @@ def bends(route: tuple[Point, ...]) -> int:
 
 
 def _horizontal(seg: tuple[Point, Point]) -> bool:
+    """Whether `seg` runs along a constant y."""
     return abs(seg[0][1] - seg[1][1]) < EPS
 
 

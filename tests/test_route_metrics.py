@@ -57,3 +57,20 @@ def test_metrics_of_an_empty_layout_are_zero():
     empty = layout({}, {})
     assert rm.crossings(empty) == 0 and rm.shared_runs(empty) == []
     assert rm.port_gap_violations(empty) == [] and rm.aspect(layout({}, {}, width=8, height=4)) == 2.0
+
+
+def test_the_digest_is_a_stable_64_hex_string():
+    first = rm.layout_digest({"empty": layout({}, {})})
+    assert len(first) == 64 and int(first, 16) >= 0
+    assert first == rm.layout_digest({"empty": layout({}, {})})
+
+
+def test_ports_in_the_same_order_as_their_far_ends_pass():
+    nodes = {"a": box(0, 0, 2, 3), "b": box(5, 1), "c": box(5, -1)}
+    ordered = {("a", "b", 0): ((1, 0.4), (4, 1)), ("a", "c", 0): ((1, -0.4), (4, -1))}
+    assert rm.port_order_violations(layout(nodes, ordered)) == []
+
+
+def test_a_vertical_collinear_overlap_is_a_shared_run():
+    routes = {("a", "b", 0): ((1, 0), (1, 4)), ("c", "d", 0): ((1, 2), (1, 6))}
+    assert rm.shared_runs(layout({}, routes)) == [(("a", "b", 0), ("c", "d", 0))]
