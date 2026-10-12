@@ -1,0 +1,1268 @@
+{
+  "run": "20261012T092743Z_af32df2",
+  "created": "2026-10-12T09:27:43+00:00",
+  "commit": "af32df2c73392aea335cedbe288c882ef2cb515c",
+  "branch": "feat/layout-phase1-page-shape",
+  "dirty": true,
+  "builder": {
+    "path": "tools/diagram_cases.py",
+    "sha256": "9ae524aecdf1dbf3c61054a6c88e827917ec21a1527e0db4cd5a80df8adca3ea"
+  },
+  "against": {
+    "ref": "aa29864",
+    "commit": "aa29864e26a8393bf8f3590f2433ff09bd5713a8"
+  },
+  "visio": {
+    "version": "16.0",
+    "build": "20430"
+  },
+  "dpi": 150,
+  "build_errors": {
+    "candidate": {},
+    "ref": {}
+  },
+  "cases": {
+    "copy_style_clash": {
+      "line": "copy_style_clash: a shape copied from a document whose style 7 is another style; its sub-shapes show the source's line pattern and margins",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "cdf9da6499c98d596891f6430e494dbfe3c9a22ebc9ebb77d96d78c4b049821a",
+            "png": "fb824489a121bd7a1308debec317101138cab71506cf3638abf1916e82e265ac"
+          },
+          "recalc": {
+            "svg": "cdf9da6499c98d596891f6430e494dbfe3c9a22ebc9ebb77d96d78c4b049821a",
+            "png": "fb824489a121bd7a1308debec317101138cab71506cf3638abf1916e82e265ac"
+          },
+          "triggered": 34,
+          "asked": 34
+        },
+        "candidate": {
+          "open": {
+            "svg": "cdf9da6499c98d596891f6430e494dbfe3c9a22ebc9ebb77d96d78c4b049821a",
+            "png": "fb824489a121bd7a1308debec317101138cab71506cf3638abf1916e82e265ac"
+          },
+          "recalc": {
+            "svg": "cdf9da6499c98d596891f6430e494dbfe3c9a22ebc9ebb77d96d78c4b049821a",
+            "png": "fb824489a121bd7a1308debec317101138cab71506cf3638abf1916e82e265ac"
+          },
+          "triggered": 34,
+          "asked": 34
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "copy_style_absent": {
+      "line": "copy_style_absent: a shape copied into a document with no style 7; its sub-shapes show the source's line pattern and margins",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "cdf9da6499c98d596891f6430e494dbfe3c9a22ebc9ebb77d96d78c4b049821a",
+            "png": "fb824489a121bd7a1308debec317101138cab71506cf3638abf1916e82e265ac"
+          },
+          "recalc": {
+            "svg": "cdf9da6499c98d596891f6430e494dbfe3c9a22ebc9ebb77d96d78c4b049821a",
+            "png": "fb824489a121bd7a1308debec317101138cab71506cf3638abf1916e82e265ac"
+          },
+          "triggered": 34,
+          "asked": 34
+        },
+        "candidate": {
+          "open": {
+            "svg": "cdf9da6499c98d596891f6430e494dbfe3c9a22ebc9ebb77d96d78c4b049821a",
+            "png": "fb824489a121bd7a1308debec317101138cab71506cf3638abf1916e82e265ac"
+          },
+          "recalc": {
+            "svg": "cdf9da6499c98d596891f6430e494dbfe3c9a22ebc9ebb77d96d78c4b049821a",
+            "png": "fb824489a121bd7a1308debec317101138cab71506cf3638abf1916e82e265ac"
+          },
+          "triggered": 34,
+          "asked": 34
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "swimlanes": {
+      "line": "swimlanes: a three-lane cross-functional flowchart from create_swimlanes, a process in each lane; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "d6d662308daef01516dde2c9c2e35ab910f6ba7df9ff3570e26e199e6f364673",
+            "png": "236859e34a4a1f441eb6b3d7b76cd80c49144b643b88a42391d2021b0a99c003"
+          },
+          "recalc": {
+            "svg": "d6d662308daef01516dde2c9c2e35ab910f6ba7df9ff3570e26e199e6f364673",
+            "png": "236859e34a4a1f441eb6b3d7b76cd80c49144b643b88a42391d2021b0a99c003"
+          },
+          "triggered": 125,
+          "asked": 125
+        },
+        "candidate": {
+          "open": {
+            "svg": "d6d662308daef01516dde2c9c2e35ab910f6ba7df9ff3570e26e199e6f364673",
+            "png": "236859e34a4a1f441eb6b3d7b76cd80c49144b643b88a42391d2021b0a99c003"
+          },
+          "recalc": {
+            "svg": "d6d662308daef01516dde2c9c2e35ab910f6ba7df9ff3570e26e199e6f364673",
+            "png": "236859e34a4a1f441eb6b3d7b76cd80c49144b643b88a42391d2021b0a99c003"
+          },
+          "triggered": 125,
+          "asked": 125
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_kinds": {
+      "line": "lanes_kinds: sized Start/End, Decision and Process steps in two lanes; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "4ca132c05ea3a4ab92ca3613a0822706b9744d7feb72be4f6fb6009848297e36",
+            "png": "d3ce651c541d6ac7ddd2ebddf4261e6dbf7fe8da300a201a2ecd51f8e1242762"
+          },
+          "recalc": {
+            "svg": "4ca132c05ea3a4ab92ca3613a0822706b9744d7feb72be4f6fb6009848297e36",
+            "png": "d3ce651c541d6ac7ddd2ebddf4261e6dbf7fe8da300a201a2ecd51f8e1242762"
+          },
+          "triggered": 136,
+          "asked": 136
+        },
+        "candidate": {
+          "open": {
+            "svg": "4ca132c05ea3a4ab92ca3613a0822706b9744d7feb72be4f6fb6009848297e36",
+            "png": "d3ce651c541d6ac7ddd2ebddf4261e6dbf7fe8da300a201a2ecd51f8e1242762"
+          },
+          "recalc": {
+            "svg": "4ca132c05ea3a4ab92ca3613a0822706b9744d7feb72be4f6fb6009848297e36",
+            "png": "d3ce651c541d6ac7ddd2ebddf4261e6dbf7fe8da300a201a2ecd51f8e1242762"
+          },
+          "triggered": 136,
+          "asked": 136
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_one": {
+      "line": "lanes_one: a cross-functional flowchart of one lane; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "d43d34a767b08f38aafd41768bbb8553c1374be93fe76710b186f8af81a744b9",
+            "png": "d486037898e09eb30598a98ca132f0435d0cef29fee63e461d4697f1f4ea5fe7"
+          },
+          "recalc": {
+            "svg": "d43d34a767b08f38aafd41768bbb8553c1374be93fe76710b186f8af81a744b9",
+            "png": "d486037898e09eb30598a98ca132f0435d0cef29fee63e461d4697f1f4ea5fe7"
+          },
+          "triggered": 78,
+          "asked": 78
+        },
+        "candidate": {
+          "open": {
+            "svg": "d43d34a767b08f38aafd41768bbb8553c1374be93fe76710b186f8af81a744b9",
+            "png": "d486037898e09eb30598a98ca132f0435d0cef29fee63e461d4697f1f4ea5fe7"
+          },
+          "recalc": {
+            "svg": "d43d34a767b08f38aafd41768bbb8553c1374be93fe76710b186f8af81a744b9",
+            "png": "d486037898e09eb30598a98ca132f0435d0cef29fee63e461d4697f1f4ea5fe7"
+          },
+          "triggered": 78,
+          "asked": 78
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_two": {
+      "line": "lanes_two: two lanes, a process in each; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "f0b6e71e9fe0691c1cdeea2739328f151b6c8fabea0a25fb0d02d3c78abc3b0e",
+            "png": "a2986158834a6d5487ebb2c88b4a5f6061190bc3076f0e5a24a5952ca1b03ea1"
+          },
+          "recalc": {
+            "svg": "f0b6e71e9fe0691c1cdeea2739328f151b6c8fabea0a25fb0d02d3c78abc3b0e",
+            "png": "a2986158834a6d5487ebb2c88b4a5f6061190bc3076f0e5a24a5952ca1b03ea1"
+          },
+          "triggered": 100,
+          "asked": 100
+        },
+        "candidate": {
+          "open": {
+            "svg": "f0b6e71e9fe0691c1cdeea2739328f151b6c8fabea0a25fb0d02d3c78abc3b0e",
+            "png": "a2986158834a6d5487ebb2c88b4a5f6061190bc3076f0e5a24a5952ca1b03ea1"
+          },
+          "recalc": {
+            "svg": "f0b6e71e9fe0691c1cdeea2739328f151b6c8fabea0a25fb0d02d3c78abc3b0e",
+            "png": "a2986158834a6d5487ebb2c88b4a5f6061190bc3076f0e5a24a5952ca1b03ea1"
+          },
+          "triggered": 100,
+          "asked": 100
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_four": {
+      "line": "lanes_four: four lanes, one labelled with the widest letters; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "2d97164ef8e5c4c7e9675f8a458c88605bf6a1167d82209072678f64dbf87f59",
+            "png": "fefada2ba0081680a95e2dc4f7dbee7a3ac6195cf4bcad1fd9abbafd87a34f62"
+          },
+          "recalc": {
+            "svg": "2d97164ef8e5c4c7e9675f8a458c88605bf6a1167d82209072678f64dbf87f59",
+            "png": "fefada2ba0081680a95e2dc4f7dbee7a3ac6195cf4bcad1fd9abbafd87a34f62"
+          },
+          "triggered": 144,
+          "asked": 144
+        },
+        "candidate": {
+          "open": {
+            "svg": "2d97164ef8e5c4c7e9675f8a458c88605bf6a1167d82209072678f64dbf87f59",
+            "png": "fefada2ba0081680a95e2dc4f7dbee7a3ac6195cf4bcad1fd9abbafd87a34f62"
+          },
+          "recalc": {
+            "svg": "2d97164ef8e5c4c7e9675f8a458c88605bf6a1167d82209072678f64dbf87f59",
+            "png": "fefada2ba0081680a95e2dc4f7dbee7a3ac6195cf4bcad1fd9abbafd87a34f62"
+          },
+          "triggered": 144,
+          "asked": 144
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_extremes": {
+      "line": "lanes_extremes: a 0.5 inch lane, a 6 inch lane and a 5 inch wide diagram; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "17191e1eeb4f69494537fb4cb916aee255d1a56a427df0d1d647a50d7798f2a2",
+            "png": "521643ffcdb2d2c343ad19b5d921c6bcf34333046040af31f0d7b84c48794720"
+          },
+          "recalc": {
+            "svg": "17191e1eeb4f69494537fb4cb916aee255d1a56a427df0d1d647a50d7798f2a2",
+            "png": "521643ffcdb2d2c343ad19b5d921c6bcf34333046040af31f0d7b84c48794720"
+          },
+          "triggered": 96,
+          "asked": 96
+        },
+        "candidate": {
+          "open": {
+            "svg": "17191e1eeb4f69494537fb4cb916aee255d1a56a427df0d1d647a50d7798f2a2",
+            "png": "521643ffcdb2d2c343ad19b5d921c6bcf34333046040af31f0d7b84c48794720"
+          },
+          "recalc": {
+            "svg": "17191e1eeb4f69494537fb4cb916aee255d1a56a427df0d1d647a50d7798f2a2",
+            "png": "521643ffcdb2d2c343ad19b5d921c6bcf34333046040af31f0d7b84c48794720"
+          },
+          "triggered": 96,
+          "asked": 96
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_five": {
+      "line": "lanes_five: five lanes, a process in each; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "6e5a094d819944190c3dc31ed0fb0ce70e9539c6376169d2661e8ae319f5ab38",
+            "png": "fe668925fd96a5dcd5176b52bd5b09a892507449b367aab6dc69b17c998cb62d"
+          },
+          "recalc": {
+            "svg": "6e5a094d819944190c3dc31ed0fb0ce70e9539c6376169d2661e8ae319f5ab38",
+            "png": "fe668925fd96a5dcd5176b52bd5b09a892507449b367aab6dc69b17c998cb62d"
+          },
+          "triggered": 166,
+          "asked": 166
+        },
+        "candidate": {
+          "open": {
+            "svg": "6e5a094d819944190c3dc31ed0fb0ce70e9539c6376169d2661e8ae319f5ab38",
+            "png": "fe668925fd96a5dcd5176b52bd5b09a892507449b367aab6dc69b17c998cb62d"
+          },
+          "recalc": {
+            "svg": "6e5a094d819944190c3dc31ed0fb0ce70e9539c6376169d2661e8ae319f5ab38",
+            "png": "fe668925fd96a5dcd5176b52bd5b09a892507449b367aab6dc69b17c998cb62d"
+          },
+          "triggered": 166,
+          "asked": 166
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_uneven": {
+      "line": "lanes_uneven: lanes of different heights, three processes in one and none in another; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "1385aee2fd727a6ccdb654d64be47a16e8b616304c1df41272eaa88d057e2908",
+            "png": "674967fdcc3ee8804084e98ffa4025a50fc1cf0db852d4c8e26f1870aa4279dc"
+          },
+          "recalc": {
+            "svg": "1385aee2fd727a6ccdb654d64be47a16e8b616304c1df41272eaa88d057e2908",
+            "png": "674967fdcc3ee8804084e98ffa4025a50fc1cf0db852d4c8e26f1870aa4279dc"
+          },
+          "triggered": 126,
+          "asked": 126
+        },
+        "candidate": {
+          "open": {
+            "svg": "1385aee2fd727a6ccdb654d64be47a16e8b616304c1df41272eaa88d057e2908",
+            "png": "674967fdcc3ee8804084e98ffa4025a50fc1cf0db852d4c8e26f1870aa4279dc"
+          },
+          "recalc": {
+            "svg": "1385aee2fd727a6ccdb654d64be47a16e8b616304c1df41272eaa88d057e2908",
+            "png": "674967fdcc3ee8804084e98ffa4025a50fc1cf0db852d4c8e26f1870aa4279dc"
+          },
+          "triggered": 126,
+          "asked": 126
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_style_clash": {
+      "line": "lanes_style_clash: a diagram in a document whose style 7 is another style; the Separator shows Flow Normal's margins",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "d5ab8b1cf7d2a8d902a20c57ff178719250af82493ca9a6e6b339aecd9b28a15",
+            "png": "f08cde51861fca50db89812ea83b71da849b06da645f76b9b68effd76af0a014"
+          },
+          "recalc": {
+            "svg": "d5ab8b1cf7d2a8d902a20c57ff178719250af82493ca9a6e6b339aecd9b28a15",
+            "png": "f08cde51861fca50db89812ea83b71da849b06da645f76b9b68effd76af0a014"
+          },
+          "triggered": 102,
+          "asked": 102
+        },
+        "candidate": {
+          "open": {
+            "svg": "d5ab8b1cf7d2a8d902a20c57ff178719250af82493ca9a6e6b339aecd9b28a15",
+            "png": "f08cde51861fca50db89812ea83b71da849b06da645f76b9b68effd76af0a014"
+          },
+          "recalc": {
+            "svg": "d5ab8b1cf7d2a8d902a20c57ff178719250af82493ca9a6e6b339aecd9b28a15",
+            "png": "f08cde51861fca50db89812ea83b71da849b06da645f76b9b68effd76af0a014"
+          },
+          "triggered": 102,
+          "asked": 102
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_style_absent": {
+      "line": "lanes_style_absent: a diagram in a document with no style 7; the Separator shows Flow Normal's margins",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "d5ab8b1cf7d2a8d902a20c57ff178719250af82493ca9a6e6b339aecd9b28a15",
+            "png": "f08cde51861fca50db89812ea83b71da849b06da645f76b9b68effd76af0a014"
+          },
+          "recalc": {
+            "svg": "d5ab8b1cf7d2a8d902a20c57ff178719250af82493ca9a6e6b339aecd9b28a15",
+            "png": "f08cde51861fca50db89812ea83b71da849b06da645f76b9b68effd76af0a014"
+          },
+          "triggered": 102,
+          "asked": 102
+        },
+        "candidate": {
+          "open": {
+            "svg": "d5ab8b1cf7d2a8d902a20c57ff178719250af82493ca9a6e6b339aecd9b28a15",
+            "png": "f08cde51861fca50db89812ea83b71da849b06da645f76b9b68effd76af0a014"
+          },
+          "recalc": {
+            "svg": "d5ab8b1cf7d2a8d902a20c57ff178719250af82493ca9a6e6b339aecd9b28a15",
+            "png": "f08cde51861fca50db89812ea83b71da849b06da645f76b9b68effd76af0a014"
+          },
+          "triggered": 102,
+          "asked": 102
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_add": {
+      "line": "lanes_add: a created two-lane diagram with a lane added by add_lane; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "efe60d353665f06a6116ee7ae910c4b10a6d550cfb4a279e86325d52bfcf727d",
+            "png": "005d1d55df5343302de03c84acd6e6da13bd25370c6c77c734eee0fbf0b58d23"
+          },
+          "recalc": {
+            "svg": "efe60d353665f06a6116ee7ae910c4b10a6d550cfb4a279e86325d52bfcf727d",
+            "png": "005d1d55df5343302de03c84acd6e6da13bd25370c6c77c734eee0fbf0b58d23"
+          },
+          "triggered": 122,
+          "asked": 122
+        },
+        "candidate": {
+          "open": {
+            "svg": "efe60d353665f06a6116ee7ae910c4b10a6d550cfb4a279e86325d52bfcf727d",
+            "png": "005d1d55df5343302de03c84acd6e6da13bd25370c6c77c734eee0fbf0b58d23"
+          },
+          "recalc": {
+            "svg": "efe60d353665f06a6116ee7ae910c4b10a6d550cfb4a279e86325d52bfcf727d",
+            "png": "005d1d55df5343302de03c84acd6e6da13bd25370c6c77c734eee0fbf0b58d23"
+          },
+          "triggered": 122,
+          "asked": 122
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_wide": {
+      "line": "lanes_wide: a diagram 22 inches wide on a page widened to 24; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "98f7a37961303e91536ba56807f489bd9529a4d04a2a1cbdf69b09a26acb019a",
+            "png": "b6ca4eb7269231c0990ef8a1a1e54b97b17e91ad40a0ff074789e1920690be8e"
+          },
+          "recalc": {
+            "svg": "98f7a37961303e91536ba56807f489bd9529a4d04a2a1cbdf69b09a26acb019a",
+            "png": "b6ca4eb7269231c0990ef8a1a1e54b97b17e91ad40a0ff074789e1920690be8e"
+          },
+          "triggered": 100,
+          "asked": 100
+        },
+        "candidate": {
+          "open": {
+            "svg": "98f7a37961303e91536ba56807f489bd9529a4d04a2a1cbdf69b09a26acb019a",
+            "png": "b6ca4eb7269231c0990ef8a1a1e54b97b17e91ad40a0ff074789e1920690be8e"
+          },
+          "recalc": {
+            "svg": "98f7a37961303e91536ba56807f489bd9529a4d04a2a1cbdf69b09a26acb019a",
+            "png": "b6ca4eb7269231c0990ef8a1a1e54b97b17e91ad40a0ff074789e1920690be8e"
+          },
+          "triggered": 100,
+          "asked": 100
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_wide_60_3": {
+      "line": "lanes_wide_60_3: three lanes, a diagram 60 inches wide on a page widened to 61; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "3a2cb2ee1a2d1d2e2900a12b53937c052aa3fe1ed1ea67d70059d7dde684d706",
+            "png": "1435a1816b67d67566b0b1fdbec2c8b1fe9ba2b4ac32fb22a1e88a4dde7ecfe7"
+          },
+          "recalc": {
+            "svg": "3a2cb2ee1a2d1d2e2900a12b53937c052aa3fe1ed1ea67d70059d7dde684d706",
+            "png": "1435a1816b67d67566b0b1fdbec2c8b1fe9ba2b4ac32fb22a1e88a4dde7ecfe7"
+          },
+          "triggered": 122,
+          "asked": 122
+        },
+        "candidate": {
+          "open": {
+            "svg": "3a2cb2ee1a2d1d2e2900a12b53937c052aa3fe1ed1ea67d70059d7dde684d706",
+            "png": "1435a1816b67d67566b0b1fdbec2c8b1fe9ba2b4ac32fb22a1e88a4dde7ecfe7"
+          },
+          "recalc": {
+            "svg": "3a2cb2ee1a2d1d2e2900a12b53937c052aa3fe1ed1ea67d70059d7dde684d706",
+            "png": "1435a1816b67d67566b0b1fdbec2c8b1fe9ba2b4ac32fb22a1e88a4dde7ecfe7"
+          },
+          "triggered": 122,
+          "asked": 122
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes_wide_60_5": {
+      "line": "lanes_wide_60_5: five lanes, a diagram 60 inches wide on a page widened to 61; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "886e73b7ce63567c2745718230dd2e1df2c5b3e83a9e2f10b666621de63d7737",
+            "png": "8f574a5042527a21256c6b1f596516cefd0cf12c614baf21e47e34202d06d594"
+          },
+          "recalc": {
+            "svg": "886e73b7ce63567c2745718230dd2e1df2c5b3e83a9e2f10b666621de63d7737",
+            "png": "8f574a5042527a21256c6b1f596516cefd0cf12c614baf21e47e34202d06d594"
+          },
+          "triggered": 166,
+          "asked": 166
+        },
+        "candidate": {
+          "open": {
+            "svg": "886e73b7ce63567c2745718230dd2e1df2c5b3e83a9e2f10b666621de63d7737",
+            "png": "8f574a5042527a21256c6b1f596516cefd0cf12c614baf21e47e34202d06d594"
+          },
+          "recalc": {
+            "svg": "886e73b7ce63567c2745718230dd2e1df2c5b3e83a9e2f10b666621de63d7737",
+            "png": "8f574a5042527a21256c6b1f596516cefd0cf12c614baf21e47e34202d06d594"
+          },
+          "triggered": 166,
+          "asked": 166
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "every_kind": {
+      "line": "every_kind: nine node kinds, six edge kinds, a long edge, a self-loop; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "a549ca43a504704573c5e52ee27e5b8c094f8eb0e10734ae35c3cc3a9c41c0b8",
+            "png": "c02b720291ea5c5707b584b3a80da37fd1c2babd5addc431b57d0cbe3e939a67"
+          },
+          "recalc": {
+            "svg": "a549ca43a504704573c5e52ee27e5b8c094f8eb0e10734ae35c3cc3a9c41c0b8",
+            "png": "c02b720291ea5c5707b584b3a80da37fd1c2babd5addc431b57d0cbe3e939a67"
+          },
+          "triggered": 278,
+          "asked": 278
+        },
+        "candidate": {
+          "open": {
+            "svg": "11989eb4b9f869d925eaea05f8bccbcfefc481788e2ff56930fbc874e55f579e",
+            "png": "cc1f8bf90ff9790ce3ff116f7e85edccf5800ca535bea2d9b5c4837fd297f134"
+          },
+          "recalc": {
+            "svg": "11989eb4b9f869d925eaea05f8bccbcfefc481788e2ff56930fbc874e55f579e",
+            "png": "cc1f8bf90ff9790ce3ff116f7e85edccf5800ca535bea2d9b5c4837fd297f134"
+          },
+          "triggered": 270,
+          "asked": 270
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [
+          "the page: width=31.12in height=3.06in viewBox=0 0 2240.64 220.32 -> width=11.26in height=7.22in viewBox=0 0 810.72 519.84",
+          "shape 1 moved (+0.010 in, +4.020 in): translate(36,-75.6) -> translate(36.72,-365.04)",
+          "shape 1 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=57.6 rx=18 ry=18 width=144 x=0 y=162.72 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=57.6 rx=18 ry=18 width=144 x=0 y=462.24; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=56.7 y=195.12 \"Step 0\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=56.7 y=494.64 \"Step 0\"",
+          "shape 2 moved (+0.010 in, +4.010 in): translate(303.84,-94.32) -> translate(304.56,-383.04)",
+          "shape 2 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=155.52 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=455.04; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.9 y=184.32 \"Step 1detail\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.9 y=483.84 \"Step 1detail\"",
+          "shape 3 moved (+0.010 in, +4.010 in): translate(586.08,-79.92) -> translate(586.8,-368.64)",
+          "shape 3 drawn differently: path style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M93.6 126.72 L187.2 173.52 L93.6 220.32 L0 173.52 L93.6 126.72 Z -> path style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M93.6 426.24 L187.2 473.04 L93.6 519.84 L0 473.04 L93.6 426.24 Z; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=78.3 y=177.12 \"Step 2\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=78.3 y=476.64 \"Step 2\"",
+          "shape 4 moved (-4.110 in, +1.700 in): translate(897.12,-94.32) -> translate(601.2,-216.72)",
+          "shape 4 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 rx=32.4 ry=32.4 width=158.4 x=0 y=155.52 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 rx=32.4 ry=32.4 width=158.4 x=0 y=455.04; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.9 y=184.32 \"Step 3detail\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.9 y=483.84 \"Step 3detail\"",
+          "shape 5 moved (-11.950 in, +1.710 in): translate(1179.36,-72) -> translate(318.96,-195.12)",
+          "shape 5 drawn differently: path style={fill:#ffffff;stroke:#000000;stroke-dasharray:5.25,3.75;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 220.32 L158.4 220.32 L158.4 155.52 L0 155.52 L0 220.32 Z -> path style={fill:#ffffff;stroke:#000000;stroke-dasharray:5.25,3.75;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 519.84 L158.4 519.84 L158.4 455.04 L0 455.04 L0 519.84 Z; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.9 y=191.52 \"Step 4\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.9 y=491.04 \"Step 4\"",
+          "shape 6 moved (-18.370 in, +1.710 in): translate(1410.48,-68.4) -> translate(87.84,-191.52)",
+          "shape 6 drawn differently: path style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 148.32 L158.4 148.32 L158.4 209.52 L118.8 216.72 L79.2 209.52 L39.6 202.32 L0 209.52 L0 148.32 Z -> path style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 447.84 L158.4 447.84 L158.4 509.04 L118.8 516.24 L79.2 509.04 L39.6 501.84 L0 509.04 L0 447.84 Z; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.9 y=180.72 \"Step 5detail\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.9 y=480.24 \"Step 5detail\"",
+          "shape 7 moved (-21.580 in, -0.150 in): translate(1641.6,-72) -> translate(87.84,-61.2)",
+          "shape 7 drawn differently: path style={fill:#ffffff} d=M0 220.32 L158.4 220.32 L158.4 155.52 L0 155.52 L0 220.32 L15.84 220.32 L15.84 155.52 L142.56 220.32 L142.56        155.52 L0 220.32 Z -> path style={fill:#ffffff} d=M0 519.84 L158.4 519.84 L158.4 455.04 L0 455.04 L0 519.84 L15.84 519.84 L15.84 455.04 L142.56 519.84 L142.56        455.04 L0 519.84 Z; path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 220.32 L158.4 220.32 L158.4 155.52 L0 155.52 L0 220.32M15.84 220.32 L15.84 155.52M142.56 220.32 L142.56 155.52 -> path style={stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 519.84 L158.4 519.84 L158.4 455.04 L0 455.04 L0 519.84M15.84 519.84 L15.84 455.04M142.56 519.84 L142.56 455.04; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.9 y=191.52 \"Step 6\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.9 y=491.04 \"Step 6\"",
+          "shape 8 moved (-21.580 in, -0.150 in): translate(1872.72,-68.4) -> translate(318.96,-57.6)",
+          "shape 8 drawn differently: path style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 148.32 L115.2 148.32 L115.2 198.72 L57.6 220.32 L0 198.72 L0 148.32 Z -> path style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 447.84 L115.2 447.84 L115.2 498.24 L57.6 519.84 L0 498.24 L0 447.84 Z; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=42.3 y=180.72 \"Step 7detail\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=42.3 y=480.24 \"Step 7detail\"",
+          "shape 9 moved (-21.580 in, -0.150 in): translate(2060.64,-75.6) -> translate(506.88,-64.8)",
+          "shape 9 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=57.6 rx=18 ry=18 width=144 x=0 y=162.72 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=57.6 rx=18 ry=18 width=144 x=0 y=462.24; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=56.7 y=195.12 \"Step 8\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=56.7 y=494.64 \"Step 8\"",
+          "shape 10 moved (+0.010 in, +4.020 in): translate(180,-108) -> translate(180.72,-397.44)",
+          "shape 10 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 11 moved (+0.010 in, +4.010 in): translate(462.24,-126.72) -> translate(462.96,-415.44)",
+          "shape 11 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 12 moved (-1.340 in, +2.150 in): translate(773.28,-126.72) -> translate(676.8,-281.52)",
+          "shape 12 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 13 moved (-8.030 in, +1.710 in): translate(1055.52,-108) -> translate(477.36,-231.12)",
+          "shape 13 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 14 moved (-15.160 in, +1.710 in): translate(1337.76,-104.4) -> translate(246.24,-227.52)",
+          "shape 14 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 15 moved (-19.470 in, +0.300 in): translate(1568.88,-104.4) -> translate(167.04,-126)",
+          "shape 15 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 16 moved (-21.580 in, -0.150 in): translate(1800,-104.4) -> translate(246.24,-93.6)",
+          "shape 16 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 17 moved (-21.580 in, -0.150 in): translate(1987.92,-104.4) -> translate(434.16,-93.6)",
+          "shape 17 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 18 moved (+0.010 in, +2.580 in): translate(180,-38.16) -> translate(180.72,-223.92)",
+          "shape 18 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-0 use transform=scale(-4.36,-4.36)  xlink:hre...",
+          "shape 19 moved (-5.140 in, +3.540 in): translate(642.24,-36) -> translate(272.16,-290.88)",
+          "shape 19 drawn differently: rect style={fill:none;stroke:none} height=21.6 width=116.64 x=0 y=198.72 -> rect style={fill:none;stroke:none} height=21.6 width=116.64 x=0 y=498.24; rect style={fill:#ffffff;stroke:none} height=14.4001 width=53.0629 x=31.7887 y=202.32 -> rect style={fill:#ffffff;stroke:none} height=14.4001 width=53.0629 x=31.7887 y=501.84; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=31.79 y=213.12 \"skips three\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=31.79 y=512.64 \"skips three\"",
+          "shape 20 moved (-5.510 in, +1.700 in): translate(976.32,-130.32) -> translate(579.6,-252.72)",
+          "shape 20 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 21 moved (-5.480 in, +1.700 in): translate(994.32,-162.72) -> translate(599.76,-285.12)",
+          "shape 21 drawn differently: rect style={fill:none;stroke:none} height=21.6 width=64.8 x=0 y=198.72 -> rect style={fill:none;stroke:none} height=21.6 width=64.8 x=0 y=498.24; rect style={fill:#ffffff;stroke:none} height=14.4001 width=26.2032 x=19.2983 y=202.32 -> rect style={fill:#ffffff;stroke:none} height=14.4001 width=26.2032 x=19.2983 y=501.84; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=19.3 y=213.12 \"again\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=19.3 y=512.64 \"again\""
+        ],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "node_outlines": {
+      "line": "node_outlines: a decision, a rounded node and two data stores (one tall) each with three edges at offset points; every line and arrowhead must touch the drawn outline",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "554eefabe0b027688d25cee60bf9c573c1d6d381315af488e8955b30848fcb54",
+            "png": "c78ee6c3833229697071a261a8ad9bed5b01939417cc4e8303eae1d57dd49469"
+          },
+          "recalc": {
+            "svg": "554eefabe0b027688d25cee60bf9c573c1d6d381315af488e8955b30848fcb54",
+            "png": "c78ee6c3833229697071a261a8ad9bed5b01939417cc4e8303eae1d57dd49469"
+          },
+          "triggered": 198,
+          "asked": 198
+        },
+        "candidate": {
+          "open": {
+            "svg": "755e01e957ff94aeca609c5cd3870de12483ae558bd3d86a4a2e15b1b371d3c1",
+            "png": "6e6f2efc5e86ccd523f71f38bbdbbe401b3d8c64d735499ee2fbf2b30d9ebc3e"
+          },
+          "recalc": {
+            "svg": "755e01e957ff94aeca609c5cd3870de12483ae558bd3d86a4a2e15b1b371d3c1",
+            "png": "6e6f2efc5e86ccd523f71f38bbdbbe401b3d8c64d735499ee2fbf2b30d9ebc3e"
+          },
+          "triggered": 198,
+          "asked": 198
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [
+          "the page: width=19.45in height=2.3in viewBox=0 0 1400.4 165.6 -> width=9.94in height=4.66in viewBox=0 0 715.68 335.52",
+          "shape 1 moved (+0.010 in, +2.060 in): translate(36,-50.4) -> translate(36.72,-198.72)",
+          "shape 1 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=100.8 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=270.72; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=62.51 y=136.8 \"Source\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=62.51 y=306.72 \"Source\"",
+          "shape 2 moved (+0.010 in, +2.060 in): translate(267.12,-36) -> translate(267.84,-184.32)",
+          "shape 2 drawn differently: path style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M93.6 72 L187.2 118.8 L93.6 165.6 L0 118.8 L93.6 72 Z -> path style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M93.6 241.92 L187.2 288.72 L93.6 335.52 L0 288.72 L93.6 241.92 Z; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=77.18 y=122.4 \"Choice\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=77.18 y=292.32 \"Choice\"",
+          "shape 3 moved (+0.010 in, +2.060 in): translate(527.04,-54) -> translate(527.76,-202.32)",
+          "shape 3 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=57.6 rx=18 ry=18 width=144 x=0 y=108 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=57.6 rx=18 ry=18 width=144 x=0 y=277.92; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=49.98 y=140.4 \"Rounded\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=49.98 y=310.32 \"Rounded\"",
+          "shape 4 moved (-3.100 in, +0.230 in): translate(743.76,-50.4) -> translate(520.56,-66.96)",
+          "shape 4 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=100.8 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=270.72; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=69.19 y=136.8 \"Sink\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=69.19 y=306.72 \"Sink\"",
+          "shape 5 moved (-9.520 in, +0.230 in): translate(974.88,-50.4) -> translate(289.44,-66.96)",
+          "shape 5 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 rx=32.4 ry=32.4 width=158.4 x=0 y=100.8 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 rx=32.4 ry=32.4 width=158.4 x=0 y=270.72; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=66.19 y=136.8 \"Store\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=66.19 y=306.72 \"Store\"",
+          "shape 6 moved (-15.940 in, +0.230 in): translate(1206,-41.4) -> translate(58.32,-57.96)",
+          "shape 6 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=82.8 rx=36 ry=36 width=158.4 x=0 y=82.8 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=82.8 rx=36 ry=36 width=158.4 x=0 y=252.72; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=70.65 y=113.4 \"Tallstoreof three lines\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=70.65 y=283.32 \"Tallstoreof three lines\"",
+          "shape 7 moved (+0.010 in, +2.060 in): translate(194.4,-90) -> translate(195.12,-238.32)",
+          "shape 7 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 8 moved (+0.010 in, +2.060 in): translate(194.4,-82.8) -> translate(195.12,-231.12)",
+          "shape 8 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 9 moved (+0.010 in, +2.060 in): translate(194.4,-75.6) -> translate(195.12,-223.92)",
+          "shape 9 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 10 moved (+0.010 in, +2.060 in): translate(439.92,-90) -> translate(440.64,-238.32)",
+          "shape 10 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 11 moved (+0.010 in, +2.060 in): translate(454.32,-82.8) -> translate(455.04,-231.12)",
+          "shape 11 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 12 moved (+0.010 in, +2.060 in): translate(439.92,-75.6) -> translate(440.64,-223.92)",
+          "shape 12 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 13 moved (-1.090 in, +0.580 in): translate(671.04,-90) -> translate(592.56,-131.76)",
+          "shape 13 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 14 moved (-0.990 in, +0.680 in): translate(671.04,-82.8) -> translate(599.76,-131.76)",
+          "shape 14 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 15 moved (-0.890 in, +0.780 in): translate(671.04,-75.6) -> translate(606.96,-131.76)",
+          "shape 15 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 16 moved (-6.320 in, +0.230 in): translate(902.16,-90) -> translate(447.12,-106.56)",
+          "shape 16 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 17 moved (-6.310 in, +0.230 in): translate(902.16,-82.8) -> translate(447.84,-99.36)",
+          "shape 17 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 18 moved (-6.320 in, +0.230 in): translate(902.16,-75.6) -> translate(447.12,-92.16)",
+          "shape 18 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 19 moved (-12.720 in, +0.230 in): translate(1132.56,-90) -> translate(216.72,-106.56)",
+          "shape 19 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 20 moved (-12.730 in, +0.230 in): translate(1133.28,-82.8) -> translate(216.72,-99.36)",
+          "shape 20 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 21 moved (-12.720 in, +0.230 in): translate(1132.56,-75.6) -> translate(216.72,-92.16)",
+          "shape 21 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink..."
+        ],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "groups_and_lanes": {
+      "line": "groups_and_lanes: three lanes, a group holding a group; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "f8b804d728fcfa991356579f86793bf710b4ecac208b59122e5e9b156f376158",
+            "png": "42b7e3b9d9ee8dae3429ee547b261e77effdaddfc22869fefd80042ef02696e2"
+          },
+          "recalc": {
+            "svg": "f8b804d728fcfa991356579f86793bf710b4ecac208b59122e5e9b156f376158",
+            "png": "42b7e3b9d9ee8dae3429ee547b261e77effdaddfc22869fefd80042ef02696e2"
+          },
+          "triggered": 312,
+          "asked": 312
+        },
+        "candidate": {
+          "open": {
+            "svg": "f8b804d728fcfa991356579f86793bf710b4ecac208b59122e5e9b156f376158",
+            "png": "42b7e3b9d9ee8dae3429ee547b261e77effdaddfc22869fefd80042ef02696e2"
+          },
+          "recalc": {
+            "svg": "f8b804d728fcfa991356579f86793bf710b4ecac208b59122e5e9b156f376158",
+            "png": "42b7e3b9d9ee8dae3429ee547b261e77effdaddfc22869fefd80042ef02696e2"
+          },
+          "triggered": 312,
+          "asked": 312
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "group_heading_top_down": {
+      "line": "group_heading_top_down: a top-down edge into a grouped node, whose one-line heading must stay clear of the connector; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "68afc0804edfbb24a1c70fb746dd7b478dcf652844a2eb196483a4ce1e17bffb",
+            "png": "7d33a53e7c4ae2a344ca1356a278a8572957579acda5549ea6a9c9f63199c8ed"
+          },
+          "recalc": {
+            "svg": "68afc0804edfbb24a1c70fb746dd7b478dcf652844a2eb196483a4ce1e17bffb",
+            "png": "7d33a53e7c4ae2a344ca1356a278a8572957579acda5549ea6a9c9f63199c8ed"
+          },
+          "triggered": 56,
+          "asked": 56
+        },
+        "candidate": {
+          "open": {
+            "svg": "68afc0804edfbb24a1c70fb746dd7b478dcf652844a2eb196483a4ce1e17bffb",
+            "png": "7d33a53e7c4ae2a344ca1356a278a8572957579acda5549ea6a9c9f63199c8ed"
+          },
+          "recalc": {
+            "svg": "68afc0804edfbb24a1c70fb746dd7b478dcf652844a2eb196483a4ce1e17bffb",
+            "png": "7d33a53e7c4ae2a344ca1356a278a8572957579acda5549ea6a9c9f63199c8ed"
+          },
+          "triggered": 56,
+          "asked": 56
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "labels_groups_lanes": {
+      "line": "labels_groups_lanes: labels inside lanes, parallel labelled edges, a label into a headed group, a label wider than its gap; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "81accb9d27edabd2eca855547f49af62c546ff284c323529a7271c317b449ed7",
+            "png": "1b60061eba3d46f48c385dde9ccbd77a4df69937d838cd361e727a3d7fd6f04c"
+          },
+          "recalc": {
+            "svg": "81accb9d27edabd2eca855547f49af62c546ff284c323529a7271c317b449ed7",
+            "png": "1b60061eba3d46f48c385dde9ccbd77a4df69937d838cd361e727a3d7fd6f04c"
+          },
+          "triggered": 324,
+          "asked": 324
+        },
+        "candidate": {
+          "open": {
+            "svg": "81accb9d27edabd2eca855547f49af62c546ff284c323529a7271c317b449ed7",
+            "png": "1b60061eba3d46f48c385dde9ccbd77a4df69937d838cd361e727a3d7fd6f04c"
+          },
+          "recalc": {
+            "svg": "81accb9d27edabd2eca855547f49af62c546ff284c323529a7271c317b449ed7",
+            "png": "1b60061eba3d46f48c385dde9ccbd77a4df69937d838cd361e727a3d7fd6f04c"
+          },
+          "triggered": 324,
+          "asked": 324
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "two_pages/page 1": {
+      "line": "two_pages: two pages and a page link; every shape on both pages where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "75fdbcbc0550cfce2f6f757a732321aa9b77a019e48a1b65d3847b908870ae9d",
+            "png": "e4e5fb8842cc8c4f4c7b6fc1c1075fdab04405d1b6c0767c55eb7d3610e04452"
+          },
+          "recalc": {
+            "svg": "75fdbcbc0550cfce2f6f757a732321aa9b77a019e48a1b65d3847b908870ae9d",
+            "png": "e4e5fb8842cc8c4f4c7b6fc1c1075fdab04405d1b6c0767c55eb7d3610e04452"
+          },
+          "triggered": 120,
+          "asked": 120
+        },
+        "candidate": {
+          "open": {
+            "svg": "4f485569a805129d2fdc2da9fd6ce82cde7577df5139fc3768f7d09dcfb30c6e",
+            "png": "12ad928e6b8a51a430d2956c1240cf7adbc366a9c418fe0fee7cda5465373439"
+          },
+          "recalc": {
+            "svg": "4f485569a805129d2fdc2da9fd6ce82cde7577df5139fc3768f7d09dcfb30c6e",
+            "png": "12ad928e6b8a51a430d2956c1240cf7adbc366a9c418fe0fee7cda5465373439"
+          },
+          "triggered": 120,
+          "asked": 120
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [
+          "the page: width=8.82in height=2in viewBox=0 0 635.04 144 -> width=5.83in height=4in viewBox=0 0 419.76 288",
+          "shape 1 moved (+2.720 in, +1.800 in): translate(36,-43.2) -> translate(231.84,-172.8)",
+          "shape 1 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=57.6 rx=18 ry=18 width=144 x=0 y=86.4 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=57.6 rx=18 ry=18 width=144 x=0 y=230.4; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=58.4 y=118.8 \"Begin\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=58.4 y=262.8 \"Begin\"",
+          "shape 2 moved (-0.390 in, +0.300 in): translate(252.72,-39.6) -> translate(224.64,-61.2)",
+          "shape 2 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=79.2 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=223.2; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=65.88 y=115.2 \"Work\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=65.88 y=259.2 \"Work\"",
+          "shape 3 moved (-6.210 in, +0.300 in): translate(483.84,-36) -> translate(36.72,-57.6)",
+          "shape 3 drawn differently: path style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 72 L115.2 72 L115.2 122.4 L57.6 144 L0 122.4 L0 72 Z -> path style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 216 L115.2 216 L115.2 266.4 L57.6 288 L0 266.4 L0 216 Z; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=35.41 y=111.6 \"Continue\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=35.41 y=255.6 \"Continue\"",
+          "shape 4 moved (+1.720 in, +0.750 in): translate(180,-72) -> translate(303.84,-126)",
+          "shape 4 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 5 moved (-3.600 in, +0.300 in): translate(411.12,-72) -> translate(151.92,-93.6)",
+          "shape 5 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink..."
+        ],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "two_pages/page 2": {
+      "line": "two_pages: two pages and a page link; every shape on both pages where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "a87692ca83182ab5b996b379668efc8ce0c64d6080af57f44f735388079f5ac6",
+            "png": "51f1c41aaaf3acb72cf7781f9dcf97dcff7b319e631701b1efd0ee3f862fed83"
+          },
+          "recalc": {
+            "svg": "a87692ca83182ab5b996b379668efc8ce0c64d6080af57f44f735388079f5ac6",
+            "png": "51f1c41aaaf3acb72cf7781f9dcf97dcff7b319e631701b1efd0ee3f862fed83"
+          },
+          "triggered": 120,
+          "asked": 120
+        },
+        "candidate": {
+          "open": {
+            "svg": "8c5dfa0d1e6708dc6e728a79b8f569c775a02a8976df653b64aac5a12c728b24",
+            "png": "448c4d72f5dea1e69a7a3872b87ebeaeefc560ee5700d22904eea3ce8ed9c698"
+          },
+          "recalc": {
+            "svg": "8c5dfa0d1e6708dc6e728a79b8f569c775a02a8976df653b64aac5a12c728b24",
+            "png": "448c4d72f5dea1e69a7a3872b87ebeaeefc560ee5700d22904eea3ce8ed9c698"
+          },
+          "triggered": 120,
+          "asked": 120
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [
+          "the page: width=8.82in height=2in viewBox=0 0 635.04 144 -> width=5.83in height=4in viewBox=0 0 419.76 288",
+          "shape 1 moved (+0.010 in, +1.700 in): translate(36,-36) -> translate(36.72,-158.4)",
+          "shape 1 drawn differently: path style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 72 L115.2 72 L115.2 122.4 L57.6 144 L0 122.4 L0 72 Z -> path style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M0 216 L115.2 216 L115.2 266.4 L57.6 288 L0 266.4 L0 216 Z; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=32.11 y=111.6 \"From start\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=32.11 y=255.6 \"From start\"",
+          "shape 2 moved (+0.010 in, +1.700 in): translate(223.92,-39.6) -> translate(224.64,-162)",
+          "shape 2 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=79.2 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=223.2; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=52.2 y=115.2 \"More work\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=52.2 y=259.2 \"More work\"",
+          "shape 3 moved (-3.100 in, +0.200 in): translate(455.04,-43.2) -> translate(231.84,-57.6)",
+          "shape 3 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=57.6 rx=18 ry=18 width=144 x=0 y=86.4 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=57.6 rx=18 ry=18 width=144 x=0 y=230.4; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=59.01 y=118.8 \"Done\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=59.01 y=262.8 \"Done\"",
+          "shape 4 moved (+0.010 in, +1.700 in): translate(151.2,-72) -> translate(151.92,-194.4)",
+          "shape 4 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 5 moved (-1.090 in, +0.600 in): translate(382.32,-72) -> translate(303.84,-115.2)",
+          "shape 5 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink..."
+        ],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "hub5": {
+      "line": "hub5: a hub with five children, two feeding one target; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "9bbf69fa7b63623d34e6d9efe023941b97e14c6a16dcc9ce74f6ac79b3e18a8c",
+            "png": "65e4fe2fe4b73cedbbcbf72e75d455792fe33d1517e8ea2c002ba46df93b5df0"
+          },
+          "recalc": {
+            "svg": "9bbf69fa7b63623d34e6d9efe023941b97e14c6a16dcc9ce74f6ac79b3e18a8c",
+            "png": "65e4fe2fe4b73cedbbcbf72e75d455792fe33d1517e8ea2c002ba46df93b5df0"
+          },
+          "triggered": 178,
+          "asked": 178
+        },
+        "candidate": {
+          "open": {
+            "svg": "9bbf69fa7b63623d34e6d9efe023941b97e14c6a16dcc9ce74f6ac79b3e18a8c",
+            "png": "65e4fe2fe4b73cedbbcbf72e75d455792fe33d1517e8ea2c002ba46df93b5df0"
+          },
+          "recalc": {
+            "svg": "9bbf69fa7b63623d34e6d9efe023941b97e14c6a16dcc9ce74f6ac79b3e18a8c",
+            "png": "65e4fe2fe4b73cedbbcbf72e75d455792fe33d1517e8ea2c002ba46df93b5df0"
+          },
+          "triggered": 178,
+          "asked": 178
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "hub5_top_down": {
+      "line": "hub5_top_down: the same hub laid out top down; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "975730585f6bdba2712f0bee7a69c82d0bd4e4842acc94f2bd8d52ccc5976efa",
+            "png": "a57fae8a82a92d0876a870ac6a89e35baadc035bf6f943aceb9dad891be19f35"
+          },
+          "recalc": {
+            "svg": "975730585f6bdba2712f0bee7a69c82d0bd4e4842acc94f2bd8d52ccc5976efa",
+            "png": "a57fae8a82a92d0876a870ac6a89e35baadc035bf6f943aceb9dad891be19f35"
+          },
+          "triggered": 178,
+          "asked": 178
+        },
+        "candidate": {
+          "open": {
+            "svg": "975730585f6bdba2712f0bee7a69c82d0bd4e4842acc94f2bd8d52ccc5976efa",
+            "png": "a57fae8a82a92d0876a870ac6a89e35baadc035bf6f943aceb9dad891be19f35"
+          },
+          "recalc": {
+            "svg": "975730585f6bdba2712f0bee7a69c82d0bd4e4842acc94f2bd8d52ccc5976efa",
+            "png": "a57fae8a82a92d0876a870ac6a89e35baadc035bf6f943aceb9dad891be19f35"
+          },
+          "triggered": 178,
+          "asked": 178
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "chain25": {
+      "line": "chain25: a 25 step chain, two decisions that skip a step, one feedback edge; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "f43e4b6090c83b25216ffa974832b7ccface7dec7317ca86c74cc945f2339f97",
+            "png": "6f2ba109c8529779961505b1c9512dcefc23d307880a2d412e6cc398cab386ca"
+          },
+          "recalc": {
+            "svg": "a3d730a68391558040aa7d5e333800dd53477bb925aa217c0c348e2ccd2ed3bf",
+            "png": "6f2ba109c8529779961505b1c9512dcefc23d307880a2d412e6cc398cab386ca"
+          },
+          "triggered": 714,
+          "asked": 714
+        },
+        "candidate": {
+          "open": {
+            "svg": "e0aa5bdfcdadf7c1d400750592b7c520f365582833f97635e30d5bc19a154bd9",
+            "png": "85cb25c6ac0d3ed604ca473a3d1ba9363edfacbcfa3a65f0dc78297e25b134d7"
+          },
+          "recalc": {
+            "svg": "e0aa5bdfcdadf7c1d400750592b7c520f365582833f97635e30d5bc19a154bd9",
+            "png": "85cb25c6ac0d3ed604ca473a3d1ba9363edfacbcfa3a65f0dc78297e25b134d7"
+          },
+          "triggered": 698,
+          "asked": 698
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [
+          "the page: width=81.04in height=3.82in viewBox=0 0 5834.88 275.04 -> width=22.48in height=10.84in viewBox=0 0 1618.56 780.48",
+          "shape 1 moved (+3.220 in, +7.680 in): translate(36,-105.12) -> translate(267.84,-658.08)",
+          "shape 1 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=210.24 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=715.68; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.9 y=246.24 \"Step 1\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.9 y=751.68 \"Step 1\"",
+          "shape 2 moved (+3.220 in, +7.680 in): translate(267.12,-105.12) -> translate(498.96,-658.08)",
+          "shape 2 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=210.24 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=715.68; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.9 y=246.24 \"Step 2\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.9 y=751.68 \"Step 2\"",
+          "shape 3 moved (+3.220 in, +7.680 in): translate(498.24,-105.12) -> translate(730.08,-658.08)",
+          "shape 3 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=210.24 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=715.68; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.9 y=246.24 \"Step 3\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.9 y=751.68 \"Step 3\"",
+          "shape 4 moved (+3.220 in, +7.680 in): translate(729.36,-105.12) -> translate(961.2,-658.08)",
+          "shape 4 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=210.24 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=715.68; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.9 y=246.24 \"Step 4\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.9 y=751.68 \"Step 4\"",
+          "shape 5 moved (+3.220 in, +7.680 in): translate(960.48,-105.12) -> translate(1192.32,-658.08)",
+          "shape 5 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=210.24 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=715.68; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.9 y=246.24 \"Step 5\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.9 y=751.68 \"Step 5\"",
+          "shape 6 moved (+3.220 in, +7.680 in): translate(1191.6,-105.12) -> translate(1423.44,-658.08)",
+          "shape 6 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=210.24 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=715.68; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.9 y=246.24 \"Step 6\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.9 y=751.68 \"Step 6\"",
+          "shape 7 moved (+0.010 in, +5.530 in): translate(1422.72,-105.12) -> translate(1423.44,-503.28)",
+          "shape 7 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=210.24 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=715.68; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.9 y=246.24 \"Step 7\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.9 y=751.68 \"Step 7\"",
+          "shape 8 moved (-6.810 in, +5.530 in): translate(1653.84,-90.72) -> translate(1163.52,-488.88)",
+          "shape 8 drawn differently: path style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M93.6 181.44 L187.2 228.24 L93.6 275.04 L0 228.24 L93.6 181.44 Z -> path style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M93.6 686.88 L187.2 733.68 L93.6 780.48 L0 733.68 L93.6 686.88 Z; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=78.3 y=231.84 \"Step 8\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=78.3 y=737.28 \"Step 8\"",
+          "shape 9 moved (-13.630 in, +5.530 in): translate(1913.76,-151.92) -> translate(932.4,-550.08)",
+          "shape 9 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=210.24 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=715.68; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.9 y=246.24 \"Step 9\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=63.9 y=751.68 \"Step 9\"",
+          "shape 10 moved (-20.050 in, +5.530 in): translate(2144.88,-105.12) -> translate(701.28,-503.28)",
+          "shape 10 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=210.24 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=715.68; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=246.24 \"Step 10\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=751.68 \"Step 10\"",
+          "shape 11 moved (-26.470 in, +5.530 in): translate(2376,-105.12) -> translate(470.16,-503.28)",
+          "shape 11 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=210.24 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=715.68; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=246.24 \"Step 11\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=751.68 \"Step 11\"",
+          "shape 12 moved (-32.890 in, +5.530 in): translate(2607.12,-105.12) -> translate(239.04,-503.28)",
+          "shape 12 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=210.24 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=715.68; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=246.24 \"Step 12\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=751.68 \"Step 12\"",
+          "shape 13 moved (-36.100 in, +2.410 in): translate(2838.24,-105.12) -> translate(239.04,-278.64)",
+          "shape 13 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=210.24 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=715.68; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=246.24 \"Step 13\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=751.68 \"Step 13\"",
+          "shape 14 moved (-36.100 in, +2.410 in): translate(3069.36,-105.12) -> translate(470.16,-278.64)",
+          "shape 14 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=210.24 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=715.68; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=246.24 \"Step 14\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=751.68 \"Step 14\"",
+          "shape 15 moved (-36.100 in, +2.400 in): translate(3300.48,-127.44) -> translate(701.28,-300.24)",
+          "shape 15 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=210.24 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=715.68; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=246.24 \"Step 15\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=751.68 \"Step 15\"",
+          "shape 16 moved (-36.100 in, +2.400 in): translate(3531.6,-127.44) -> translate(932.4,-300.24)",
+          "shape 16 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=210.24 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=715.68; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=246.24 \"Step 16\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=751.68 \"Step 16\"",
+          "shape 17 moved (-36.100 in, +2.400 in): translate(3762.72,-113.04) -> translate(1163.52,-285.84)",
+          "shape 17 drawn differently: path style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M93.6 181.44 L187.2 228.24 L93.6 275.04 L0 228.24 L93.6 181.44 Z -> path style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} d=M93.6 686.88 L187.2 733.68 L93.6 780.48 L0 733.68 L93.6 686.88 Z; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=75.26 y=231.84 \"Step 17\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=75.26 y=737.28 \"Step 17\"",
+          "shape 18 moved (-36.100 in, +2.410 in): translate(4022.64,-174.24) -> translate(1423.44,-347.76)",
+          "shape 18 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=210.24 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=715.68; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=246.24 \"Step 18\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=751.68 \"Step 18\"",
+          "shape 19 moved (-39.310 in, -0.360 in): translate(4253.76,-127.44) -> translate(1423.44,-101.52)",
+          "shape 19 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=210.24 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=715.68; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=246.24 \"Step 19\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=751.68 \"Step 19\"",
+          "shape 20 moved (-45.730 in, -0.350 in): translate(4484.88,-105.12) -> translate(1192.32,-79.92)",
+          "shape 20 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=210.24 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=715.68; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=246.24 \"Step 20\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=751.68 \"Step 20\"",
+          "shape 21 moved (-52.150 in, -0.350 in): translate(4716,-105.12) -> translate(961.2,-79.92)",
+          "shape 21 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=210.24 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=715.68; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=246.24 \"Step 21\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=751.68 \"Step 21\"",
+          "shape 22 moved (-58.570 in, -0.350 in): translate(4947.12,-105.12) -> translate(730.08,-79.92)",
+          "shape 22 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=210.24 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=715.68; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=246.24 \"Step 22\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=751.68 \"Step 22\"",
+          "shape 23 moved (-64.990 in, -0.350 in): translate(5178.24,-105.12) -> translate(498.96,-79.92)",
+          "shape 23 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=210.24 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=715.68; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=246.24 \"Step 23\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=751.68 \"Step 23\"",
+          "shape 24 moved (-71.410 in, -0.350 in): translate(5409.36,-105.12) -> translate(267.84,-79.92)",
+          "shape 24 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=210.24 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=715.68; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=246.24 \"Step 24\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=751.68 \"Step 24\"",
+          "shape 25 moved (-77.830 in, -0.350 in): translate(5640.48,-105.12) -> translate(36.72,-79.92)",
+          "shape 25 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=210.24 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=715.68; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=246.24 \"Step 25\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=60.86 y=751.68 \"Step 25\"",
+          "shape 26 moved (-13.630 in, +5.530 in): translate(1913.76,-57.6) -> translate(932.4,-455.76)",
+          "shape 26 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=210.24 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=715.68; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=64.79 y=246.24 \"Skip 8\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=64.79 y=751.68 \"Skip 8\"",
+          "shape 27 moved (-36.100 in, +2.410 in): translate(4022.64,-79.92) -> translate(1423.44,-253.44)",
+          "shape 27 drawn differently: rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=210.24 -> rect style={fill:#ffffff;stroke:#000000;stroke-linecap:round;stroke-linejoin:round;stroke-width:0.75} height=64.8 width=158.4 x=0 y=715.68; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=61.75 y=246.24 \"Skip 17\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=61.75 y=751.68 \"Skip 17\"",
+          "shape 28 moved (+3.220 in, +7.680 in): translate(194.4,-137.52) -> translate(426.24,-690.48)",
+          "shape 28 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 29 moved (+3.220 in, +7.680 in): translate(425.52,-137.52) -> translate(657.36,-690.48)",
+          "shape 29 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 30 moved (+3.220 in, +7.680 in): translate(656.64,-137.52) -> translate(888.48,-690.48)",
+          "shape 30 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 31 moved (+3.220 in, +7.680 in): translate(887.76,-137.52) -> translate(1119.6,-690.48)",
+          "shape 31 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 32 moved (+3.220 in, +7.680 in): translate(1118.88,-137.52) -> translate(1350.72,-690.48)",
+          "shape 32 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 33 moved (+2.120 in, +5.980 in): translate(1350,-137.52) -> translate(1502.64,-568.08)",
+          "shape 33 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 34 moved (-3.200 in, +5.530 in): translate(1581.12,-137.52) -> translate(1350.72,-535.68)",
+          "shape 34 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 35 moved (-10.320 in, +5.530 in): translate(1833.84,-141.12) -> translate(1090.8,-539.28)",
+          "shape 35 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 36 moved (-10.760 in, +5.530 in): translate(1865.52,-173.52) -> translate(1090.8,-571.68)",
+          "shape 36 drawn differently: rect style={fill:none;stroke:none} height=21.6 width=47.52 x=0 y=253.44 -> rect style={fill:none;stroke:none} height=21.6 width=47.52 x=0 y=758.88; rect style={fill:#ffffff;stroke:none} height=14.4001 width=16.5119 x=15.5042 y=257.04 -> rect style={fill:#ffffff;stroke:none} height=14.4001 width=16.5119 x=15.5042 y=762.48; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=15.5 y=267.84 \"Yes\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=15.5 y=773.28 \"Yes\"",
+          "shape 37 moved (-10.320 in, +5.530 in): translate(1833.84,-90) -> translate(1090.8,-488.16)",
+          "shape 37 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 38 moved (-10.080 in, +5.530 in): translate(1845.36,-123.12) -> translate(1119.6,-521.28)",
+          "shape 38 drawn differently: rect style={fill:none;stroke:none} height=21.6 width=38.88 x=0 y=253.44 -> rect style={fill:none;stroke:none} height=21.6 width=38.88 x=0 y=758.88; rect style={fill:#ffffff;stroke:none} height=14.4001 width=14.0743 x=12.403 y=257.04 -> rect style={fill:#ffffff;stroke:none} height=14.4001 width=14.0743 x=12.403 y=762.48; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=12.4 y=267.84 \"No\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=12.4 y=773.28 \"No\"",
+          "shape 39 moved (-16.840 in, +5.530 in): translate(2072.16,-90) -> translate(859.68,-488.16)",
+          "shape 39 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 40 moved (-16.840 in, +5.530 in): translate(2072.16,-141.12) -> translate(859.68,-539.28)",
+          "shape 40 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 41 moved (-23.260 in, +5.530 in): translate(2303.28,-137.52) -> translate(628.56,-535.68)",
+          "shape 41 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 42 moved (-29.680 in, +5.530 in): translate(2534.4,-137.52) -> translate(397.44,-535.68)",
+          "shape 42 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 43 moved (-33.990 in, +2.860 in): translate(2765.52,-137.52) -> translate(318.24,-343.44)",
+          "shape 43 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 44 moved (-36.100 in, +2.410 in): translate(2996.64,-137.52) -> translate(397.44,-311.04)",
+          "shape 44 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 45 moved (-36.100 in, +2.410 in): translate(3227.76,-141.12) -> translate(628.56,-314.64)",
+          "shape 45 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 46 moved (-36.100 in, +2.400 in): translate(3458.88,-159.84) -> translate(859.68,-332.64)",
+          "shape 46 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 47 moved (-36.100 in, +2.400 in): translate(3690,-159.84) -> translate(1090.8,-332.64)",
+          "shape 47 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 48 moved (-36.100 in, +2.400 in): translate(3942.72,-163.44) -> translate(1343.52,-336.24)",
+          "shape 48 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 49 moved (-36.100 in, +2.410 in): translate(3971.52,-195.84) -> translate(1372.32,-369.36)",
+          "shape 49 drawn differently: rect style={fill:none;stroke:none} height=21.6 width=47.52 x=0 y=253.44 -> rect style={fill:none;stroke:none} height=21.6 width=47.52 x=0 y=758.88; rect style={fill:#ffffff;stroke:none} height=14.4001 width=16.5119 x=15.5042 y=257.04 -> rect style={fill:#ffffff;stroke:none} height=14.4001 width=16.5119 x=15.5042 y=762.48; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=15.5 y=267.84 \"Yes\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=15.5 y=773.28 \"Yes\"",
+          "shape 50 moved (-36.100 in, +2.410 in): translate(3942.72,-112.32) -> translate(1343.52,-285.84)",
+          "shape 50 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 51 moved (-36.110 in, +2.410 in): translate(3967.2,-123.12) -> translate(1367.28,-296.64)",
+          "shape 51 drawn differently: rect style={fill:none;stroke:none} height=21.6 width=38.88 x=0 y=253.44 -> rect style={fill:none;stroke:none} height=21.6 width=38.88 x=0 y=758.88; rect style={fill:#ffffff;stroke:none} height=14.4001 width=14.0743 x=12.403 y=257.04 -> rect style={fill:#ffffff;stroke:none} height=14.4001 width=14.0743 x=12.403 y=762.48; text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=12.4 y=267.84 \"No\" -> text style={fill:#000000;font-family:Calibri;font-size:1.00001em} x=12.4 y=773.28 \"No\"",
+          "shape 52 moved (-37.200 in, +0.750 in): translate(4181.04,-112.32) -> translate(1502.64,-166.32)",
+          "shape 52 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 53 moved (-36.100 in, -0.360 in): translate(4181.04,-163.44) -> translate(1581.84,-137.52)",
+          "shape 53 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-0 use transform=scale(-4.36,-4.36)  xlink:hre...",
+          "shape 54 moved (-42.520 in, -0.350 in): translate(4412.16,-141.12) -> translate(1350.72,-115.92)",
+          "shape 54 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 55 moved (-48.940 in, -0.350 in): translate(4643.28,-137.52) -> translate(1119.6,-112.32)",
+          "shape 55 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 56 moved (-55.360 in, -0.350 in): translate(4874.4,-137.52) -> translate(888.48,-112.32)",
+          "shape 56 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 57 moved (-61.780 in, -0.350 in): translate(5105.52,-137.52) -> translate(657.36,-112.32)",
+          "shape 57 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 58 moved (-68.200 in, -0.350 in): translate(5336.64,-137.52) -> translate(426.24,-112.32)",
+          "shape 58 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 59 moved (-74.620 in, -0.350 in): translate(5567.76,-137.52) -> translate(195.12,-112.32)",
+          "shape 59 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink...",
+          "shape 60 moved (-36.100 in, +1.000 in): translate(3227.76,-36.72) -> translate(628.56,-108.72)",
+          "shape 60 drawn differently: path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink... -> path style={marker-end:url({marker style={fill:#000000;fill-opacity:1;stroke:#000000;stroke-opacity:1;stroke-width:0.22935779816514} markerUnits=strokeWidth orient=auto overflow=visible refX=-13.08 use transform=scale(-4.36,-4.36)  xlink..."
+        ],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "lanes3": {
+      "line": "lanes3: three lanes, a decision that splits into two lanes and rejoins; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "7ac4c5be44fbe199b9818e6b6d7c9a0741225b580824fe4162be55043c1bb069",
+            "png": "da4f31c690c22be8ec2b9fc8f653852412598a9b1c456c4478f8e900115ff091"
+          },
+          "recalc": {
+            "svg": "7ac4c5be44fbe199b9818e6b6d7c9a0741225b580824fe4162be55043c1bb069",
+            "png": "da4f31c690c22be8ec2b9fc8f653852412598a9b1c456c4478f8e900115ff091"
+          },
+          "triggered": 330,
+          "asked": 330
+        },
+        "candidate": {
+          "open": {
+            "svg": "7ac4c5be44fbe199b9818e6b6d7c9a0741225b580824fe4162be55043c1bb069",
+            "png": "da4f31c690c22be8ec2b9fc8f653852412598a9b1c456c4478f8e900115ff091"
+          },
+          "recalc": {
+            "svg": "7ac4c5be44fbe199b9818e6b6d7c9a0741225b580824fe4162be55043c1bb069",
+            "png": "da4f31c690c22be8ec2b9fc8f653852412598a9b1c456c4478f8e900115ff091"
+          },
+          "triggered": 330,
+          "asked": 330
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    },
+    "fanin": {
+      "line": "fanin: four sources into one target; every shape where it was written",
+      "shots": {
+        "ref": {
+          "open": {
+            "svg": "b9e5e4a96a729df158c88724af3df10f23da8989ff240f97d41ba3d66cb85f79",
+            "png": "809bfded08d7dca7fdc0897fb03667988b9f6954e9ef900dcf850b028e491735"
+          },
+          "recalc": {
+            "svg": "b9e5e4a96a729df158c88724af3df10f23da8989ff240f97d41ba3d66cb85f79",
+            "png": "809bfded08d7dca7fdc0897fb03667988b9f6954e9ef900dcf850b028e491735"
+          },
+          "triggered": 140,
+          "asked": 140
+        },
+        "candidate": {
+          "open": {
+            "svg": "b9e5e4a96a729df158c88724af3df10f23da8989ff240f97d41ba3d66cb85f79",
+            "png": "809bfded08d7dca7fdc0897fb03667988b9f6954e9ef900dcf850b028e491735"
+          },
+          "recalc": {
+            "svg": "b9e5e4a96a729df158c88724af3df10f23da8989ff240f97d41ba3d66cb85f79",
+            "png": "809bfded08d7dca7fdc0897fb03667988b9f6954e9ef900dcf850b028e491735"
+          },
+          "triggered": 140,
+          "asked": 140
+        }
+      },
+      "findings": {
+        "candidate on open -> after recalc": [],
+        "ref on open -> after recalc": [],
+        "ref -> candidate, after recalc": [],
+        "before -> candidate, after recalc": null
+      },
+      "stale_on_open": false
+    }
+  }
+}
