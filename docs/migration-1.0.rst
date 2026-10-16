@@ -211,10 +211,9 @@ exhaustive for such a package.
 An argument of the wrong type or out of range usually raises a plain
 ``TypeError`` or ``ValueError``, not a ``VsdxError``, and ``except VsdxError:``
 does not catch it. Examples are ``Document.open("file.txt")``, a page width
-that is not positive, and a ``ConnectorOptions`` ``glue`` or ``routing`` that
-is not a ``Glue`` or ``Routing``. A connection point that is not a
-non-negative ``int`` (``ConnectorOptions(from_point=-1)``) is the exception:
-it raises :class:`vsdxkit.errors.InvalidOperationError`, which is both.
+that is not positive, a ``ConnectorOptions`` ``glue`` or ``routing`` that
+is not a ``Glue`` or ``Routing``, and a connection point that is not an
+``int`` (``TypeError``) or is negative (``ValueError``).
 
 ``except zipfile.BadZipFile:``, ``except RuntimeError:``, ``except KeyError:`` around an open
    ``except MalformedPackageError:``. Opening a package that is not a zip,
