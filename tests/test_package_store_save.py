@@ -438,3 +438,33 @@ def test_save_without_fchmod_never_changes_a_mode_by_path(source, tmp_path, monk
     assert PackageStore.open(source).save(target) == target
     assert target.exists()
     assert _members(target) == _members(source)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="symlinks need privileges on Windows")
+def test_saving_to_a_symlinked_target_writes_the_file_it_points_to(source, tmp_path):
+    """The link survives and the real file gets the new bytes (#374)."""
+    real = tmp_path / "real.vsdx"
+    real.write_bytes(b"old")
+    link = tmp_path / "link.vsdx"
+    link.symlink_to(real)
+
+    PackageStore.open(source).save(link)
+
+    assert link.is_symlink()
+    assert _members(real) == _members(source)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="symlinks need privileges on Windows")
+def test_an_in_place_save_through_a_symlink_keeps_the_link(tmp_path):
+    """A package opened through a link saves onto the file behind it (#374)."""
+    real = tmp_path / "real.vsdx"
+    shutil.copy(os.path.join(BASEDIR, "test1.vsdx"), real)
+    link = tmp_path / "link.vsdx"
+    link.symlink_to(real)
+    store = PackageStore.open(link)
+    store.write_xml("/visio/extra.xml", ET.ElementTree(ET.Element("Extra")))
+
+    store.save()
+
+    assert link.is_symlink()
+    assert "visio/extra.xml" in dict(_members(real))

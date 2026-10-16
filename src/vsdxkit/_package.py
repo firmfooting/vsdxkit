@@ -684,7 +684,8 @@ class PackageStore:
         """
         # Use self.source directly (already absolute from open()) when target is None,
         # avoiding working-directory-dependent behavior.
-        destination = Path(self.source if target is None else os.path.abspath(target))
+        # Resolved, so a save through a symlink replaces the file it points to and the link survives (#374).
+        destination = Path(os.path.realpath(self.source if target is None else target))
 
         # Gather all member bytes and validate against load limits before creating any files.
         # This prevents leaving the destination or directory in an inconsistent state.
