@@ -635,3 +635,16 @@ def test_masters_from_something_that_is_not_a_document_are_refused(vsdx_copy):
     vis = Document.open(vsdx_copy("test1.vsdx"))
     with pytest.raises(TypeError, match="LooksLikeADocument"):
         vis._masters_for(["1"], LooksLikeADocument())
+
+
+def test_a_taken_page_name_counts_up_from_the_name_asked_for(vsdx_copy):
+    """Fails if each collision appends another suffix to the last candidate.
+
+    With ``Page-1`` and ``Page-1-1`` both taken the next name is ``Page-1-2``,
+    not ``Page-1-1-2``.
+    """
+    doc = Document.open(vsdx_copy("test1.vsdx"))
+    base = doc.pages[0].name
+    doc.pages.create(name=f"{base}-1")
+
+    assert doc._get_new_page_name(base) == f"{base}-2"

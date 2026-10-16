@@ -575,14 +575,15 @@ class Document:
         return relationship.attrib["Id"]
 
     def _get_new_page_name(self, new_page_name: str) -> str:
-        """`new_page_name`, or a name no page has yet made from it by appending ``-1``, then ``-2``, and so on.
+        """`new_page_name`, or the first of ``-1``, ``-2``, ... appended to it that no page has.
 
-        The suffixes accumulate: when ``Page`` and ``Page-1`` are both taken,
-        the answer is ``Page-1-2``, not ``Page-2``.
+        Each candidate is made from `new_page_name` itself, so when ``Page``
+        and ``Page-1`` are both taken the answer is ``Page-2``.
         """
-        i = 1
-        while new_page_name in [page.name for page in self.pages]:
-            new_page_name = f"{new_page_name}-{i}"  # Page-X-i
+        taken = {page.name for page in self.pages}
+        base, i = new_page_name, 1
+        while new_page_name in taken:
+            new_page_name = f"{base}-{i}"
             i += 1
 
         return new_page_name
