@@ -228,6 +228,7 @@ class MasterCatalog:
                 rel_id,
             )
             page._master_unique_id = master.attrib.get("UniqueID")
+            page._is_master = True
             pages.append(page)
         self._pages = pages
         self._revision += 1
@@ -368,6 +369,7 @@ class MasterCatalog:
         tree = self._store.require_xml(part_name)
         page = self._make_page(tree, part_name, _page_name(element), new_id, relationship.attrib["Id"])
         page._master_unique_id = element.attrib.get("UniqueID")
+        page._is_master = True
         self._pages.append(page)
         self._revision += 1
         return page
