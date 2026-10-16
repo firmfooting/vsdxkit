@@ -240,3 +240,11 @@ def test_a_member_cannot_deliver_more_bytes_than_it_declares(tmp_path):
     )
     ((_, delivered),) = read_archive_members(path, PackageLimits())
     assert len(delivered) == 1
+
+
+@pytest.mark.parametrize("field", ["max_members", "max_member_size", "max_total_uncompressed", "max_ratio"])
+@pytest.mark.parametrize("value", ["5", "abc", True, False])
+def test_a_limit_that_is_a_string_or_a_bool_is_a_type_error(field, value):
+    """Fails if a numeric string crashes later in a comparison, or a bool passes as 1."""
+    with pytest.raises(TypeError, match=field):
+        PackageLimits(**{field: value})
