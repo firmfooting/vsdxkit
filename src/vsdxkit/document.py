@@ -946,8 +946,8 @@ class Document:
         self._titles_of_parts_insert(new_page_name, Document._PAGES)
 
     def _remove_page_from_app_xml(self, page_name: str) -> None:
-        """Take a removed page's name out of app.xml's pages section, and its count; a document without app.xml is left alone."""
-        if self._app_xml is not None:
+        """Take a removed page's name out of app.xml's pages section, and its count; a document that does not list its titles is left alone."""
+        if self._lists_titles():
             _logger.debug("_remove_page_from_app_xml()")
             self._titles_of_parts_remove(page_name, Document._PAGES)
 
@@ -1015,8 +1015,8 @@ class Document:
         # update [Content_Types].xml - insert reference to the new page
         self._add_content_types_override(new_page_path, "application/vnd.ms-visio.page+xml")
 
-        # update app.xml, if it exists
-        if self._app_xml:
+        # update app.xml, if it lists the pages
+        if self._lists_titles():
             self._add_page_to_app_xml(page_name)
 
         # Update Document object; the page carries its real ID and relationship
