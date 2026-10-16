@@ -8,6 +8,43 @@ From 0.7.1 onward this file is maintained by release-please, which writes a
 section per release from the conventional-commit subjects on `main`. Edit the
 release pull request rather than this file directly.
 
+## [0.12.0](https://github.com/firmfooting/vsdxkit/compare/v0.11.0...v0.12.0) (2026-10-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* **glue:** a connection point that is not an int raises TypeError and a negative one raises ValueError, instead of InvalidOperationError, so except VsdxError no longer catches either.
+* **package:** PackageLimits raises TypeError for a str or bool limit. 0.11.0 accepted True as 1 and raised ValueError for a non-numeric string.
+* **templating:** render raises when two pages would share a name, including a document that already holds two pages with one name, which 0.11.0 rendered. Rename one of the pages before rendering.
+
+### Features
+
+* **layout:** place each edge label on its own connector ([#547](https://github.com/firmfooting/vsdxkit/issues/547)) ([234aa09](https://github.com/firmfooting/vsdxkit/commit/234aa09b0ff1216aeb33ffbbb80a8113b7d0a2af))
+* **layout:** straighten runs, pin layers, align nodes and route feedback in a corridor ([#544](https://github.com/firmfooting/vsdxkit/issues/544)) ([9274fff](https://github.com/firmfooting/vsdxkit/commit/9274ffff1aa99fda29c33c0cebff51471b876b31))
+
+
+### Bug Fixes
+
+* add, copy and remove pages when app.xml lists no titles ([#559](https://github.com/firmfooting/vsdxkit/issues/559)) ([5d82457](https://github.com/firmfooting/vsdxkit/commit/5d8245740baf6264f9d51f02f2acfbe2b568b61d))
+* **connectors:** freeze an inherited glue coordinate when an end is freed ([#566](https://github.com/firmfooting/vsdxkit/issues/566)) ([bacdba3](https://github.com/firmfooting/vsdxkit/commit/bacdba35456a377831f31d9f310e10cc16c24475))
+* **document:** count up a taken page name from the name asked for ([#563](https://github.com/firmfooting/vsdxkit/issues/563)) ([d7783e0](https://github.com/firmfooting/vsdxkit/commit/d7783e02bc54a9f089ac2fc4ce4a42a839de22ba))
+* **glue:** raise builtin errors for a bad connection point ([80fa0f6](https://github.com/firmfooting/vsdxkit/commit/80fa0f69f5946d50ffe93ea3f5c730b2ffbc8693))
+* **glue:** write Sheet.N! in connector glue formulas ([#567](https://github.com/firmfooting/vsdxkit/issues/567)) ([d842761](https://github.com/firmfooting/vsdxkit/commit/d842761e6ab1706e86b1859387292b3ea64e4b29))
+* keep a formatting run in the middle of a shape's text ([#560](https://github.com/firmfooting/vsdxkit/issues/560)) ([0975c19](https://github.com/firmfooting/vsdxkit/commit/0975c1968af6fa5b3d88d74b6bb0dccad34ecb12))
+* **layout:** keep LayoutOptions in its 0.11.0 positional order ([#569](https://github.com/firmfooting/vsdxkit/issues/569)) ([1c948e8](https://github.com/firmfooting/vsdxkit/commit/1c948e80966be99ac080d517644ec59ae5ce9602))
+* **package:** reject a string or bool as a package limit ([a861d56](https://github.com/firmfooting/vsdxkit/commit/a861d560e591b8b61723e351b444c63f3b1b64b4))
+* read a master's own PageSheet when a drawing page shares its ID ([#558](https://github.com/firmfooting/vsdxkit/issues/558)) ([92bd12b](https://github.com/firmfooting/vsdxkit/commit/92bd12ba4b2647466f18796317d0faa7c26aafba))
+* record the glue of a copied connector ([#556](https://github.com/firmfooting/vsdxkit/issues/556)) ([0f99921](https://github.com/firmfooting/vsdxkit/commit/0f999211d091fe523ef1c9d87ceadf2cbeed5428))
+* resolve a master shape across the whole master page ([#561](https://github.com/firmfooting/vsdxkit/issues/561)) ([064ac44](https://github.com/firmfooting/vsdxkit/commit/064ac4496a1afec33cdf1b1238a520933b5475fa))
+* save through a symlink onto the file it points to ([#557](https://github.com/firmfooting/vsdxkit/issues/557)) ([7e9f6be](https://github.com/firmfooting/vsdxkit/commit/7e9f6bee0670ac15d1f0b267c35499d63d2c79fa))
+* **templating:** refuse a render that gives two pages one name ([951ffe1](https://github.com/firmfooting/vsdxkit/commit/951ffe17785c3b5abc15b2bcd400e51a6977abd2))
+
+
+### Documentation
+
+* move plans and specs out of this repository ([#554](https://github.com/firmfooting/vsdxkit/issues/554)) ([b4320ca](https://github.com/firmfooting/vsdxkit/commit/b4320ca76aaf5a5ab19b6e46100fa19ac86ae898))
+* say which builtin error a bad connection point raises ([#568](https://github.com/firmfooting/vsdxkit/issues/568)) ([e5c7a58](https://github.com/firmfooting/vsdxkit/commit/e5c7a5810dcbc8c0bc223c1d63d55b03ac1b81d4))
+
 ## [0.11.0](https://github.com/firmfooting/vsdxkit/compare/v0.10.0...v0.11.0) (2026-10-12)
 
 
