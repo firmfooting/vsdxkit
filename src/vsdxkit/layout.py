@@ -193,14 +193,14 @@ class LayoutOptions:
     """Per group, (group id, width, height) in inches of its heading text. The group's box is widened to the width and grows at the top to clear the height above its members; a box that then covers a node or group that is not its own is refused."""
     edge_labels: tuple[tuple[float, float] | None, ...] = ()
     """Per edge, in the order of ``edges``, the (width, height) in inches of its label, or None for none; empty means no edge has one. Each label is centred on a straight stretch of its own route, in one lane band and clear of every node, heading, other group, lane heading, other label and other route, or, as the last step of the fallback ladder, any of those but the other route, or the layout is refused; the gaps it crosses are widened to hold it."""
-    edge_first: tuple[bool, ...] = ()
-    """Per edge, in the order of ``edges``, whether its label prefers the first segment of its route; empty means none does, and the longest segment is preferred."""
-    loose_labels: bool = False
-    """Whether a label may sit where other routes cross it; the fallback ladder sets it as its last rung, and a caller need not."""
     port_pitch: float = 0.2
     """Inches between the points where parallel routes meet one side of a box, at least 0.1; a short side shrinks it."""
     channel_pitch: float = 0.2
     """Inches between parallel routes in a channel between layers, at least one grid step. A default layer gap holds up to eight channels at this spacing; a busier gap keeps that width and its channels are spaced evenly in it, closer than this."""
+    edge_first: tuple[bool, ...] = ()
+    """Per edge, in the order of ``edges``, whether its label prefers the first segment of its route; empty means none does, and the longest segment is preferred."""
+    loose_labels: bool = False
+    """Whether a label may sit where other routes cross it; the fallback ladder sets it as its last rung, and a caller need not."""
     straighten_sweeps: int = 6
     """How many down-and-up passes move boxes toward their neighbours within their track; zero keeps each run centred."""
     pinned: tuple[tuple[str, int], ...] = ()

@@ -236,7 +236,7 @@ class _DocumentSeam(DocumentView, Protocol):
 
     @property
     def _masters_xml(self) -> ET.Element | None:
-        """The `<Masters>` root, read from the store so it can never be a stale copy; `is_master_page` and a master's page sheet are read there."""
+        """The `<Masters>` root, read from the store so it can never be a stale copy; a master's page sheet is read there."""
         ...
 
     @property
