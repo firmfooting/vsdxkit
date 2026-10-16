@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -483,6 +484,8 @@ def _git(repo: Path, *args: str) -> str:
         check=True,
         capture_output=True,
         text=True,
+        # a pre-push hook run from a worktree exports GIT_DIR, which -C does not override
+        env={k: v for k, v in os.environ.items() if not k.startswith("GIT_")},
     ).stdout.strip()
 
 
