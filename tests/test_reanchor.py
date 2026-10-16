@@ -53,8 +53,8 @@ def test_retarget_both_ends(vsdx_copy):
     # old records replaced, not duplicated
     assert len(records) == 2
     # triggers reference the new shapes
-    assert f"Sheet{c.ID}!" in connector.cells["BegTrigger"].formula
-    assert f"Sheet{d.ID}!" in connector.cells["EndTrigger"].formula
+    assert f"Sheet.{c.ID}!" in connector.cells["BegTrigger"].formula
+    assert f"Sheet.{d.ID}!" in connector.cells["EndTrigger"].formula
     vis.save(path)
     assert zipfile.ZipFile(path).testzip() is None
 
@@ -99,7 +99,7 @@ def test_moving_one_end_of_a_point_glued_connector_keeps_point_glue(vsdx_copy):
     connector.retarget(target=other)
 
     assert _records(page, connector) == {"BeginX": ("90", "Connections.X2"), "EndX": ("102", "Connections.X3")}
-    assert connector.cells["EndX"].formula == "PAR(PNT(Sheet102!Connections.X3,Sheet102!Connections.Y3))"
+    assert connector.cells["EndX"].formula == "PAR(PNT(Sheet.102!Connections.X3,Sheet.102!Connections.Y3))"
     assert connector.cells["EndTrigger"].formula == "_XFTRIGGER(Sheet102!EventXFMod)"
 
 

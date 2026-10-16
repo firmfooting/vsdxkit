@@ -37,8 +37,8 @@ def test_connect_shapes_dynamic_glue_formulas(basedir):
     beg_trigger = connector.cells.get("BegTrigger")
     end_trigger = connector.cells.get("EndTrigger")
     assert beg_trigger is not None and end_trigger is not None
-    assert beg_trigger.formula == f"_XFTRIGGER(Sheet{a.ID}!EventXFMod)"
-    assert end_trigger.formula == f"_XFTRIGGER(Sheet{b.ID}!EventXFMod)"
+    assert beg_trigger.formula == f"_XFTRIGGER(Sheet.{a.ID}!EventXFMod)"
+    assert end_trigger.formula == f"_XFTRIGGER(Sheet.{b.ID}!EventXFMod)"
 
     walkglue_begin = "_WALKGLUE(BegTrigger,EndTrigger,WalkPreference)"
     walkglue_end = "_WALKGLUE(EndTrigger,BegTrigger,WalkPreference)"
@@ -101,8 +101,8 @@ def test_connect_shapes_combines_point_glue_and_curved_routing(basedir):
 
     connector = page.connect(source, target, glue=Glue.POINT, routing=Routing.CURVED, to_point=2)
 
-    source_point = f"PAR(PNT(Sheet{source.ID}!Connections.X1,Sheet{source.ID}!Connections.Y1))"
-    target_point = f"PAR(PNT(Sheet{target.ID}!Connections.X3,Sheet{target.ID}!Connections.Y3))"
+    source_point = f"PAR(PNT(Sheet.{source.ID}!Connections.X1,Sheet.{source.ID}!Connections.Y1))"
+    target_point = f"PAR(PNT(Sheet.{target.ID}!Connections.X3,Sheet.{target.ID}!Connections.Y3))"
     assert connector.cells["BeginX"].formula == source_point
     assert connector.cells["EndX"].formula == target_point
     assert connector.cells["ShapeRouteStyle"].value == "17"
@@ -145,8 +145,8 @@ def test_connector_round_trip_and_zip_validity(basedir):
         page = vis2.pages[0]
         reopened = page.shapes.by_id(str(conn_id))
         assert reopened is not None
-        assert reopened.cells["BegTrigger"].formula == f"_XFTRIGGER(Sheet{a.ID}!EventXFMod)"
-        assert reopened.cells["EndTrigger"].formula == f"_XFTRIGGER(Sheet{b.ID}!EventXFMod)"
+        assert reopened.cells["BegTrigger"].formula == f"_XFTRIGGER(Sheet.{a.ID}!EventXFMod)"
+        assert reopened.cells["EndTrigger"].formula == f"_XFTRIGGER(Sheet.{b.ID}!EventXFMod)"
         assert reopened.cells["ShapeRouteStyle"].value == "17"
 
 
@@ -254,11 +254,11 @@ def _as_visio_records(cell) -> str | None:
 def _by_role(formula: str, roles: dict[str, str]) -> str:
     """The formula with each sheet reference named by the role of the shape it names.
 
-    The engine writes `Sheet90!` where Visio writes `Sheet.1!`. The missing dot
-    is #400, so this reads both. A reference to a shape outside
+    Both the engine and Visio write `Sheet.N!`; an undotted `SheetN!` is left
+    as it is, so it shows as a difference. A reference to a shape outside
     `roles` keeps its id, so a stray one still shows.
     """
-    return re.sub(r"Sheet\.?(\d+)!", lambda match: f"{roles.get(match.group(1), 'Sheet.' + match.group(1))}!", formula)
+    return re.sub(r"Sheet\.(\d+)!", lambda match: f"{roles.get(match.group(1), 'Sheet.' + match.group(1))}!", formula)
 
 
 @pytest.mark.parametrize(
@@ -324,7 +324,7 @@ def test_point_glue_names_only_the_shapes_it_glues():
         match.group(1)
         for cell in connector.cells.values()
         if cell.formula
-        for match in re.finditer(r"Sheet\.?(\d+)!", cell.formula)
+        for match in re.finditer(r"Sheet\.(\d+)!", cell.formula)
     }
     assert named == {source.ID, target.ID}
     assert "BeginTrigger" not in connector.cells

@@ -3,8 +3,8 @@
 `Document.update_ids`, now `shape_tree.remap_sheet_references`, used to rewrite
 a formula only when it began with the literal `Sheet.`, which covers ordinary
 inherited cells but not the forms the connector engine writes:
-`_XFTRIGGER(Sheet5!EventXFMod)` and
-`PAR(PNT(Sheet5!Connections.X1,Sheet5!Connections.Y1))` carry no dot and are
+`_XFTRIGGER(Sheet.5!EventXFMod)` and
+`PAR(PNT(Sheet.5!Connections.X1,Sheet.5!Connections.Y1))` are
 never at the start. Copied connectors therefore kept pointing at the source
 shapes and Visio silently dropped the glue.
 """
@@ -33,7 +33,7 @@ POINT_GLUE_FIXTURE = os.path.join(FIXTURES, "fixtures", "com_reference", "s05_sw
 
 
 def test_remap_sheet_references_remaps_shape_glue_trigger_formulas(vsdx_copy):
-    """`_XFTRIGGER(SheetN!EventXFMod)` carries no dot and is not at the start."""
+    """`_XFTRIGGER(Sheet.N!EventXFMod)` has the reference inside a call, not at the start."""
     vis = Document.open(vsdx_copy("test1.vsdx"))
     page = vis.pages[0]
     start = page.create_shape(ShapeKind.PROCESS, x=2.0, y=2.0, text="A")
@@ -43,8 +43,8 @@ def test_remap_sheet_references_remaps_shape_glue_trigger_formulas(vsdx_copy):
     shapes_element = page.xml.getroot().find(f"{namespace}Shapes")
     remap_sheet_references(shapes_element, {start.ID: 900, end.ID: 901})
 
-    assert _formula(connector, "BegTrigger") == "_XFTRIGGER(Sheet900!EventXFMod)"
-    assert _formula(connector, "EndTrigger") == "_XFTRIGGER(Sheet901!EventXFMod)"
+    assert _formula(connector, "BegTrigger") == "_XFTRIGGER(Sheet.900!EventXFMod)"
+    assert _formula(connector, "EndTrigger") == "_XFTRIGGER(Sheet.901!EventXFMod)"
 
 
 def test_remap_sheet_references_remaps_point_glue_formulas():
@@ -58,9 +58,9 @@ def test_remap_sheet_references_remaps_point_glue_formulas():
     shapes_element = page.xml.getroot().find(f"{namespace}Shapes")
     remap_sheet_references(shapes_element, {start.ID: 900, end.ID: 901})
 
-    assert _formula(connector, "BeginX") == "PAR(PNT(Sheet900!Connections.X1,Sheet900!Connections.Y1))"
-    assert _formula(connector, "EndY") == "PAR(PNT(Sheet901!Connections.X1,Sheet901!Connections.Y1))"
-    assert _formula(connector, "BegTrigger") == "_XFTRIGGER(Sheet900!EventXFMod)"
+    assert _formula(connector, "BeginX") == "PAR(PNT(Sheet.900!Connections.X1,Sheet.900!Connections.Y1))"
+    assert _formula(connector, "EndY") == "PAR(PNT(Sheet.901!Connections.X1,Sheet.901!Connections.Y1))"
+    assert _formula(connector, "BegTrigger") == "_XFTRIGGER(Sheet.900!EventXFMod)"
 
 
 def test_remap_sheet_references_leaves_references_outside_the_copy_untouched(vsdx_copy):
@@ -74,8 +74,8 @@ def test_remap_sheet_references_leaves_references_outside_the_copy_untouched(vsd
     shapes_element = page.xml.getroot().find(f"{namespace}Shapes")
     remap_sheet_references(shapes_element, {start.ID: 900})
 
-    assert "Sheet900!" in _formula(connector, "BegTrigger")
-    assert f"Sheet{end.ID}!" in _formula(connector, "EndTrigger")
+    assert "Sheet.900!" in _formula(connector, "BegTrigger")
+    assert f"Sheet.{end.ID}!" in _formula(connector, "EndTrigger")
 
 
 def test_remap_sheet_references_matches_whole_ids_only(vsdx_copy):
@@ -163,3 +163,15 @@ def test_copy_page_keeps_connector_glue(vsdx_copy):
     assert {name: _formula(copied_connector, name) for name in expected} == expected
     connects = [c for c in page_records(copied) if c.from_id == connector.ID]
     assert len(connects) == 2
+
+
+def test_remap_sheet_references_still_remaps_the_undotted_form_earlier_versions_wrote():
+    """Fails if a file saved before glue wrote `Sheet.N!` loses its glue on copy."""
+    shapes = ET.fromstring(
+        f'<Shapes xmlns="{namespace[1:-1]}">'
+        f'<Shape ID="9"><Cell N="BegTrigger" F="_XFTRIGGER(Sheet5!EventXFMod)"/></Shape>'
+        f"</Shapes>"
+    )
+    remap_sheet_references(shapes, {"5": 700})
+    cell = shapes.find(f"{namespace}Shape/{namespace}Cell")
+    assert cell.attrib["F"] == "_XFTRIGGER(Sheet700!EventXFMod)"

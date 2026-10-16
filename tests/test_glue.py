@@ -63,8 +63,8 @@ def test_options_name_the_glue_each_end_gets():
 def test_dynamic_glue_at_both_ends_is_what_visio_writes():
     cells = glue_cells(EndGlue("5", None), EndGlue("6", None))
     assert cells == (
-        CellWrite("BegTrigger", formula="_XFTRIGGER(Sheet5!EventXFMod)"),
-        CellWrite("EndTrigger", formula="_XFTRIGGER(Sheet6!EventXFMod)"),
+        CellWrite("BegTrigger", formula="_XFTRIGGER(Sheet.5!EventXFMod)"),
+        CellWrite("EndTrigger", formula="_XFTRIGGER(Sheet.6!EventXFMod)"),
         CellWrite("BeginX", formula=WALKGLUE_BEGIN),
         CellWrite("BeginY", formula=WALKGLUE_BEGIN),
         CellWrite("EndX", formula=WALKGLUE_END),
@@ -77,11 +77,11 @@ def test_dynamic_glue_at_both_ends_is_what_visio_writes():
 
 def test_point_glue_at_both_ends_writes_the_begin_trigger_to_begtrigger():
     cells = glue_cells(EndGlue("5", 0), EndGlue("6", 2))
-    begin_point = "PAR(PNT(Sheet5!Connections.X1,Sheet5!Connections.Y1))"
-    end_point = "PAR(PNT(Sheet6!Connections.X3,Sheet6!Connections.Y3))"
+    begin_point = "PAR(PNT(Sheet.5!Connections.X1,Sheet.5!Connections.Y1))"
+    end_point = "PAR(PNT(Sheet.6!Connections.X3,Sheet.6!Connections.Y3))"
     assert cells == (
-        CellWrite("BegTrigger", formula="_XFTRIGGER(Sheet5!EventXFMod)"),
-        CellWrite("EndTrigger", formula="_XFTRIGGER(Sheet6!EventXFMod)"),
+        CellWrite("BegTrigger", formula="_XFTRIGGER(Sheet.5!EventXFMod)"),
+        CellWrite("EndTrigger", formula="_XFTRIGGER(Sheet.6!EventXFMod)"),
         CellWrite("BeginX", formula=begin_point),
         CellWrite("BeginY", formula=begin_point),
         CellWrite("EndX", formula=end_point),
@@ -94,7 +94,7 @@ def test_point_glue_at_both_ends_writes_the_begin_trigger_to_begtrigger():
 
 def test_mixed_glue_writes_each_end_its_own_way():
     cells = {cell.name: cell for cell in glue_cells(EndGlue("5", 0), EndGlue("6", None))}
-    assert cells["BeginX"].formula == "PAR(PNT(Sheet5!Connections.X1,Sheet5!Connections.Y1))"
+    assert cells["BeginX"].formula == "PAR(PNT(Sheet.5!Connections.X1,Sheet.5!Connections.Y1))"
     assert cells["EndX"].formula == WALKGLUE_END
     assert cells["GlueType"].value == "2"
 
@@ -105,7 +105,7 @@ def test_a_floating_end_stays_where_it_is():
     assert cells[0] == CellInherit("BegTrigger")
     assert CellFreeze("BeginX") in cells
     assert CellFreeze("BeginY") in cells
-    assert CellWrite("EndTrigger", formula="_XFTRIGGER(Sheet6!EventXFMod)") in cells
+    assert CellWrite("EndTrigger", formula="_XFTRIGGER(Sheet.6!EventXFMod)") in cells
 
 
 def test_dynamic_routing_starts_from_visio_defaults():
