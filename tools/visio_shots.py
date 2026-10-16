@@ -48,6 +48,7 @@ import html
 import io
 import itertools
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -507,15 +508,21 @@ def _build(builder: Path, library_src: Path, out: Path) -> dict[str, str]:
     return report["errors"]
 
 
+# a hook run from a worktree exports GIT_DIR, which -C does not override
+_GIT_ENV = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+
+
 def _git(repo: Path, *args: str) -> str:
-    return subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, text=True).stdout.strip()
+    return subprocess.run(
+        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True, env=_GIT_ENV
+    ).stdout.strip()
 
 
 def _export_library(repo: Path, ref: str, dest: Path) -> tuple[Path, str]:
     """`ref`'s `src/` written under `dest` by `git archive`, leaving the checkout alone; that folder and `ref`'s commit."""
     commit = _git(repo, "rev-parse", "--verify", f"{ref}^{{commit}}")
     archive = subprocess.run(
-        ["git", "-C", str(repo), "archive", "--format=tar", commit, "src"], check=True, capture_output=True
+        ["git", "-C", str(repo), "archive", "--format=tar", commit, "src"], check=True, capture_output=True, env=_GIT_ENV
     )
     dest.mkdir(parents=True, exist_ok=True)
     with tarfile.open(fileobj=io.BytesIO(archive.stdout)) as tar:
