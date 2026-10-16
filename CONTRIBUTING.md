@@ -239,6 +239,35 @@ The connector and swimlane ground truth the engine was built against lives in
 [that directory's README](tests/fixtures/com_reference/README.md) before
 changing a fixture or adding a scenario.
 
+## Fast test feedback
+
+Run the affected pytest suites from the repository root:
+
+```bash
+uv run --no-project .github/changed_tests.py
+uv run --no-project .github/changed_tests.py --base origin/main
+uv run --no-project .github/changed_tests.py --base origin/main --dry-run
+uv run --no-project .github/changed_tests.py --full
+```
+
+The first command includes staged, unstaged and untracked files. `--base`
+also includes committed changes since the branch split from that ref. No
+changes selects no tests, except configured repository guards. `--dry-run`
+prints the selected commands and paths as JSON.
+
+Changed test modules run directly, with serial execution where pytest-xdist
+is installed. Source, fixture, template and shared helper changes run whole
+owning suites and their transitive local dependants. Deleted tests expand to
+whole suites; unknown paths and unavailable Git bases run every suite. The
+routes live in `.github/changed-tests.json`; update them when adding a package
+or a dependency between packages. The runner is vendored from
+`firmfooting/.github` and needs no extra dependencies or cache.
+
+This command provides fast local feedback. Test modules can be imported by
+other tests, and runtime dependencies can extend beyond declared package
+routes. Run the existing full pre-push and CI gates before merging. Use the
+existing full-suite commands for coverage and finding reachability checks.
+
 ## Releases
 
 Releases are cut by [release-please](https://github.com/googleapis/release-please),

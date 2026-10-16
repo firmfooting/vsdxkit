@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "runner_source": "firmfooting/.github:tools/changed_tests.py",
+  "runner_sha256": "c0f0d211c0b41a838a75aa2556520342f12434239724ab1c50b41185e668cac4",
+  "suites": [
+    {
+      "name": "vsdxkit",
+      "cwd": ".",
+      "paths": [
+        "src",
+        "tests"
+      ],
+      "tests": [
+        "tests"
+      ],
+      "command": [
+        "uv",
+        "run",
+        "--locked",
+        "pytest",
+        "-q"
+      ],
+      "serial_args": [],
+      "depends_on": []
+    }
+  ],
+  "runner_revision": "89e8080f3ad3d9e5101999e735dc93c66358fd9d"
+}
