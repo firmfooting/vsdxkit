@@ -31,14 +31,10 @@ class PackageLimits:
     or a JSON file passed as ``limits_path`` with the same keys.
 
     A count or size field below 1, or ``max_ratio`` below 1.0, raises
-    :class:`ValueError`. A value :func:`float` cannot parse at all, such as
-    ``None`` or a list, raises :class:`TypeError` instead; a non-numeric
-    string raises :class:`ValueError` from that conversion. A numeric
-    string such as ``"5"`` passes the finiteness check but then fails the
-    ``< 1`` comparison against the *unconverted* string, so it raises
-    :class:`TypeError`, not :class:`ValueError`. A ``bool`` is not rejected
-    either: being an ``int`` subclass, ``True`` is accepted and behaves as
-    ``1`` (or ``1.0``), while ``False`` is rejected as below 1.
+    :class:`ValueError`, as does one that is not finite. A field that is not
+    a number raises :class:`TypeError`: ``None``, a list, a string (a numeric
+    one such as ``"5"`` included) and a ``bool``, which is an ``int`` but
+    never a count or a size.
     """
 
     max_members: int = 512
@@ -56,16 +52,16 @@ class PackageLimits:
 
     def __post_init__(self) -> None:
         """Refuse limits that could not be applied; see the class docstring for what is raised."""
-        if not math.isfinite(float(self.max_ratio)):
-            raise ValueError("max_ratio must be a finite number")
-        for field_name in ("max_members", "max_member_size", "max_total_uncompressed"):
+        for field_name in ("max_members", "max_member_size", "max_total_uncompressed", "max_ratio"):
             value = getattr(self, field_name)
-            if not math.isfinite(float(value)):
+            if isinstance(value, (bool, str)):
+                raise TypeError(f"{field_name} must be a number, not {value!r}")
+            number = float(value)
+            if not math.isfinite(number):
                 raise ValueError(f"{field_name} must be a finite number")
-            if value < 1:
-                raise ValueError(f"{field_name} must be at least 1")
-        if self.max_ratio < 1.0:
-            raise ValueError("max_ratio must be at least 1.0")
+            minimum = "1.0" if field_name == "max_ratio" else "1"
+            if number < 1:
+                raise ValueError(f"{field_name} must be at least {minimum}")
 
     @classmethod
     def from_json_file(cls, path: str) -> PackageLimits:
