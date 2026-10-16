@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import copy
 import html
+import itertools
 import math
 import numbers
 import xml.etree.ElementTree as ET
@@ -375,8 +376,8 @@ def _is_formatting_run(element: Element) -> bool:
     return element.tag in _TEXT_RUN_TAGS and len(element) == 0 and not element.text
 
 
-def _text_runs_of(text_element: Element | None) -> tuple[list[Element], str, list[Element], str]:
-    """Split a `<Text>` element into leading runs, content, trailing runs and newlines.
+def _text_runs_of(text_element: Element | None) -> tuple[list[Element], str, list[Element], str, list[tuple[int, Element]]]:
+    """Split a `<Text>` element into leading runs, content, trailing runs, newlines and middle runs.
 
     The leading and trailing runs are the element's own children, not copies, so
     a caller may re-append them after clearing it. Visio ends a Text element
@@ -386,12 +387,12 @@ def _text_runs_of(text_element: Element | None) -> tuple[list[Element], str, lis
     Module level rather than a Shape method because it reads a bare `Text`
     element and nothing of the Shape around it.
 
-    A run between two pieces of content is folded into the content string and
-    cannot be recovered from it, which corrupts the text on write. See #317;
-    fixing it means modelling the middle children as elements too.
+    A run between two pieces of content stays out of the content string: it is
+    returned as an ``(offset, run)`` pair, the offset being a position in the
+    content, and `_write_text` puts it back (#317).
     """
     if not isinstance(text_element, Element):
-        return [], "", [], ""
+        return [], "", [], "", []
 
     children = list(text_element)
     start = 0
@@ -414,7 +415,14 @@ def _text_runs_of(text_element: Element | None) -> tuple[list[Element], str, lis
         end -= 1
 
     leading = (text_element.text if start == 0 else children[start - 1].tail) or ""
-    content = leading + "".join(html.unescape(ET.tostring(child, encoding="unicode")) for child in children[start:end])
+    content = leading
+    middle: list[tuple[int, Element]] = []
+    for child in children[start:end]:
+        if _is_formatting_run(child):
+            middle.append((len(content), child))
+            content += child.tail or ""
+        else:
+            content += html.unescape(ET.tostring(child, encoding="unicode"))
     suffix = children[end:]
     trailing = ""
     if not suffix:
@@ -422,7 +430,7 @@ def _text_runs_of(text_element: Element | None) -> tuple[list[Element], str, lis
         # terminator rather than text; a trailing run keeps its own tail
         stripped = content.rstrip("\n")
         content, trailing = stripped, content[len(stripped) :]
-    return children[:start], content, suffix, trailing
+    return children[:start], content, suffix, trailing, middle
 
 
 def _substitute(text: str, context: dict[str, object]) -> str:
@@ -432,6 +440,23 @@ def _substitute(text: str, context: dict[str, object]) -> str:
     return text
 
 
+def _moved_offsets(old: str, new: str, middle: list[tuple[int, Element]]) -> list[int]:
+    """Where each middle run sits in `new`: kept relative to the text that did not change around the edit.
+
+    shortcut: a run inside the changed span collapses to its start, and a
+    pure reorder moves runs with the nearest unchanged edge; use a real diff
+    if runs inside rewritten text must follow it.
+    """
+    head = sum(1 for _ in itertools.takewhile(lambda pair: pair[0] == pair[1], zip(old, new, strict=False)))
+    tail = sum(
+        1 for _ in itertools.takewhile(lambda pair: pair[0] == pair[1], zip(old[head:][::-1], new[head:][::-1], strict=False))
+    )
+    return [
+        offset if offset <= head else len(new) - (len(old) - offset) if offset >= len(old) - tail else head
+        for offset, _ in middle
+    ]
+
+
 def _write_text(
     shape_xml: Element,
     value: str,
@@ -439,14 +464,16 @@ def _write_text(
     prefix: list[Element],
     suffix: list[Element],
     trailing: str,
+    middle: list[tuple[int, Element]],
+    old: str,
 ) -> None:
-    """Write `value` as a shape element's text, putting back the runs around it.
+    """Write `value` as a shape element's text, putting back the runs around and inside it.
 
     Every argument is required: this writes back a split the caller already
     holds, and deriving a missing one here would silently discard whichever the
-    caller did pass.
+    caller did pass. `old` is the content that split came from, which says
+    where the middle runs were.
     """
-    value += trailing
     tag = f"{namespace}Text"
     text_element = shape_xml.find(tag)
     if not isinstance(text_element, Element):  # create Text element if not found
@@ -458,10 +485,16 @@ def _write_text(
     for run in prefix:
         run.tail = None
         text_element.append(run)
+    offsets = [0, *(min(offset, len(value)) for offset in _moved_offsets(old, value, middle)), len(value)]
+    chunks = [value[start:stop] for start, stop in itertools.pairwise(offsets)]
+    chunks[-1] += trailing
     if prefix:
-        prefix[-1].tail = value
+        prefix[-1].tail = chunks[0]
     else:
-        text_element.text = value
+        text_element.text = chunks[0]
+    for (_, run), chunk in zip(middle, chunks[1:], strict=True):
+        run.tail = chunk or None
+        text_element.append(run)
     for run in suffix:
         text_element.append(run)
 
@@ -2164,7 +2197,7 @@ class Shape:
                 if v is not None:
                     c._set_value(v, keep_formula=True)
 
-    def _text_runs(self) -> tuple[list[Element], str, list[Element], str]:
+    def _text_runs(self) -> tuple[list[Element], str, list[Element], str, list[tuple[int, Element]]]:
         """This shape's text, split by `_text_runs_of`, with master inheritance applied.
 
         Inheritance is the part only a Shape can resolve: a shape with no Text
@@ -2175,7 +2208,7 @@ class Shape:
         if not isinstance(text_element, Element) and self.master_page_ID:
             master = self.master_shape
             if master is not None and master.text:
-                return [], master.text, [], ""
+                return [], master.text, [], "", []
         return _text_runs_of(text_element)
 
     @property
@@ -2184,9 +2217,9 @@ class Shape:
 
         A shape with no ``Text`` element of its own shows its master's text,
         and ``""`` where the master has none either. Setting it takes a string, writes it as
-        the shape's own text and puts back the runs at its start and end. A
-        run between two pieces of text is read as its XML markup, and written
-        back as literal text (#317).
+        the shape's own text and puts back the runs at its start and end, and
+        those in the middle at the same place relative to the text around the
+        edit.
 
         Reading or setting it raises :class:`~vsdxkit.errors.InvalidOperationError` once the
         shape is detached.
@@ -2197,8 +2230,8 @@ class Shape:
     @text.setter
     def text(self, value: str) -> None:
         self._require_attached("writing a shape's text")
-        prefix, _, suffix, trailing = self._text_runs()
-        _write_text(self.xml, value, prefix=prefix, suffix=suffix, trailing=trailing)
+        prefix, old, suffix, trailing, middle = self._text_runs()
+        _write_text(self.xml, value, prefix=prefix, suffix=suffix, trailing=trailing, middle=middle, old=old)
 
     @property
     def children(self) -> ShapeCollection:
@@ -2243,10 +2276,9 @@ class Shape:
     def _rewrite_texts(self, rewrite: Callable[[str], str]) -> None:
         """Pass the text of this shape and every shape inside it through `rewrite`, writing back only what changed.
 
-        Writing back text that did not change is not free. A run between two
-        pieces of content does not survive the round trip (#317), and a shape
-        showing its master's text would gain a copy of it as its own. So a shape
-        with nothing to change must not be altered by being visited.
+        Writing back text that did not change is not free: a shape showing its
+        master's text would gain a copy of it as its own. So a shape with
+        nothing to change must not be altered by being visited.
         """
         for shape in (self, *self._descendants()):
             text = shape.text
