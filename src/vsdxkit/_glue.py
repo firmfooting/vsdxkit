@@ -9,7 +9,7 @@ what Visio writes without a document to hand.
 The formulas are Visio's own, from `tests/fixtures/com_reference`:
 `_WALKGLUE`/`_XFTRIGGER` with `GlueType=2` for dynamic glue (s01, s02),
 `PAR(PNT(...))` for point glue (s07) and the `ShapeRouteStyle` codes (s03).
-The sheet references are written `SheetN!`; Visio writes `Sheet.N!` (#400).
+The sheet references are `Sheet.N!`, as Visio writes them and documents them (Microsoft Learn, "About Cell References": `Sheet.ID!CellName`).
 """
 
 from __future__ import annotations
@@ -97,14 +97,14 @@ def _coordinate_formula(end: EndGlue, *, begin: bool) -> str:
     if end.point is None:
         return _WALKGLUE_BEGIN if begin else _WALKGLUE_END
     row = end.point + 1
-    return f"PAR(PNT(Sheet{end.shape_id}!Connections.X{row},Sheet{end.shape_id}!Connections.Y{row}))"
+    return f"PAR(PNT(Sheet.{end.shape_id}!Connections.X{row},Sheet.{end.shape_id}!Connections.Y{row}))"
 
 
 def _trigger(glued: EndGlue | None, name: str) -> CellChange:
     """The change to `name` (``BegTrigger`` or ``EndTrigger``): inherit it floating, or fire on the glued shape's changes."""
     if glued is None:
         return CellInherit(name)
-    return CellWrite(name, formula=f"_XFTRIGGER(Sheet{glued.shape_id}!EventXFMod)")
+    return CellWrite(name, formula=f"_XFTRIGGER(Sheet.{glued.shape_id}!EventXFMod)")
 
 
 def _coordinate(glued: EndGlue | None, name: str, *, begin: bool) -> CellChange:
