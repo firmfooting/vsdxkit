@@ -1232,6 +1232,20 @@ class Shape:
         if not cross_document and dst_page is not self._page:
             dst_page._carry_relationships(new_shape_xml, self._page)
 
+        if dst_page is self._page:
+            # the copy's glue formulas bind it to the original's endpoints
+            # whether or not a record says so, so the package has to (#313)
+            ids = {
+                old.attrib["ID"]: new.attrib["ID"]
+                for old, new in zip(self.xml.iter(f"{namespace}Shape"), new_shape_xml.iter(f"{namespace}Shape"), strict=True)
+            }
+            for record in dst_page._connects():
+                if record.from_id in ids:
+                    element = ET.fromstring(ET.tostring(record.xml))
+                    element.attrib["FromSheet"] = ids[record.from_id]
+                    element.attrib["ToSheet"] = ids.get(record.to_id, record.to_id)
+                    dst_page._add_connect(element)
+
         # _copy_shape_xml put it at the page's top level, whatever the source sat in
         return _wrap(new_shape_xml, dst_page, dst_page)
 
