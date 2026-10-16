@@ -390,11 +390,7 @@ class Page:
     @property
     def is_master_page(self) -> bool:
         """Whether this is one of the document's master pages rather than a drawing page."""
-        if self._document._masters_xml is not None and self._master_unique_id:
-            master_match = f'{namespace}Master[@UniqueID="{self._master_unique_id}"]'
-            master_element = self._document._masters_xml.find(master_match)
-            return master_element is not None
-        return False
+        return self._is_master
 
     @property
     def _pagesheet_xml(self) -> ET.Element:

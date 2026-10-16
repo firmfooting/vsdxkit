@@ -14,3 +14,13 @@ def test_a_master_sharing_a_drawing_pages_id_reads_its_own_page_sheet(vsdx_copy)
     router.width = 1.5
     assert router.width == 1.5
     assert page.width != 1.5
+
+
+def test_a_master_without_a_unique_id_is_a_master_page(vsdx_copy):
+    """test5_master.vsdx's master has no UniqueID; the lookup by it cannot say it is a master."""
+    vis = Document.open(vsdx_copy("test5_master.vsdx"))
+    master = vis.master_pages[0]
+    assert master._master_unique_id is None
+
+    assert master.is_master_page
+    assert not vis.pages[0].is_master_page
