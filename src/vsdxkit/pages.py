@@ -309,6 +309,8 @@ class Page:
         self._page_id = page_id
         self._rel_id = rel_id
         self._master_unique_id: str | None = None
+        self._is_master = False
+        """Whether the document built this page from masters.xml; ``UniqueID`` is optional there, so it cannot say."""
         self._rels_xml_filename: str | None = None
         self._rels_tree: PartTree | None = None
         self._document = vis
@@ -388,25 +390,23 @@ class Page:
     @property
     def is_master_page(self) -> bool:
         """Whether this is one of the document's master pages rather than a drawing page."""
-        if self._document._masters_xml is not None and self._master_unique_id:
-            master_match = f'{namespace}Master[@UniqueID="{self._master_unique_id}"]'
-            master_element = self._document._masters_xml.find(master_match)
-            return master_element is not None
-        return False
+        return self._is_master
 
     @property
     def _pagesheet_xml(self) -> ET.Element:
-        """The page's `PageSheet` element, found by the page's ID in pages.xml and then in masters.xml; `MissingPartError` in neither.
+        """The page's `PageSheet` element: a master page's own in masters.xml, a drawing page's in pages.xml; `MissingPartError` if absent.
 
-        pages.xml is asked first, so a master whose ID a drawing page also has
-        is given that drawing page's `PageSheet`.
+        The two ID spaces are separate, so a master and a drawing page may share an ID; which collection to ask follows from the kind of page.
         """
-        # get PageSheet element from _pages_xml based on _page_id
-        ps = _pages_root(self._document).find(f'{namespace}Page[@ID="{self._page_id}"]/{namespace}PageSheet')
-        if not isinstance(ps, ET.Element):
+        if self._is_master:
             masters_xml = self._document._masters_xml
-            if masters_xml is not None:
-                ps = masters_xml.find(f'{namespace}Master[@ID="{self._page_id}"]/{namespace}PageSheet')
+            ps = (
+                None
+                if masters_xml is None
+                else masters_xml.find(f'{namespace}Master[@ID="{self._page_id}"]/{namespace}PageSheet')
+            )
+        else:
+            ps = _pages_root(self._document).find(f'{namespace}Page[@ID="{self._page_id}"]/{namespace}PageSheet')
         return require_element(ps, f"PageSheet for page_id={self._page_id}")
 
     def _pagesheet_cell(self, name: str) -> ET.Element:
@@ -419,9 +419,7 @@ class Page:
 
         Setting it takes a positive number, or a string that reads as one;
         anything else raises :class:`ValueError`, and ``None`` raises
-        :class:`TypeError`. On a master page whose ID a drawing page also
-        has, this reads that drawing page's sheet instead of the master's
-        own.
+        :class:`TypeError`.
 
         :raises MissingPartError: if the page sheet has no ``PageWidth`` cell
         :raises MalformedPackageError: if the ``PageWidth`` value is not a number
@@ -437,8 +435,7 @@ class Page:
         """The page's height, in inches, from its page sheet's ``PageHeight`` cell; ``0.0`` for a cell with no value.
 
         Setting it takes what :attr:`width` takes, and refuses what it
-        refuses; a master page whose ID a drawing page shares reads that
-        drawing page's sheet here too.
+        refuses.
 
         :raises MissingPartError: if the page sheet has no ``PageHeight`` cell
         :raises MalformedPackageError: if the ``PageHeight`` value is not a number
