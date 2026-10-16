@@ -100,7 +100,7 @@ def test_moving_one_end_of_a_point_glued_connector_keeps_point_glue(vsdx_copy):
 
     assert _records(page, connector) == {"BeginX": ("90", "Connections.X2"), "EndX": ("102", "Connections.X3")}
     assert connector.cells["EndX"].formula == "PAR(PNT(Sheet.102!Connections.X3,Sheet.102!Connections.Y3))"
-    assert connector.cells["EndTrigger"].formula == "_XFTRIGGER(Sheet102!EventXFMod)"
+    assert connector.cells["EndTrigger"].formula == "_XFTRIGGER(Sheet.102!EventXFMod)"
 
 
 def test_a_retained_point_the_new_shape_lacks_is_refused(vsdx_copy):
@@ -207,7 +207,7 @@ def test_options_uncurve_a_curved_point_connector(vsdx_copy):
 
 
 def test_a_kept_floating_end_loses_its_old_glue(vsdx_copy):
-    """Codex on #401: a floating begin kept `PAR(PNT(Sheet90!...))`, so Visio would glue it back to 90."""
+    """Codex on #401: a floating begin kept `PAR(PNT(Sheet.90!...))`, so Visio would glue it back to 90."""
     vis = Document.open(vsdx_copy(S05))
     page = vis.pages[0]
     source, target, other = (page.shapes.by_id(i) for i in ("90", "97", "102"))
@@ -221,7 +221,7 @@ def test_a_kept_floating_end_loses_its_old_glue(vsdx_copy):
     assert connector.cells["BeginY"].formula is None
     assert _own_cell(connector, "BegTrigger") is None
     assert (connector.begin_x, connector.begin_y) == begin
-    assert not any("Sheet90!" in (cell.formula or "") for cell in connector.cells.values())
+    assert not any("Sheet.90!" in (cell.formula or "") for cell in connector.cells.values())
 
 
 def test_retarget_removes_the_begintrigger_earlier_releases_wrote(vsdx_copy):
