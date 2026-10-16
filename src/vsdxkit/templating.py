@@ -21,7 +21,7 @@ from jinja2.sandbox import SandboxedEnvironment
 
 from vsdxkit._logging_support import get_logger
 from vsdxkit._xmlio import adopt_prefixes
-from vsdxkit.errors import NotFoundError
+from vsdxkit.errors import InvalidOperationError, NotFoundError
 from vsdxkit.pages import Page, PageCollection
 from vsdxkit.shapes import Shape
 
@@ -93,7 +93,9 @@ def render_document(document: RenderTarget, context: Mapping[str, object]) -> No
 
     :param document: the document to render, usually a :class:`vsdxkit.document.Document`
     :param context: the values the templates can refer to
+    :raises InvalidOperationError: two kept pages would render to one name; nothing is changed
     """
+    _check_page_names_unique(document, context)
     # parse each shape in each page as Jinja2 template with context
     pages_to_remove: list[Page] = []
     for page in document.pages:  # type: Page
@@ -315,6 +317,27 @@ def _render_page_name(page: Page, context: Mapping[str, object]) -> None:
     otherwise lose its universal name to a render that changed nothing.
     """
     name = page.name
-    rendered = _template(_PAGE_SHOWIF.sub("", name)).render(context)
+    rendered = _rendered_page_name(page, context)
     if rendered != name:
         page.name = rendered
+
+
+def _rendered_page_name(page: Page, context: Mapping[str, object]) -> str:
+    """The name `page` would have after the render: its template without ``{% showif %}``, rendered."""
+    return _template(_PAGE_SHOWIF.sub("", page.name)).render(context)
+
+
+def _check_page_names_unique(document: RenderTarget, context: Mapping[str, object]) -> None:
+    """Raise before any change when two kept pages would render to one name.
+
+    Visio keeps page names unique and ``pages.by_name`` refuses a document
+    that breaks it. A page the render removes does not count.
+    """
+    seen: set[str] = set()
+    for page in document.pages:
+        if not _page_is_shown(page, context):
+            continue
+        name = _rendered_page_name(page, context)
+        if name in seen:
+            raise InvalidOperationError(f"two pages would be called {name!r}; page names are unique in a document")
+        seen.add(name)

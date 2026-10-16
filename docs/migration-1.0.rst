@@ -127,10 +127,9 @@ A page name holding ``{{ ... }}``
    ``{{ title }}`` is named ``Quarterly`` after
    ``document.render({"title": "Quarterly"})``. 0.8 left the name as it was.
    A ``showif`` anywhere in the name is taken out of it before it is
-   rendered, where 0.8 took one out only when it opened the name. Nothing
-   checks that the names rendered are unique: give each page a name the
-   others do not render to, because ``document.pages.by_name`` refuses a
-   name two pages share. A name meant to keep a literal ``{{``, ``{%`` or
+   rendered, where 0.8 took one out only when it opened the name. The
+   render raises ``InvalidOperationError``, before it changes anything, when
+   two kept pages would render to one name. A name meant to keep a literal ``{{``, ``{%`` or
    ``{#`` now needs escaping, as in shape text: ``{{ '{{' }}``. A broken
    template in a name raises ``jinja2.TemplateSyntaxError``: an
    unescaped ``{#`` raises it with "Missing end of comment tag".
