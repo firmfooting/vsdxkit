@@ -1322,22 +1322,24 @@ class Shape:
         """Find `master_shape` afresh, for the memo to hold.
 
         The master's first top-level shape, or, where this shape names a
-        `MasterShape`, the shape of that ID inside it. None without a master,
-        where the document has no master of that ID, or where no shape inside
-        has the ID `MasterShape` names. A master page with no shapes raises
-        IndexError.
+        `MasterShape`, the shape of that ID anywhere on the master page. None
+        without a master, where the document has no master of that ID, where
+        the master page has no shapes, or where no shape on it has the ID
+        `MasterShape` names.
         """
         if self.master_page_ID is None:
             return None  # no master set for this Shape
         master_page = self._page._master_by_id(self.master_page_ID)
         if not master_page:
             return None  # None if no master page set for this Shape
-        master_shape = master_page._children()[0]  # there's always a single master shape in a master page
-
-        if self.master_shape_ID is not None:
-            return master_shape.descendants.by_id(self.master_shape_ID)
-
-        return master_shape
+        top_level = master_page._children()
+        if self.master_shape_ID is None:
+            return top_level[0] if top_level else None
+        for shape in top_level:
+            found = shape if self.master_shape_ID == shape.ID else shape.descendants.by_id(self.master_shape_ID)
+            if found is not None:
+                return found
+        return None
 
     @property
     def master_page(self) -> PageView | None:
