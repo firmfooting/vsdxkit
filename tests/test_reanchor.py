@@ -336,3 +336,22 @@ def test_a_connector_visio_glued_to_points_keeps_them(vsdx_copy):
     connector.retarget(target=start)
 
     assert _records(page, connector) == {"BeginX": ("54", "Connections.X3"), "EndX": ("52", "Connections.X3")}
+
+
+def test_freeing_an_end_drops_the_glue_formula_a_coordinate_inherits(vsdx_copy):
+    """Fails if a coordinate the connector inherits keeps the master's glue formula after its end is freed."""
+    vis = Document.open(vsdx_copy(BASE))
+    page = vis.pages[0]
+    connector = page.connect(page.shapes.by_text("Shape A"), page.shapes.by_text("Shape B"))
+    master = connector.master_shape
+    master.set_cell_formula("BeginY", "_WALKGLUE(BegTrigger,EndTrigger,WalkPreference)")
+    own = connector._cell("BeginY")
+    connector.xml.remove(own.xml)
+    assert connector._cell("BeginY") is None
+
+    connector.begin_x = 3.0
+
+    begin_y = connector._cell("BeginY")
+    assert begin_y is not None
+    assert begin_y.formula is None
+    assert begin_y.value == master.cell_value("BeginY")

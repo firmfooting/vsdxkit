@@ -145,6 +145,10 @@ class _ConnectorShape(_EndShape, Protocol):
         """Set or create the named cell, and return it; the engine passes `keep_formula`, so a half of the cell it does not name stays as it is."""
         ...
 
+    def cell_value(self, name: str) -> str | None:
+        """The value of cell `name`, the master's where the connector has none of its own, for the engine to freeze an inherited cell."""
+        ...
+
     def _cell(self, name: str) -> _CellXml | None:
         """This connector's own cell `name`, or ``None``, for the engine to drop a formula or remove a cell in place."""
         ...
@@ -383,6 +387,10 @@ def _change_cell(connector: _ConnectorShape, change: CellChange) -> None:
     connector._require_attached(f"writing shape cell {change.name!r}")
     cell = connector._cell(change.name)
     if cell is None:
+        # a coordinate the shape inherits keeps the master's glue formula unless it gets a cell of its own
+        value = connector.cell_value(change.name) if isinstance(change, CellFreeze) else None
+        if value is not None:
+            connector._write_cell(change.name, v=value, f=None, keep_formula=False)
         return
     if isinstance(change, CellFreeze):
         cell.xml.attrib.pop("F", None)
