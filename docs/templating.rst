@@ -54,9 +54,9 @@ A page's name is a template too. A page named ``{{ quarter }} report`` is
 named ``Q3 report`` after ``document.render({"quarter": "Q3"})``. A
 ``{% showif expression %}`` anywhere in the name decides whether the page is
 kept, as it decides for a shape, and comes out of the name before the name is
-rendered. The render does not check that the names it gives are unique, and
-``document.pages.by_name`` refuses a name two pages share, so give each page a
-name no other page renders to. A name meant to keep a literal ``{{``, ``{%``
+rendered. Page names are unique, so the render raises
+:class:`~vsdxkit.errors.InvalidOperationError`, before it changes anything,
+when two kept pages would render to one name. A name meant to keep a literal ``{{``, ``{%``
 or ``{#`` needs escaping, as in shape text: ``{{ '{{' }}``. An unescaped
 ``{#`` raises ``jinja2.TemplateSyntaxError``, "Missing end of comment tag".
 

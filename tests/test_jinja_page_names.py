@@ -12,7 +12,7 @@ import pytest
 from jinja2.exceptions import TemplateSyntaxError
 
 from vsdxkit.document import Document
-from vsdxkit.errors import PackageError
+from vsdxkit.errors import InvalidOperationError
 
 
 def _render_page_and_shape(vsdx_copy, value: object) -> tuple[bool, bool]:
@@ -137,23 +137,32 @@ def test_a_page_name_without_a_template_is_not_rewritten(vsdx_copy):
     assert (element.attrib["Name"], element.attrib["NameU"]) == ("Local", "Universal")
 
 
-def test_two_page_names_that_render_alike_leave_two_pages_of_one_name(vsdx_copy):
-    """Pins what the render does when the context makes two page names equal: it sets both.
+def test_two_page_names_that_render_alike_are_refused_before_anything_changes(vsdx_copy):
+    """Fails if render writes a document in which two pages share a name.
 
-    ``Page.name`` does not refuse a name another page has, and the render
-    sets names through it. ``pages.by_name`` then refuses the name, because
-    Visio keeps page names unique. A context has to give each page a name
-    of its own.
+    Visio keeps page names unique and ``pages.by_name`` refuses a repeat, so
+    the render raises before it changes any page or shape.
     """
     vis = Document.open(vsdx_copy("test1.vsdx"))
     vis.pages[1].name = "{{ first }}"
-    vis.pages[2].name = "{{ second }}"
+    vis.pages[2].name = "{{ second }}{% showif flag %}"
+    names = [page.name for page in vis.pages]
 
-    vis.render({"first": "Same", "second": "Same"})
+    with pytest.raises(InvalidOperationError, match="two pages would be called 'Same'"):
+        vis.render({"first": "Same", "second": "Same", "flag": True})
 
-    assert [page.name for page in vis.pages] == ["Page-1", "Same", "Same"]
-    with pytest.raises(PackageError, match="the document has 2 pages called 'Same'"):
-        vis.pages.by_name("Same")
+    assert [page.name for page in vis.pages] == names
+
+
+def test_a_page_the_render_removes_does_not_count_toward_a_repeated_name(vsdx_copy):
+    """Fails if a page a ``showif`` removes still blocks the name it would have had."""
+    vis = Document.open(vsdx_copy("test1.vsdx"))
+    vis.pages[1].name = "{{ first }}"
+    vis.pages[2].name = "{{ second }}{% showif flag %}"
+
+    vis.render({"first": "Same", "second": "Same", "flag": False})
+
+    assert [page.name for page in vis.pages] == ["Page-1", "Same"]
 
 
 def test_a_broken_template_in_a_page_name_fails_as_broken_shape_text_does(vsdx_copy):
