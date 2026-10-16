@@ -12,8 +12,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from vsdxkit.errors import InvalidOperationError
-
 
 class Glue(Enum):
     """How a connector's ends attach to the shapes they name."""
@@ -51,9 +49,9 @@ class ConnectorOptions:
 
     :raises TypeError: for a ``glue`` that is not a :class:`Glue`, or a
         ``routing`` that is not a :class:`Routing`
-    :raises vsdxkit.errors.InvalidOperationError: for a ``from_point`` or
-        ``to_point`` that is negative or not an ``int`` (a ``bool`` does not
-        count as one)
+    :raises TypeError: for a ``from_point`` or ``to_point`` that is not an
+        ``int`` (a ``bool`` does not count as one)
+    :raises ValueError: for a ``from_point`` or ``to_point`` that is negative
     """
 
     glue: Glue = Glue.DYNAMIC
@@ -73,8 +71,10 @@ class ConnectorOptions:
             members = ", ".join(f"Routing.{member.name}" for member in Routing)
             raise TypeError(f"routing must be one of {members}, not {self.routing!r}")
         for point in (self.from_point, self.to_point):
-            if type(point) is not int or point < 0:
-                raise InvalidOperationError(f"a connection point is a 0-based row index, not {point!r}")
+            if type(point) is not int:
+                raise TypeError(f"a connection point is a 0-based row index, not {point!r}")
+            if point < 0:
+                raise ValueError(f"a connection point is a 0-based row index, not {point!r}")
 
     def end_point(self, *, begin: bool) -> int | None:
         """The connection point one end glues to, or ``None`` for dynamic glue."""

@@ -18,17 +18,24 @@ from vsdxkit._glue import (
     record_element,
     routing_cells,
 )
-from vsdxkit.errors import InvalidOperationError
+from vsdxkit.errors import VsdxError
 from vsdxkit.glue import ConnectorOptions, Glue, Routing
 
 WALKGLUE_BEGIN = "_WALKGLUE(BegTrigger,EndTrigger,WalkPreference)"
 WALKGLUE_END = "_WALKGLUE(EndTrigger,BegTrigger,WalkPreference)"
 
 
-@pytest.mark.parametrize("point", [-1, 1.0, "0", True])
-def test_options_refuse_a_point_that_is_not_a_row_index(point):
-    with pytest.raises(InvalidOperationError, match="connection point"):
+@pytest.mark.parametrize("point", [1.0, "0", True])
+def test_options_refuse_a_point_that_is_not_an_int_with_a_type_error(point):
+    with pytest.raises(TypeError, match="connection point") as raised:
         ConnectorOptions(glue=Glue.POINT, from_point=point)
+    assert not isinstance(raised.value, VsdxError)
+
+
+def test_options_refuse_a_negative_point_with_a_plain_value_error():
+    with pytest.raises(ValueError, match="connection point") as raised:
+        ConnectorOptions(glue=Glue.POINT, to_point=-1)
+    assert not isinstance(raised.value, VsdxError)
 
 
 def test_options_refuse_a_glue_that_is_not_a_glue():
