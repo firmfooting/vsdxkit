@@ -123,6 +123,10 @@ class Lane:
         object.__setattr__(self, "node_ids", tuple(self.node_ids))
 
 
+TitleBar = Literal["name", "blank", "none"]
+"""The choices for :attr:`Page.title_bar`."""
+
+
 @dataclass(frozen=True)
 class Page:
     """One Visio page."""
@@ -139,6 +143,8 @@ class Page:
     """The lanes, top to bottom."""
     align: Sequence[Sequence[str]] = ()
     """Groups of node ids to draw on one row (one column when flowing top down). The members of a group sit in different layers and one lane, and a node is in at most one group. A group of one id changes nothing."""
+    title_bar: TitleBar = "name"
+    """What the title bar above the first lane of a page with lanes says: ``"name"`` writes the page's name, ``"blank"`` writes an empty text. ``"none"`` is refused: a probe of Visio 16.0 found that deleting the bar, giving it height 0 or lifting the container to the first lane each leave a file Visio redraws with the bar back or the lanes lower. A page without lanes ignores the field."""
 
     def __post_init__(self) -> None:
         """Hold the members as tuples, so a page compares by value, and refuse an align group given as a string."""
@@ -146,6 +152,10 @@ class Page:
             object.__setattr__(self, name, tuple(getattr(self, name)))
         if any(isinstance(g, str) for g in self.align):
             raise GraphError(f"page {self.name!r} has an align group that is a string; pass a list of ids for each group")
+        if self.title_bar not in get_args(TitleBar):
+            raise GraphError(
+                f"page {self.name!r} has title_bar {self.title_bar!r}; the choices are {list(get_args(TitleBar))}"
+            )
         object.__setattr__(self, "align", tuple(tuple(g) for g in self.align))
 
 
@@ -500,6 +510,11 @@ def _draw_layout(
 ) -> None:
     """Draw lane bands, group boxes, nodes and edges where `layout` put them."""
     if page.lanes:
+        if page.title_bar == "none":
+            raise GraphError(
+                f"page {page.name!r}: title_bar='none' is not available: Visio redraws a deleted, zero-height or lifted title bar "
+                "(it re-creates the bar or moves the lanes down), and its Phase List band stays above the first lane"
+            )
         boxes = [layout.lanes[lane.id] for lane in page.lanes]
         for lane, box in zip(page.lanes, boxes, strict=True):
             if not LANE_HEIGHTS[0] <= box.height <= LANE_HEIGHTS[1]:
@@ -520,6 +535,11 @@ def _draw_layout(
         except InvalidOperationError as error:  # a limit the checks above missed must still leave the builder as a GraphError
             raise GraphError(f"page {page.name!r} cannot draw its lanes: {error}") from error
         add_data_rows(diagram.container, {"Source": page.name, "Kind": "lane_container"})
+        # The bar is the container sub-shape of master shape 7; its default text is not empty, so "blank" writes "" explicitly.
+        bars = [part for part in diagram.container.children if part.master_shape_ID == "7"]
+        if len(bars) != 1:
+            raise GraphError(f"page {page.name!r}: expected one title bar in the lane container, found {len(bars)}")
+        bars[0].text = page.name if page.title_bar == "name" else ""
         for lane, shape in zip(page.lanes, diagram.lanes, strict=True):
             add_data_rows(shape, {"Source": lane.id, "Kind": "lane"})
         for shape in target.children:

@@ -32,7 +32,10 @@ outside raises :class:`~vsdxkit.errors.InvalidOperationError`. The diagram has
 the Phase List Visio draws; phases cannot be set.
 
 The diagram's container stands a title bar, 15 mm high, above the first lane,
-so ``top`` is the top of the first lane and not of the container.
+so ``top`` is the top of the first lane and not of the container. A new diagram's bar reads
+``Cross-Functional Flowchart``; it is the container's sub-shape of master shape 7, and its text
+is that shape's own text. :class:`~vsdxkit.builder.Page` writes the page name there by default
+(``title_bar="name"``) or an empty text (``"blank"``).
 
 Find the diagram
 ----------------
