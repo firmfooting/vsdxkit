@@ -531,7 +531,9 @@ class TestReadingPlacementCellsFromAPackage:
         import glob
 
         two_dimensional = set(PLACEMENT_CELLS) - {"BeginX", "BeginY", "EndX", "EndY"}
-        for path in sorted(glob.glob(f"{basedir}/*.vsdx")):
+        paths = sorted(glob.glob(f"{basedir}/*.vsdx"))
+        assert paths, f"no .vsdx fixtures under {basedir}, so nothing was checked"
+        for path in paths:
             observation = observation_from_package(path)
             for page in observation.pages:
                 for shape in page.shapes:

@@ -117,8 +117,9 @@ def test_no_page_a_user_reads_names_a_private_module_or_name():
     ``vsdx.<module>``, so a match there is something 1.0 recommends. The sdist
     carries the README and the guide, and not the other pages.
     """
-    pages = [page for page in (ROOT / "README.md", *sorted((ROOT / "docs").glob("*.rst"))) if page.exists()]
-    assert pages, "no README.md and no docs/*.rst beside the tests"
+    assert (ROOT / "README.md").is_file() and (ROOT / "docs").is_dir(), "the README or docs folder is missing"
+    pages = [ROOT / "README.md", *sorted((ROOT / "docs").glob("*.rst"))]
+    assert len(pages) > 1, "no docs/*.rst beside the README"
     found = [
         f"{page.relative_to(ROOT)}:{number}: {line}"
         for page in pages
@@ -139,6 +140,7 @@ def test_a_split_module_defines_only_its_user_api(module, public):
 
 def test_only_the_root_defines_the_visio_namespace():
     """Fails if a module keeps its own copy of `vsdxkit.namespace` again, as `connectors` and `geometry` did."""
+    assert SOURCE.is_dir() and any(SOURCE.glob("*.py")), f"no modules under {SOURCE}"
     copies = sorted(
         path.name for path in SOURCE.glob("*.py") if path.name != "__init__.py" and "namespace" in _top_level_names(path.stem)
     )
