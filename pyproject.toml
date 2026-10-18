@@ -105,6 +105,9 @@ ban-relative-imports = "all"
 
 [tool.pyrefly]
 python-version = "3.15"
+# Pyrefly reads the parent checkout's ignore files, which hide a worktree nested in the repo.
+project-excludes = ["**/node_modules", "**/__pycache__", "**/venv/**", "**/.venv/**", "**/site-packages/**"]
+use-ignore-files = false
 project-includes = ["src/vsdxkit"]
 # The strict preset, not legacy: legacy types untyped imports as Any.
 preset = "strict"
