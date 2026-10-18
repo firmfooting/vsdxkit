@@ -105,9 +105,7 @@ ban-relative-imports = "all"
 
 [tool.pyrefly]
 python-version = "3.15"
-# Pyrefly's default excludes skip every dot-directory and it reads the parent repo's ignore
-# files, so nothing is checked inside <repo>/.worktrees/<name>; list the excludes explicitly.
-disable-project-excludes-heuristics = true
+# Pyrefly reads the parent checkout's ignore files, which hide a worktree nested in the repo.
 project-excludes = ["**/node_modules", "**/__pycache__", "**/venv/**", "**/.venv/**", "**/site-packages/**"]
 use-ignore-files = false
 project-includes = ["src/vsdxkit"]
