@@ -1,0 +1,6 @@
+# Generated output crowds the reviewer's token budget; review the generator instead.
+[ignore]
+glob = [
+    ".hermes/visio-shots/**",
+    "uv.lock",
+]
