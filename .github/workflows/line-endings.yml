@@ -13,4 +13,4 @@ jobs:
   line-endings:
     permissions:
       contents: read
-    uses: firmfooting/.github/.github/workflows/line-endings.yml@34039b6cf89ec46a00d067fbc656d2d1bf85da08 # v1.0.0
+    uses: firmfooting/.github/.github/workflows/line-endings.yml@b42e6a19ea7bb68439f4d9a632f16f4fd6ab7338 # v1.6.0
